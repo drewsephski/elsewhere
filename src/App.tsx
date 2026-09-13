@@ -45,9 +45,6 @@ export default function App() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [botSaving, setBotSaving] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
-  const [activeAssistantMessageId, setActiveAssistantMessageId] = useState<
-    string | null
-  >(null);
   const [loadingChat, setLoadingChat] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -138,7 +135,6 @@ export default function App() {
     if (event.type === "error") {
       setGlobalError(event.error ?? "Stream failed");
       setActiveRequestId(null);
-      setActiveAssistantMessageId(null);
       if (selectedBotId) {
         void loadChat(selectedBotId);
       }
@@ -146,7 +142,6 @@ export default function App() {
     }
     if (event.type === "done" || event.type === "cancelled") {
       setActiveRequestId(null);
-      setActiveAssistantMessageId(null);
       if (selectedBotId) {
         void loadChat(selectedBotId);
       }
@@ -269,7 +264,6 @@ export default function App() {
       });
       setConversationId(result.conversationId);
       setActiveRequestId(result.requestId);
-      setActiveAssistantMessageId(result.assistantMessageId);
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => !m.id.startsWith("temp-"));
         return [

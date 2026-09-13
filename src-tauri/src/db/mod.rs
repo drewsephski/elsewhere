@@ -139,6 +139,18 @@ impl Database {
         self.get_bot(&input.id)
     }
 
+    pub fn touch_bot(&self, id: &str) -> Result<(), AppError> {
+        let now = Self::now_ms();
+        let updated = self.conn.execute(
+            "UPDATE bots SET updated_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        if updated == 0 {
+            return Err(AppError::NotFound(format!("bot {}", id)));
+        }
+        Ok(())
+    }
+
     pub fn archive_bot(&self, id: &str) -> Result<(), AppError> {
         let now = Self::now_ms();
         let updated = self
@@ -399,6 +411,53 @@ mod tests {
             .expect("update");
         assert_eq!(updated.name, "Renamed");
         assert_eq!(updated.model, "gpt-4o");
+    }
+
+    #[test]
+    fn update_bot_with_none_fields_preserves_existing_values() {
+        let db = Database::open_in_memory().expect("db");
+        let bot = db
+            .create_bot(CreateBotInput {
+                name: "Researcher".into(),
+                description: Some("Notes".into()),
+                system_prompt: Some("You are helpful.".into()),
+                provider: Some("openai".into()),
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("create");
+        let updated = db
+            .update_bot(UpdateBotInput {
+                id: bot.id.clone(),
+                name: None,
+                description: None,
+                system_prompt: None,
+                model: None,
+            })
+            .expect("update");
+        assert_eq!(updated.name, "Researcher");
+        assert_eq!(updated.description.as_deref(), Some("Notes"));
+        assert_eq!(updated.system_prompt, "You are helpful.");
+        assert_eq!(updated.model, "gpt-4o-mini");
+    }
+
+    #[test]
+    fn touch_bot_updates_timestamp_only() {
+        let db = Database::open_in_memory().expect("db");
+        let bot = db
+            .create_bot(CreateBotInput {
+                name: "Bot".into(),
+                description: None,
+                system_prompt: Some("Stay.".into()),
+                provider: None,
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("create");
+        db.touch_bot(&bot.id).expect("touch");
+        let touched = db.get_bot(&bot.id).expect("get");
+        assert_eq!(touched.name, bot.name);
+        assert_eq!(touched.system_prompt, bot.system_prompt);
+        assert_eq!(touched.model, bot.model);
+        assert!(touched.updated_at >= bot.updated_at);
     }
 
     #[test]

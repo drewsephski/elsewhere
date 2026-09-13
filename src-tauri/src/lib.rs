@@ -15,9 +15,9 @@ use tracing_subscriber::EnvFilter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive("gptbot=info".parse().unwrap()))
-        .init();
+        .try_init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -36,7 +36,7 @@ pub fn run() {
                 active_streams: parking_lot::Mutex::new(std::collections::HashMap::new()),
             });
 
-            tracing::info!(path = %db_path, "database initialized");
+            tracing::info!(path = %db_path.display(), "database initialized");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

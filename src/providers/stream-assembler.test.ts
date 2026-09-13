@@ -7,11 +7,13 @@ describe("stream-assembler", () => {
     content = applyStreamEvent(content, {
       type: "delta",
       requestId: "r1",
+      assistantMessageId: "m1",
       delta: "Hello",
     });
     content = applyStreamEvent(content, {
       type: "delta",
       requestId: "r1",
+      assistantMessageId: "m1",
       delta: ", world",
     });
     expect(content).toBe("Hello, world");
@@ -21,6 +23,7 @@ describe("stream-assembler", () => {
     const result = applyStreamEvent("partial", {
       type: "done",
       requestId: "r1",
+      assistantMessageId: "m1",
       fullContent: "final",
     });
     expect(result).toBe("final");

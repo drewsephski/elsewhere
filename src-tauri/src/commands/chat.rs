@@ -24,7 +24,15 @@ pub async fn start_chat(
     let request_id = Uuid::new_v4().to_string();
     let cancel_token = state.register_cancel_token(&request_id);
 
-    let (bot, conversation_id, user_message_id, assistant_message_id, model, messages_for_api) = {
+    let (
+        _bot,
+        bot_id_for_touch,
+        conversation_id,
+        user_message_id,
+        assistant_message_id,
+        model,
+        messages_for_api,
+    ) = {
         let db = state.db.lock();
         let bot = db.get_bot(&input.bot_id)?;
         let conversation = match &input.conversation_id {
@@ -81,12 +89,15 @@ pub async fn start_chat(
             });
         }
 
+        let model = bot.model.clone();
+        let bot_id = bot.id.clone();
         (
             bot,
+            bot_id,
             conversation.id,
             user_message.id,
             assistant_message.id,
-            bot.model.clone(),
+            model,
             messages_for_api,
         )
     };
@@ -109,6 +120,7 @@ pub async fn start_chat(
 
     let app_handle = app.clone();
 
+    let bot_id_touch = bot_id_for_touch.clone();
     tauri::async_runtime::spawn(async move {
         let emit = |payload: StreamEventPayload| {
             let _ = app_handle.emit(STREAM_EVENT, payload);
@@ -155,13 +167,7 @@ pub async fn start_chat(
                         None,
                     );
                     let _ = db.touch_conversation(&conv_id);
-                    let _ = db.update_bot(crate::models::UpdateBotInput {
-                        id: bot.id.clone(),
-                        name: None,
-                        description: None,
-                        system_prompt: None,
-                        model: None,
-                    });
+                    let _ = db.touch_bot(&bot_id_touch);
                 }
                 emit(StreamEventPayload {
                     request_id: req_id.clone(),

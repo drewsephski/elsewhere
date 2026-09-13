@@ -1,3 +1,5 @@
+import type { KeyboardEvent } from "react";
+
 interface ChatComposerProps {
   value: string;
   disabled: boolean;
@@ -15,7 +17,7 @@ export function ChatComposer({
   onSend,
   onStop,
 }: ChatComposerProps) {
-  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!disabled && value.trim()) {
