@@ -11,9 +11,10 @@
 
 ## 2. Local Computer
 
-- [ ] Virtualization.framework Linux guest
-- [ ] Persistent agent VM disk
-- [ ] Native bridge to guest
+- [x] Virtualization.framework Linux guest (Phase 2A spike — Alpine + Swift `gptbot-vmm`)
+- [x] Persistent agent VM disk (`vm/disks/root.raw`, provision once)
+- [x] Native bridge to guest (Virtio socket + `gptbot-guest-agent` JSON RPC)
+- [ ] Production Agent Computer UI, desktop viewer, Chromium
 
 ## 3. Agent Runtime
 

@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::secrets::SecretStore;
+use crate::vm::SharedVirtualMachineManager;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
@@ -9,6 +10,8 @@ pub struct AppState {
     pub db: Mutex<Database>,
     pub secrets: Arc<dyn SecretStore>,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    #[cfg(target_os = "macos")]
+    pub vm: SharedVirtualMachineManager,
 }
 
 impl AppState {

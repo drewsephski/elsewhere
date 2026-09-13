@@ -25,6 +25,7 @@ interface BotSettingsPanelProps {
   onSave: () => void;
   onArchive: () => void;
   saving: boolean;
+  variant?: "inline" | "sidebar";
 }
 
 export function BotSettingsPanel({
@@ -36,23 +37,42 @@ export function BotSettingsPanel({
   onSave,
   onArchive,
   saving,
+  variant = "inline",
 }: BotSettingsPanelProps) {
+  const isSidebar = variant === "sidebar";
+
   return (
     <Collapsible
       defaultOpen={false}
-      className="group border-b border-border/80 bg-muted/20"
+      className={
+        isSidebar
+          ? "group"
+          : "group border-b border-border/80 bg-muted/20"
+      }
     >
       <CollapsibleTrigger
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/40 group-data-open:bg-muted/30 sm:px-4"
+        className={
+          isSidebar
+            ? "flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1.5 text-left text-sm font-medium transition-colors hover:bg-white/60"
+            : "flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/40 group-data-open:bg-muted/30 sm:px-4"
+        }
       >
-        <span>Bot configuration</span>
+        <span>Assistant settings</span>
         <ChevronDown
           className="size-4 text-muted-foreground transition-transform group-data-open:rotate-180"
           aria-hidden
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="px-3 pb-4 pt-1 sm:px-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1.5fr_minmax(12rem,1fr)_auto] lg:items-end">
+      <CollapsibleContent
+        className={isSidebar ? "space-y-3 pt-2" : "px-3 pb-4 pt-1 sm:px-4"}
+      >
+        <div
+          className={
+            isSidebar
+              ? "flex flex-col gap-3"
+              : "grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1.5fr_minmax(12rem,1fr)_auto] lg:items-end"
+          }
+        >
           <div className="space-y-1.5">
             <Label htmlFor="bot-name">Name</Label>
             <Input

@@ -1,0 +1,171 @@
+use std::fs;
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
+
+use super::paths::VmLayout;
+use super::protocol::VmConfigFile;
+
+const ALPINE_NETBOOT_BASE: &str =
+    "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases";
+const GUEST_AGENT_PORT: u32 = 1024;
+
+pub fn host_arch() -> &'static str {
+    #[cfg(target_arch = "aarch64")]
+    {
+        "arm64"
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        "x86_64"
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        "unknown"
+    }
+}
+
+pub fn guest_arch() -> &'static str {
+    host_arch()
+}
+
+pub fn alpine_arch_slug() -> &'static str {
+    match guest_arch() {
+        "arm64" => "aarch64",
+        "x86_64" => "x86_64",
+        _ => "aarch64",
+    }
+}
+
+pub fn provision_vm(layout: &VmLayout) -> Result<(), String> {
+    layout.ensure_directories().map_err(|e| e.to_string())?;
+
+    download_alpine_artifacts(layout)?;
+    ensure_disk_image(layout)?;
+    write_vm_config(layout)?;
+
+    Ok(())
+}
+
+fn download_alpine_artifacts(layout: &VmLayout) -> Result<(), String> {
+    let kernel_path = layout.kernel_path();
+    let initrd_path = layout.initrd_path();
+    if kernel_path.exists() && initrd_path.exists() {
+        return Ok(());
+    }
+
+    let arch = alpine_arch_slug();
+    let base = format!("{}/{}/netboot", ALPINE_NETBOOT_BASE, arch);
+
+    if !kernel_path.exists() {
+        let url = format!("{}/vmlinuz-virt", base);
+        download_file(&url, &kernel_path)?;
+    }
+    if !initrd_path.exists() {
+        let url = format!("{}/initramfs-virt", base);
+        download_file(&url, &initrd_path)?;
+    }
+
+    Ok(())
+}
+
+fn download_file(url: &str, dest: &Path) -> Result<(), String> {
+    tracing::info!(url, path = %dest.display(), "downloading VM artifact");
+    let output = Command::new("curl")
+        .args(["-fL", "--retry", "3", "-o"])
+        .arg(dest)
+        .arg(url)
+        .output()
+        .map_err(|e| format!("curl failed to run: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("download failed for {url}: {stderr}"));
+    }
+    Ok(())
+}
+
+fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
+    let disk_path = layout.disk_path();
+    if disk_path.exists() {
+        return Ok(());
+    }
+
+    let repo_script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/build-guest-disk.sh");
+
+    if repo_script.exists() {
+        let output = Command::new("bash")
+            .arg(&repo_script)
+            .arg(&disk_path)
+            .arg(alpine_arch_slug())
+            .output()
+            .map_err(|e| format!("failed to run build-guest-disk.sh: {e}"))?;
+
+        if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "build-guest-disk.sh failed:\nstdout:{stdout}\nstderr:{stderr}"
+            ));
+        }
+        if disk_path.exists() && fs::metadata(&disk_path).map(|m| m.len()).unwrap_or(0) > 10 * 1024 * 1024 {
+            return Ok(());
+        }
+    }
+
+    Err(
+        "Guest disk was not built. Build gptbot-guest-agent and run scripts/build-guest-disk.sh."
+            .into(),
+    )
+}
+
+fn write_vm_config(layout: &VmLayout) -> Result<(), String> {
+    let kernel_cmdline = "console=hvc0 root=/dev/vda rw rootwait modules=sd-mod,usb-storage,ext4 alpine_repo=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main".to_string();
+
+    let config = VmConfigFile {
+        id: "default".into(),
+        host_arch: host_arch().into(),
+        guest_arch: guest_arch().into(),
+        cpu_count: 2,
+        memory_mib: 2048,
+        kernel_path: layout.kernel_path().to_string_lossy().into(),
+        initrd_path: Some(layout.initrd_path().to_string_lossy().into()),
+        disk_path: layout.disk_path().to_string_lossy().into(),
+        kernel_command_line: kernel_cmdline,
+        guest_agent_port: GUEST_AGENT_PORT,
+    };
+
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    let path = layout.vm_config_path();
+    let mut file = fs::File::create(path).map_err(|e| e.to_string())?;
+    file.write_all(json.as_bytes()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn locate_guest_agent_binary() -> Result<std::path::PathBuf, String> {
+    if let Ok(path) = std::env::var("GPTBOT_GUEST_AGENT_PATH") {
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
+    let target = match guest_arch() {
+        "arm64" => "aarch64-unknown-linux-musl",
+        _ => "x86_64-unknown-linux-musl",
+    };
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let release_path = manifest
+        .join("../../guest-agent/target")
+        .join(target)
+        .join("release/gptbot-guest-agent");
+    if release_path.exists() {
+        return Ok(release_path);
+    }
+
+    Err(
+        "gptbot-guest-agent binary not found. Cross-compile with: cargo build -p gptbot-guest-agent --release --target <musl>"
+            .into(),
+    )
+}

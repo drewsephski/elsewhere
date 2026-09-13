@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "project": {
+    "name": "gptbot",
+    "productType": null,
+    "stack": [
+      "react",
+      "shadcn",
+      "tailwind-v4",
+      "vite"
+    ]
+  },
+  "sources": {
+    "tokens": [
+      "src/index.css",
+      "src/app.css"
+    ],
+    "components": [
+      "src/components/ui"
+    ],
+    "assets": [
+      "src/assets"
+    ],
+    "instructions": []
+  },
+  "design": {
+    "colorMode": "light-and-dark",
+    "colors": {
+      "--color-sidebar-ring": {
+        "value": "var(--sidebar-ring)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-border": {
+        "value": "var(--sidebar-border)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-accent-foreground": {
+        "value": "var(--sidebar-accent-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-accent": {
+        "value": "var(--sidebar-accent)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-primary-foreground": {
+        "value": "var(--sidebar-primary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-primary": {
+        "value": "var(--sidebar-primary)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar-foreground": {
+        "value": "var(--sidebar-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-sidebar": {
+        "value": "var(--sidebar)",
+        "source": "src/index.css"
+      },
+      "--color-chart-5": {
+        "value": "var(--chart-5)",
+        "source": "src/index.css"
+      },
+      "--color-chart-4": {
+        "value": "var(--chart-4)",
+        "source": "src/index.css"
+      },
+      "--color-chart-3": {
+        "value": "var(--chart-3)",
+        "source": "src/index.css"
+      },
+      "--color-chart-2": {
+        "value": "var(--chart-2)",
+        "source": "src/index.css"
+      },
+      "--color-chart-1": {
+        "value": "var(--chart-1)",
+        "source": "src/index.css"
+      },
+      "--color-ring": {
+        "value": "var(--ring)",
+        "source": "src/index.css"
+      },
+      "--color-input": {
+        "value": "var(--input)",
+        "source": "src/index.css"
+      },
+      "--color-border": {
+        "value": "var(--border)",
+        "source": "src/index.css"
+      },
+      "--color-destructive": {
+        "value": "var(--destructive)",
+        "source": "src/index.css"
+      },
+      "--color-accent-foreground": {
+        "value": "var(--accent-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-accent": {
+        "value": "var(--accent)",
+        "source": "src/index.css"
+      },
+      "--color-muted-foreground": {
+        "value": "var(--muted-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-muted": {
+        "value": "var(--muted)",
+        "source": "src/index.css"
+      },
+      "--color-secondary-foreground": {
+        "value": "var(--secondary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-secondary": {
+        "value": "var(--secondary)",
+        "source": "src/index.css"
+      },
+      "--color-primary-foreground": {
+        "value": "var(--primary-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-primary": {
+        "value": "var(--primary)",
+        "source": "src/index.css"
+      },
+      "--color-popover-foreground": {
+        "value": "var(--popover-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-popover": {
+        "value": "var(--popover)",
+        "source": "src/index.css"
+      },
+      "--color-card-foreground": {
+        "value": "var(--card-foreground)",
+        "source": "src/index.css"
+      },
+      "--color-card": {
+        "value": "var(--card)",
+        "source": "src/index.css"
+      },
+      "--color-foreground": {
+        "value": "var(--foreground)",
+        "source": "src/index.css"
+      },
+      "--color-background": {
+        "value": "var(--background)",
+        "source": "src/index.css"
+      },
+      "--background": {
+        "value": "oklch(0.14 0.014 285)",
+        "source": "src/index.css"
+      },
+      "--foreground": {
+        "value": "oklch(0.97 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--card-foreground": {
+        "value": "oklch(0.97 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--popover-foreground": {
+        "value": "oklch(0.97 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--primary": {
+        "value": "oklch(0.62 0.19 265)",
+        "source": "src/index.css"
+      },
+      "--primary-foreground": {
+        "value": "oklch(0.98 0.01 265)",
+        "source": "src/index.css"
+      },
+      "--secondary": {
+        "value": "oklch(0.24 0.02 285)",
+        "source": "src/index.css"
+      },
+      "--secondary-foreground": {
+        "value": "oklch(0.95 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--muted": {
+        "value": "oklch(0.22 0.018 285)",
+        "source": "src/index.css"
+      },
+      "--muted-foreground": {
+        "value": "oklch(0.72 0.02 285)",
+        "source": "src/index.css"
+      },
+      "--accent": {
+        "value": "oklch(0.26 0.03 265)",
+        "source": "src/index.css"
+      },
+      "--accent-foreground": {
+        "value": "oklch(0.97 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--destructive": {
+        "value": "oklch(0.65 0.2 25)",
+        "source": "src/index.css"
+      },
+      "--border": {
+        "value": "oklch(1 0 0 / 9%)",
+        "source": "src/index.css"
+      },
+      "--ring": {
+        "value": "oklch(0.62 0.19 265 / 55%)",
+        "source": "src/index.css"
+      },
+      "--chart-1": {
+        "value": "oklch(0.62 0.19 265)",
+        "source": "src/index.css"
+      },
+      "--chart-2": {
+        "value": "oklch(0.55 0.12 200)",
+        "source": "src/index.css"
+      },
+      "--chart-3": {
+        "value": "oklch(0.5 0.1 320)",
+        "source": "src/index.css"
+      },
+      "--chart-4": {
+        "value": "oklch(0.45 0.08 285)",
+        "source": "src/index.css"
+      },
+      "--chart-5": {
+        "value": "oklch(0.4 0.06 285)",
+        "source": "src/index.css"
+      },
+      "--sidebar-foreground": {
+        "value": "oklch(0.95 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary": {
+        "value": "oklch(0.62 0.19 265)",
+        "source": "src/index.css"
+      },
+      "--sidebar-primary-foreground": {
+        "value": "oklch(0.98 0.01 265)",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent": {
+        "value": "oklch(0.22 0.022 285)",
+        "source": "src/index.css"
+      },
+      "--sidebar-accent-foreground": {
+        "value": "oklch(0.97 0.01 285)",
+        "source": "src/index.css"
+      },
+      "--sidebar-border": {
+        "value": "oklch(1 0 0 / 8%)",
+        "source": "src/index.css"
+      },
+      "--sidebar-ring": {
+        "value": "oklch(0.62 0.19 265 / 50%)",
+        "source": "src/index.css"
+      }
+    },
+    "typography": {
+      "--font-mono": {
+        "value": "ui-monospace, \"SF Mono\", Menlo, monospace",
+        "source": "src/index.css"
+      },
+      "--font-heading": {
+        "value": "var(--font-sans)",
+        "source": "src/index.css"
+      },
+      "--font-sans": {
+        "value": "'Geist Variable', sans-serif",
+        "source": "src/index.css"
+      }
+    },
+    "spacing": {},
+    "radius": {
+      "--radius-sm": {
+        "value": "calc(var(--radius) * 0.6)",
+        "source": "src/index.css"
+      },
+      "--radius-md": {
+        "value": "calc(var(--radius) * 0.8)",
+        "source": "src/index.css"
+      },
+      "--radius-lg": {
+        "value": "var(--radius)",
+        "source": "src/index.css"
+      },
+      "--radius-xl": {
+        "value": "calc(var(--radius) * 1.4)",
+        "source": "src/index.css"
+      },
+      "--radius-2xl": {
+        "value": "calc(var(--radius) * 1.8)",
+        "source": "src/index.css"
+      },
+      "--radius-3xl": {
+        "value": "calc(var(--radius) * 2.2)",
+        "source": "src/index.css"
+      },
+      "--radius-4xl": {
+        "value": "calc(var(--radius) * 2.6)",
+        "source": "src/index.css"
+      },
+      "--radius": {
+        "value": "0.625rem",
+        "source": "src/index.css"
+      }
+    },
+    "shadows": {},
+    "motion": {},
+    "density": "unknown"
+  },
+  "components": {
+    "installed": [
+      "alert",
+      "avatar",
+      "badge",
+      "button",
+      "collapsible",
+      "dialog",
+      "dropdown-menu",
+      "input",
+      "label",
+      "scroll-area",
+      "select",
+      "separator",
+      "sheet",
+      "skeleton",
+      "sonner",
+      "textarea",
+      "tooltip"
+    ],
+    "preferredPrimitives": [],
+    "patterns": []
+  },
+  "constraints": {
+    "must": [],
+    "avoid": []
+  },
+  "decisions": [
+    {
+      "id": "grokbot-shell-2026-09",
+      "summary": "Adopted Grokbot-inspired three-column shell: workspace sidebar, centered chat, context panel with screen preview and routines.",
+      "chosenAt": "2026-09-13T22:30:00.000Z"
+    }
+  ],
+  "evidence": [
+    {
+      "fact": "components.installed",
+      "source": "src/components/ui"
+    },
+    {
+      "fact": "design.colorMode:light-and-dark",
+      "source": "src/index.css, src/app.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/app.css"
+    },
+    {
+      "fact": "design.tokens",
+      "source": "src/index.css"
+    },
+    {
+      "fact": "project.stack:react",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:shadcn",
+      "source": "components.json"
+    },
+    {
+      "fact": "project.stack:tailwind-v4",
+      "source": "package.json"
+    },
+    {
+      "fact": "project.stack:vite",
+      "source": "package.json"
+    }
+  ],
+  "generatedAt": "2026-09-13T22:17:25.263Z"
+}

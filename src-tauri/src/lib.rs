@@ -5,6 +5,8 @@ mod models;
 mod openai;
 mod secrets;
 mod state;
+#[cfg(target_os = "macos")]
+pub mod vm;
 
 use db::Database;
 use secrets::KeychainSecretStore;
@@ -30,10 +32,15 @@ pub fn run() {
             let database = Database::open(&db_path)?;
             let secrets: Arc<dyn secrets::SecretStore> = Arc::new(KeychainSecretStore);
 
+            #[cfg(target_os = "macos")]
+            let vm = Arc::new(crate::vm::VirtualMachineManager::new(&data_dir));
+
             app.manage(AppState {
                 db: parking_lot::Mutex::new(database),
                 secrets,
                 active_streams: parking_lot::Mutex::new(std::collections::HashMap::new()),
+                #[cfg(target_os = "macos")]
+                vm,
             });
 
             tracing::info!(path = %db_path.display(), "database initialized");
@@ -55,6 +62,20 @@ pub fn run() {
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,
+            #[cfg(target_os = "macos")]
+            commands::vm_info,
+            #[cfg(target_os = "macos")]
+            commands::vm_provision,
+            #[cfg(target_os = "macos")]
+            commands::vm_start,
+            #[cfg(target_os = "macos")]
+            commands::vm_stop,
+            #[cfg(target_os = "macos")]
+            commands::vm_restart,
+            #[cfg(target_os = "macos")]
+            commands::vm_guest_health,
+            #[cfg(target_os = "macos")]
+            commands::vm_guest_request,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

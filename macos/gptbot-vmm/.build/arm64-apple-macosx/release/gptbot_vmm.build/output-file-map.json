@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/gptbot_vmm.d",
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/gptbot_vmm.o",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/primary.swiftdeps"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/gptbot-vmm/main.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.dia"
+  }
+}

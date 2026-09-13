@@ -1,0 +1,43 @@
+{
+  "": {
+    "dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GptBotVMMLib.d",
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GptBotVMMLib.o",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/primary.swiftdeps"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.dia"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.dia"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.dia"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.dia"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.dia"
+  },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.dia"
+  }
+}

@@ -1,0 +1,6 @@
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift
+/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift

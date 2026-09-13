@@ -18,9 +18,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BotSidebar } from "@/ui/bot-sidebar";
-import { BotSettingsPanel } from "@/ui/bot-settings-panel";
 import { ChatComposer } from "@/ui/chat-composer";
 import { ChatHeader } from "@/ui/chat-header";
+import { ContextSidebar } from "@/ui/context-sidebar";
 import { CreateBotModal } from "@/ui/create-bot-modal";
 import { EmptyChat } from "@/ui/empty-chat";
 import { MessageBubble } from "@/ui/message-bubble";
@@ -430,7 +430,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full bg-background">
+    <div className="flex h-full bg-[#fafafa]">
       <BotSidebar
         bots={bots}
         selectedBotId={selectedBotId}
@@ -439,7 +439,7 @@ export default function App() {
         onOpenSettings={handleOpenSettings}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col bg-white">
         <ChatHeader
           bot={selectedBot}
           mobileNavOpen={mobileNavOpen}
@@ -469,24 +469,6 @@ export default function App() {
           </Alert>
         )}
 
-        {displayBot && (
-          <BotSettingsPanel
-            bot={displayBot}
-            models={models}
-            modelsLoading={modelsLoading}
-            modelsError={modelsError}
-            onChange={(patch) => {
-              setBotDraft((prev) => ({
-                ...(prev ?? displayBot),
-                ...patch,
-              }));
-            }}
-            onSave={handleSaveBot}
-            onArchive={handleArchiveBot}
-            saving={botSaving}
-          />
-        )}
-
         {globalError && (
           <Alert variant="destructive" className="mx-3 mt-2 sm:mx-4">
             <AlertDescription>{globalError}</AlertDescription>
@@ -498,7 +480,7 @@ export default function App() {
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto"
         >
-          <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4 sm:py-6">
+          <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
             {!selectedBot && (
               <EmptyChat
                 apiKeyConfigured={apiKeyConfigured}
@@ -524,11 +506,32 @@ export default function App() {
           value={composer}
           disabled={!selectedBot || loadingChat}
           isStreaming={isStreaming}
+          recipientName={selectedBot?.name ?? null}
           onChange={setComposer}
           onSend={handleSend}
           onStop={handleStop}
         />
       </main>
+
+      <ContextSidebar
+        bot={selectedBot}
+        displayBot={displayBot}
+        models={models}
+        modelsLoading={modelsLoading}
+        modelsError={modelsError}
+        onBotChange={(patch) => {
+          if (!displayBot) {
+            return;
+          }
+          setBotDraft((prev) => ({
+            ...(prev ?? displayBot),
+            ...patch,
+          }));
+        }}
+        onSaveBot={handleSaveBot}
+        onArchiveBot={handleArchiveBot}
+        botSaving={botSaving}
+      />
 
       <SettingsModal
         open={settingsOpen}

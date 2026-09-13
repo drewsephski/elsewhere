@@ -191,6 +191,11 @@ select {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  html.dark body {
     background-image:
       radial-gradient(
         ellipse 90% 60% at 50% -30%,
@@ -203,9 +208,6 @@ select {
         transparent 50%
       );
     background-attachment: fixed;
-  }
-  html {
-    @apply font-sans;
   }
 }
 

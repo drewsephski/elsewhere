@@ -15,7 +15,7 @@ export function BotSidebar(props: BotSidebarProps) {
   return (
     <aside
       className={cn(
-        "hidden h-full w-[min(100%,15rem)] shrink-0 border-r border-sidebar-border bg-sidebar md:flex md:w-60 lg:w-64",
+        "hidden h-full w-[min(100%,18rem)] shrink-0 border-r border-border/70 md:flex md:w-72 xl:w-80",
         props.className,
       )}
     >

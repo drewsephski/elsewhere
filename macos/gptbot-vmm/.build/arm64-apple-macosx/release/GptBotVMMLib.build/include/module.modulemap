@@ -1,0 +1,3 @@
+module GptBotVMMLib {
+    header "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/include/GptBotVMMLib-Swift.h"
+}

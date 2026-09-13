@@ -1,0 +1,496 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.GptBotVMMLib-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/sources",
+      "importPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "GptBotVMMLib",
+      "moduleOutputPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/GptBotVMMLib.swiftmodule",
+      "objects" : [
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/include/GptBotVMMLib-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "gptbot_vmm"
+      ],
+      "outputFileMapPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/GptBotVMMLib.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift"
+      ],
+      "tempsPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build",
+      "wholeModuleOptimization" : true
+    },
+    "C.gptbot-vmm-arm64-apple-macosx-release.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/sources",
+      "importPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/gptbot-vmm/main.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/GptBotVMMLib.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/sources"
+        }
+      ],
+      "isLibrary" : false,
+      "moduleName" : "gptbot_vmm",
+      "moduleOutputPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/gptbot_vmm.swiftmodule",
+      "objects" : [
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-whole-module-optimization",
+        "-num-threads",
+        "10",
+        "-serialize-diagnostics",
+        "-O",
+        "-j10",
+        "-DSWIFT_PACKAGE",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/ModuleCache",
+        "-parseable-output",
+        "-Xfrontend",
+        "-entry-point-function-name",
+        "-Xfrontend",
+        "gptbot_vmm_main",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "gptbot_vmm"
+      ],
+      "outputFileMapPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/gptbot_vmm.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/gptbot-vmm/main.swift"
+      ],
+      "tempsPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build",
+      "wholeModuleOptimization" : true
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "GptBotVMMLib" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "GptBotVMMLib",
+      "-package-name",
+      "gptbot_vmm",
+      "-c",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift",
+      "-I",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/include/GptBotVMMLib-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "gptbot_vmm",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "gptbot_vmm" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "gptbot_vmm",
+      "-package-name",
+      "gptbot_vmm",
+      "-c",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/gptbot-vmm/main.swift",
+      "-I",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-whole-module-optimization",
+      "-num-threads",
+      "10",
+      "-serialize-diagnostics",
+      "-O",
+      "-j10",
+      "-DSWIFT_PACKAGE",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/ModuleCache",
+      "-parseable-output",
+      "-Xfrontend",
+      "-entry-point-function-name",
+      "-Xfrontend",
+      "gptbot_vmm_main",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "gptbot_vmm",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "GptBotVMMLib" : [
+
+    ],
+    "gptbot_vmm" : [
+      "GptBotVMMLib"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMMError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMRuntimeState.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/sources"
+    },
+    "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot-vmm.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMMError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMRuntimeState.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/main.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot-vmm.product/Objects.LinkFileList"
+    },
+    "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/gptbot-vmm/main.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/gptbot_vmm.build/sources"
+    },
+    "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

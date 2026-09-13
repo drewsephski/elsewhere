@@ -1,13 +1,14 @@
 import type { KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { SendHorizontal, Square } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Mic, Plus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatComposerProps {
   value: string;
   disabled: boolean;
   isStreaming: boolean;
+  recipientName?: string | null;
   onChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -17,11 +18,12 @@ export function ChatComposer({
   value,
   disabled,
   isStreaming,
+  recipientName,
   onChange,
   onSend,
   onStop,
 }: ChatComposerProps) {
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!disabled && value.trim() && !isStreaming) {
@@ -30,53 +32,63 @@ export function ChatComposer({
     }
   }
 
-  const canSend = !disabled && value.trim().length > 0 && !isStreaming;
+  const placeholder = recipientName
+    ? `Message ${recipientName}`
+    : "Message your assistant";
 
   return (
-    <div className="shrink-0 border-t border-border/80 bg-gradient-to-t from-background via-background to-background/80 px-3 pb-3 pt-2 sm:px-4 sm:pb-4">
+    <div className="shrink-0 border-t border-border/50 bg-white px-4 py-4">
       <div
         className={cn(
-          "mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-border/80 bg-card/90 p-2 shadow-sm ring-1 ring-foreground/5 backdrop-blur-sm",
-          "focus-within:border-primary/40 focus-within:ring-primary/20",
+          "mx-auto flex max-w-2xl items-center gap-1 rounded-full border border-border/70 bg-[#f5f5f7] px-2 py-1.5 shadow-sm",
+          "focus-within:border-foreground/20 focus-within:ring-2 focus-within:ring-foreground/5",
         )}
       >
-        <Textarea
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 rounded-full text-muted-foreground"
+          aria-label="Add attachment"
+          disabled
+        >
+          <Plus className="size-4" />
+        </Button>
+
+        <Input
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled || isStreaming}
-          placeholder="Message your bot…"
-          rows={1}
-          className="min-h-[44px] max-h-40 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 shadow-none focus-visible:ring-0"
+          placeholder={placeholder}
+          className="h-9 flex-1 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
           aria-label="Message input"
         />
+
         {isStreaming ? (
           <Button
             type="button"
             variant="secondary"
-            size="icon"
+            size="icon-sm"
             onClick={onStop}
             aria-label="Stop response"
-            className="shrink-0 rounded-xl"
+            className="shrink-0 rounded-full"
           >
-            <Square className="size-4 fill-current" />
+            <Square className="size-3.5 fill-current" />
           </Button>
         ) : (
           <Button
             type="button"
-            size="icon"
-            onClick={onSend}
-            disabled={!canSend}
-            aria-label="Send message"
-            className="shrink-0 rounded-xl"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 rounded-full text-muted-foreground"
+            aria-label="Voice input"
+            disabled
           >
-            <SendHorizontal className="size-4" />
+            <Mic className="size-4" />
           </Button>
         )}
       </div>
-      <p className="mx-auto mt-2 max-w-3xl text-center text-[11px] text-muted-foreground">
-        Enter to send · Shift+Enter for a new line
-      </p>
     </div>
   );
 }
