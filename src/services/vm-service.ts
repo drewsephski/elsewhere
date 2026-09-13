@@ -24,6 +24,8 @@ export const vmInfoSchema = z.object({
   guestBridgeReady: z.boolean(),
   message: z.string().nullable().optional(),
   created: z.boolean(),
+  consoleLogPath: z.string().optional().default(""),
+  vmmBinaryPath: z.string().nullable().optional(),
 });
 
 export type VmInfo = z.infer<typeof vmInfoSchema>;

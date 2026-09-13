@@ -1,3 +1,4 @@
+mod kernel;
 mod manager;
 mod paths;
 mod protocol;

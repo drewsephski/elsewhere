@@ -3,11 +3,10 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
+use super::kernel::{ensure_linux_image, kernel_command_line};
 use super::paths::VmLayout;
 use super::protocol::VmConfigFile;
 
-const ALPINE_NETBOOT_BASE: &str =
-    "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases";
 const GUEST_AGENT_PORT: u32 = 1024;
 
 pub fn host_arch() -> &'static str {
@@ -40,48 +39,10 @@ pub fn alpine_arch_slug() -> &'static str {
 pub fn provision_vm(layout: &VmLayout) -> Result<(), String> {
     layout.ensure_directories().map_err(|e| e.to_string())?;
 
-    download_alpine_artifacts(layout)?;
+    ensure_linux_image(layout)?;
     ensure_disk_image(layout)?;
     write_vm_config(layout)?;
 
-    Ok(())
-}
-
-fn download_alpine_artifacts(layout: &VmLayout) -> Result<(), String> {
-    let kernel_path = layout.kernel_path();
-    let initrd_path = layout.initrd_path();
-    if kernel_path.exists() && initrd_path.exists() {
-        return Ok(());
-    }
-
-    let arch = alpine_arch_slug();
-    let base = format!("{}/{}/netboot", ALPINE_NETBOOT_BASE, arch);
-
-    if !kernel_path.exists() {
-        let url = format!("{}/vmlinuz-virt", base);
-        download_file(&url, &kernel_path)?;
-    }
-    if !initrd_path.exists() {
-        let url = format!("{}/initramfs-virt", base);
-        download_file(&url, &initrd_path)?;
-    }
-
-    Ok(())
-}
-
-fn download_file(url: &str, dest: &Path) -> Result<(), String> {
-    tracing::info!(url, path = %dest.display(), "downloading VM artifact");
-    let output = Command::new("curl")
-        .args(["-fL", "--retry", "3", "-o"])
-        .arg(dest)
-        .arg(url)
-        .output()
-        .map_err(|e| format!("curl failed to run: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("download failed for {url}: {stderr}"));
-    }
     Ok(())
 }
 
@@ -120,8 +81,6 @@ fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
 }
 
 fn write_vm_config(layout: &VmLayout) -> Result<(), String> {
-    let kernel_cmdline = "console=hvc0 root=/dev/vda rw rootwait modules=sd-mod,usb-storage,ext4 alpine_repo=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main".to_string();
-
     let config = VmConfigFile {
         id: "default".into(),
         host_arch: host_arch().into(),
@@ -129,10 +88,11 @@ fn write_vm_config(layout: &VmLayout) -> Result<(), String> {
         cpu_count: 2,
         memory_mib: 2048,
         kernel_path: layout.kernel_path().to_string_lossy().into(),
-        initrd_path: Some(layout.initrd_path().to_string_lossy().into()),
+        initrd_path: None,
         disk_path: layout.disk_path().to_string_lossy().into(),
-        kernel_command_line: kernel_cmdline,
+        kernel_command_line: kernel_command_line().into(),
         guest_agent_port: GUEST_AGENT_PORT,
+        console_log_path: layout.console_log_path().to_string_lossy().into(),
     };
 
     let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;

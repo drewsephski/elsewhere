@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
@@ -33,6 +33,7 @@ pub struct ControlResponse {
 
 pub struct VmmProcess {
     child: Child,
+    pub binary_path: PathBuf,
 }
 
 impl VmmProcess {
@@ -42,11 +43,15 @@ impl VmmProcess {
         socket_path: &Path,
         log_path: &Path,
     ) -> Result<Self, String> {
+        verify_vmm_binary(vmm_binary)?;
+
         if socket_path.exists() {
             std::fs::remove_file(socket_path).map_err(|e| e.to_string())?;
         }
 
         let log_file = std::fs::File::create(log_path).map_err(|e| e.to_string())?;
+
+        tracing::info!(vmm = %vmm_binary.display(), "spawning gptbot-vmm");
 
         let child = Command::new(vmm_binary)
             .arg("serve")
@@ -57,11 +62,14 @@ impl VmmProcess {
             .stdout(Stdio::from(log_file.try_clone().map_err(|e| e.to_string())?))
             .stderr(Stdio::from(log_file))
             .spawn()
-            .map_err(|e| format!("failed to spawn gptbot-vmm: {e}"))?;
+            .map_err(|e| format!("failed to spawn gptbot-vmm at {}: {e}", vmm_binary.display()))?;
 
         wait_for_socket(socket_path, Duration::from_secs(10))?;
 
-        Ok(Self { child })
+        Ok(Self {
+            child,
+            binary_path: vmm_binary.to_path_buf(),
+        })
     }
 
     pub fn stop(&mut self) {
@@ -116,27 +124,72 @@ pub fn parse_guest_response(result: &str) -> Result<GuestResponse, String> {
     serde_json::from_str(result).map_err(|e| format!("invalid guest JSON: {e}"))
 }
 
-pub fn locate_vmm_binary() -> Result<std::path::PathBuf, String> {
-    if let Ok(path) = std::env::var("GPTBOT_VMM_PATH") {
-        let p = std::path::PathBuf::from(path);
-        if p.exists() {
-            return Ok(p);
+/// Resolve the `gptbot-vmm` helper that will actually be executed (must be signed with virtualization entitlement).
+pub fn locate_vmm_binary() -> Result<PathBuf, String> {
+    let candidates: Vec<PathBuf> = {
+        let mut list = Vec::new();
+        if let Ok(path) = std::env::var("GPTBOT_VMM_PATH") {
+            list.push(PathBuf::from(path));
+        }
+        list.push(PathBuf::from(env!("OUT_DIR")).join("gptbot-vmm"));
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        list.push(manifest.join("../macos/gptbot-vmm/.build/release/gptbot-vmm"));
+        list
+    };
+
+    let mut errors: Vec<String> = Vec::new();
+    for candidate in candidates {
+        if !candidate.exists() {
+            continue;
+        }
+        match verify_vmm_binary(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(err) => errors.push(format!("{}: {}", candidate.display(), err)),
         }
     }
 
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let dev_path = manifest
-        .join("../macos/gptbot-vmm/.build/release/gptbot-vmm");
-    if dev_path.exists() {
-        return Ok(dev_path);
+    Err(format!(
+        "no usable signed gptbot-vmm found. Build with `cargo build` (signs OUT_DIR copy) or export GPTBOT_VMM_PATH to a codesigned binary with com.apple.security.virtualization. Details:\n{}",
+        errors.join("\n")
+    ))
+}
+
+pub fn verify_vmm_binary(path: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Err("binary does not exist".into());
     }
 
-    let out_path = std::path::PathBuf::from(env!("OUT_DIR")).join("gptbot-vmm");
-    if out_path.exists() {
-        return Ok(out_path);
+    let output = Command::new("codesign")
+        .args(["-dvvv", "--entitlements", ":-"])
+        .arg(path)
+        .output()
+        .map_err(|e| format!("codesign failed to run: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("not codesigned or invalid signature: {stderr}"));
     }
 
-    Err(
-        "gptbot-vmm binary not found (build with swift or set GPTBOT_VMM_PATH)".into(),
-    )
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !combined.contains("com.apple.security.virtualization") {
+        return Err(
+            "missing com.apple.security.virtualization entitlement (re-sign with src-tauri/entitlements.plist and --generate-entitlement-der)"
+                .into(),
+        );
+    }
+
+    Ok(())
+}
+
+pub fn tail_file(path: &Path, max_bytes: usize) -> Option<String> {
+    let data = std::fs::read(path).ok()?;
+    if data.is_empty() {
+        return None;
+    }
+    let start = data.len().saturating_sub(max_bytes);
+    String::from_utf8_lossy(&data[start..]).to_string().into()
 }

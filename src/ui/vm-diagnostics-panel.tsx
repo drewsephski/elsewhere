@@ -9,6 +9,8 @@ import {
   type GuestResponse,
   type VmInfo,
 } from "@/services/vm-service";
+import { LoaderCircle } from "@/components/icons/lucide";
+import { cn } from "@/lib/utils";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -98,23 +100,26 @@ export function VmDiagnosticsPanel({ open, embedded = false }: VmDiagnosticsPane
 
   if (!open && !embedded) return null;
 
+  if (embedded) {
+    return (
+      <VmSidebarControls
+        info={info}
+        error={error}
+        busy={busy}
+        onRefresh={() => void refresh()}
+        onStart={() => void runAction(() => vmService.start())}
+        onStop={() => void runAction(() => vmService.stop())}
+        onRestart={() => void runAction(() => vmService.restart())}
+      />
+    );
+  }
+
   return (
     <section
-      className={
-        embedded
-          ? "flex flex-col gap-3"
-          : "border-t border-border/60 bg-muted/20 px-3 py-3 sm:px-4"
-      }
+      className="border-t border-border/60 bg-muted/20 px-3 py-3 sm:px-4"
       aria-label="Agent Computer VM diagnostics"
     >
-      <div
-        className={
-          embedded
-            ? "flex w-full flex-col gap-3"
-            : "mx-auto flex w-full max-w-3xl flex-col gap-3"
-        }
-      >
-        {!embedded && (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium text-foreground">
             Agent Computer — VM diagnostics (Phase 2A spike)
@@ -129,7 +134,6 @@ export function VmDiagnosticsPanel({ open, embedded = false }: VmDiagnosticsPane
             Refresh
           </Button>
         </div>
-        )}
 
         {error && (
           <Alert variant="destructive">
@@ -167,6 +171,18 @@ export function VmDiagnosticsPanel({ open, embedded = false }: VmDiagnosticsPane
                 {formatBytes(info.diskBytes)} — {info.diskPath}
               </dd>
             </div>
+            {info.consoleLogPath ? (
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-foreground">Guest console log</dt>
+                <dd className="break-all font-mono">{info.consoleLogPath}</dd>
+              </div>
+            ) : null}
+            {info.vmmBinaryPath ? (
+              <div className="sm:col-span-2">
+                <dt className="font-medium text-foreground">VMM binary</dt>
+                <dd className="break-all font-mono">{info.vmmBinaryPath}</dd>
+              </div>
+            ) : null}
           </dl>
         )}
 
@@ -235,5 +251,124 @@ export function VmDiagnosticsPanel({ open, embedded = false }: VmDiagnosticsPane
         )}
       </div>
     </section>
+  );
+}
+
+interface VmSidebarControlsProps {
+  info: VmInfo | null;
+  error: string | null;
+  busy: boolean;
+  onRefresh: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  onRestart: () => void;
+}
+
+function vmStateTone(state: string | undefined): string {
+  if (!state) {
+    return "bg-muted-foreground/40";
+  }
+  const lower = state.toLowerCase();
+  if (lower.includes("run") || lower.includes("start")) {
+    return "bg-emerald-500";
+  }
+  if (lower.includes("stop") || lower.includes("off")) {
+    return "bg-zinc-400";
+  }
+  return "bg-amber-500";
+}
+
+function VmSidebarControls({
+  info,
+  error,
+  busy,
+  onRefresh,
+  onStart,
+  onStop,
+  onRestart,
+}: VmSidebarControlsProps) {
+  const statusLabel = info?.state ?? (error ? "Unavailable" : "Checking…");
+  const meta =
+    info &&
+    `${info.guestBridgeReady ? "Bridge on" : "Bridge off"} · ${info.cpuCount} vCPU`;
+
+  return (
+    <div className="flex flex-col gap-2 px-1 pb-1 pt-0.5" aria-label="Agent computer controls">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn("size-1.5 shrink-0 rounded-full", vmStateTone(info?.state))}
+              aria-hidden
+            />
+            <span className="truncate text-[10px] font-medium text-foreground">
+              {statusLabel}
+            </span>
+            {busy && (
+              <LoaderCircle
+                className="size-3 shrink-0 animate-spin text-muted-foreground"
+                aria-label="Working"
+              />
+            )}
+          </div>
+          {meta && (
+            <p className="mt-0.5 truncate pl-3 text-[9px] text-muted-foreground">{meta}</p>
+          )}
+          {error && (
+            <p
+              className="mt-1 line-clamp-2 pl-3 text-[9px] leading-snug text-destructive/90"
+              title={error}
+            >
+              {error}
+            </p>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="h-6 shrink-0 px-1.5 text-[9px] text-muted-foreground"
+          onClick={onRefresh}
+          disabled={busy}
+        >
+          Refresh
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-1">
+        <SidebarAction disabled={busy} onClick={onStart}>
+          Start
+        </SidebarAction>
+        <SidebarAction disabled={busy} onClick={onStop}>
+          Stop
+        </SidebarAction>
+        <SidebarAction disabled={busy} onClick={onRestart}>
+          Restart
+        </SidebarAction>
+      </div>
+    </div>
+  );
+}
+
+function SidebarAction({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="xs"
+      disabled={disabled}
+      className="h-6 border-border/50 bg-white/50 px-2 text-[9px] font-normal text-foreground shadow-none hover:bg-white"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }

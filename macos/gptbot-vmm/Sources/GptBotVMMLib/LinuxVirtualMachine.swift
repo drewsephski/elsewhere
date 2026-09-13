@@ -69,8 +69,14 @@ public final class LinuxVirtualMachine: NSObject, @unchecked Sendable {
         semaphore.wait()
 
         if let startError {
-            setStatus(.error, message: startError.localizedDescription)
-            throw VMMError.bootFailed(startError.localizedDescription)
+            let consolePath = config.resolvedConsoleLogPath()
+            var detail = ErrorFormatting.describe(startError)
+            if let tail = ErrorFormatting.tailOfFile(at: consolePath) {
+                detail += "\n--- console.log (tail) ---\n\(tail)"
+            }
+            detail += "\n(console log: \(consolePath))"
+            setStatus(.error, message: detail)
+            throw VMMError.bootFailed(detail)
         }
 
         setStatus(.running)
@@ -147,7 +153,17 @@ public final class LinuxVirtualMachine: NSObject, @unchecked Sendable {
         let socketConfig = VZVirtioSocketDeviceConfiguration()
         vmConfig.socketDevices = [socketConfig]
 
+        let consolePath = config.resolvedConsoleLogPath()
+        let consoleURL = URL(fileURLWithPath: consolePath)
+        let consoleDir = consoleURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: consoleDir, withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: consolePath) {
+            try FileManager.default.removeItem(at: consoleURL)
+        }
+        FileManager.default.createFile(atPath: consolePath, contents: nil)
+        let serialAttachment = try VZFileSerialPortAttachment(url: consoleURL, append: false)
         let serialPort = VZVirtioConsoleDeviceSerialPortConfiguration()
+        serialPort.attachment = serialAttachment
         vmConfig.serialPorts = [serialPort]
 
         try vmConfig.validate()
@@ -170,7 +186,13 @@ public final class LinuxVirtualMachine: NSObject, @unchecked Sendable {
             }
             Thread.sleep(forTimeInterval: 0.5)
         }
-        throw VMMError.bridgeUnavailable("Guest agent did not become ready within \(timeout)s")
+        let consolePath = config.resolvedConsoleLogPath()
+        var detail = "Guest agent did not become ready within \(timeout)s"
+        if let tail = ErrorFormatting.tailOfFile(at: consolePath) {
+            detail += "\n--- console.log (tail) ---\n\(tail)"
+        }
+        detail += "\n(console log: \(consolePath))"
+        throw VMMError.bridgeUnavailable(detail)
     }
 
     public func guestRequest(jsonLine: String, timeout: TimeInterval) throws -> String {
@@ -211,7 +233,13 @@ extension LinuxVirtualMachine: VZVirtualMachineDelegate {
     }
 
     public func virtualMachine(_ virtualMachine: VZVirtualMachine, didStopWithError error: Error) {
-        setStatus(.error, message: error.localizedDescription)
+        let consolePath = config.resolvedConsoleLogPath()
+        var detail = ErrorFormatting.describe(error)
+        if let tail = ErrorFormatting.tailOfFile(at: consolePath) {
+            detail += "\n--- console.log (tail) ---\n\(tail)"
+        }
+        detail += "\n(console log: \(consolePath))"
+        setStatus(.error, message: detail)
         guestReady = false
         self.virtualMachine = nil
         self.socketDevice = nil

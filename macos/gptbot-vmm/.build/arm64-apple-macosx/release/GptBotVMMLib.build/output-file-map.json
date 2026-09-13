@@ -10,6 +10,12 @@
     "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swiftdeps",
     "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.dia"
   },
+  "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ErrorFormatting.swift": {
+    "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.swift.o",
+    "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting~partial.swiftmodule",
+    "swift-dependencies": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.swiftdeps",
+    "diagnostics": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.dia"
+  },
   "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift": {
     "object": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o",
     "swiftmodule": "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge~partial.swiftmodule",

@@ -1,20 +1,57 @@
 import type { Bot } from "@/lib/definitions";
+import { DEMO_AGENT_INPUT, isDemoAgent } from "@/lib/demo-agent";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { tauriApi, type CreateBotInput, type UpdateBotInput } from "@/lib/tauri-api";
+import { localBotStore } from "@/services/local-bot-store";
+
+async function bootstrapInTauri(): Promise<Bot[]> {
+  try {
+    return await tauriApi.bootstrapBots();
+  } catch {
+    const existing = await tauriApi.listBots();
+    if (existing.some((bot) => isDemoAgent(bot))) {
+      return existing;
+    }
+    await tauriApi.createBot(DEMO_AGENT_INPUT);
+    return tauriApi.listBots();
+  }
+}
 
 export const botService = {
-  list(includeArchived = false): Promise<Bot[]> {
-    return tauriApi.listBots(includeArchived);
+  async bootstrap(): Promise<Bot[]> {
+    if (isTauriRuntime()) {
+      return bootstrapInTauri();
+    }
+    return localBotStore.bootstrap();
   },
-  create(input: CreateBotInput): Promise<Bot> {
-    return tauriApi.createBot(input);
+  async list(includeArchived = false): Promise<Bot[]> {
+    if (isTauriRuntime()) {
+      return tauriApi.listBots(includeArchived);
+    }
+    return localBotStore.list(includeArchived);
   },
-  update(input: UpdateBotInput): Promise<Bot> {
-    return tauriApi.updateBot(input);
+  async create(input: CreateBotInput): Promise<Bot> {
+    if (isTauriRuntime()) {
+      return tauriApi.createBot(input);
+    }
+    return localBotStore.create(input);
   },
-  archive(id: string): Promise<void> {
-    return tauriApi.archiveBot(id);
+  async update(input: UpdateBotInput): Promise<Bot> {
+    if (isTauriRuntime()) {
+      return tauriApi.updateBot(input);
+    }
+    return localBotStore.update(input);
   },
-  delete(id: string): Promise<void> {
-    return tauriApi.deleteBot(id);
+  async archive(id: string): Promise<void> {
+    if (isTauriRuntime()) {
+      return tauriApi.archiveBot(id);
+    }
+    localBotStore.archive(id);
+  },
+  async delete(id: string): Promise<void> {
+    if (isTauriRuntime()) {
+      return tauriApi.deleteBot(id);
+    }
+    localBotStore.delete(id);
   },
 };

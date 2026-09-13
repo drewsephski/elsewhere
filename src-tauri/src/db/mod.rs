@@ -23,6 +23,7 @@ impl Database {
         schema::migrate(&conn)?;
         let db = Self { conn };
         db.recover_interrupted_messages()?;
+        db.ensure_demo_agent()?;
         Ok(db)
     }
 
@@ -32,6 +33,7 @@ impl Database {
         schema::migrate(&conn)?;
         let db = Self { conn };
         db.recover_interrupted_messages()?;
+        db.ensure_demo_agent()?;
         Ok(db)
     }
 
@@ -59,6 +61,34 @@ impl Database {
 
     fn now_ms() -> i64 {
         Utc::now().timestamp_millis()
+    }
+
+    pub fn ensure_demo_agent(&self) -> Result<(), AppError> {
+        let exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM bots WHERE name = ?1 AND archived_at IS NULL",
+                params!["Scout"],
+                |row| row.get(0),
+            )
+            .map_err(AppError::Database)?;
+        if exists > 0 {
+            return Ok(());
+        }
+
+        let system_prompt = "You are Scout, a calm and capable research assistant inside GPTBot.\n\n\
+Help the user explore ideas, compare options, and turn curiosity into clear next steps. \
+Be concise unless they ask for depth. Prefer structured answers with short headings and bullet points when useful.\n\n\
+When information might be outdated, say what you know and what you would verify. Never invent sources.";
+
+        self.create_bot(CreateBotInput {
+            name: "Scout".to_string(),
+            description: Some("Research & discovery".to_string()),
+            system_prompt: Some(system_prompt.to_string()),
+            provider: None,
+            model: "gpt-4o-mini".to_string(),
+        })?;
+        Ok(())
     }
 
     pub fn list_bots(&self, include_archived: bool) -> Result<Vec<Bot>, AppError> {
@@ -583,6 +613,16 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].id, user.id);
         assert_eq!(messages[1].id, assistant.id);
+    }
+
+    #[test]
+    fn ensure_demo_agent_creates_scout_on_open() {
+        let db = Database::open_in_memory().expect("db");
+        let bots = db.list_bots(false).expect("list");
+        assert!(
+            bots.iter().any(|bot| bot.name == "Scout"),
+            "expected Scout demo agent after database open",
+        );
     }
 
     #[test]

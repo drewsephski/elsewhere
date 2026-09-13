@@ -1,5 +1,5 @@
 import type { Bot } from "@/lib/definitions";
-import { getBotAvatarClass, getBotInitials } from "@/lib/bot-visual";
+import { BotCreatureAvatar } from "@/ui/bot-creature-avatar";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -8,8 +8,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { BotNav } from "@/ui/bot-nav";
-import { cn } from "@/lib/utils";
-import { Menu, MoreHorizontal } from "lucide-react";
+import { Menu, MoreHorizontal } from "@/components/icons/lucide";
 
 interface ChatHeaderProps {
   bot: Bot | null;
@@ -22,6 +21,8 @@ interface ChatHeaderProps {
   onOpenSettings: () => void;
   onOpenVmDiagnostics?: () => void;
   isStreaming: boolean;
+  apiKeyConfigured?: boolean;
+  onRenameBot?: (id: string, name: string) => void | Promise<void>;
 }
 
 export function ChatHeader({
@@ -34,6 +35,8 @@ export function ChatHeader({
   onCreateBot,
   onOpenSettings,
   isStreaming,
+  apiKeyConfigured = false,
+  onRenameBot,
 }: ChatHeaderProps) {
   return (
     <header className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-white px-4 py-3">
@@ -50,14 +53,11 @@ export function ChatHeader({
 
       {bot ? (
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <span
-            className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
-              getBotAvatarClass(bot.name),
-            )}
-          >
-            {getBotInitials(bot.name)}
-          </span>
+          <BotCreatureAvatar
+            name={bot.name}
+            size="md"
+            animated={isStreaming}
+          />
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold tracking-tight">
               {bot.name}
@@ -95,6 +95,9 @@ export function ChatHeader({
             onSelectBot={onSelectBot}
             onCreateBot={onCreateBot}
             onOpenSettings={onOpenSettings}
+            apiKeyConfigured={apiKeyConfigured}
+            isStreaming={isStreaming}
+            onRenameBot={onRenameBot}
             className="h-full"
             onNavigate={() => onMobileNavOpenChange(false)}
           />

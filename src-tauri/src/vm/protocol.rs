@@ -25,6 +25,8 @@ pub struct VmInfo {
     pub guest_bridge_ready: bool,
     pub message: Option<String>,
     pub created: bool,
+    pub console_log_path: String,
+    pub vmm_binary_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,4 +62,5 @@ pub struct VmConfigFile {
     pub disk_path: String,
     pub kernel_command_line: String,
     pub guest_agent_port: u32,
+    pub console_log_path: String,
 }

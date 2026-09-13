@@ -41,7 +41,7 @@ fn build_vmm() {
                 std::fs::copy(&built, &dest).expect("copy gptbot-vmm to OUT_DIR");
                 let entitlements = manifest_dir.join("entitlements.plist");
                 if entitlements.exists() {
-                    let _ = std::process::Command::new("codesign")
+                    let sign = std::process::Command::new("codesign")
                         .args([
                             "-f",
                             "-s",
@@ -52,6 +52,20 @@ fn build_vmm() {
                             dest.to_str().unwrap(),
                         ])
                         .status();
+                    match sign {
+                        Ok(s) if s.success() => {
+                            println!("cargo:warning=Signed gptbot-vmm at {}", dest.display());
+                        }
+                        Ok(s) => {
+                            println!(
+                                "cargo:warning=codesign gptbot-vmm failed (exit {:?}); VM start will fail until signed",
+                                s.code()
+                            );
+                        }
+                        Err(e) => {
+                            println!("cargo:warning=codesign gptbot-vmm failed: {e}");
+                        }
+                    }
                 }
                 println!("cargo:warning=Built gptbot-vmm at {}", dest.display());
             }

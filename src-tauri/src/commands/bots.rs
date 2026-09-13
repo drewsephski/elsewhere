@@ -4,6 +4,13 @@ use crate::state::AppState;
 use tauri::State;
 
 #[tauri::command]
+pub fn bootstrap_bots(state: State<AppState>) -> Result<Vec<Bot>, AppError> {
+    let db = state.db.lock();
+    db.ensure_demo_agent()?;
+    db.list_bots(false)
+}
+
+#[tauri::command]
 pub fn list_bots(
     state: State<AppState>,
     include_archived: Option<bool>,

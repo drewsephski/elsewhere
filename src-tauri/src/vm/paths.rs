@@ -42,11 +42,15 @@ impl VmLayout {
     }
 
     pub fn kernel_path(&self) -> PathBuf {
-        self.artifacts_dir().join("vmlinuz-virt")
+        self.artifacts_dir().join("linux-image")
     }
 
     pub fn initrd_path(&self) -> PathBuf {
         self.artifacts_dir().join("initramfs-virt")
+    }
+
+    pub fn console_log_path(&self) -> PathBuf {
+        self.logs_dir().join("console.log")
     }
 
     pub fn control_socket_path(&self) -> PathBuf {

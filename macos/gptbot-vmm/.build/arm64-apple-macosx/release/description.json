@@ -28,6 +28,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ErrorFormatting.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift"
         },
         {
@@ -60,6 +64,7 @@
       "moduleOutputPath" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/Modules/GptBotVMMLib.swiftmodule",
       "objects" : [
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.swift.o",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/LinuxVirtualMachine.swift.o",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/VMConfig.swift.o",
@@ -120,6 +125,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/GuestBridge.swift.o"
         },
         {
@@ -146,6 +155,7 @@
       "prepareForIndexing" : false,
       "sources" : [
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift",
+        "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ErrorFormatting.swift",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift",
         "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift",
@@ -260,6 +270,7 @@
       "gptbot_vmm",
       "-c",
       "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ControlServer.swift",
+      "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ErrorFormatting.swift",
       "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift",
       "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/LinuxVirtualMachine.swift",
       "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/VMConfig.swift",
@@ -405,6 +416,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/ErrorFormatting.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/Sources/GptBotVMMLib/GuestBridge.swift"
         },
         {
@@ -436,6 +451,10 @@
         {
           "kind" : "file",
           "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ControlServer.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/drewsepeczi/gptbot/macos/gptbot-vmm/.build/arm64-apple-macosx/release/GptBotVMMLib.build/ErrorFormatting.swift.o"
         },
         {
           "kind" : "file",

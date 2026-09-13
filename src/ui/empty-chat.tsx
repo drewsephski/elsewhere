@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Bot, KeyRound, Plus } from "lucide-react";
+import { Bot, KeyRound, Plus } from "@/components/icons/lucide";
 
 interface EmptyChatProps {
   apiKeyConfigured: boolean;

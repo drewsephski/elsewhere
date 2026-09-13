@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ThemeProvider } from "@/components/theme-provider";
+import { MotionIconConfig } from "@/components/icons/lucide";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import "./index.css";
@@ -9,10 +10,12 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <TooltipProvider>
-        <App />
-        <Toaster position="top-center" richColors closeButton />
-      </TooltipProvider>
+      <MotionIconConfig trigger="hover" mode="signature" duration={0.35}>
+        <TooltipProvider>
+          <App />
+          <Toaster position="top-center" richColors closeButton />
+        </TooltipProvider>
+      </MotionIconConfig>
     </ThemeProvider>
   </React.StrictMode>,
 );

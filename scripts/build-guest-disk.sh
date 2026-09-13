@@ -58,21 +58,40 @@ docker run --rm --privileged \
     mkdir -p /mnt
     mount /disk.raw /mnt
     tar -xzf /tmp/alpine-minirootfs.tar.gz -C /mnt
-    mkdir -p /mnt/usr/local/bin /mnt/etc/init.d /mnt/etc/runlevels/default /mnt/workspace
+    mkdir -p /mnt/usr/local/bin /mnt/etc/init.d /mnt/workspace
     install -m 755 \"\$AGENT\" /mnt/usr/local/bin/gptbot-guest-agent
+
     mount --bind /dev /mnt/dev
     mount -t proc proc /mnt/proc
     mount -t sysfs sys /mnt/sys
     cp /etc/resolv.conf /mnt/etc/resolv.conf
-    chroot /mnt /sbin/apk add --no-cache linux-virt e2fsprogs >/dev/null
+
+    chroot /mnt /sbin/apk add --no-cache alpine-base e2fsprogs openrc >/dev/null
+
+    cat > /mnt/etc/init.d/gptbot-guest-agent <<'EOF'
+#!/sbin/openrc-run
+
+name=\"gptbot-guest-agent\"
+description=\"GPT Bot virtio guest agent\"
+
+command=/usr/local/bin/gptbot-guest-agent
+command_background=yes
+pidfile=/run/gptbot-guest-agent.pid
+
+depend() {
+    need localmount
+    after localmount
+}
+EOF
+    chmod +x /mnt/etc/init.d/gptbot-guest-agent
+
+    chroot /mnt /sbin/rc-update add gptbot-guest-agent default
+
+    if ! grep -q '^/dev/vda ' /mnt/etc/fstab; then
+      echo '/dev/vda / ext4 defaults 0 1' >> /mnt/etc/fstab
+    fi
+
     umount /mnt/sys /mnt/proc /mnt/dev
-    mkdir -p /mnt/etc/local.d
-    printf '%s\n' \
-      '#!/bin/sh' \
-      '/usr/local/bin/gptbot-guest-agent &' \
-      > /mnt/etc/local.d/gptbot-agent.start
-    chmod +x /mnt/etc/local.d/gptbot-agent.start
-    echo '/dev/vda / ext4 defaults 0 1' >> /mnt/etc/fstab
     umount /mnt
   "
 

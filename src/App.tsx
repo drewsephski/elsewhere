@@ -11,11 +11,13 @@ import {
   pushPreAckStreamEvent,
 } from "@/providers/pre-ack-stream-buffer";
 import type { ProviderStreamEvent } from "@/providers/types";
+import { isDemoAgent } from "@/lib/demo-agent";
 import { botService } from "@/services/bot-service";
 import { chatService } from "@/services/chat-service";
 import { tauriApi } from "@/lib/tauri-api";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { XIcon } from "@/components/icons/lucide";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BotSidebar } from "@/ui/bot-sidebar";
 import { ChatComposer } from "@/ui/chat-composer";
@@ -49,6 +51,7 @@ export default function App() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [apiKeyBannerDismissed, setApiKeyBannerDismissed] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -76,12 +79,23 @@ export default function App() {
   const isStreaming = activeRequestId !== null;
 
   const refreshBots = useCallback(async () => {
-    const list = await botService.list();
-    setBots(list);
-    if (list.length > 0 && !selectedBotId) {
-      setSelectedBotId(list[0].id);
+    try {
+      const list = await botService.bootstrap();
+      setBots(list);
+      setSelectedBotId((current) => {
+        if (current && list.some((bot) => bot.id === current)) {
+          return current;
+        }
+        if (list.length === 0) {
+          return null;
+        }
+        const preferred = list.find((bot) => isDemoAgent(bot)) ?? list[0];
+        return preferred.id;
+      });
+    } catch (error) {
+      setGlobalError(formatInvokeError(error));
     }
-  }, [selectedBotId]);
+  }, []);
 
   const refreshApiKeyStatus = useCallback(async () => {
     const status = await tauriApi.getApiKeyStatus();
@@ -245,6 +259,27 @@ export default function App() {
       setGlobalError(formatInvokeError(error));
     } finally {
       setBotSaving(false);
+    }
+  }
+
+  async function handleRenameBot(id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    const existing = bots.find((bot) => bot.id === id);
+    if (!existing || existing.name === trimmed) {
+      return;
+    }
+    setGlobalError(null);
+    try {
+      const updated = await botService.update({ id, name: trimmed });
+      setBots((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      setBotDraft((prev) =>
+        prev?.id === updated.id ? { ...prev, name: updated.name } : prev,
+      );
+    } catch (error) {
+      setGlobalError(formatInvokeError(error));
     }
   }
 
@@ -437,6 +472,9 @@ export default function App() {
         onSelectBot={setSelectedBotId}
         onCreateBot={handleOpenCreateBot}
         onOpenSettings={handleOpenSettings}
+        onRenameBot={handleRenameBot}
+        apiKeyConfigured={apiKeyConfigured}
+        isStreaming={isStreaming}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
@@ -449,30 +487,50 @@ export default function App() {
           onSelectBot={setSelectedBotId}
           onCreateBot={handleOpenCreateBot}
           onOpenSettings={handleOpenSettings}
+          onRenameBot={handleRenameBot}
+          apiKeyConfigured={apiKeyConfigured}
           isStreaming={isStreaming}
         />
 
-        {!apiKeyConfigured && (
-          <Alert className="mx-3 mt-2 border-amber-500/30 bg-amber-500/10 sm:mx-4">
-            <AlertDescription className="flex flex-wrap items-center gap-2 text-amber-950/90 dark:text-amber-100/90">
-              <span>Add your OpenAI API key to start chatting.</span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 border-amber-600/40 bg-transparent text-amber-900 hover:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-50 dark:hover:bg-amber-500/15"
-                onClick={handleOpenSettings}
-              >
-                Open settings
-              </Button>
-            </AlertDescription>
-          </Alert>
+        {!apiKeyConfigured && !apiKeyBannerDismissed && (
+          <div className="min-w-0 px-3 pt-2 sm:px-4">
+            <Alert className="border-amber-500/30 bg-amber-500/10">
+              <AlertDescription className="flex min-w-0 flex-wrap items-center gap-2 pr-1 text-amber-950/90 dark:text-amber-100/90">
+                <span className="min-w-0">
+                  Add your OpenAI API key to start chatting.
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 border-amber-600/40 bg-transparent text-amber-900 hover:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-50 dark:hover:bg-amber-500/15"
+                  onClick={handleOpenSettings}
+                >
+                  Open settings
+                </Button>
+              </AlertDescription>
+              <AlertAction>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-amber-900/80 hover:bg-amber-500/20 hover:text-amber-950 dark:text-amber-50/80 dark:hover:bg-amber-500/15 dark:hover:text-amber-50"
+                  aria-label="Dismiss API key reminder"
+                  onClick={() => setApiKeyBannerDismissed(true)}
+                >
+                  <XIcon size={16} className="pointer-events-none" />
+                </Button>
+              </AlertAction>
+            </Alert>
+          </div>
         )}
 
         {globalError && (
-          <Alert variant="destructive" className="mx-3 mt-2 sm:mx-4">
-            <AlertDescription>{globalError}</AlertDescription>
+          <div className="min-w-0 px-3 pt-2 sm:px-4">
+            <Alert variant="destructive">
+            <AlertDescription className="min-w-0 break-words">{globalError}</AlertDescription>
           </Alert>
+          </div>
         )}
 
         <div
@@ -530,6 +588,7 @@ export default function App() {
         }}
         onSaveBot={handleSaveBot}
         onArchiveBot={handleArchiveBot}
+        onRenameBot={handleRenameBot}
         botSaving={botSaving}
       />
 

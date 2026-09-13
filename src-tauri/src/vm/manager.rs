@@ -22,6 +22,7 @@ pub struct VirtualMachineManager {
     layout: VmLayout,
     state: Mutex<InternalState>,
     vmm: Mutex<Option<VmmProcess>>,
+    last_vmm_binary: Mutex<Option<String>>,
 }
 
 impl VirtualMachineManager {
@@ -36,6 +37,7 @@ impl VirtualMachineManager {
             layout,
             state: Mutex::new(initial),
             vmm: Mutex::new(None),
+            last_vmm_binary: Mutex::new(None),
         }
     }
 
@@ -61,6 +63,8 @@ impl VirtualMachineManager {
             (2, 2048, provision::guest_arch().into())
         };
 
+        let vmm_binary_path = self.last_vmm_binary.lock().clone();
+
         Ok(VmInfo {
             state,
             host_arch: provision::host_arch().into(),
@@ -73,6 +77,8 @@ impl VirtualMachineManager {
             guest_bridge_ready,
             message,
             created,
+            console_log_path: self.layout.console_log_path().to_string_lossy().into(),
+            vmm_binary_path,
         })
     }
 
@@ -159,6 +165,7 @@ impl VirtualMachineManager {
         }
 
         let process = VmmProcess::spawn(&vmm_binary, &config_path, &socket_path, &log_path)?;
+        *self.last_vmm_binary.lock() = Some(vmm_binary.to_string_lossy().into());
         *vmm_guard = Some(process);
 
         let response = vmm_client::control_request(
@@ -169,9 +176,23 @@ impl VirtualMachineManager {
         )?;
 
         if !response.ok {
-            return Err(response
+            let base = response
                 .error
-                .unwrap_or_else(|| "VMM start command failed".into()));
+                .unwrap_or_else(|| "VMM start command failed".into());
+            let console = self.layout.console_log_path();
+            let tail = vmm_client::tail_file(&console, 8192);
+            let mut message = format!(
+                "{base}\nVMM binary: {}\nGuest console log: {}",
+                vmm_binary.display(),
+                console.display()
+            );
+            if let Some(tail) = tail {
+                if !tail.trim().is_empty() {
+                    message.push_str("\n--- console.log (tail) ---\n");
+                    message.push_str(&tail);
+                }
+            }
+            return Err(message);
         }
 
         *self.state.lock() = InternalState::Running;

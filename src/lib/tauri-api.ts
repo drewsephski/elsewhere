@@ -37,6 +37,9 @@ export interface StartChatResult {
 }
 
 export const tauriApi = {
+  bootstrapBots(): Promise<Bot[]> {
+    return invoke("bootstrap_bots");
+  },
   listBots(includeArchived = false): Promise<Bot[]> {
     return invoke("list_bots", { includeArchived });
   },

@@ -47,6 +47,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::bootstrap_bots,
             commands::list_bots,
             commands::get_bot,
             commands::create_bot,
