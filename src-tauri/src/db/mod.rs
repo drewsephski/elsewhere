@@ -21,14 +21,40 @@ impl Database {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         schema::migrate(&conn)?;
-        Ok(Self { conn })
+        let db = Self { conn };
+        db.recover_interrupted_messages()?;
+        Ok(db)
     }
 
     pub fn open_in_memory() -> Result<Self, AppError> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         schema::migrate(&conn)?;
-        Ok(Self { conn })
+        let db = Self { conn };
+        db.recover_interrupted_messages()?;
+        Ok(db)
+    }
+
+    /// Marks in-flight assistant generations from a prior session as interrupted.
+    pub fn recover_interrupted_messages(&self) -> Result<(), AppError> {
+        self.conn.execute(
+            "UPDATE messages SET status = ?1, updated_at = ?2 WHERE status IN ('pending', 'streaming')",
+            params![
+                MessageStatus::Interrupted.as_str(),
+                Self::now_ms()
+            ],
+        )?;
+        Ok(())
+    }
+
+    fn next_message_sequence(&self, conversation_id: &str) -> Result<i64, AppError> {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(MAX(sequence), -1) + 1 FROM messages WHERE conversation_id = ?1",
+                params![conversation_id],
+                |row| row.get(0),
+            )
+            .map_err(AppError::Database)
     }
 
     fn now_ms() -> i64 {
@@ -269,7 +295,7 @@ impl Database {
 
     pub fn list_messages(&self, conversation_id: &str) -> Result<Vec<Message>, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, conversation_id, role, kind, body, status, model, error_message, created_at, updated_at FROM messages WHERE conversation_id = ?1 ORDER BY created_at ASC",
+            "SELECT id, conversation_id, role, kind, body, status, model, error_message, created_at, updated_at FROM messages WHERE conversation_id = ?1 ORDER BY sequence ASC, created_at ASC, id ASC",
         )?;
         let rows = stmt.query_map(params![conversation_id], |row| {
             let role_str: String = row.get(2)?;
@@ -304,9 +330,10 @@ impl Database {
     ) -> Result<Message, AppError> {
         self.get_conversation(conversation_id)?;
         let now = Self::now_ms();
+        let sequence = self.next_message_sequence(conversation_id)?;
         let id = Uuid::new_v4().to_string();
         self.conn.execute(
-            "INSERT INTO messages (id, conversation_id, role, kind, body, status, model, created_at, updated_at) VALUES (?1, ?2, ?3, 'text', ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO messages (id, conversation_id, role, kind, body, status, model, sequence, created_at, updated_at) VALUES (?1, ?2, ?3, 'text', ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 id,
                 conversation_id,
@@ -314,6 +341,7 @@ impl Database {
                 body,
                 status.as_str(),
                 model,
+                sequence,
                 now,
                 now
             ],
@@ -504,5 +532,96 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].id, user.id);
         assert_eq!(messages[1].body, "world");
+    }
+
+    #[test]
+    fn messages_with_equal_timestamps_order_by_sequence() {
+        let db = Database::open_in_memory().expect("db");
+        let bot = db
+            .create_bot(CreateBotInput {
+                name: "Bot".into(),
+                description: None,
+                system_prompt: None,
+                provider: None,
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("create");
+        let conv = db.create_conversation(&bot.id, None).expect("conv");
+        let user = db
+            .insert_message(
+                &conv.id,
+                MessageRole::User,
+                "first",
+                MessageStatus::Complete,
+                None,
+            )
+            .expect("user");
+        let assistant = db
+            .insert_message(
+                &conv.id,
+                MessageRole::Assistant,
+                "second",
+                MessageStatus::Complete,
+                None,
+            )
+            .expect("assistant");
+        let messages = db.list_messages(&conv.id).expect("list");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].id, user.id);
+        assert_eq!(messages[1].id, assistant.id);
+    }
+
+    #[test]
+    fn recover_interrupted_messages_on_open() {
+        let db = Database::open_in_memory().expect("db");
+        let bot = db
+            .create_bot(CreateBotInput {
+                name: "Bot".into(),
+                description: None,
+                system_prompt: None,
+                provider: None,
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("create");
+        let conv = db.create_conversation(&bot.id, None).expect("conv");
+        let assistant = db
+            .insert_message(
+                &conv.id,
+                MessageRole::Assistant,
+                "partial",
+                MessageStatus::Streaming,
+                Some("gpt-4o-mini"),
+            )
+            .expect("assistant");
+        db.recover_interrupted_messages().expect("recover");
+        let loaded = db.get_message(&assistant.id).expect("get");
+        assert_eq!(loaded.status, MessageStatus::Interrupted);
+    }
+
+    #[test]
+    fn conversation_must_match_bot() {
+        let db = Database::open_in_memory().expect("db");
+        let bot_a = db
+            .create_bot(CreateBotInput {
+                name: "A".into(),
+                description: None,
+                system_prompt: None,
+                provider: None,
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("bot a");
+        let bot_b = db
+            .create_bot(CreateBotInput {
+                name: "B".into(),
+                description: None,
+                system_prompt: None,
+                provider: None,
+                model: "gpt-4o-mini".into(),
+            })
+            .expect("bot b");
+        let conv_a = db.create_conversation(&bot_a.id, None).expect("conv");
+        let conv = db.get_conversation(&conv_a.id).expect("get");
+        assert_eq!(conv.bot_id, bot_a.id);
+        assert_ne!(conv.bot_id, bot_b.id);
     }
 }

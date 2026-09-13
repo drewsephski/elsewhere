@@ -1,7 +1,7 @@
 use crate::error::AppError;
-use bytes::Bytes;
+use crate::openai::sse::SseDecoder;
 use futures_util::StreamExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -18,22 +18,6 @@ struct ChatCompletionRequest {
     model: String,
     messages: Vec<ChatMessageInput>,
     stream: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct StreamChunk {
-    choices: Vec<StreamChoice>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StreamChoice {
-    delta: StreamDelta,
-    finish_reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct StreamDelta {
-    content: Option<String>,
 }
 
 pub async fn stream_chat_completion<F>(
@@ -72,50 +56,25 @@ where
     }
 
     let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut decoder = SseDecoder::new();
     let mut full = String::new();
 
     while let Some(chunk) = stream.next().await {
         if cancelled.load(Ordering::Relaxed) {
             return Err(AppError::Cancelled);
         }
-        let bytes: Bytes = chunk.map_err(|e| AppError::Network(e.to_string()))?;
-        buffer.push_str(&String::from_utf8_lossy(&bytes));
-
-        while let Some(pos) = buffer.find("\n\n") {
-            let line_block = buffer[..pos].to_string();
-            buffer = buffer[pos + 2..].to_string();
-
-            for line in line_block.lines() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with(':') {
-                    continue;
-                }
-                if !line.starts_with("data: ") {
-                    continue;
-                }
-                let data = line.strip_prefix("data: ").unwrap_or("");
-                if data == "[DONE]" {
-                    continue;
-                }
-                let parsed: StreamChunk = serde_json::from_str(data).map_err(|e| {
-                    AppError::Provider(format!("malformed stream chunk: {}", e))
-                })?;
-                for choice in parsed.choices {
-                    if let Some(content) = choice.delta.content {
-                        if !content.is_empty() {
-                            full.push_str(&content);
-                            on_delta(&content);
-                        }
-                    }
-                }
-            }
+        let bytes = chunk.map_err(|e| AppError::Network(e.to_string()))?;
+        for delta in decoder.push_chunk(&bytes)? {
+            full.push_str(&delta);
+            on_delta(&delta);
         }
     }
 
     if cancelled.load(Ordering::Relaxed) {
         return Err(AppError::Cancelled);
     }
+
+    decoder.finish()?;
 
     Ok(full)
 }

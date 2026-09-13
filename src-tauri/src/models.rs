@@ -79,6 +79,7 @@ pub enum MessageStatus {
     Complete,
     Error,
     Cancelled,
+    Interrupted,
 }
 
 impl MessageStatus {
@@ -89,6 +90,7 @@ impl MessageStatus {
             MessageStatus::Complete => "complete",
             MessageStatus::Error => "error",
             MessageStatus::Cancelled => "cancelled",
+            MessageStatus::Interrupted => "interrupted",
         }
     }
 
@@ -99,6 +101,7 @@ impl MessageStatus {
             "complete" => Some(MessageStatus::Complete),
             "error" => Some(MessageStatus::Error),
             "cancelled" => Some(MessageStatus::Cancelled),
+            "interrupted" => Some(MessageStatus::Interrupted),
             _ => None,
         }
     }
@@ -122,10 +125,20 @@ pub struct Message {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ModelCapabilities {
+    pub text_output: bool,
+    pub streaming: bool,
+    pub tools: bool,
+    pub vision: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelDescriptor {
     pub id: String,
     pub display_name: String,
     pub provider: String,
+    pub capabilities: ModelCapabilities,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,6 +147,7 @@ pub struct StartChatInput {
     pub bot_id: String,
     pub conversation_id: Option<String>,
     pub content: String,
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

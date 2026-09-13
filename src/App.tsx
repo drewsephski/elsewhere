@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Bot, Message, ModelDescriptor } from "@/lib/definitions";
 import { useChatStreamListener } from "@/hooks/use-chat-stream";
+import { shouldCommitChatLoad } from "@/lib/chat-load-guard";
+import {
+  bufferStreamDelta,
+  takeBufferedStreamBody,
+} from "@/providers/pending-stream-deltas";
 import { applyStreamEvent } from "@/providers/stream-assembler";
 import { botService } from "@/services/bot-service";
 import { chatService } from "@/services/chat-service";
@@ -56,6 +61,8 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const loadChatEpochRef = useRef(0);
+  const pendingStreamBodiesRef = useRef<Map<string, string>>(new Map());
 
   const selectedBot = bots.find((b) => b.id === selectedBotId) ?? null;
   const displayBot = botDraft ?? selectedBot;
@@ -96,18 +103,27 @@ export default function App() {
   }, [apiKeyConfigured, createModel]);
 
   const loadChat = useCallback(async (botId: string) => {
+    const epoch = ++loadChatEpochRef.current;
     setLoadingChat(true);
     setGlobalError(null);
     try {
       const { conversation, messages: loaded } =
         await chatService.loadConversation(botId);
+      if (!shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+        return;
+      }
       setConversationId(conversation.id);
       setMessages(loaded);
       setBotDraft(null);
     } catch (error) {
+      if (!shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+        return;
+      }
       setGlobalError(formatInvokeError(error));
     } finally {
-      setLoadingChat(false);
+      if (shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+        setLoadingChat(false);
+      }
     }
   }, []);
 
@@ -154,8 +170,19 @@ export default function App() {
       return;
     }
     if (event.type === "delta") {
-      setMessages((prev) =>
-        prev.map((m) => {
+      setMessages((prev) => {
+        const hasTarget = prev.some((m) => m.id === event.assistantMessageId);
+        if (!hasTarget) {
+          if (event.delta) {
+            bufferStreamDelta(
+              pendingStreamBodiesRef.current,
+              event.assistantMessageId,
+              event.delta,
+            );
+          }
+          return prev;
+        }
+        return prev.map((m) => {
           if (m.id !== event.assistantMessageId) {
             return m;
           }
@@ -163,8 +190,8 @@ export default function App() {
             ...m,
             body: applyStreamEvent(m.body, event),
           };
-        }),
-      );
+        });
+      });
     }
   });
 
@@ -259,6 +286,8 @@ export default function App() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+    const requestId = crypto.randomUUID();
+    setActiveRequestId(requestId);
     setMessages((prev) => [...prev, optimisticUser, optimisticAssistant]);
 
     try {
@@ -267,9 +296,13 @@ export default function App() {
         providerId: selectedBot.provider,
         conversationId: conversationId ?? undefined,
         content,
+        requestId,
       });
+      const bufferedAssistantBody = takeBufferedStreamBody(
+        pendingStreamBodiesRef.current,
+        result.assistantMessageId,
+      );
       setConversationId(result.conversationId);
-      setActiveRequestId(result.requestId);
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => !m.id.startsWith("temp-"));
         return [
@@ -283,6 +316,7 @@ export default function App() {
             ...optimisticAssistant,
             id: result.assistantMessageId,
             conversationId: result.conversationId,
+            body: optimisticAssistant.body + bufferedAssistantBody,
           },
         ];
       });

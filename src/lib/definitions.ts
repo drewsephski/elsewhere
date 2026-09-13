@@ -9,7 +9,16 @@ export const messageStatusSchema = z.enum([
   "complete",
   "error",
   "cancelled",
+  "interrupted",
 ]);
+
+export const modelCapabilitiesSchema = z.object({
+  textOutput: z.boolean(),
+  streaming: z.boolean(),
+  tools: z.boolean(),
+  vision: z.boolean(),
+});
+export type ModelCapabilities = z.infer<typeof modelCapabilitiesSchema>;
 export type MessageStatus = z.infer<typeof messageStatusSchema>;
 
 export const botSchema = z.object({
@@ -52,6 +61,7 @@ export const modelDescriptorSchema = z.object({
   id: z.string(),
   displayName: z.string(),
   provider: z.string(),
+  capabilities: modelCapabilitiesSchema,
 });
 export type ModelDescriptor = z.infer<typeof modelDescriptorSchema>;
 

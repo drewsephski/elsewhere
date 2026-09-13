@@ -11,6 +11,7 @@ export const openAiProvider: ModelProvider = {
       botId: params.botId,
       conversationId: params.conversationId,
       content: params.content,
+      requestId: params.requestId,
     });
   },
   async cancel(requestId) {

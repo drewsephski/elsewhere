@@ -17,12 +17,14 @@ export const chatService = {
     providerId: string;
     conversationId?: string;
     content: string;
+    requestId: string;
   }) {
     const provider = getProvider(params.providerId);
     return provider.startChat({
       botId: params.botId,
       conversationId: params.conversationId,
       content: params.content,
+      requestId: params.requestId,
     });
   },
 

@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::models::ModelDescriptor;
+use crate::models::{ModelCapabilities, ModelDescriptor};
 use serde::Deserialize;
 
 const OPENAI_BASE: &str = "https://api.openai.com/v1";
@@ -44,10 +44,14 @@ impl OpenAiClient {
             .data
             .into_iter()
             .filter(|m| is_chat_model(&m.id))
-            .map(|m| ModelDescriptor {
-                id: m.id.clone(),
-                display_name: m.id.clone(),
-                provider: "openai".to_string(),
+            .map(|m| {
+                let capabilities = model_capabilities(&m.id);
+                ModelDescriptor {
+                    id: m.id.clone(),
+                    display_name: m.id.clone(),
+                    provider: "openai".to_string(),
+                    capabilities,
+                }
             })
             .collect();
 
@@ -64,7 +68,7 @@ impl OpenAiClient {
     }
 }
 
-fn is_chat_model(id: &str) -> bool {
+pub fn is_chat_model(id: &str) -> bool {
     let id = id.to_lowercase();
     if id.contains("embedding")
         || id.contains("tts")
@@ -75,6 +79,7 @@ fn is_chat_model(id: &str) -> bool {
         || id.contains("audio")
         || id.contains("transcribe")
         || id.contains("search")
+        || id.contains("gpt-image")
     {
         return false;
     }
@@ -85,6 +90,18 @@ fn is_chat_model(id: &str) -> bool {
         || id.starts_with("chatgpt-")
 }
 
+pub fn model_capabilities(id: &str) -> ModelCapabilities {
+    let id_lower = id.to_lowercase();
+    let text_output = is_chat_model(id);
+    let streaming = text_output && !id_lower.contains("image");
+    ModelCapabilities {
+        text_output,
+        streaming,
+        tools: false,
+        vision: id_lower.contains("vision") || id_lower.contains("4o"),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct ModelsResponse {
     data: Vec<OpenAiModel>,
@@ -93,4 +110,16 @@ struct ModelsResponse {
 #[derive(Debug, Deserialize)]
 struct OpenAiModel {
     id: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn excludes_gpt_image_models() {
+        assert!(!is_chat_model("gpt-image-2.5-sunburst"));
+        assert!(!is_chat_model("gpt-image-2.5-flare"));
+        assert!(is_chat_model("gpt-5.6-terra"));
+    }
 }

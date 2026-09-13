@@ -26,6 +26,7 @@ export interface StartChatInput {
   botId: string;
   conversationId?: string;
   content: string;
+  requestId?: string;
 }
 
 export interface StartChatResult {

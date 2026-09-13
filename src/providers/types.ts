@@ -29,6 +29,7 @@ export interface ModelProvider {
     botId: string;
     conversationId?: string;
     content: string;
+    requestId: string;
   }): Promise<{
     requestId: string;
     conversationId: string;

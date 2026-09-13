@@ -47,6 +47,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           {!isUser && message.status === "streaming" && (
             <span className="text-primary">· writing</span>
           )}
+          {!isUser && message.status === "interrupted" && (
+            <span className="text-amber-500/90">· interrupted</span>
+          )}
         </div>
 
         <div

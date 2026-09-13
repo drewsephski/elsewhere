@@ -1,4 +1,5 @@
 mod client;
+mod sse;
 mod stream;
 
 pub use client::OpenAiClient;
