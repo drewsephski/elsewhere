@@ -35,16 +35,21 @@ enum GuestBridge {
             throw VMMError.invalidRequest("Payload is not valid UTF-8")
         }
 
-        try writeAll(fd: connection.fileDescriptor, data: data)
+        let fd = connection.fileDescriptor
+        try setSocketTimeout(fd: fd, seconds: timeout)
+
+        try writeAll(fd: fd, data: data)
 
         var received = Data()
         let bufferSize = 4096
-        let deadline = Date().addingTimeInterval(timeout)
 
-        while Date() < deadline {
+        while true {
             var chunk = [UInt8](repeating: 0, count: bufferSize)
-            let readCount = read(connection.fileDescriptor, &chunk, bufferSize)
+            let readCount = read(fd, &chunk, bufferSize)
             if readCount <= 0 {
+                if readCount < 0 && errno == EAGAIN {
+                    throw VMMError.bridgeUnavailable("Guest read timed out after \(timeout)s")
+                }
                 break
             }
             received.append(contentsOf: chunk.prefix(readCount))
@@ -61,6 +66,22 @@ enum GuestBridge {
             throw VMMError.bridgeUnavailable("Empty response from guest agent")
         }
         return line
+    }
+
+    private static func setSocketTimeout(fd: Int32, seconds: TimeInterval) throws {
+        var tv = timeval(
+            tv_sec: __darwin_time_t(max(1, Int(seconds))),
+            tv_usec: 0
+        )
+        let rcSend = withUnsafePointer(to: &tv) { ptr in
+            setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, ptr, socklen_t(MemoryLayout<timeval>.size))
+        }
+        let rcRecv = withUnsafePointer(to: &tv) { ptr in
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, ptr, socklen_t(MemoryLayout<timeval>.size))
+        }
+        if rcSend != 0 || rcRecv != 0 {
+            throw VMMError.bridgeUnavailable("Failed to set socket timeouts: \(String(cString: strerror(errno)))")
+        }
     }
 
     private static func writeAll(fd: Int32, data: Data) throws {

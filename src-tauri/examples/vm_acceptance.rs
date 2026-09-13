@@ -3,6 +3,9 @@
 use gptbot_lib::vm::{GuestRequest, VirtualMachineManager};
 use std::path::PathBuf;
 use std::process;
+use std::time::Duration;
+
+const GUEST_WAIT: Duration = Duration::from_secs(120);
 
 fn main() {
     if let Err(err) = run() {
@@ -31,11 +34,13 @@ fn run() -> Result<(), String> {
         }
         "write-proof" => {
             vm.start()?;
+            vm.wait_for_guest(GUEST_WAIT)?;
             let response = vm.guest_request(GuestRequest {
                 id: "write-proof".into(),
-                method: "exec".into(),
+                method: "write_file".into(),
                 params: serde_json::json!({
-                    "command": "mkdir -p /workspace && echo \"hello from the persistent GPT Bot computer\" > /workspace/proof.txt"
+                    "path": "/workspace/proof.txt",
+                    "content": "hello from the persistent GPT Bot computer\n"
                 }),
             })?;
             if !response.ok {
@@ -48,13 +53,19 @@ fn run() -> Result<(), String> {
         }
         "read-proof" => {
             vm.start()?;
+            vm.wait_for_guest(GUEST_WAIT)?;
             let response = vm.guest_request(GuestRequest {
                 id: "read-proof".into(),
-                method: "exec".into(),
+                method: "read_file".into(),
                 params: serde_json::json!({
-                    "command": "cat /workspace/proof.txt"
+                    "path": "/workspace/proof.txt"
                 }),
             })?;
+            if !response.ok {
+                return Err(response
+                    .error
+                    .unwrap_or_else(|| "read failed".into()));
+            }
             let stdout = response.stdout.unwrap_or_default();
             if stdout.trim() != "hello from the persistent GPT Bot computer" {
                 return Err(format!("unexpected proof contents: {stdout}"));

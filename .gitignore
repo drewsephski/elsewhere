@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SwiftPM build output (macos/gptbot-vmm)
+macos/gptbot-vmm/.build/
+
+# Rust / guest-agent build artifacts
+guest-agent/target/
+src-tauri/target/

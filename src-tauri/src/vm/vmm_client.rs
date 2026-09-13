@@ -100,6 +100,13 @@ pub fn control_request(
     let mut stream = UnixStream::connect(socket_path)
         .map_err(|e| format!("connect to VMM control socket: {e}"))?;
 
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|e| format!("set read timeout: {e}"))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|e| format!("set write timeout: {e}"))?;
+
     let request = ControlRequest {
         cmd: cmd.to_string(),
         payload,
@@ -108,16 +115,26 @@ pub fn control_request(
     let line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
     stream
         .write_all(line.as_bytes())
-        .map_err(|e| e.to_string())?;
-    stream.write_all(b"\n").map_err(|e| e.to_string())?;
+        .map_err(|e| map_io_timeout(e, timeout, "write VMM control request"))?;
+    stream
+        .write_all(b"\n")
+        .map_err(|e| map_io_timeout(e, timeout, "write VMM control newline"))?;
 
     let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
     reader
         .read_line(&mut response_line)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| map_io_timeout(e, timeout, "read VMM control response"))?;
 
     serde_json::from_str(response_line.trim()).map_err(|e| format!("invalid VMM response: {e}"))
+}
+
+fn map_io_timeout(err: std::io::Error, timeout: Duration, op: &str) -> String {
+    if err.kind() == std::io::ErrorKind::WouldBlock || err.kind() == std::io::ErrorKind::TimedOut {
+        format!("{op} timed out after {}s", timeout.as_secs_f64())
+    } else {
+        format!("{op}: {err}")
+    }
 }
 
 pub fn parse_guest_response(result: &str) -> Result<GuestResponse, String> {

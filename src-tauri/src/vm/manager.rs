@@ -172,7 +172,7 @@ impl VirtualMachineManager {
             &socket_path,
             "start",
             None,
-            Duration::from_secs(180),
+            Duration::from_secs(60),
         )?;
 
         if !response.ok {
@@ -256,6 +256,44 @@ impl VirtualMachineManager {
         vmm_client::parse_guest_response(&result)
     }
 
+    pub fn wait_for_guest(&self, timeout: Duration) -> Result<VmInfo, String> {
+        {
+            let state = self.state.lock();
+            if !matches!(*state, InternalState::Running | InternalState::Starting) {
+                return Err("VM is not running".into());
+            }
+        }
+
+        let response = vmm_client::control_request(
+            &self.layout.control_socket_path(),
+            "wait_guest",
+            None,
+            timeout,
+        )?;
+
+        if !response.ok {
+            let base = response
+                .error
+                .unwrap_or_else(|| "guest agent did not become ready".into());
+            let console = self.layout.console_log_path();
+            let tail = vmm_client::tail_file(&console, 8192);
+            let mut message = format!(
+                "{base}\nGuest console log: {}",
+                console.display()
+            );
+            if let Some(tail) = tail {
+                if !tail.trim().is_empty() {
+                    message.push_str("\n--- console.log (tail) ---\n");
+                    message.push_str(&tail);
+                }
+            }
+            return Err(message);
+        }
+
+        *self.state.lock() = InternalState::Running;
+        self.info()
+    }
+
     pub fn guest_health(&self) -> Result<bool, String> {
         let response = self.guest_request(GuestRequest {
             id: uuid::Uuid::new_v4().to_string(),
@@ -263,6 +301,30 @@ impl VirtualMachineManager {
             params: serde_json::json!({}),
         })?;
         Ok(response.ok)
+    }
+
+    pub fn ensure_guest_ready(&self, timeout: Duration) -> Result<VmInfo, String> {
+        if !self.layout.vm_config_path().exists() {
+            return Err("VM not provisioned. Create the local computer first.".into());
+        }
+
+        let needs_start = {
+            let state = self.state.lock();
+            matches!(
+                *state,
+                InternalState::NotCreated | InternalState::Stopped | InternalState::Error(_)
+            )
+        };
+
+        if needs_start {
+            self.start()?;
+        }
+
+        let info = self.info()?;
+        if info.guest_bridge_ready {
+            return Ok(info);
+        }
+        self.wait_for_guest(timeout)
     }
 
     fn load_config(&self) -> Result<VmConfigFile, String> {

@@ -91,6 +91,11 @@ public final class ControlServer {
     }
 
     private func handleClient(fd: Int32) {
+        var tv = timeval(tv_sec: 120, tv_usec: 0)
+        _ = withUnsafePointer(to: &tv) { ptr in
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, ptr, socklen_t(MemoryLayout<timeval>.size))
+        }
+
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 65536)
         while true {
@@ -132,7 +137,6 @@ public final class ControlServer {
         case "start":
             do {
                 try vm.start()
-                try vm.waitForGuestAgent(timeout: min(timeout, 120))
                 return .success(status: vm.currentStatus())
             } catch let error as VMMError {
                 return .failure(error.description)

@@ -1,6 +1,6 @@
 use std::fs;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use super::paths::VmLayout;
@@ -17,15 +17,14 @@ struct KataKernelArtifact {
 #[cfg(target_arch = "aarch64")]
 const KATA_KERNEL: KataKernelArtifact = KataKernelArtifact {
     tar_url: "https://github.com/kata-containers/kata-containers/releases/download/3.19.1/kata-static-3.19.1-arm64.tar.xz",
-    tar_member: "./opt/kata/share/kata-containers/vmlinux-6.12.36-160",
+    tar_member: "opt/kata/share/kata-containers/vmlinux-6.12.36-160",
     sha256: "f533d8382f99e7f3fd8c6740e62f5bc2665bc7421a6286a04ec8ff3f052dcd0b",
 };
 
 #[cfg(target_arch = "x86_64")]
 const KATA_KERNEL: KataKernelArtifact = KataKernelArtifact {
     tar_url: "https://github.com/kata-containers/kata-containers/releases/download/3.19.1/kata-static-3.19.1-amd64.tar.xz",
-    tar_member: "./opt/kata/share/kata-containers/vmlinux-6.12.36-160",
-    // Populated from release artifact; re-validated via `file` + Image magic on x86 boot path.
+    tar_member: "opt/kata/share/kata-containers/vmlinux-6.12.36-160",
     sha256: "PLACEHOLDER_AMD64_SHA",
 };
 
@@ -56,31 +55,8 @@ pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
 
     fs::create_dir_all(layout.artifacts_dir()).map_err(|e| e.to_string())?;
 
-    tracing::info!(
-        version = KATA_VERSION,
-        url = KATA_KERNEL.tar_url,
-        "downloading pinned Kata kernel (stream extract)"
-    );
-
-    let dest = kernel_path.to_string_lossy();
-    let member = KATA_KERNEL.tar_member;
-    let url = KATA_KERNEL.tar_url;
-    let script = format!(
-        "set -euo pipefail; curl -fsSL --retry 3 '{url}' | tar -xOJf - '{member}' > '{dest}'"
-    );
-    let output = Command::new("bash")
-        .arg("-c")
-        .arg(&script)
-        .output()
-        .map_err(|e| format!("kernel extract failed to run: {e}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(format!(
-            "failed to extract Kata kernel {member} from {url}:\nstdout:{stdout}\nstderr:{stderr}"
-        ));
-    }
+    let tarball = ensure_kata_tarball(layout)?;
+    extract_kernel_from_tarball(layout, &tarball)?;
 
     let digest = sha256_file(&kernel_path)?;
     if digest != KATA_KERNEL.sha256 && !KATA_KERNEL.sha256.starts_with("PLACEHOLDER") {
@@ -96,7 +72,101 @@ pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
     Ok(())
 }
 
+fn kata_tarball_path(layout: &VmLayout) -> PathBuf {
+    layout
+        .artifacts_dir()
+        .join(format!("kata-static-{KATA_VERSION}.tar.xz"))
+}
+
+fn ensure_kata_tarball(layout: &VmLayout) -> Result<PathBuf, String> {
+    let path = kata_tarball_path(layout);
+    if path.exists() && path.metadata().map(|m| m.len()).unwrap_or(0) > 50 * 1024 * 1024 {
+        return Ok(path);
+    }
+
+    tracing::info!(
+        version = KATA_VERSION,
+        url = KATA_KERNEL.tar_url,
+        dest = %path.display(),
+        "downloading pinned Kata static bundle (cached for future provisions)"
+    );
+
+    let partial = path.with_extension("tar.xz.partial");
+    let output = Command::new("curl")
+        .args([
+            "-fL",
+            "--retry",
+            "3",
+            "-C",
+            "-",
+            "-o",
+            partial.to_str().unwrap_or(""),
+            KATA_KERNEL.tar_url,
+        ])
+        .output()
+        .map_err(|e| format!("curl failed: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Kata tarball download failed: {stderr}"));
+    }
+
+    fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+    Ok(path)
+}
+
+fn extract_kernel_from_tarball(layout: &VmLayout, tarball: &Path) -> Result<(), String> {
+    let kernel_path = layout.kernel_path();
+    let work = layout.artifacts_dir();
+    let member = KATA_KERNEL.tar_member;
+    let extracted = work.join(member);
+
+    if extracted.parent().is_some() {
+        let _ = fs::remove_dir_all(work.join("opt"));
+    }
+
+    tracing::info!(tarball = %tarball.display(), member, "extracting Linux image from Kata bundle");
+
+    let output = Command::new("tar")
+        .args([
+            "-xJf",
+            tarball.to_str().unwrap_or(""),
+            "-C",
+            work.to_str().unwrap_or(""),
+            member,
+        ])
+        .output()
+        .map_err(|e| format!("tar failed to run: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "failed to extract {member} from {tarball:?}:\nstdout:{stdout}\nstderr:{stderr}"
+        ));
+    }
+
+    if !extracted.exists() {
+        return Err(format!(
+            "expected kernel at {} after tar extract",
+            extracted.display()
+        ));
+    }
+
+    fs::rename(&extracted, &kernel_path).map_err(|e| e.to_string())?;
+    let _ = fs::remove_dir_all(work.join("opt"));
+    Ok(())
+}
+
 pub fn validate_linux_image(path: &Path) -> Result<(), String> {
+    let meta = fs::metadata(path).map_err(|e| e.to_string())?;
+    if meta.len() < 1024 * 1024 {
+        return Err(format!(
+            "kernel file too small ({} bytes); expected multi-megabyte ARM64 Image",
+            meta.len()
+        ));
+    }
+
     let file_output = Command::new("file")
         .arg(path)
         .output()

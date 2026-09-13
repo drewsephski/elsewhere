@@ -52,7 +52,7 @@ fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
         return Ok(());
     }
 
-    let repo_script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/build-guest-disk.sh");
+    let repo_script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/build-guest-disk.sh");
 
     if repo_script.exists() {
         let output = Command::new("bash")
@@ -117,7 +117,7 @@ pub fn locate_guest_agent_binary() -> Result<std::path::PathBuf, String> {
 
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let release_path = manifest
-        .join("../../guest-agent/target")
+        .join("../guest-agent/target")
         .join(target)
         .join("release/gptbot-guest-agent");
     if release_path.exists() {
