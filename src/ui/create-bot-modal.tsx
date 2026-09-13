@@ -1,3 +1,24 @@
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
 interface CreateBotModalProps {
   open: boolean;
   name: string;
@@ -27,71 +48,85 @@ export function CreateBotModal({
   onModelChange,
   onCreate,
 }: CreateBotModalProps) {
-  if (!open) {
-    return null;
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-bot-title"
-    >
-      <div className="w-full max-w-md rounded-lg border border-border bg-surface-1">
-        <div className="border-b border-border px-4 py-3 flex justify-between items-center">
-          <h2 id="create-bot-title" className="text-sm font-semibold">
-            New Bot
-          </h2>
-          <button type="button" onClick={onClose} className="text-sm text-muted">
-            Cancel
-          </button>
-        </div>
-        <div className="p-4 space-y-3">
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Name
-            <input
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create a bot</DialogTitle>
+          <DialogDescription>
+            Give your assistant a name, optional instructions, and a model.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="create-bot-name">Name</Label>
+            <Input
+              id="create-bot-name"
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
-              className="rounded border border-border bg-surface-0 px-3 py-2 text-sm"
+              placeholder="Research helper"
               autoFocus
             />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            System instructions
-            <textarea
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="create-bot-system">System instructions</Label>
+            <Textarea
+              id="create-bot-system"
               value={systemPrompt}
               onChange={(e) => onSystemPromptChange(e.target.value)}
-              rows={3}
-              className="rounded border border-border bg-surface-0 px-3 py-2 text-sm resize-none"
+              rows={4}
+              placeholder="How should this bot behave?"
+              className="resize-none"
             />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-muted">
-            Model
-            <select
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="create-bot-model">Model</Label>
+            <Select
               value={model}
-              onChange={(e) => onModelChange(e.target.value)}
+              onValueChange={(value) => {
+                if (value) {
+                  onModelChange(value);
+                }
+              }}
               disabled={modelsLoading || models.length === 0}
-              className="rounded border border-border bg-surface-0 px-3 py-2 text-sm"
             >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-          {error && <p className="text-danger text-sm">{error}</p>}
-          <button
+              <SelectTrigger id="create-bot-model" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.displayName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
             type="button"
             onClick={onCreate}
             disabled={!name.trim() || !model}
-            className="w-full rounded-md bg-accent py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            Create Bot
-          </button>
-        </div>
-      </div>
-    </div>
+            Create bot
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -5,10 +5,15 @@ import { applyStreamEvent } from "@/providers/stream-assembler";
 import { botService } from "@/services/bot-service";
 import { chatService } from "@/services/chat-service";
 import { tauriApi } from "@/lib/tauri-api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BotSidebar } from "@/ui/bot-sidebar";
 import { BotSettingsPanel } from "@/ui/bot-settings-panel";
 import { ChatComposer } from "@/ui/chat-composer";
+import { ChatHeader } from "@/ui/chat-header";
 import { CreateBotModal } from "@/ui/create-bot-modal";
+import { EmptyChat } from "@/ui/empty-chat";
 import { MessageBubble } from "@/ui/message-bubble";
 import { SettingsModal } from "@/ui/settings-modal";
 
@@ -46,6 +51,7 @@ export default function App() {
   const [botSaving, setBotSaving] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -346,37 +352,57 @@ export default function App() {
     }
   }
 
+  function handleOpenCreateBot() {
+    setCreateOpen(true);
+    setCreateError(null);
+    if (models[0]) {
+      setCreateModel(models[0].id);
+    }
+  }
+
+  function handleOpenSettings() {
+    setSettingsOpen(true);
+    setSettingsError(null);
+  }
+
   return (
-    <div className="h-full flex bg-surface-0">
+    <div className="flex h-full bg-background">
       <BotSidebar
         bots={bots}
         selectedBotId={selectedBotId}
         onSelectBot={setSelectedBotId}
-        onCreateBot={() => {
-          setCreateOpen(true);
-          setCreateError(null);
-          if (models[0]) {
-            setCreateModel(models[0].id);
-          }
-        }}
-        onOpenSettings={() => {
-          setSettingsOpen(true);
-          setSettingsError(null);
-        }}
+        onCreateBot={handleOpenCreateBot}
+        onOpenSettings={handleOpenSettings}
       />
 
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className="flex min-w-0 flex-1 flex-col">
+        <ChatHeader
+          bot={selectedBot}
+          mobileNavOpen={mobileNavOpen}
+          onMobileNavOpenChange={setMobileNavOpen}
+          bots={bots}
+          selectedBotId={selectedBotId}
+          onSelectBot={setSelectedBotId}
+          onCreateBot={handleOpenCreateBot}
+          onOpenSettings={handleOpenSettings}
+          isStreaming={isStreaming}
+        />
+
         {!apiKeyConfigured && (
-          <div className="bg-amber-950/40 border-b border-amber-900/50 px-4 py-2 text-sm text-amber-200/90">
-            Add your OpenAI API key in Settings to chat.
-            <button
-              type="button"
-              className="ml-2 underline"
-              onClick={() => setSettingsOpen(true)}
-            >
-              Open Settings
-            </button>
-          </div>
+          <Alert className="mx-3 mt-2 border-amber-500/30 bg-amber-500/10 sm:mx-4">
+            <AlertDescription className="flex flex-wrap items-center gap-2 text-amber-100/90">
+              <span>Add your OpenAI API key to start chatting.</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 border-amber-500/40 bg-transparent text-amber-50 hover:bg-amber-500/15"
+                onClick={handleOpenSettings}
+              >
+                Open settings
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
 
         {displayBot && (
@@ -398,28 +424,36 @@ export default function App() {
         )}
 
         {globalError && (
-          <div className="px-4 py-2 text-sm text-danger bg-danger/10 border-b border-danger/30">
-            {globalError}
-          </div>
+          <Alert variant="destructive" className="mx-3 mt-2 sm:mx-4">
+            <AlertDescription>{globalError}</AlertDescription>
+          </Alert>
         )}
 
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-4 py-4"
+          className="flex-1 overflow-y-auto"
         >
-          {!selectedBot && (
-            <div className="h-full flex items-center justify-center text-muted text-sm">
-              Create or select a Bot to start.
-            </div>
-          )}
-          {selectedBot && loadingChat && messages.length === 0 && (
-            <p className="text-muted text-sm">Loading conversation…</p>
-          )}
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-          <div ref={messagesEndRef} />
+          <div className="mx-auto w-full max-w-3xl px-3 py-4 sm:px-4 sm:py-6">
+            {!selectedBot && (
+              <EmptyChat
+                apiKeyConfigured={apiKeyConfigured}
+                onCreateBot={handleOpenCreateBot}
+                onOpenSettings={handleOpenSettings}
+              />
+            )}
+            {selectedBot && loadingChat && messages.length === 0 && (
+              <div className="space-y-4 py-4" aria-busy="true">
+                <Skeleton className="h-16 w-[85%] rounded-2xl" />
+                <Skeleton className="ml-auto h-12 w-[60%] rounded-2xl" />
+                <Skeleton className="h-20 w-[75%] rounded-2xl" />
+              </div>
+            )}
+            {messages.map((message) => (
+              <MessageBubble key={message.id} message={message} />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
         <ChatComposer
