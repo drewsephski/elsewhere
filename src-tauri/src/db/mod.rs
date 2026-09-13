@@ -281,6 +281,20 @@ impl Database {
         })
     }
 
+    pub fn get_conversation_for_bot(
+        &self,
+        conversation_id: &str,
+        bot_id: &str,
+    ) -> Result<Conversation, AppError> {
+        let conversation = self.get_conversation(conversation_id)?;
+        if conversation.bot_id != bot_id {
+            return Err(AppError::Validation(
+                "conversation does not belong to this bot".into(),
+            ));
+        }
+        Ok(conversation)
+    }
+
     pub fn touch_conversation(&self, id: &str) -> Result<(), AppError> {
         let now = Self::now_ms();
         let updated = self.conn.execute(
@@ -599,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    fn conversation_must_match_bot() {
+    fn get_conversation_for_bot_rejects_wrong_bot() {
         let db = Database::open_in_memory().expect("db");
         let bot_a = db
             .create_bot(CreateBotInput {
@@ -620,8 +634,13 @@ mod tests {
             })
             .expect("bot b");
         let conv_a = db.create_conversation(&bot_a.id, None).expect("conv");
-        let conv = db.get_conversation(&conv_a.id).expect("get");
-        assert_eq!(conv.bot_id, bot_a.id);
-        assert_ne!(conv.bot_id, bot_b.id);
+        let owned = db
+            .get_conversation_for_bot(&conv_a.id, &bot_a.id)
+            .expect("owned");
+        assert_eq!(owned.id, conv_a.id);
+        let err = db
+            .get_conversation_for_bot(&conv_a.id, &bot_b.id)
+            .expect_err("foreign");
+        assert!(matches!(err, AppError::Validation(_)));
     }
 }

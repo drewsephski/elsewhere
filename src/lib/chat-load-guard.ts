@@ -2,6 +2,8 @@
 export function shouldCommitChatLoad(
   loadEpoch: number,
   currentEpoch: number,
+  loadBotId: string,
+  selectedBotId: string | null,
 ): boolean {
-  return loadEpoch === currentEpoch;
+  return loadEpoch === currentEpoch && loadBotId === selectedBotId;
 }

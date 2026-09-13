@@ -12,13 +12,11 @@ pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
 
     let version = current_version(conn)?;
-    if version == 0 {
-        migrate_to_v1(conn)?;
-        set_version(conn, 1)?;
+    if version < 1 {
+        run_migration(conn, 1, migrate_to_v1)?;
     }
     if current_version(conn)? < 2 {
-        migrate_to_v2(conn)?;
-        set_version(conn, 2)?;
+        run_migration(conn, 2, migrate_to_v2)?;
     }
 
     let final_version = current_version(conn)?;
@@ -30,6 +28,25 @@ pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
         ));
     }
 
+    Ok(())
+}
+
+fn run_migration(
+    conn: &Connection,
+    target_version: i32,
+    migrate: fn(&Connection) -> Result<(), rusqlite::Error>,
+) -> Result<(), rusqlite::Error> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let result = (|| {
+        migrate(conn)?;
+        set_version(conn, target_version)?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = conn.execute_batch("ROLLBACK");
+        return result;
+    }
+    conn.execute_batch("COMMIT")?;
     Ok(())
 }
 
@@ -46,6 +63,21 @@ fn set_version(conn: &Connection, version: i32) -> Result<(), rusqlite::Error> {
     conn.execute("DELETE FROM schema_version", [])?;
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [version])?;
     Ok(())
+}
+
+fn column_exists(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+) -> Result<bool, rusqlite::Error> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+    for name in rows {
+        if name? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn migrate_to_v1(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -95,38 +127,35 @@ fn migrate_to_v1(conn: &Connection) -> Result<(), rusqlite::Error> {
 }
 
 fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
-    let has_sequence: bool = conn
-        .prepare("SELECT sequence FROM messages LIMIT 1")
-        .is_ok();
-
-    if !has_sequence {
+    if !column_exists(conn, "messages", "sequence")? {
         conn.execute_batch(
             "
             ALTER TABLE messages ADD COLUMN sequence INTEGER;
             ",
         )?;
-
-        conn.execute_batch(
-            "
-            UPDATE messages
-            SET sequence = (
-                SELECT COUNT(*) FROM messages AS older
-                WHERE older.conversation_id = messages.conversation_id
-                  AND (
-                    older.created_at < messages.created_at
-                    OR (older.created_at = messages.created_at AND older.id < messages.id)
-                  )
-            );
-            ",
-        )?;
-
-        conn.execute_batch(
-            "
-            CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence
-                ON messages(conversation_id, sequence ASC);
-            ",
-        )?;
     }
+
+    conn.execute_batch(
+        "
+        UPDATE messages
+        SET sequence = (
+            SELECT COUNT(*) FROM messages AS older
+            WHERE older.conversation_id = messages.conversation_id
+              AND (
+                older.created_at < messages.created_at
+                OR (older.created_at = messages.created_at AND older.id < messages.id)
+              )
+        )
+        WHERE sequence IS NULL;
+        ",
+    )?;
+
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence
+            ON messages(conversation_id, sequence ASC);
+        ",
+    )?;
 
     Ok(())
 }
@@ -142,8 +171,7 @@ mod tests {
             "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
         )
         .expect("schema_version");
-        migrate_to_v1(&conn).expect("v1");
-        set_version(&conn, 1).expect("version");
+        run_migration(&conn, 1, migrate_to_v1).expect("v1");
 
         conn.execute_batch(
             "
@@ -159,7 +187,7 @@ mod tests {
         )
         .expect("seed");
 
-        migrate_to_v2(&conn).expect("v2");
+        run_migration(&conn, 2, migrate_to_v2).expect("v2");
 
         let seq_a: i64 = conn
             .query_row(

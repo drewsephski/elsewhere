@@ -3,10 +3,14 @@ import type { Bot, Message, ModelDescriptor } from "@/lib/definitions";
 import { useChatStreamListener } from "@/hooks/use-chat-stream";
 import { shouldCommitChatLoad } from "@/lib/chat-load-guard";
 import {
-  bufferStreamDelta,
-  takeBufferedStreamBody,
-} from "@/providers/pending-stream-deltas";
-import { applyStreamEvent } from "@/providers/stream-assembler";
+  applyChatStreamEventToMessages,
+  applyChatStreamEventsToMessages,
+} from "@/providers/chat-stream-state";
+import {
+  drainPreAckStreamEvents,
+  pushPreAckStreamEvent,
+} from "@/providers/pre-ack-stream-buffer";
+import type { ProviderStreamEvent } from "@/providers/types";
 import { botService } from "@/services/bot-service";
 import { chatService } from "@/services/chat-service";
 import { tauriApi } from "@/lib/tauri-api";
@@ -62,7 +66,10 @@ export default function App() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
   const loadChatEpochRef = useRef(0);
-  const pendingStreamBodiesRef = useRef<Map<string, string>>(new Map());
+  const selectedBotIdRef = useRef<string | null>(selectedBotId);
+  selectedBotIdRef.current = selectedBotId;
+  const ackPendingRequestIdRef = useRef<string | null>(null);
+  const preAckStreamBufferRef = useRef<ProviderStreamEvent[]>([]);
 
   const selectedBot = bots.find((b) => b.id === selectedBotId) ?? null;
   const displayBot = botDraft ?? selectedBot;
@@ -109,19 +116,40 @@ export default function App() {
     try {
       const { conversation, messages: loaded } =
         await chatService.loadConversation(botId);
-      if (!shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+      if (
+        !shouldCommitChatLoad(
+          epoch,
+          loadChatEpochRef.current,
+          botId,
+          selectedBotIdRef.current,
+        )
+      ) {
         return;
       }
       setConversationId(conversation.id);
       setMessages(loaded);
       setBotDraft(null);
     } catch (error) {
-      if (!shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+      if (
+        !shouldCommitChatLoad(
+          epoch,
+          loadChatEpochRef.current,
+          botId,
+          selectedBotIdRef.current,
+        )
+      ) {
         return;
       }
       setGlobalError(formatInvokeError(error));
     } finally {
-      if (shouldCommitChatLoad(epoch, loadChatEpochRef.current)) {
+      if (
+        shouldCommitChatLoad(
+          epoch,
+          loadChatEpochRef.current,
+          botId,
+          selectedBotIdRef.current,
+        )
+      ) {
         setLoadingChat(false);
       }
     }
@@ -150,48 +178,34 @@ export default function App() {
     }
   }, [selectedBot]);
 
+  function handleStreamTerminal(event: ProviderStreamEvent) {
+    if (event.type === "error") {
+      setGlobalError(event.error ?? "Stream failed");
+    }
+    setActiveRequestId(null);
+    if (selectedBotIdRef.current) {
+      void loadChat(selectedBotIdRef.current);
+    }
+  }
+
   useChatStreamListener((event) => {
     if (activeRequestId && event.requestId !== activeRequestId) {
       return;
     }
+    if (ackPendingRequestIdRef.current === event.requestId) {
+      pushPreAckStreamEvent(preAckStreamBufferRef.current, event);
+      return;
+    }
     if (event.type === "error") {
-      setGlobalError(event.error ?? "Stream failed");
-      setActiveRequestId(null);
-      if (selectedBotId) {
-        void loadChat(selectedBotId);
-      }
+      handleStreamTerminal(event);
       return;
     }
     if (event.type === "done" || event.type === "cancelled") {
-      setActiveRequestId(null);
-      if (selectedBotId) {
-        void loadChat(selectedBotId);
-      }
+      handleStreamTerminal(event);
       return;
     }
     if (event.type === "delta") {
-      setMessages((prev) => {
-        const hasTarget = prev.some((m) => m.id === event.assistantMessageId);
-        if (!hasTarget) {
-          if (event.delta) {
-            bufferStreamDelta(
-              pendingStreamBodiesRef.current,
-              event.assistantMessageId,
-              event.delta,
-            );
-          }
-          return prev;
-        }
-        return prev.map((m) => {
-          if (m.id !== event.assistantMessageId) {
-            return m;
-          }
-          return {
-            ...m,
-            body: applyStreamEvent(m.body, event),
-          };
-        });
-      });
+      setMessages((prev) => applyChatStreamEventToMessages(prev, event));
     }
   });
 
@@ -240,6 +254,7 @@ export default function App() {
     }
     try {
       await botService.archive(displayBot.id);
+      loadChatEpochRef.current += 1;
       setSelectedBotId(null);
       setConversationId(null);
       setMessages([]);
@@ -287,6 +302,8 @@ export default function App() {
       updatedAt: Date.now(),
     };
     const requestId = crypto.randomUUID();
+    ackPendingRequestIdRef.current = requestId;
+    preAckStreamBufferRef.current = [];
     setActiveRequestId(requestId);
     setMessages((prev) => [...prev, optimisticUser, optimisticAssistant]);
 
@@ -298,14 +315,15 @@ export default function App() {
         content,
         requestId,
       });
-      const bufferedAssistantBody = takeBufferedStreamBody(
-        pendingStreamBodiesRef.current,
-        result.assistantMessageId,
+      const preAckEvents = drainPreAckStreamEvents(
+        preAckStreamBufferRef.current,
       );
+      ackPendingRequestIdRef.current = null;
+
       setConversationId(result.conversationId);
       setMessages((prev) => {
         const withoutTemp = prev.filter((m) => !m.id.startsWith("temp-"));
-        return [
+        const mapped: Message[] = [
           ...withoutTemp,
           {
             ...optimisticUser,
@@ -316,11 +334,23 @@ export default function App() {
             ...optimisticAssistant,
             id: result.assistantMessageId,
             conversationId: result.conversationId,
-            body: optimisticAssistant.body + bufferedAssistantBody,
           },
         ];
+        return applyChatStreamEventsToMessages(mapped, preAckEvents);
       });
+
+      for (const event of preAckEvents) {
+        if (
+          event.type === "error" ||
+          event.type === "done" ||
+          event.type === "cancelled"
+        ) {
+          handleStreamTerminal(event);
+        }
+      }
     } catch (error) {
+      ackPendingRequestIdRef.current = null;
+      preAckStreamBufferRef.current = [];
       setActiveRequestId(null);
       setGlobalError(formatInvokeError(error));
       void loadChat(selectedBot.id);

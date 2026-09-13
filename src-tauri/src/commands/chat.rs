@@ -47,14 +47,9 @@ pub async fn start_chat(
         let db = state.db.lock();
         let bot = db.get_bot(&input.bot_id)?;
         let conversation = match &input.conversation_id {
-            Some(id) => db.get_conversation(id)?,
+            Some(id) => db.get_conversation_for_bot(id, &input.bot_id)?,
             None => db.get_or_create_primary_conversation(&input.bot_id)?,
         };
-        if conversation.bot_id != input.bot_id {
-            return Err(AppError::Validation(
-                "conversation does not belong to this bot".into(),
-            ));
-        }
 
         let user_message = db.insert_message(
             &conversation.id,
@@ -301,35 +296,3 @@ pub fn cancel_chat(state: State<AppState>, request_id: String) -> Result<(), App
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::db::Database;
-    use crate::models::CreateBotInput;
-
-    #[test]
-    fn rejects_foreign_conversation_for_bot() {
-        let db = Database::open_in_memory().expect("db");
-        let bot_a = db
-            .create_bot(CreateBotInput {
-                name: "A".into(),
-                description: None,
-                system_prompt: None,
-                provider: None,
-                model: "gpt-4o-mini".into(),
-            })
-            .expect("bot a");
-        let bot_b = db
-            .create_bot(CreateBotInput {
-                name: "B".into(),
-                description: None,
-                system_prompt: None,
-                provider: None,
-                model: "gpt-4o-mini".into(),
-            })
-            .expect("bot b");
-        let conv_a = db.create_conversation(&bot_a.id, None).expect("conv");
-        let conversation = db.get_conversation(&conv_a.id).expect("get");
-        assert_ne!(conversation.bot_id, bot_b.id);
-    }
-}
