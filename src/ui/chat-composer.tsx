@@ -44,7 +44,7 @@ export function ChatComposer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={disabled && !isStreaming}
+          disabled={disabled || isStreaming}
           placeholder="Message your bot…"
           rows={1}
           className="min-h-[44px] max-h-40 flex-1 resize-none border-0 bg-transparent px-2 py-2.5 shadow-none focus-visible:ring-0"

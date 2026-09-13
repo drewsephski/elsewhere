@@ -40,14 +40,14 @@ export function BotSettingsPanel({
   return (
     <Collapsible
       defaultOpen={false}
-      className="border-b border-border/80 bg-muted/20"
+      className="group border-b border-border/80 bg-muted/20"
     >
       <CollapsibleTrigger
-        className="group flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/40 data-panel-open:bg-muted/30 sm:px-4"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-muted/40 group-data-open:bg-muted/30 sm:px-4"
       >
         <span>Bot configuration</span>
         <ChevronDown
-          className="size-4 text-muted-foreground transition-transform group-data-panel-open:rotate-180"
+          className="size-4 text-muted-foreground transition-transform group-data-open:rotate-180"
           aria-hidden
         />
       </CollapsibleTrigger>
