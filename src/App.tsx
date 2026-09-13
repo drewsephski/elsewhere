@@ -454,13 +454,13 @@ export default function App() {
 
         {!apiKeyConfigured && (
           <Alert className="mx-3 mt-2 border-amber-500/30 bg-amber-500/10 sm:mx-4">
-            <AlertDescription className="flex flex-wrap items-center gap-2 text-amber-100/90">
+            <AlertDescription className="flex flex-wrap items-center gap-2 text-amber-950/90 dark:text-amber-100/90">
               <span>Add your OpenAI API key to start chatting.</span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 border-amber-500/40 bg-transparent text-amber-50 hover:bg-amber-500/15"
+                className="h-7 border-amber-600/40 bg-transparent text-amber-900 hover:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-50 dark:hover:bg-amber-500/15"
                 onClick={handleOpenSettings}
               >
                 Open settings
