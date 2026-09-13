@@ -1,0 +1,67 @@
+import { z } from "zod";
+
+export const messageRoleSchema = z.enum(["system", "user", "assistant"]);
+export type MessageRole = z.infer<typeof messageRoleSchema>;
+
+export const messageStatusSchema = z.enum([
+  "pending",
+  "streaming",
+  "complete",
+  "error",
+  "cancelled",
+]);
+export type MessageStatus = z.infer<typeof messageStatusSchema>;
+
+export const botSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  systemPrompt: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  archivedAt: z.number().nullable(),
+});
+export type Bot = z.infer<typeof botSchema>;
+
+export const conversationSchema = z.object({
+  id: z.string(),
+  botId: z.string(),
+  title: z.string().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type Conversation = z.infer<typeof conversationSchema>;
+
+export const messageSchema = z.object({
+  id: z.string(),
+  conversationId: z.string(),
+  role: messageRoleSchema,
+  kind: z.string(),
+  body: z.string(),
+  status: messageStatusSchema,
+  model: z.string().nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type Message = z.infer<typeof messageSchema>;
+
+export const modelDescriptorSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  provider: z.string(),
+});
+export type ModelDescriptor = z.infer<typeof modelDescriptorSchema>;
+
+export const streamEventSchema = z.object({
+  requestId: z.string(),
+  eventType: z.string(),
+  conversationId: z.string(),
+  assistantMessageId: z.string(),
+  delta: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+  fullContent: z.string().nullable().optional(),
+});
+export type StreamEvent = z.infer<typeof streamEventSchema>;
