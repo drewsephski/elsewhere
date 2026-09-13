@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+pub mod agent;
 mod commands;
 mod db;
 mod error;
@@ -63,6 +65,8 @@ pub fn run() {
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,
+            #[cfg(target_os = "macos")]
+            commands::start_agent_chat,
             #[cfg(target_os = "macos")]
             commands::vm_info,
             #[cfg(target_os = "macos")]

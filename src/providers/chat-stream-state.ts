@@ -6,6 +6,15 @@ export function applyChatStreamEventToMessages(
   messages: Message[],
   event: ProviderStreamEvent,
 ): Message[] {
+  if (event.type === "message" && event.message) {
+    const existing = messages.some((m) => m.id === event.message!.id);
+    if (existing) {
+      return messages.map((m) =>
+        m.id === event.message!.id ? event.message! : m,
+      );
+    }
+    return [...messages, event.message];
+  }
   if (event.type === "error") {
     return messages;
   }

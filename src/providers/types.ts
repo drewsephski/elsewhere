@@ -11,7 +11,7 @@ export interface GenerateInput {
   requestId: string;
 }
 
-export type StreamEventType = "delta" | "done" | "error" | "cancelled";
+export type StreamEventType = "delta" | "done" | "error" | "cancelled" | "message";
 
 export interface ProviderStreamEvent {
   type: StreamEventType;
@@ -20,6 +20,7 @@ export interface ProviderStreamEvent {
   delta?: string;
   error?: string;
   fullContent?: string;
+  message?: import("@/lib/definitions").Message;
 }
 
 export interface ModelProvider {

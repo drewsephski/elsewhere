@@ -97,7 +97,7 @@ pub fn model_capabilities(id: &str) -> ModelCapabilities {
     ModelCapabilities {
         text_output,
         streaming,
-        tools: false,
+        tools: text_output,
         vision: id_lower.contains("vision") || id_lower.contains("4o"),
     }
 }

@@ -2,7 +2,8 @@ mod schema;
 
 use crate::error::AppError;
 use crate::models::{
-    Bot, Conversation, CreateBotInput, Message, MessageRole, MessageStatus, UpdateBotInput,
+    Bot, Conversation, CreateBotInput, DEFAULT_MODEL, Message, MessageRole, MessageStatus,
+    UpdateBotInput,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -39,12 +40,14 @@ impl Database {
 
     /// Marks in-flight assistant generations from a prior session as interrupted.
     pub fn recover_interrupted_messages(&self) -> Result<(), AppError> {
+        let now = Self::now_ms();
         self.conn.execute(
             "UPDATE messages SET status = ?1, updated_at = ?2 WHERE status IN ('pending', 'streaming')",
-            params![
-                MessageStatus::Interrupted.as_str(),
-                Self::now_ms()
-            ],
+            params![MessageStatus::Interrupted.as_str(), now],
+        )?;
+        self.conn.execute(
+            "UPDATE agent_runs SET status = 'interrupted', updated_at = ?1 WHERE status = 'running'",
+            params![now],
         )?;
         Ok(())
     }
@@ -86,7 +89,7 @@ When information might be outdated, say what you know and what you would verify.
             description: Some("Research & discovery".to_string()),
             system_prompt: Some(system_prompt.to_string()),
             provider: None,
-            model: "gpt-4o-mini".to_string(),
+            model: DEFAULT_MODEL.to_string(),
         })?;
         Ok(())
     }
@@ -394,6 +397,70 @@ When information might be outdated, say what you know and what you would verify.
         self.get_message(&id)
     }
 
+    pub fn insert_structured_message(
+        &self,
+        conversation_id: &str,
+        role: MessageRole,
+        kind: &str,
+        body: &str,
+        status: MessageStatus,
+        model: Option<&str>,
+    ) -> Result<Message, AppError> {
+        self.get_conversation(conversation_id)?;
+        let now = Self::now_ms();
+        let sequence = self.next_message_sequence(conversation_id)?;
+        let id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO messages (id, conversation_id, role, kind, body, status, model, sequence, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                conversation_id,
+                role.as_str(),
+                kind,
+                body,
+                status.as_str(),
+                model,
+                sequence,
+                now,
+                now
+            ],
+        )?;
+        self.touch_conversation(conversation_id)?;
+        self.get_message(&id)
+    }
+
+    pub fn create_agent_run(
+        &self,
+        conversation_id: &str,
+        request_id: &str,
+    ) -> Result<String, AppError> {
+        let id = Uuid::new_v4().to_string();
+        let now = Self::now_ms();
+        self.conn.execute(
+            "INSERT INTO agent_runs (id, conversation_id, request_id, status, step_count, created_at, updated_at) VALUES (?1, ?2, ?3, 'running', 0, ?4, ?4)",
+            params![id, conversation_id, request_id, now],
+        )?;
+        Ok(id)
+    }
+
+    pub fn update_agent_run(
+        &self,
+        request_id: &str,
+        status: &str,
+        error_code: Option<&str>,
+        step_count: i64,
+    ) -> Result<(), AppError> {
+        let now = Self::now_ms();
+        let updated = self.conn.execute(
+            "UPDATE agent_runs SET status = ?1, error_code = ?2, step_count = ?3, updated_at = ?4 WHERE request_id = ?5",
+            params![status, error_code, step_count, now, request_id],
+        )?;
+        if updated == 0 {
+            return Err(AppError::NotFound(format!("agent run {}", request_id)));
+        }
+        Ok(())
+    }
+
     pub fn get_message(&self, id: &str) -> Result<Message, AppError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, conversation_id, role, kind, body, status, model, error_message, created_at, updated_at FROM messages WHERE id = ?1",
@@ -456,7 +523,7 @@ When information might be outdated, say what you know and what you would verify.
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::CreateBotInput;
+    use crate::models::{CreateBotInput, DEFAULT_MODEL};
 
     #[test]
     fn bot_persistence_roundtrip() {
@@ -467,7 +534,7 @@ mod tests {
                 description: None,
                 system_prompt: Some("You are helpful.".into()),
                 provider: Some("openai".into()),
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         let loaded = db.get_bot(&bot.id).expect("get");
@@ -494,7 +561,7 @@ mod tests {
                 description: Some("Notes".into()),
                 system_prompt: Some("You are helpful.".into()),
                 provider: Some("openai".into()),
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         let updated = db
@@ -509,7 +576,7 @@ mod tests {
         assert_eq!(updated.name, "Researcher");
         assert_eq!(updated.description.as_deref(), Some("Notes"));
         assert_eq!(updated.system_prompt, "You are helpful.");
-        assert_eq!(updated.model, "gpt-4o-mini");
+        assert_eq!(updated.model, DEFAULT_MODEL);
     }
 
     #[test]
@@ -521,7 +588,7 @@ mod tests {
                 description: None,
                 system_prompt: Some("Stay.".into()),
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         db.touch_bot(&bot.id).expect("touch");
@@ -541,7 +608,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -560,7 +627,7 @@ mod tests {
                 MessageRole::Assistant,
                 "",
                 MessageStatus::Streaming,
-                Some("gpt-4o-mini"),
+                Some(DEFAULT_MODEL),
             )
             .expect("assistant");
         db.append_message_body(&assistant.id, "world").expect("append");
@@ -587,7 +654,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -634,7 +701,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -644,7 +711,7 @@ mod tests {
                 MessageRole::Assistant,
                 "partial",
                 MessageStatus::Streaming,
-                Some("gpt-4o-mini"),
+                Some(DEFAULT_MODEL),
             )
             .expect("assistant");
         db.recover_interrupted_messages().expect("recover");
@@ -661,7 +728,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("bot a");
         let bot_b = db
@@ -670,7 +737,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 provider: None,
-                model: "gpt-4o-mini".into(),
+                model: DEFAULT_MODEL.into(),
             })
             .expect("bot b");
         let conv_a = db.create_conversation(&bot_a.id, None).expect("conv");

@@ -82,6 +82,9 @@ export const tauriApi = {
   startChat(input: StartChatInput): Promise<StartChatResult> {
     return invoke("start_chat", { input });
   },
+  startAgentChat(input: StartChatInput): Promise<StartChatResult> {
+    return invoke("start_agent_chat", { input });
+  },
   cancelChat(requestId: string): Promise<void> {
     return invoke("cancel_chat", { requestId });
   },

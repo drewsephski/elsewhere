@@ -179,6 +179,7 @@ pub async fn start_chat(
                     delta: Some(delta.to_string()),
                     error: None,
                     full_content: None,
+                    message: None,
                 });
             },
         )
@@ -209,6 +210,7 @@ pub async fn start_chat(
                             delta: None,
                             error: None,
                             full_content: Some(full),
+                            message: None,
                         });
                         info!(request_id = %req_id, "chat stream completed");
                     }
@@ -226,6 +228,7 @@ pub async fn start_chat(
                             delta: None,
                             error: Some(err.to_string()),
                             full_content: Some(full),
+                            message: None,
                         });
                     }
                 }
@@ -251,6 +254,7 @@ pub async fn start_chat(
                     delta: None,
                     error: None,
                     full_content: Some(partial),
+                    message: None,
                 });
             }
             Err(err) => {
@@ -276,6 +280,7 @@ pub async fn start_chat(
                     delta: None,
                     error: Some(message),
                     full_content: None,
+                    message: None,
                 });
             }
         }

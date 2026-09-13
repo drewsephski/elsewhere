@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_SCHEMA_VERSION: i32 = 2;
+const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -17,6 +17,9 @@ pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
     if current_version(conn)? < 2 {
         run_migration(conn, 2, migrate_to_v2)?;
+    }
+    if current_version(conn)? < 3 {
+        run_migration(conn, 3, migrate_to_v3)?;
     }
 
     let final_version = current_version(conn)?;
@@ -160,6 +163,27 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
     Ok(())
 }
 
+fn migrate_to_v3(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            id TEXT PRIMARY KEY NOT NULL,
+            conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            request_id TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            error_code TEXT,
+            step_count INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation
+            ON agent_runs(conversation_id, created_at DESC);
+        ",
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,7 +200,7 @@ mod tests {
         conn.execute_batch(
             "
             INSERT INTO bots (id, name, system_prompt, model, created_at, updated_at)
-            VALUES ('bot-1', 'Bot', '', 'gpt-4o-mini', 1, 1);
+            VALUES ('bot-1', 'Bot', '', 'gpt-5.6-luna', 1, 1);
             INSERT INTO conversations (id, bot_id, created_at, updated_at)
             VALUES ('conv-1', 'bot-1', 1, 1);
             INSERT INTO messages (id, conversation_id, role, kind, body, status, created_at, updated_at)

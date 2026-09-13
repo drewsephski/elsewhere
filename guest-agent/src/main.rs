@@ -158,6 +158,33 @@ fn dispatch(request: &GuestRequest) -> GuestResponse {
                 }
             }
         }
+        "list_dir" => {
+            let path = request
+                .params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or(sandbox::WORKSPACE_ROOT);
+            match sandbox::list_workspace_dir(path) {
+                Ok(entries) => match serde_json::to_string(&entries) {
+                    Ok(json) => {
+                        let mut r = base(true);
+                        r.stdout = Some(json);
+                        r.exit_code = Some(0);
+                        r
+                    }
+                    Err(err) => {
+                        let mut r = base(false);
+                        r.error = Some(err.to_string());
+                        r
+                    }
+                },
+                Err(err) => {
+                    let mut r = base(false);
+                    r.error = Some(err);
+                    r
+                }
+            }
+        }
         "read_file" => {
             let path = request
                 .params

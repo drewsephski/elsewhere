@@ -8,7 +8,76 @@ interface MessageBubbleProps {
   message: Message;
 }
 
+function formatTimelineLabel(message: Message): string | null {
+  if (message.kind === "tool_call") {
+    try {
+      const data = JSON.parse(message.body) as {
+        tool?: string;
+        arguments?: { path?: string; command?: string };
+      };
+      const tool = data.tool ?? "tool";
+      const path = data.arguments?.path;
+      const command = data.arguments?.command;
+      if (tool === "workspace_write" && path) {
+        return `Writing ${path}`;
+      }
+      if (tool === "workspace_read" && path) {
+        return `Reading ${path}`;
+      }
+      if (tool === "workspace_list" && path) {
+        return `Listing ${path}`;
+      }
+      if (tool === "workspace_exec" && command) {
+        return `Running ${command}`;
+      }
+      return tool;
+    } catch {
+      return "Tool call";
+    }
+  }
+  if (message.kind === "tool_result") {
+    try {
+      const data = JSON.parse(message.body) as { tool?: string; ok?: boolean };
+      const tool = data.tool ?? "tool";
+      return data.ok === false ? `${tool} failed` : `${tool} completed`;
+    } catch {
+      return "Tool result";
+    }
+  }
+  if (message.kind === "agent_status") {
+    try {
+      const data = JSON.parse(message.body) as { status?: string };
+      if (data.status === "running") {
+        return "Agent working…";
+      }
+      if (data.status === "completed") {
+        return "Agent finished";
+      }
+      if (data.status === "failed") {
+        return "Agent failed";
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function MessageBubble({ message }: MessageBubbleProps) {
+  const timelineLabel = formatTimelineLabel(message);
+  if (timelineLabel) {
+    return (
+      <div
+        className="mb-2 flex w-full justify-center"
+        data-message-id={message.id}
+      >
+        <div className="rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+          {timelineLabel}
+        </div>
+      </div>
+    );
+  }
+
   const isUser = message.role === "user";
   const isError = message.status === "error";
   const isStreaming = message.status === "streaming" && !message.body;

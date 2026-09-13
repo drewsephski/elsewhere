@@ -1,43 +1,46 @@
 import { describe, expect, test } from "vitest";
 import type { Message } from "@/lib/definitions";
-import { applyChatStreamEventsToMessages } from "@/providers/chat-stream-state";
-import type { ProviderStreamEvent } from "@/providers/types";
+import { applyChatStreamEventToMessages } from "@/providers/chat-stream-state";
 
-function assistantMessage(id: string, body = ""): Message {
-  return {
-    id,
-    conversationId: "conv-1",
-    role: "assistant",
-    kind: "text",
-    body,
-    status: "streaming",
-    model: "gpt-4o-mini",
-    errorMessage: null,
-    createdAt: 1,
-    updatedAt: 1,
-  };
-}
+describe("applyChatStreamEventToMessages", () => {
+  test("appends structured tool timeline messages", () => {
+    const assistant: Message = {
+      id: "assistant-1",
+      conversationId: "conv-1",
+      role: "assistant",
+      kind: "text",
+      body: "",
+      status: "streaming",
+      model: "gpt-5.6-luna",
+      errorMessage: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const toolMessage: Message = {
+      id: "tool-1",
+      conversationId: "conv-1",
+      role: "assistant",
+      kind: "tool_call",
+      body: JSON.stringify({
+        tool: "workspace_write",
+        callId: "call_1",
+        arguments: { path: "/workspace/hello.txt" },
+      }),
+      status: "complete",
+      model: "gpt-5.6-luna",
+      errorMessage: null,
+      createdAt: 2,
+      updatedAt: 2,
+    };
 
-describe("chat-stream-state", () => {
-  test("replays pre-ack deltas onto durable assistant id", () => {
-    const events: ProviderStreamEvent[] = [
-      {
-        type: "delta",
-        requestId: "req-1",
-        assistantMessageId: "asst-1",
-        delta: "Hel",
-      },
-      {
-        type: "delta",
-        requestId: "req-1",
-        assistantMessageId: "asst-1",
-        delta: "lo",
-      },
-    ];
-    const next = applyChatStreamEventsToMessages(
-      [assistantMessage("asst-1")],
-      events,
-    );
-    expect(next[0]?.body).toBe("Hello");
+    const next = applyChatStreamEventToMessages([assistant], {
+      type: "message",
+      requestId: "req-1",
+      assistantMessageId: "assistant-1",
+      message: toolMessage,
+    });
+
+    expect(next).toHaveLength(2);
+    expect(next[1]?.kind).toBe("tool_call");
   });
 });

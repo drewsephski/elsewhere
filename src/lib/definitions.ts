@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+/** Default OpenAI chat model for new bots and demos. */
+export const DEFAULT_MODEL_ID = "gpt-5.6-luna";
+
+export function resolveDefaultModelId(
+  models: readonly { id: string }[],
+): string {
+  const preferred = models.find(
+    (m) =>
+      m.id.toLowerCase() === DEFAULT_MODEL_ID ||
+      m.id.toLowerCase().includes("luna"),
+  );
+  return preferred?.id ?? models[0]?.id ?? DEFAULT_MODEL_ID;
+}
+
 export const messageRoleSchema = z.enum(["system", "user", "assistant"]);
 export type MessageRole = z.infer<typeof messageRoleSchema>;
 
@@ -73,5 +87,6 @@ export const streamEventSchema = z.object({
   delta: z.string().nullable().optional(),
   error: z.string().nullable().optional(),
   fullContent: z.string().nullable().optional(),
+  message: messageSchema.nullable().optional(),
 });
 export type StreamEvent = z.infer<typeof streamEventSchema>;

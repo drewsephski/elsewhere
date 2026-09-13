@@ -28,6 +28,7 @@ export function useChatStreamListener(
         delta: data.delta ?? undefined,
         error: data.error ?? undefined,
         fullContent: data.fullContent ?? undefined,
+        message: data.message ?? undefined,
       });
     }).then((fn) => {
       unlisten = fn;

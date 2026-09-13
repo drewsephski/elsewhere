@@ -1,4 +1,5 @@
 import type { Bot } from "@/lib/definitions";
+import { DEFAULT_MODEL_ID } from "@/lib/definitions";
 import type { CreateBotInput } from "@/lib/tauri-api";
 import { botService } from "@/services/bot-service";
 
@@ -15,7 +16,7 @@ export const DEMO_AGENT_INPUT: CreateBotInput = {
   description: "Research & discovery",
   systemPrompt: DEMO_AGENT_SYSTEM_PROMPT,
   provider: "openai",
-  model: "gpt-4o-mini",
+  model: DEFAULT_MODEL_ID,
 };
 
 export function isDemoAgent(bot: Pick<Bot, "name">): boolean {

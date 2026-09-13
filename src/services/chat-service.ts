@@ -18,8 +18,17 @@ export const chatService = {
     conversationId?: string;
     content: string;
     requestId: string;
+    useAgent?: boolean;
   }) {
     const provider = getProvider(params.providerId);
+    if (params.useAgent) {
+      return tauriApi.startAgentChat({
+        botId: params.botId,
+        conversationId: params.conversationId,
+        content: params.content,
+        requestId: params.requestId,
+      });
+    }
     return provider.startChat({
       botId: params.botId,
       conversationId: params.conversationId,

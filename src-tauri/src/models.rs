@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+/// Default OpenAI chat model for new bots and demos.
+pub const DEFAULT_MODEL: &str = "gpt-5.6-luna";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bot {
@@ -169,4 +172,6 @@ pub struct StreamEventPayload {
     pub delta: Option<String>,
     pub error: Option<String>,
     pub full_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<Message>,
 }

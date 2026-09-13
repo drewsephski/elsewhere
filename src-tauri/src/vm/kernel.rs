@@ -36,6 +36,12 @@ const KATA_KERNEL: KataKernelArtifact = KataKernelArtifact {
 };
 
 pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
+    if KATA_KERNEL.tar_url.is_empty() {
+        return Err("unsupported host architecture for Linux VM kernel".into());
+    }
+
+    fs::create_dir_all(layout.artifacts_dir()).map_err(|e| e.to_string())?;
+
     let kernel_path = layout.kernel_path();
     if kernel_path.exists() {
         if sha256_file(&kernel_path)? == KATA_KERNEL.sha256 {
@@ -49,14 +55,36 @@ pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
         let _ = fs::remove_file(&kernel_path);
     }
 
-    if KATA_KERNEL.tar_url.is_empty() {
-        return Err("unsupported host architecture for Linux VM kernel".into());
+    let mut last_err: Option<String> = None;
+    for attempt in 0..2 {
+        if attempt > 0 {
+            tracing::warn!("retrying Kata kernel download after corrupt or incomplete bundle");
+            let _ = fs::remove_file(kata_tarball_path(layout));
+        }
+        let tarball = match ensure_kata_tarball(layout) {
+            Ok(t) => t,
+            Err(e) => {
+                last_err = Some(e);
+                continue;
+            }
+        };
+        match extract_kernel_from_tarball(layout, &tarball) {
+            Ok(()) => break,
+            Err(e) => {
+                last_err = Some(e);
+                let _ = fs::remove_file(&tarball);
+                if attempt == 1 {
+                    return Err(last_err.unwrap_or_else(|| "kernel extract failed".into()));
+                }
+            }
+        }
     }
 
-    fs::create_dir_all(layout.artifacts_dir()).map_err(|e| e.to_string())?;
-
-    let tarball = ensure_kata_tarball(layout)?;
-    extract_kernel_from_tarball(layout, &tarball)?;
+    if !kernel_path.exists() {
+        return Err(
+            last_err.unwrap_or_else(|| "failed to download and extract Kata kernel image".into()),
+        );
+    }
 
     let digest = sha256_file(&kernel_path)?;
     if digest != KATA_KERNEL.sha256 && !KATA_KERNEL.sha256.starts_with("PLACEHOLDER") {
@@ -81,7 +109,10 @@ fn kata_tarball_path(layout: &VmLayout) -> PathBuf {
 fn ensure_kata_tarball(layout: &VmLayout) -> Result<PathBuf, String> {
     let path = kata_tarball_path(layout);
     if path.exists() && path.metadata().map(|m| m.len()).unwrap_or(0) > 50 * 1024 * 1024 {
-        return Ok(path);
+        if verify_tarball_integrity(&path).is_ok() {
+            return Ok(path);
+        }
+        tracing::warn!(path = %path.display(), "removing corrupt cached Kata tarball");
     }
 
     tracing::info!(
@@ -112,7 +143,23 @@ fn ensure_kata_tarball(layout: &VmLayout) -> Result<PathBuf, String> {
     }
 
     fs::rename(&partial, &path).map_err(|e| e.to_string())?;
+    verify_tarball_integrity(&path)?;
     Ok(path)
+}
+
+fn verify_tarball_integrity(path: &Path) -> Result<(), String> {
+    let output = Command::new("xz")
+        .args(["-t", path.to_str().unwrap_or("")])
+        .output()
+        .map_err(|e| format!("xz integrity check failed to run: {e}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let _ = fs::remove_file(path);
+    Err(format!(
+        "Kata tarball failed integrity check (corrupt or incomplete download): {stderr}"
+    ))
 }
 
 fn extract_kernel_from_tarball(layout: &VmLayout, tarball: &Path) -> Result<(), String> {

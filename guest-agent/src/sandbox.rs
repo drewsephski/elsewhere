@@ -4,6 +4,7 @@ use std::ffi::CString;
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use serde::Serialize;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -401,6 +402,49 @@ fn path_contains_dot_ssh(path: &str) -> bool {
 
 pub fn workspace_dir_for_exec() -> PathBuf {
     PathBuf::from(WORKSPACE_ROOT)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceEntry {
+    pub name: String,
+    pub path: String,
+    pub kind: String,
+}
+
+pub fn list_workspace_dir(path: &str) -> Result<Vec<WorkspaceEntry>, String> {
+    let resolved = resolve_workspace_path(path)?;
+    let workspace_canon = workspace_canonical_root()?;
+    let canonical = if resolved.exists() {
+        fs::canonicalize(&resolved).map_err(|e| e.to_string())?
+    } else {
+        return Err("directory does not exist".into());
+    };
+    if !canonical.starts_with(&workspace_canon) {
+        return Err("path resolves outside the workspace sandbox".into());
+    }
+    let meta = fs::metadata(&canonical).map_err(|e| e.to_string())?;
+    if !meta.is_dir() {
+        return Err("path is not a directory".into());
+    }
+
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&canonical).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let file_type = entry.file_type().map_err(|e| e.to_string())?;
+        let name = entry.file_name().to_string_lossy().into();
+        let path = entry.path().to_string_lossy().into();
+        let kind = if file_type.is_dir() {
+            "directory"
+        } else if file_type.is_symlink() {
+            "symlink"
+        } else {
+            "file"
+        };
+        entries.push(WorkspaceEntry { name, path, kind });
+    }
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(entries)
 }
 
 fn workspace_canonical_root() -> Result<PathBuf, String> {

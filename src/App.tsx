@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Bot, Message, ModelDescriptor } from "@/lib/definitions";
+import { DEFAULT_MODEL_ID, resolveDefaultModelId } from "@/lib/definitions";
 import { useChatStreamListener } from "@/hooks/use-chat-stream";
 import { shouldCommitChatLoad } from "@/lib/chat-load-guard";
 import {
@@ -58,7 +59,7 @@ export default function App() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createPrompt, setCreatePrompt] = useState("");
-  const [createModel, setCreateModel] = useState("");
+  const [createModel, setCreateModel] = useState(DEFAULT_MODEL_ID);
   const [createError, setCreateError] = useState<string | null>(null);
   const [botSaving, setBotSaving] = useState(false);
   const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
@@ -113,15 +114,18 @@ export default function App() {
     try {
       const list = await tauriApi.listOpenAiModels();
       setModels(list);
-      if (!createModel && list[0]) {
-        setCreateModel(list[0].id);
-      }
+      setCreateModel((current) => {
+        if (list.some((m) => m.id === current)) {
+          return current;
+        }
+        return resolveDefaultModelId(list);
+      });
     } catch (error) {
       setModelsError(formatInvokeError(error));
     } finally {
       setModelsLoading(false);
     }
-  }, [apiKeyConfigured, createModel]);
+  }, [apiKeyConfigured]);
 
   const loadChat = useCallback(async (botId: string) => {
     const epoch = ++loadChatEpochRef.current;
@@ -218,7 +222,7 @@ export default function App() {
       handleStreamTerminal(event);
       return;
     }
-    if (event.type === "delta") {
+    if (event.type === "delta" || event.type === "message") {
       setMessages((prev) => applyChatStreamEventToMessages(prev, event));
     }
   });
@@ -349,6 +353,7 @@ export default function App() {
         conversationId: conversationId ?? undefined,
         content,
         requestId,
+        useAgent: !isDemoAgent(selectedBot),
       });
       const preAckEvents = drainPreAckStreamEvents(
         preAckStreamBufferRef.current,
@@ -454,9 +459,7 @@ export default function App() {
   function handleOpenCreateBot() {
     setCreateOpen(true);
     setCreateError(null);
-    if (models[0]) {
-      setCreateModel(models[0].id);
-    }
+    setCreateModel(resolveDefaultModelId(models));
   }
 
   function handleOpenSettings() {
