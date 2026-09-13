@@ -114,7 +114,7 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
                 WHERE older.conversation_id = messages.conversation_id
                   AND (
                     older.created_at < messages.created_at
-                    OR (older.created_at = messages.created_at AND older.id <= messages.id)
+                    OR (older.created_at = messages.created_at AND older.id < messages.id)
                   )
             );
             ",
@@ -129,4 +129,54 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn v2_backfill_sequence_uses_strict_id_order_at_equal_timestamps() {
+        let conn = Connection::open_in_memory().expect("conn");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
+        )
+        .expect("schema_version");
+        migrate_to_v1(&conn).expect("v1");
+        set_version(&conn, 1).expect("version");
+
+        conn.execute_batch(
+            "
+            INSERT INTO bots (id, name, system_prompt, model, created_at, updated_at)
+            VALUES ('bot-1', 'Bot', '', 'gpt-4o-mini', 1, 1);
+            INSERT INTO conversations (id, bot_id, created_at, updated_at)
+            VALUES ('conv-1', 'bot-1', 1, 1);
+            INSERT INTO messages (id, conversation_id, role, kind, body, status, created_at, updated_at)
+            VALUES
+              ('msg-a', 'conv-1', 'user', 'text', 'first', 'complete', 100, 100),
+              ('msg-b', 'conv-1', 'assistant', 'text', 'second', 'complete', 100, 100);
+            ",
+        )
+        .expect("seed");
+
+        migrate_to_v2(&conn).expect("v2");
+
+        let seq_a: i64 = conn
+            .query_row(
+                "SELECT sequence FROM messages WHERE id = 'msg-a'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("seq a");
+        let seq_b: i64 = conn
+            .query_row(
+                "SELECT sequence FROM messages WHERE id = 'msg-b'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("seq b");
+
+        assert_eq!(seq_a, 0);
+        assert_eq!(seq_b, 1);
+    }
 }
