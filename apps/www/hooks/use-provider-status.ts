@@ -47,6 +47,7 @@ export function useProviderStatus() {
   const [error, setError] = useState<string | null>(null);
   const loadGeneration = useRef(0);
   const consecutiveFailures = useRef(0);
+  const providerUnavailable = status?.chatgptConnectionState === "unavailable";
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -60,7 +61,11 @@ export function useProviderStatus() {
       if (generation !== loadGeneration.current) {
         return;
       }
-      consecutiveFailures.current = 0;
+      if (next.chatgptConnectionState === "unavailable") {
+        consecutiveFailures.current += 1;
+      } else {
+        consecutiveFailures.current = 0;
+      }
       setStatus(next);
       setPhase("ready");
       if (next.chatgptConnected) {
@@ -80,10 +85,10 @@ export function useProviderStatus() {
     void load();
   }, [load]);
 
-  // Runner reachability is independent of whether ChatGPT was paired. Keep the
-  // last known provider state and retry transport/status failures automatically.
+  // Runner reachability and a temporarily unavailable Codex probe are distinct
+  // from an actual unpaired profile. Keep the last status and retry automatically.
   useEffect(() => {
-    if (phase !== "error" || challenge) {
+    if ((phase !== "error" && !providerUnavailable) || challenge) {
       return;
     }
     const delay = Math.min(
@@ -92,7 +97,7 @@ export function useProviderStatus() {
     );
     const timer = setTimeout(() => void load(), delay);
     return () => clearTimeout(timer);
-  }, [challenge, load, phase]);
+  }, [challenge, load, phase, providerUnavailable]);
 
   useEffect(() => {
     if (!challenge) {
@@ -181,9 +186,16 @@ export function useProviderStatus() {
   const checking = phase === "loading" || phase === "idle";
   const checkFailed = phase === "error";
   const canConnect = Boolean(
-    status && !connected && status.codexLoginAllowed && !challenge && !checking,
+    status &&
+      !connected &&
+      !providerUnavailable &&
+      status.codexLoginAllowed &&
+      !challenge &&
+      !checking,
   );
-  const connectBlocked = Boolean(status && !connected && !status.codexLoginAllowed);
+  const connectBlocked = Boolean(
+    status && !connected && !providerUnavailable && !status.codexLoginAllowed,
+  );
   return {
     status,
     challenge,
@@ -192,6 +204,7 @@ export function useProviderStatus() {
     connected,
     checking,
     checkFailed,
+    providerUnavailable,
     canConnect,
     connectBlocked,
     load,
