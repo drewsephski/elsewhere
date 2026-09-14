@@ -6,6 +6,7 @@ import { BotSettings } from "@/components/app/bot-settings";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { BotRoutinesSidebar } from "./bot-routines-sidebar";
 import { ComputerStatePanel } from "./computer-state-panel";
+import { ComputerWorkspaceTree } from "./computer-workspace-tree";
 import {
   Collapsible,
   CollapsibleContent,
@@ -66,6 +67,12 @@ export function BotContextRail({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         <ComputerStatePanel bot={bot} activeRun={activeRun} variant="minimal" />
+
+        {bot?.computerId ? (
+          <RailSection title="Workspace files" defaultOpen>
+            <ComputerWorkspaceTree computerId={bot.computerId} className="px-0.5" />
+          </RailSection>
+        ) : null}
 
         {bot ? (
           <div className="mt-1">
