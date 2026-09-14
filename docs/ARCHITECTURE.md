@@ -8,6 +8,7 @@
 | `@elsewhere/www` | `apps/www/` | Next.js marketing site |
 | `@elsewhere/brand` | `packages/brand/` | Shared product copy and URLs |
 | `agent-core` | `crates/agent-core/` | Host-independent Luna agent loop |
+| `sprite-computer` | `crates/sprite-computer/` | Fly Sprites `AgentComputer` adapter |
 
 Desktop and web are separate bundles. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
 
@@ -18,9 +19,9 @@ AgentRuntime (agent-core::run_agent_loop)
  ├── ResponsesModel      (OpenAI Responses API — host-provided)
  ├── RunStore            (SQLite today, Postgres later)
  ├── EventSink           (Tauri events today, SSE/WebSocket later)
- └── AgentComputer
-      ├── LocalMacComputer   (desktop)
-      └── CloudComputer      (future — Fly Sprites, etc.)
+ └── AgentComputer (async)
+      ├── LocalMacComputer   (desktop — VZ + guest-agent)
+      └── SpriteComputer     (Fly Sprites REST — `crates/sprite-computer`)
 ```
 
 The core loop does **not** depend on Tauri, macOS, SQLite, or Virtualization.framework. The desktop app wires concrete adapters in `src-tauri/src/agent/`.
@@ -74,4 +75,4 @@ Tauri event: `gptbot://chat-stream` (**legacy compatibility id**). `TauriEventSi
 
 ## Cloud
 
-See `docs/CLOUD_ARCHITECTURE.md`. Next adapter: `SpriteComputer : AgentComputer` without changing `agent-core`.
+See `docs/CLOUD_ARCHITECTURE.md`. Phase 3A ships `SpriteComputer`; Phase 3B adds the cloud host (Postgres run store, event sink, authenticated run API).

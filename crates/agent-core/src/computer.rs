@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -59,14 +60,15 @@ impl ComputerError {
 }
 
 /// Portable abstraction for an agent's Linux computer (local VM or future cloud sandbox).
+#[async_trait]
 pub trait AgentComputer: Send + Sync {
-    fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError>;
+    async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError>;
 
-    fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError>;
+    async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError>;
 
-    fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError>;
+    async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError>;
 
-    fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError>;
+    async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError>;
 
-    fn exec(&self, command: &str) -> Result<ExecResult, ComputerError>;
+    async fn exec(&self, command: &str) -> Result<ExecResult, ComputerError>;
 }

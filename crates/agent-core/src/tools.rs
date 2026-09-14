@@ -100,7 +100,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
     ]
 }
 
-pub fn dispatch_tool(
+pub async fn dispatch_tool(
     computer: &dyn AgentComputer,
     name: &str,
     arguments: &str,
@@ -116,6 +116,7 @@ pub fn dispatch_tool(
 
     computer
         .ensure_ready()
+        .await
         .map_err(ToolError::ComputerNotReady)?;
 
     if cancel.load(Ordering::Relaxed) {
@@ -124,10 +125,10 @@ pub fn dispatch_tool(
 
     let started = Instant::now();
     let result = match name {
-        "workspace_list" => workspace_list(computer, &args),
-        "workspace_read" => workspace_read(computer, &args),
-        "workspace_write" => workspace_write(computer, &args),
-        "workspace_exec" => workspace_exec(computer, &args),
+        "workspace_list" => workspace_list(computer, &args).await,
+        "workspace_read" => workspace_read(computer, &args).await,
+        "workspace_write" => workspace_write(computer, &args).await,
+        "workspace_exec" => workspace_exec(computer, &args).await,
         other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
     }?;
 
@@ -138,10 +139,11 @@ pub fn dispatch_tool(
     Ok(envelope)
 }
 
-fn workspace_list(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
+async fn workspace_list(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
     let path = required_str(args, "path")?;
     let entries = computer
         .list_dir(path)
+        .await
         .map_err(ToolError::ComputerNotReady)?;
     Ok(json!({
         "ok": true,
@@ -150,10 +152,11 @@ fn workspace_list(computer: &dyn AgentComputer, args: &Value) -> Result<Value, T
     }))
 }
 
-fn workspace_read(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
+async fn workspace_read(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
     let path = required_str(args, "path")?;
     let bytes = computer
         .read_file(path)
+        .await
         .map_err(ToolError::ComputerNotReady)?;
     let content = String::from_utf8_lossy(&bytes).into_owned();
     Ok(json!({
@@ -164,11 +167,12 @@ fn workspace_read(computer: &dyn AgentComputer, args: &Value) -> Result<Value, T
     }))
 }
 
-fn workspace_write(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
+async fn workspace_write(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
     let path = required_str(args, "path")?;
     let content = required_str(args, "content")?;
     computer
         .write_file(path, content.as_bytes())
+        .await
         .map_err(ToolError::ComputerNotReady)?;
     Ok(json!({
         "ok": true,
@@ -177,9 +181,12 @@ fn workspace_write(computer: &dyn AgentComputer, args: &Value) -> Result<Value, 
     }))
 }
 
-fn workspace_exec(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
+async fn workspace_exec(computer: &dyn AgentComputer, args: &Value) -> Result<Value, ToolError> {
     let command = required_str(args, "command")?;
-    let response = computer.exec(command).map_err(ToolError::ComputerNotReady)?;
+    let response = computer
+        .exec(command)
+        .await
+        .map_err(ToolError::ComputerNotReady)?;
     Ok(json!({
         "ok": response.ok,
         "stdout": response.stdout,
@@ -199,6 +206,7 @@ fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
 mod tests {
     use super::*;
     use crate::computer::{ComputerInfo, ExecResult};
+    use async_trait::async_trait;
     use std::collections::HashMap;
     use std::sync::Mutex;
 
@@ -214,8 +222,9 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl AgentComputer for FakeComputer {
-        fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
+        async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
             Ok(ComputerInfo {
                 ready: true,
                 protocol_version: 1,
@@ -223,23 +232,29 @@ mod tests {
             })
         }
 
-        fn list_dir(&self, _path: &str) -> Result<Vec<crate::computer::WorkspaceEntry>, ComputerError> {
+        async fn list_dir(
+            &self,
+            _path: &str,
+        ) -> Result<Vec<crate::computer::WorkspaceEntry>, ComputerError> {
             Ok(vec![])
         }
 
-        fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
+        async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
             let map = self.files.lock().unwrap();
             map.get(path)
                 .cloned()
                 .ok_or_else(|| ComputerError::ExecutionFailed("not found".into()))
         }
 
-        fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
-            self.files.lock().unwrap().insert(path.to_string(), data.to_vec());
+        async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
+            self.files
+                .lock()
+                .unwrap()
+                .insert(path.to_string(), data.to_vec());
             Ok(())
         }
 
-        fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
+        async fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
             Ok(ExecResult {
                 ok: true,
                 stdout: "ok".into(),
@@ -249,8 +264,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn dispatch_write_does_not_require_vm() {
+    #[tokio::test]
+    async fn dispatch_write_does_not_require_vm() {
         let computer = FakeComputer::new();
         let cancel = AtomicBool::new(false);
         let result = dispatch_tool(
@@ -259,16 +274,17 @@ mod tests {
             r#"{"path":"/workspace/a.txt","content":"hi"}"#,
             &cancel,
         )
+        .await
         .expect("write");
         assert_eq!(result.get("ok"), Some(&json!(true)));
         assert_eq!(
-            computer.read_file("/workspace/a.txt").unwrap(),
+            computer.read_file("/workspace/a.txt").await.unwrap(),
             b"hi".to_vec()
         );
     }
 
-    #[test]
-    fn cancellation_checked_early() {
+    #[tokio::test]
+    async fn cancellation_checked_early() {
         let computer = FakeComputer::new();
         let cancel = AtomicBool::new(true);
         let err = dispatch_tool(
@@ -277,6 +293,7 @@ mod tests {
             r#"{"path":"/workspace/x"}"#,
             &cancel,
         )
+        .await
         .unwrap_err();
         assert_eq!(err, ToolError::Cancelled);
     }

@@ -18,8 +18,9 @@
 
 ## 3. Agent Runtime
 
-- [x] Portable `agent-core` (Luna Responses tool loop, `AgentComputer`, `RunStore`, `EventSink`)
+- [x] Portable `agent-core` (Luna Responses tool loop, async `AgentComputer`, `RunStore`, `EventSink`)
 - [x] Terminal / filesystem tools via guest RPC (`workspace_*` tools + `LocalMacComputer`)
+- [x] Fly Sprites adapter (`SpriteComputer` + mock/live proofs)
 - [x] `run_events` table (dual-write with structured `messages` during migration)
 - [ ] Browser automation
 - [ ] Approvals and activity timeline

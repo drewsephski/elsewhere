@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/agent-core",
+    "crates/sprite-computer",
+    "src-tauri",
+    "guest-agent",
+]

@@ -134,7 +134,7 @@ pub async fn run_agent_loop(
                 message: Some(call_message),
             })?;
 
-            let tool_result = match dispatch_tool(deps.computer.as_ref(), &name, &arguments, &deps.cancel) {
+            let tool_result = match dispatch_tool(deps.computer.as_ref(), &name, &arguments, &deps.cancel).await {
                 Ok(value) => value,
                 Err(err) if err == ToolError::Cancelled => {
                     finalize_cancelled(&deps, &ctx)?;
@@ -458,8 +458,9 @@ mod tests {
 
     struct FakeComputer;
 
+    #[async_trait]
     impl AgentComputer for FakeComputer {
-        fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
+        async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
             Ok(ComputerInfo {
                 ready: true,
                 protocol_version: 1,
@@ -467,19 +468,19 @@ mod tests {
             })
         }
 
-        fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
+        async fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
             Ok(vec![])
         }
 
-        fn read_file(&self, _path: &str) -> Result<Vec<u8>, ComputerError> {
+        async fn read_file(&self, _path: &str) -> Result<Vec<u8>, ComputerError> {
             Ok(vec![])
         }
 
-        fn write_file(&self, _path: &str, _data: &[u8]) -> Result<(), ComputerError> {
+        async fn write_file(&self, _path: &str, _data: &[u8]) -> Result<(), ComputerError> {
             Ok(())
         }
 
-        fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
+        async fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
             Ok(ExecResult {
                 ok: true,
                 stdout: String::new(),
