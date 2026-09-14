@@ -40,3 +40,12 @@ Live device authorization requires the user's participation and has not been per
 - A bot settings update no longer accidentally clears its computer assignment when the field is omitted.
 
 Milestone 2 verification: cloud-host regression tests pass against local Postgres, including isolated queue/approval tests and 1,001-event cursor replay. Web and desktop type checks and desktop tests pass. Browser QA confirmed sign-in, computer/bot creation, durable work submission, an explicit disconnected-provider failure, and history after refresh. Live providers were deliberately disabled for browser QA.
+
+### 3 — Scheduled routines
+
+- Complete routine creation/editing, first-run time, fixed repeat intervals, pause/resume, and manual run-once in the web dashboard.
+- Each occurrence uses the same durable work admission and approval path. Schedule advancement and admission commit atomically; stable occurrence keys prevent duplication.
+- Missed time slots coalesce; active work does not overlap; failed/interrupted prior work pauses the routine with an actionable explanation. Explicit resume acknowledges the prior failure without replaying it.
+- Owner-scoped APIs and regression cases cover concurrency, missed occurrences, cancellation/pause, manual idempotency, foreign ownership, unavailable computers, and resume after failure.
+
+Milestone 3 verification: full cloud-host regressions and six routine-specific tests pass against Postgres; web type checks pass. Browser QA confirmed routine creation, pause, and run-once navigation to persisted work, with live providers disabled.

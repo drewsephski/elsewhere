@@ -5,6 +5,7 @@ import { cn } from "cn";
 import {
   Bot,
   BriefcaseBusiness,
+  CalendarClock,
   CheckCircle2,
   LayoutDashboard,
   Monitor,
@@ -18,6 +19,7 @@ const links = [
   { href: "/app/bots", label: "Bots", icon: Bot },
   { href: "/app/work", label: "Work", icon: BriefcaseBusiness },
   { href: "/app/computers", label: "Computers", icon: Monitor },
+  { href: "/app/routines", label: "Routines", icon: CalendarClock },
   { href: "/app/approvals", label: "Approvals", icon: CheckCircle2 },
 ] as const;
 

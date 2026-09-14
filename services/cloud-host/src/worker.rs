@@ -44,6 +44,9 @@ pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), St
                 .await
                 .map_err(|e| e.to_string())?;
         }
+        crate::routines::tick(&state.pool, chrono::Utc::now())
+            .await
+            .map_err(|e| e.to_string())?;
         dispatch_available(&state)
             .await
             .map_err(|e| e.to_string())?;

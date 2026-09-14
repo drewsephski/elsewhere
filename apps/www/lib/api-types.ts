@@ -56,3 +56,15 @@ export interface CreateRunResponse {
   model: string;
   status: string;
 }
+
+export interface Routine {
+  id: string;
+  botId: string;
+  name: string;
+  instructions: string;
+  intervalMinutes: number;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunId: string | null;
+  lastError: string | null;
+}

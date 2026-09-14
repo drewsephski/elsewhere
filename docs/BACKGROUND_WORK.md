@@ -23,3 +23,11 @@ Cancellation of queued work is atomic with dispatch. Cancellation of active work
 If queued work does not start: confirm the cloud host is alive, Postgres is reachable, no other runner holds leadership, the bot/computer is not already working, and the configured concurrency is nonzero. If subscription work fails: verify the owner's ChatGPT connection and the private profile volume. Elsewhere never substitutes paid API usage.
 
 Local verification uses an isolated test database. No live subscription authorization, Sprite provisioning, infrastructure deployment, or paid model call is required for the regression suite.
+
+## Routines
+
+`/app/routines` stores a bot, assignment, first start time, and fixed repeat interval (15 minutes to 30 days). The browser displays local time and sends an absolute timestamp. Intervals are elapsed time, not timezone-based cron: an every-24-hours routine can shift local clock time across daylight saving changes.
+
+The runner checks due routines and commits the new Work item and next occurrence in the same database transaction. Concurrent scheduler ticks cannot duplicate an occurrence. Missed occurrences coalesce into one assignment; a routine with queued/active work advances its schedule without adding overlap. A failed or interrupted previous assignment pauses scheduling until explicit resume or a new manual attempt. Resume acknowledges the previous failed assignment; it does not replay it.
+
+API: `GET/POST /v1/routines`, `PUT /v1/routines/:id`, `POST /v1/routines/:id/enabled`, and `POST /v1/routines/:id/run`. All are owner-scoped. Run-once accepts an `Idempotency-Key`, works while paused, and does not change the saved schedule. Pausing prevents future occurrences but does not cancel previously accepted work; stop that assignment from its Work page.
