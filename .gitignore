@@ -33,5 +33,6 @@ macos/gptbot-vmm/.build/
 
 # Rust / Cargo build artifacts (workspace + member crates)
 target/
+.data/
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo

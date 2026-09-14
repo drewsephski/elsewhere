@@ -8,3 +8,12 @@ export function cloudHostBaseUrl(): string {
     "http://127.0.0.1:8080"
   );
 }
+
+/** App origin for auth redirects (no trailing slash, no /api/auth path). */
+export function publicAppOrigin(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_BETTER_AUTH_URL ??
+    process.env.BETTER_AUTH_URL ??
+    "http://localhost:3000";
+  return raw.replace(/\/api\/auth\/?$/, "").replace(/\/$/, "");
+}

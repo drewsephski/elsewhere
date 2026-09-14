@@ -1,29 +1,42 @@
 "use client";
 
-import { fetchCloudHostJwt } from "@/lib/auth-client";
-import { cloudHostBaseUrl } from "@/lib/auth.shared";
+/** Same-origin BFF; avoids CORS and localhost vs 127.0.0.1 cookie/port issues in the browser. */
+const CLOUD_BROWSER_PREFIX = "/api/cloud";
 
-// Bind every request to the current Better Auth session. A cached bearer can outlive
-// sign-out or an account switch in another tab and show the previous owner's workspace.
-export async function getCloudHostJwt(signal?: AbortSignal): Promise<string> {
-  return fetchCloudHostJwt(signal);
+function cloudRequestUrl(path: string): string {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${CLOUD_BROWSER_PREFIX}${normalized}`;
+}
+
+function wrapNetworkError(error: unknown): Error {
+  if (error instanceof TypeError) {
+    return new Error(
+      "Workspace API is unreachable. Start cloud-host (cargo run -p cloud-host) and refresh.",
+    );
+  }
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error("Workspace API is unreachable");
 }
 
 export async function cloudHostFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const token = await getCloudHostJwt(init.signal ?? undefined);
   const headers = new Headers(init.headers);
-  headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  return fetch(`${cloudHostBaseUrl()}${path}`, {
-    ...init,
-    headers,
-    credentials: "omit",
-  });
+  try {
+    return await fetch(cloudRequestUrl(path), {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+  } catch (error) {
+    throw wrapNetworkError(error);
+  }
 }
 
 export interface SseStreamOptions {
@@ -32,24 +45,28 @@ export interface SseStreamOptions {
   onEvent: (event: { id?: string; event: string; data: string }) => void;
 }
 
-/** fetch + Authorization bearer SSE (EventSource cannot set headers). */
+/** fetch + session cookie SSE (EventSource cannot set headers). */
 export async function cloudHostEventStream(
   path: string,
   options: SseStreamOptions,
 ): Promise<void> {
-  const token = await getCloudHostJwt(options.signal);
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
     Accept: "text/event-stream",
   };
   if (options.lastEventId) {
     headers["Last-Event-ID"] = options.lastEventId;
   }
 
-  const response = await fetch(`${cloudHostBaseUrl()}${path}`, {
-    headers,
-    signal: options.signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(cloudRequestUrl(path), {
+      headers,
+      signal: options.signal,
+      credentials: "include",
+    });
+  } catch (error) {
+    throw wrapNetworkError(error);
+  }
   if (!response.ok || !response.body) {
     throw new Error(`SSE request failed: ${response.status}`);
   }

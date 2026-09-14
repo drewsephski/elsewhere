@@ -4,9 +4,11 @@ import Link from "next/link";
 import { Bot, ArrowUpRight, Monitor } from "lucide-react";
 import { cloudHostFetch } from "@/lib/cloud-api";
 
-type Presence = { id: string; name: string; computerName: string | null; presence: string; workId: string | null; task: string | null };
-type Overview = { runnerReady: boolean; counts: { working: number; queued: number; approvals: number; finished: number; results: number; routines: number }; bots: Presence[] };
-const labels: Record<string, string> = { working: "Working", queued: "Work queued", waiting_approval: "Waiting for you", saving_results: "Saving results", needs_computer: "Needs a computer", needs_attention: "Needs attention", ready: "Ready for an assignment" };
+import {
+  presenceLabels,
+  type WorkspaceOverview as Overview,
+} from "@/lib/workspace-types";
+
 export function WorkspaceOverview({ compact = false }: { compact?: boolean }) {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function WorkspaceOverview({ compact = false }: { compact?: boolean }) {
       {!data ? <p className="mt-4 text-sm text-muted-foreground">Loading your team…</p> : !data.bots.length ? <div className="py-8"><Bot className="h-8 w-8 text-primary" /><h3 className="mt-4 text-base font-medium">Give your first bot a job</h3><p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">Connect ChatGPT from the overview, create a computer, and give your bot a name and role. Then delegate a report, a draft, or a task from your project.</p><div className="mt-4 flex gap-4 text-sm"><Link href="/app/computers" className="font-medium underline underline-offset-4">Create a computer</Link><Link href="/app/bots" className="font-medium underline underline-offset-4">Create a bot</Link></div></div> : <ul className="mt-4 grid gap-3 xl:grid-cols-2">{data.bots.map(bot => {
         const attention = ["waiting_approval", "needs_attention", "needs_computer"].includes(bot.presence);
         const working = ["working", "queued", "saving_results"].includes(bot.presence);
-        return <li key={bot.id} className="rounded-xl border border-border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><Link href={`/app/bots/${bot.id}`} className="flex min-w-[120px] max-w-full items-center gap-3 font-semibold hover:underline"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bot className="size-5" /></span><span className="truncate">{bot.name}</span></Link><span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${attention ? "bg-amber-50 text-amber-800" : working ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{labels[bot.presence] ?? "Available"}</span></div><p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><Monitor className="size-3.5" />{bot.computerName ?? "Assign a computer in bot settings"}</p>{bot.workId && bot.task ? <Link href={`/app/work/${bot.workId}`} className="mt-3 flex items-start justify-between gap-2 text-sm text-muted-foreground hover:text-foreground"><span className="line-clamp-2">{bot.task}</span><ArrowUpRight className="mt-0.5 size-4 shrink-0" /></Link> : <p className="mt-3 text-sm text-muted-foreground">No assignments yet.</p>}</li>;
+        return <li key={bot.id} className="rounded-xl border border-border p-4"><div className="flex flex-wrap items-start justify-between gap-3"><Link href={`/app/bots/${bot.id}`} className="flex min-w-[120px] max-w-full items-center gap-3 font-semibold hover:underline"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><Bot className="size-5" /></span><span className="truncate">{bot.name}</span></Link><span className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${attention ? "bg-amber-50 text-amber-800" : working ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{presenceLabels[bot.presence] ?? "Available"}</span></div><p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground"><Monitor className="size-3.5" />{bot.computerName ?? "Assign a computer in bot settings"}</p>{bot.workId && bot.task ? <Link href={`/app/work/${bot.workId}`} className="mt-3 flex items-start justify-between gap-2 text-sm text-muted-foreground hover:text-foreground"><span className="line-clamp-2">{bot.task}</span><ArrowUpRight className="mt-0.5 size-4 shrink-0" /></Link> : <p className="mt-3 text-sm text-muted-foreground">No assignments yet.</p>}</li>;
       })}</ul>}
     </section>
   </div>;

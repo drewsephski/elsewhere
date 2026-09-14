@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 export default function SignInPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resetSuccess = searchParams.get("reset") === "success";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -96,7 +98,17 @@ export default function SignInPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="password">Password</Label>
+              {mode === "sign-in" ? (
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-primary underline-offset-4 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              ) : null}
+            </div>
             <Input
               id="password"
               type="password"
@@ -107,6 +119,11 @@ export default function SignInPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          {resetSuccess && mode === "sign-in" ? (
+            <p className="text-sm text-muted-foreground" role="status">
+              Your password was reset. Sign in with your new password.
+            </p>
+          ) : null}
           {mode === "sign-up" && invitationRequired ? (
             <div className="space-y-2">
               <Label htmlFor="invitation">Alpha invitation code</Label>

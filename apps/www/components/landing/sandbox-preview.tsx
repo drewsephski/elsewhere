@@ -1,4 +1,6 @@
 import { Badge } from "@/components/ui/badge";
+import { appRoutes } from "@/lib/app-routes";
+import Link from "next/link";
 
 const terminalLines = [
   { kind: "prompt", text: "gptbot guest attach --bot research-01" },
@@ -77,9 +79,15 @@ export function SandboxPreview() {
           </div>
         </div>
         <div className="grid grid-cols-3 divide-x divide-border/60 bg-muted/20 text-center font-mono text-[0.6rem] text-muted-foreground">
-          <div className="px-2 py-2">terminal</div>
-          <div className="px-2 py-2">files</div>
-          <div className="px-2 py-2">browser</div>
+          <Link href={appRoutes.computers} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+            terminal
+          </Link>
+          <Link href={appRoutes.results} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+            files
+          </Link>
+          <Link href={appRoutes.work} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+            browser
+          </Link>
         </div>
       </div>
       <p className="mt-3 text-center font-mono text-[0.65rem] text-muted-foreground sm:text-left">

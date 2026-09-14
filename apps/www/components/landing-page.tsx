@@ -7,7 +7,9 @@ import { SandboxPreview } from "@/components/landing/sandbox-preview";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
 import { buttonVariants } from "@/components/ui/button";
+import { appRoutes } from "@/lib/app-routes";
 import { cn } from "cn";
+import Link from "next/link";
 
 export function LandingPage() {
   return (
@@ -28,9 +30,9 @@ export function LandingPage() {
                 {siteConfig.cloudPitch}
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <a href="#early-access" className={cn(buttonVariants({ size: "lg" }))}>
-                  Get early access
-                </a>
+                <Link href={appRoutes.workspace} className={cn(buttonVariants({ size: "lg" }))}>
+                  Open workspace
+                </Link>
                 <a
                   href={siteConfig.links.download}
                   className={cn(buttonVariants({ size: "lg", variant: "outline" }))}

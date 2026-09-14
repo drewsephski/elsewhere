@@ -6,13 +6,12 @@ import {
   ProductMobileSection,
   ProductNavDropdown,
 } from "@/components/product-nav-dropdown";
+import { appRoutes, capabilityAppHrefs } from "@/lib/app-routes";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 const HERO_VIDEO_SRC =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260820_010308_b1636845-4c15-4ab6-b0c9-9a29bfb0c6e3.mp4";
-
-const waitlistHref = `mailto:${siteConfig.contactEmail}?subject=${encodeURIComponent(siteConfig.waitlistMailSubject)}&body=${encodeURIComponent("Please add me to the cloud waitlist.")}`;
 
 const capabilityWordmarks = [
   { label: "Sandboxes", className: "font-playfair font-bold" },
@@ -63,12 +62,12 @@ function Navbar() {
             >
               Source
             </a>
-            <a
-              href={waitlistHref}
+            <Link
+              href={appRoutes.workspace}
               className="text-sm tracking-wide text-brand-dark uppercase transition-opacity hover:opacity-70"
             >
-              Cloud
-            </a>
+              Workspace
+            </Link>
           </div>
 
           <Link
@@ -135,9 +134,13 @@ function Navbar() {
           >
             Source
           </a>
-          <a href={waitlistHref} className="text-3xl tracking-tight text-brand-dark" onClick={closeMenu}>
-            Cloud
-          </a>
+          <Link
+            href={appRoutes.workspace}
+            className="text-3xl tracking-tight text-brand-dark"
+            onClick={closeMenu}
+          >
+            Workspace
+          </Link>
           <a
             href={siteConfig.links.download}
             className="mt-4 inline-flex items-center rounded-lg bg-primary px-8 py-3.5 text-lg font-medium text-primary-foreground shadow-sm"
@@ -158,14 +161,18 @@ function CapabilityRow() {
         Built for
       </p>
       <div className="flex flex-wrap items-center justify-start gap-x-6 gap-y-3 md:gap-x-12 lg:gap-x-16">
-        {capabilityWordmarks.map((item) => (
-          <span
-            key={item.label}
-            className={`text-lg text-brand-dark/80 md:text-xl lg:text-2xl ${item.className}`}
-          >
-            {item.label}
-          </span>
-        ))}
+        {capabilityWordmarks.map((item) => {
+          const href = capabilityAppHrefs[item.label] ?? appRoutes.workspace;
+          return (
+            <Link
+              key={item.label}
+              href={href}
+              className={`text-lg text-brand-dark/80 transition-colors hover:text-primary md:text-xl lg:text-2xl ${item.className}`}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
@@ -186,15 +193,15 @@ function Hero() {
       </div>
 
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-col items-start px-6 pt-28 md:pt-36 lg:px-8">
-        <a
-          href={waitlistHref}
+        <Link
+          href={appRoutes.workspace}
           className="mb-5 inline-flex animate-fade-up items-center gap-2 rounded-full border border-brand-dark/15 bg-white/60 px-4 py-2 backdrop-blur-sm transition-colors hover:bg-white/80 md:mb-6 stagger-3"
         >
           <span className="text-sm text-brand-dark">
-            macOS desktop is live — join the cloud waitlist.
+            macOS desktop is live — open your cloud workspace.
           </span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-dark" strokeWidth={2} aria-hidden />
-        </a>
+        </Link>
 
         <h1
           className="max-w-4xl animate-fade-up text-left font-helvetica-neue text-3xl leading-[1.05] font-light tracking-tight text-brand-dark sm:text-4xl md:text-5xl lg:text-6xl stagger-4"
@@ -208,6 +215,21 @@ function Hero() {
         <p className="mt-5 max-w-2xl animate-fade-up text-base leading-relaxed text-brand-dark/75 md:text-lg stagger-5">
           {siteConfig.cloudPitch}
         </p>
+
+        <div className="mt-8 flex animate-fade-up flex-col gap-3 sm:flex-row sm:items-center stagger-5">
+          <Link
+            href={appRoutes.workspace}
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+          >
+            Open workspace
+          </Link>
+          <a
+            href={siteConfig.links.download}
+            className="inline-flex items-center justify-center rounded-lg border border-brand-dark/20 bg-white/70 px-6 py-3 text-sm font-medium text-brand-dark backdrop-blur-sm transition-colors hover:bg-white"
+          >
+            Download for macOS
+          </a>
+        </div>
 
         <CapabilityRow />
       </div>

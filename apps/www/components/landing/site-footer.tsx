@@ -1,4 +1,6 @@
 import { siteConfig } from "@elsewhere/brand";
+import { appRoutes } from "@/lib/app-routes";
+import Link from "next/link";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();
@@ -16,6 +18,9 @@ export function SiteFooter() {
           <a href={siteConfig.links.docs} className="hover:text-foreground" target="_blank" rel="noreferrer">
             Source
           </a>
+          <Link href={appRoutes.workspace} className="hover:text-foreground">
+            Workspace
+          </Link>
           <a href={siteConfig.links.download} className="hover:text-foreground">
             Download
           </a>

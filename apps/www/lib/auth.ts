@@ -4,9 +4,12 @@ import { nextCookies } from "better-auth/next-js";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { acceptsAlphaInvitation } from "@/lib/alpha-admission";
 import { getAuthPool } from "@/lib/db";
-import { CLOUD_HOST_JWT_AUDIENCE } from "@/lib/auth.shared";
+import { CLOUD_HOST_JWT_AUDIENCE, publicAppOrigin } from "@/lib/auth.shared";
+import { sendAuthEmail } from "@/lib/send-auth-email";
+import { siteConfig } from "@elsewhere/brand";
 
-const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+const appOrigin = publicAppOrigin();
+const baseURL = process.env.BETTER_AUTH_URL ?? appOrigin;
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -28,7 +31,7 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: getAuthPool(),
-  trustedOrigins: [baseURL],
+  trustedOrigins: [appOrigin, baseURL],
   hooks: {
     before: createAuthMiddleware(async (context) => {
       // Reject uninvited requests before expensive password hashing.
@@ -47,6 +50,15 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      void sendAuthEmail({
+        to: user.email,
+        subject: `Reset your ${siteConfig.productName} password`,
+        text: `We received a request to reset your password.\n\nOpen this link to choose a new password (expires in one hour):\n${url}\n\nIf you did not request this, you can ignore this email.`,
+        html: `<p>We received a request to reset your password.</p><p><a href="${url}">Choose a new password</a> (link expires in one hour).</p><p>If you did not request this, you can ignore this email.</p>`,
+      });
+    },
   },
   ...(googleClientId && googleClientSecret
     ? {

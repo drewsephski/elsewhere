@@ -1,21 +1,21 @@
 "use client";
 
 import { marketingFeatures, siteConfig } from "@elsewhere/brand";
+import { marketingFeatureAppHrefs, appRoutes } from "@/lib/app-routes";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useId, useState } from "react";
 
-const waitlistHref = `mailto:${siteConfig.contactEmail}?subject=${encodeURIComponent(siteConfig.waitlistMailSubject)}&body=${encodeURIComponent("Please add me to the cloud waitlist.")}`;
-
 const productLinks = [
+  {
+    label: "Open workspace",
+    href: appRoutes.workspace,
+    external: false,
+  },
   {
     label: "Download",
     href: siteConfig.links.download,
     external: true,
-  },
-  {
-    label: "Cloud waitlist",
-    href: waitlistHref,
-    external: false,
   },
 ] as const;
 
@@ -77,46 +77,71 @@ export function ProductNavDropdown() {
               Platform
             </p>
             <p className="truncate text-[11px] text-brand-dark/50">
-              Desktop now · Cloud next
+              Desktop now · Cloud workspace live
             </p>
           </div>
 
           <ul className="grid grid-cols-2 gap-px bg-brand-dark/[0.06] p-px">
-            {marketingFeatures.map((feature) => (
-              <li key={feature.title} className="bg-white/95">
-                <div
-                  role="menuitem"
-                  className="group/item h-full px-3 py-2.5 transition-colors duration-200 hover:bg-brand-cream/90"
-                >
-                  <p className="text-[13px] leading-tight tracking-tight text-brand-dark">
-                    {feature.title}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-brand-dark/50">
-                    {feature.description}
-                  </p>
-                </div>
-              </li>
-            ))}
+            {marketingFeatures.map((feature, index) => {
+              const href = marketingFeatureAppHrefs[index] ?? appRoutes.workspace;
+              return (
+                <li key={feature.title} className="bg-white/95">
+                  <Link
+                    href={href}
+                    role="menuitem"
+                    className="group/item flex h-full flex-col px-3 py-2.5 transition-colors duration-200 hover:bg-brand-cream/90"
+                  >
+                    <p className="flex items-center gap-1 text-[13px] leading-tight tracking-tight text-brand-dark">
+                      {feature.title}
+                      <ArrowUpRight
+                        className="h-3 w-3 text-brand-dark/25 transition-transform group-hover/item:translate-x-0.5 group-hover/item:-translate-y-0.5 group-hover/item:text-primary"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-brand-dark/50">
+                      {feature.description}
+                    </p>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
 
           <div className="flex items-center divide-x divide-brand-dark/[0.06] border-t border-brand-dark/[0.06] bg-brand-cream/35">
-            {productLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                target={link.external ? "_blank" : undefined}
-                rel={link.external ? "noreferrer" : undefined}
-                role="menuitem"
-                className="group/link flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-[11px] tracking-[0.12em] text-brand-dark uppercase transition-colors hover:bg-white/70"
-              >
-                {link.label}
-                <ArrowUpRight
-                  className="h-3 w-3 text-brand-dark/30 transition-transform duration-200 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 group-hover/link:text-primary"
-                  strokeWidth={2}
-                  aria-hidden
-                />
-              </a>
-            ))}
+            {productLinks.map((link) =>
+              link.external ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  role="menuitem"
+                  className="group/link flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-[11px] tracking-[0.12em] text-brand-dark uppercase transition-colors hover:bg-white/70"
+                >
+                  {link.label}
+                  <ArrowUpRight
+                    className="h-3 w-3 text-brand-dark/30 transition-transform duration-200 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 group-hover/link:text-primary"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  role="menuitem"
+                  className="group/link flex flex-1 items-center justify-center gap-1.5 px-3 py-2 text-[11px] tracking-[0.12em] text-brand-dark uppercase transition-colors hover:bg-white/70"
+                >
+                  {link.label}
+                  <ArrowUpRight
+                    className="h-3 w-3 text-brand-dark/30 transition-transform duration-200 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 group-hover/link:text-primary"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                </Link>
+              ),
+            )}
           </div>
         </div>
       </div>
@@ -153,28 +178,48 @@ export function ProductMobileSection({ onNavigate }: ProductMobileSectionProps) 
       >
         <div className="rounded-2xl border border-brand-dark/10 bg-white/60 p-4 text-left backdrop-blur-sm">
           <ul className="space-y-3">
-            {marketingFeatures.map((feature) => (
-              <li key={feature.title}>
-                <p className="text-base text-brand-dark">{feature.title}</p>
-                <p className="mt-1 text-sm leading-relaxed text-brand-dark/60">
-                  {feature.description}
-                </p>
-              </li>
-            ))}
+            {marketingFeatures.map((feature, index) => {
+              const href = marketingFeatureAppHrefs[index] ?? appRoutes.workspace;
+              return (
+                <li key={feature.title}>
+                  <Link
+                    href={href}
+                    className="block text-base text-brand-dark underline-offset-2 hover:underline"
+                    onClick={onNavigate}
+                  >
+                    {feature.title}
+                  </Link>
+                  <p className="mt-1 text-sm leading-relaxed text-brand-dark/60">
+                    {feature.description}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
           <div className="mt-4 flex flex-col gap-2 border-t border-brand-dark/10 pt-4">
-            {productLinks.map((link) => (
-              <a
-                key={link.label}
-                href={link.href}
-                target={link.external ? "_blank" : undefined}
-                rel={link.external ? "noreferrer" : undefined}
-                className="text-sm tracking-wide text-brand-dark uppercase"
-                onClick={onNavigate}
-              >
-                {link.label}
-              </a>
-            ))}
+            {productLinks.map((link) =>
+              link.external ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm tracking-wide text-brand-dark uppercase"
+                  onClick={onNavigate}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="text-sm tracking-wide text-brand-dark uppercase"
+                  onClick={onNavigate}
+                >
+                  {link.label}
+                </Link>
+              ),
+            )}
           </div>
         </div>
       </div>

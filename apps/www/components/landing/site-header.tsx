@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@elsewhere/brand";
+import { appRoutes } from "@/lib/app-routes";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 
@@ -55,9 +56,9 @@ export function SiteHeader() {
           >
             Download
           </a>
-          <a href="#early-access" className={cn(buttonVariants({ size: "sm" }))}>
-            Waitlist
-          </a>
+          <Link href={appRoutes.workspace} className={cn(buttonVariants({ size: "sm" }))}>
+            Open app
+          </Link>
         </div>
       </div>
     </header>

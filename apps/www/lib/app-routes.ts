@@ -1,0 +1,26 @@
+/** In-app destinations linked from marketing surfaces. */
+export const appRoutes = {
+  workspace: "/app",
+  signIn: "/sign-in",
+  createBot: "/app?create=1",
+  computers: "/app/computers",
+  routines: "/app/routines",
+  approvals: "/app/approvals",
+  work: "/app/work",
+  results: "/app/results",
+} as const;
+
+/** Order matches `marketingFeatures` in @elsewhere/brand. */
+export const marketingFeatureAppHrefs: readonly string[] = [
+  appRoutes.computers,
+  appRoutes.routines,
+  appRoutes.workspace,
+  appRoutes.approvals,
+];
+
+export const capabilityAppHrefs: Record<string, string> = {
+  Sandboxes: appRoutes.computers,
+  Routines: appRoutes.routines,
+  Memory: appRoutes.workspace,
+  Approvals: appRoutes.approvals,
+};

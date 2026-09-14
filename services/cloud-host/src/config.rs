@@ -73,10 +73,16 @@ impl Config {
         let cors_web_origin = env::var("ELSEWHERE_WEB_ORIGIN")
             .ok()
             .filter(|v| !v.is_empty());
-        let allow_codex_login = env::var("ELSEWHERE_ALLOW_CODEX_LOGIN")
+        let allow_codex_login = match env::var("ELSEWHERE_ALLOW_CODEX_LOGIN")
             .ok()
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+            .filter(|v| !v.is_empty())
+        {
+            Some(v) if v == "1" || v.eq_ignore_ascii_case("true") => true,
+            Some(v) if v == "0" || v.eq_ignore_ascii_case("false") => false,
+            Some(_) => false,
+            // Local hybrid dev: enable ChatGPT device login unless explicitly turned off.
+            None => auth_mode == AuthMode::Hybrid,
+        };
 
         let max_concurrent_runs = env::var("ELSEWHERE_MAX_CONCURRENT_RUNS")
             .ok()
@@ -100,6 +106,20 @@ impl Config {
             .map(PathBuf::from)
             .or_else(|| which_codex_on_path());
 
+        let codex_profiles_dir = env::var("ELSEWHERE_CODEX_PROFILES_DIR")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                if allow_codex_login && auth_mode == AuthMode::Hybrid {
+                    std::env::current_dir()
+                        .ok()
+                        .map(|cwd| cwd.join(".data").join("codex-profiles"))
+                } else {
+                    None
+                }
+            });
+
         Ok(Self {
             database_url,
             openai_api_key,
@@ -118,9 +138,7 @@ impl Config {
             bind_addr: env::var("ELSEWHERE_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into()),
             run_engine,
             codex_executable,
-            codex_profiles_dir: env::var("ELSEWHERE_CODEX_PROFILES_DIR")
-                .ok()
-                .map(PathBuf::from),
+            codex_profiles_dir,
             tool_approval_timeout_secs,
             enforce_tool_approvals_internal,
         })
@@ -136,6 +154,7 @@ impl Config {
             jwt_configured = self.jwt_jwks_url.is_some(),
             cors_web_origin = ?self.cors_web_origin,
             allow_codex_login = self.allow_codex_login,
+            codex_profiles_dir = ?self.codex_profiles_dir,
             run_engine = ?self.run_engine,
             codex_on_path = self.codex_executable.is_some(),
             sprites_api_base = %self.sprites_api_base,
