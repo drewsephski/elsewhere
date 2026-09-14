@@ -4,6 +4,7 @@ mod client;
 mod compat;
 mod error;
 mod login;
+mod mcp_turn_probe;
 mod process;
 mod protocol;
 mod run_engine;
@@ -19,7 +20,8 @@ pub use testing::{spawn_fake_app_server, spawn_fake_app_server_with_mode, FakeSe
 
 pub use client::CodexAppServerClient;
 pub use compat::{
-    generate_schema_to_dir, verify_generated_schema_dir, REQUIRED_PROTOCOL_METHODS,
+    ensure_codex_mcp_tool_exposure_supported, generate_schema_to_dir, verify_generated_schema_dir,
+    REQUIRED_PROTOCOL_METHODS,
 };
 pub use error::CodexProviderError;
 pub use process::{codex_version, which_codex_executable, CodexProcessLaunch, ManagedCodexProcess};
@@ -28,7 +30,14 @@ pub use protocol::{
     CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot, ElsewhereThreadConfig,
     MCP_SERVER_NAME,
 };
-pub use protocol::thread::assert_host_tools_disabled;
+pub use protocol::thread::{
+    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled,
+    ELSEWHERE_ENABLED_MCP_TOOLS, ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES,
+};
+pub use mcp_turn_probe::{
+    run_mcp_turn_probe, McpTurnProbeResult, DIRECT_TOOL_PROBE_EXPECTED_CONTENT,
+    DIRECT_TOOL_PROBE_PROMPT,
+};
 pub use probe::{
     parse_login_status, prefers_chatgpt_subscription, probe_codex, CodexAuthMethod,
     CodexInstallProbe, CodexProbeError,

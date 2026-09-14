@@ -38,5 +38,9 @@ name = "mcp_probe"
 path = "examples/mcp_probe.rs"
 
 [[example]]
+name = "mcp_turn_probe"
+path = "examples/mcp_turn_probe.rs"
+
+[[example]]
 name = "schema_probe"
 path = "examples/schema_probe.rs"

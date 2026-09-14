@@ -14,6 +14,7 @@ use agent_core::{
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
 use crate::client::CodexAppServerClient;
+use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
 use crate::process::{which_codex_executable, CodexProcessLaunch};
 use crate::protocol::{
@@ -200,6 +201,7 @@ impl CodexRunEngine {
         };
         let cwd = cwd_dir.path().canonicalize().unwrap_or_else(|_| cwd_dir.path().to_path_buf());
 
+        let using_real_codex = injected_process.is_none();
         let client = if let Some(process) = injected_process {
             match CodexAppServerClient::from_process(process).await {
                 Ok(client) => client,
@@ -267,6 +269,12 @@ impl CodexRunEngine {
         let (auth_type, _) = account_auth_metadata(&account);
 
         let instructions = compose_instructions(&ctx.instructions);
+        if using_real_codex {
+            if let Err(err) = ensure_codex_mcp_tool_exposure_supported() {
+                cleanup_run(client, mcp).await;
+                return map_boot_failure(&shared, &ctx, err).await;
+            }
+        }
         let thread_config = ElsewhereThreadConfig {
             cwd,
             mcp_url: mcp.url().to_string(),
@@ -543,6 +551,9 @@ fn codex_error_to_run(err: CodexProviderError) -> (String, String) {
             "codex_timeout".into(),
             format!("Codex request timed out: {method}"),
         ),
+        CodexProviderError::UnsupportedCodexToolExposure(msg) => {
+            ("unsupported_codex_tool_exposure".into(), msg)
+        }
         other => ("codex_provider_error".into(), other.to_string()),
     }
 }

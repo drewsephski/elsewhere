@@ -6,6 +6,8 @@ pub enum CodexProviderError {
     CodexNotInstalled,
     #[error("unsupported Codex version: {0}")]
     UnsupportedCodexVersion(String),
+    #[error("unsupported_codex_tool_exposure: {0}")]
+    UnsupportedCodexToolExposure(String),
     #[error("app-server process error: {0}")]
     Process(String),
     #[error("protocol error: {0}")]

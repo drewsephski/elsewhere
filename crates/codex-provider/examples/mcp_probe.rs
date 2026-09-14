@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use agent_core::FakeAgentComputer;
 use codex_provider::{
-    assert_host_tools_disabled, build_elsewhere_thread_start_params, which_codex_executable,
+    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled, build_elsewhere_thread_start_params,
+    ensure_codex_mcp_tool_exposure_supported, which_codex_executable,
     CodexAppServerClient, CodexProcessLaunch, ElsewhereThreadConfig, MCP_SERVER_NAME,
 };
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
@@ -37,8 +38,10 @@ async fn main() {
     };
     let thread_params = build_elsewhere_thread_start_params(&thread_config).expect("thread params");
     assert_host_tools_disabled(&thread_params).expect("host tools disabled");
+    assert_elsewhere_mcp_direct_exposure(&thread_params).expect("direct MCP exposure");
 
     let executable = which_codex_executable().expect("codex installed");
+    ensure_codex_mcp_tool_exposure_supported().expect("codex MCP tool exposure support");
     let launch = CodexProcessLaunch::from_path(executable)
         .with_env(MCP_BEARER_ENV_VAR, mcp.bearer_token());
     let client = CodexAppServerClient::launch(launch)
