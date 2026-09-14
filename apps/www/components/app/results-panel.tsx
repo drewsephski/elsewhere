@@ -228,6 +228,7 @@ export function ResultsPanel({ runId }: { runId?: string }) {
                 title: resultItemTitle(activeItem.kind, activeItem.name),
                 fileName: activeItem.name,
                 size: activeItem.size,
+                kind: activeItem.kind,
               }
             : null
         }

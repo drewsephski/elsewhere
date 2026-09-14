@@ -21,6 +21,14 @@ export function isPreviewableImageFileName(name: string): boolean {
   return mimeTypeForResultFileName(name) !== null;
 }
 
+export function isMarkdownResultFile(fileName: string, kind?: string): boolean {
+  if (kind === "summary") {
+    return true;
+  }
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  return ext === "md" || ext === "markdown";
+}
+
 export function resultDownloadUrl(resultId: string, inline = false): string {
   const base = `/api/results/${resultId}/download`;
   return inline ? `${base}?inline=1` : base;

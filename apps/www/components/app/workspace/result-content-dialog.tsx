@@ -10,7 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { ExternalLink, FileText } from "@/components/icons/lucide";
+import { MarkdownContent } from "@/components/app/markdown-content";
 import {
+  isMarkdownResultFile,
   isPreviewableImageFileName,
   RESULT_PREVIEW_MAX_BYTES,
   resultDownloadUrl,
@@ -26,6 +28,7 @@ type OpenResult = {
   title: string;
   fileName: string;
   size: number;
+  kind?: string;
 };
 
 type ContentState =
@@ -100,6 +103,9 @@ export function ResultContentDialog({
     return () => controller.abort();
   }, [open, result?.fileName, result?.id, result?.size]);
 
+  const renderAsMarkdown =
+    result !== null && isMarkdownResultFile(result.fileName, result.kind);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -129,11 +135,15 @@ export function ResultContentDialog({
           ) : null}
 
           {content.status === "ready" ? (
-            <pre
-              className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-foreground"
-            >
-              {content.text || "(Empty file)"}
-            </pre>
+            renderAsMarkdown ? (
+              <MarkdownContent text={content.text} />
+            ) : (
+              <pre
+                className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-foreground"
+              >
+                {content.text || "(Empty file)"}
+              </pre>
+            )
           ) : null}
 
           {content.status === "image" ? (

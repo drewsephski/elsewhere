@@ -9,10 +9,6 @@ const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 export const metadata: Metadata = {
   title: `${siteConfig.productName} — ${siteConfig.tagline}`,
   description: siteConfig.cloudPitch,
-  icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
-  },
   openGraph: {
     title: siteConfig.productName,
     description: siteConfig.cloudPitch,
