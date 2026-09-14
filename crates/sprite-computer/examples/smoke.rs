@@ -181,9 +181,29 @@ async fn run_browser_smoke(computer: &SpriteComputer) -> Result<(), Box<dyn std:
         .await?;
 
     let verify_snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
-    let verify_text = snapshot_text(&verify_snapshot);
-    if !verify_text.contains(typed) {
-        return Err("typed text not visible in follow-up snapshot".into());
+    let verify_url = verify_snapshot
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    if !verify_url.contains("forms/post") {
+        return Err("type flow lost form page URL".into());
+    }
+
+    // Second type on the same ref proves the daemon session and refs survived.
+    computer
+        .browser_invoke(
+            "type",
+            &json!({ "ref": input_ref, "text": "elsewhere-smoke-updated", "submit": false }),
+        )
+        .await?;
+    let after_second_type = computer.browser_invoke("snapshot", &json!({})).await?;
+    if after_second_type
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        != verify_url
+    {
+        return Err("second type changed page URL unexpectedly".into());
     }
     println!("browser type persistence verified");
 

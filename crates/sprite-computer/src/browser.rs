@@ -219,8 +219,6 @@ pub async fn invoke_browser_daemon(
     payload: &str,
     exec_timeout: Duration,
 ) -> Result<String, ComputerError> {
-    ensure_browser_daemon(client, baseline_policy, exec_timeout).await?;
-
     client
         .fs_write(BROWSER_REQUEST, payload.as_bytes(), true)
         .await
@@ -232,17 +230,68 @@ pub async fn invoke_browser_daemon(
          node {BROWSER_CLIENT} --request {BROWSER_REQUEST}"
     );
 
+    let mut last_err = None;
+    for attempt in 0..2 {
+        ensure_browser_daemon(client, baseline_policy, exec_timeout).await?;
+        let stdout = with_temporary_egress(client, baseline_policy, async {
+            let (stdout, stderr, exit_code) = client
+                .exec_http(&command, "/workspace", exec_timeout)
+                .await
+                .map_err(map_err)?;
+            if exit_code != 0 {
+                return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
+            }
+            Ok(stdout)
+        })
+        .await;
+
+        match stdout {
+            Ok(out) => return Ok(out),
+            Err(err) => {
+                let retryable = err.to_string().contains("ERR_CONNECTION_REFUSED")
+                    || err.to_string().contains("ERR_NAME_NOT_RESOLVED")
+                    || err.to_string().contains("browser daemon did not become healthy");
+                if attempt == 0 && retryable {
+                    let _ = restart_browser_daemon(client, baseline_policy).await;
+                    last_err = Some(err);
+                    continue;
+                }
+                return Err(err);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| {
+        ComputerError::GuestUnavailable("browser invoke failed after retry".into())
+    }))
+}
+
+async fn restart_browser_daemon(
+    client: &SpriteClient,
+    baseline_policy: &NetworkPolicyConfig,
+) -> Result<(), ComputerError> {
+    let script = format!(
+        r#"set -e
+if [ -f "{BROWSER_DAEMON_PID}" ]; then
+  kill "$(cat {BROWSER_DAEMON_PID})" 2>/dev/null || true
+  rm -f "{BROWSER_DAEMON_PID}"
+fi
+rm -f /var/elsewhere/browser/daemon.sock
+"#
+    );
     with_temporary_egress(client, baseline_policy, async {
-        let (stdout, stderr, exit_code) = client
-            .exec_http(&command, "/workspace", exec_timeout)
+        let (_, _, code) = client
+            .exec_http(&script, "/workspace", Duration::from_secs(15))
             .await
             .map_err(map_err)?;
-        if exit_code != 0 {
-            return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
+        if code != 0 {
+            return Err(ComputerError::GuestUnavailable(
+                "failed to restart browser daemon".into(),
+            ));
         }
-        Ok(stdout)
+        Ok(())
     })
-    .await
+    .await?;
+    Ok(())
 }
 
 pub async fn with_temporary_egress<T, F>(client: &SpriteClient, baseline: &NetworkPolicyConfig, f: F) -> Result<T, ComputerError>
@@ -253,8 +302,11 @@ where
         .set_network_policy(&browser_workload_network_policy())
         .await
         .map_err(map_err)?;
+    // Fly Sprites network policy updates are asynchronous; give egress a moment to apply.
+    tokio::time::sleep(Duration::from_millis(400)).await;
     let result = f.await;
     let _ = client.set_network_policy(baseline).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
     result
 }
 
