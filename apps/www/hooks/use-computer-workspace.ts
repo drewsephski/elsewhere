@@ -28,6 +28,12 @@ function normalizeEntries(raw: WorkspaceListJson["entries"]): WorkspaceEntry[] {
   );
 }
 
+const FETCH_TIMEOUT_MS = 90_000;
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === "AbortError";
+}
+
 export function useComputerWorkspace(computerId: string | null) {
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
@@ -35,6 +41,9 @@ export function useComputerWorkspace(computerId: string | null) {
   const [rootError, setRootError] = useState<string | null>(null);
   const dirsRef = useRef(dirs);
   dirsRef.current = dirs;
+  const inflightSeqRef = useRef<Record<string, number>>({});
+  const computerIdRef = useRef(computerId);
+  computerIdRef.current = computerId;
 
   const setPathLoading = useCallback((path: string, loading: boolean) => {
     setLoadingPaths((prev) => {
@@ -56,6 +65,11 @@ export function useComputerWorkspace(computerId: string | null) {
       if (!force && dirsRef.current[path]) {
         return;
       }
+      const seq = (inflightSeqRef.current[path] ?? 0) + 1;
+      inflightSeqRef.current[path] = seq;
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
       setPathLoading(path, true);
       setErrors((prev) => {
         if (!prev[path]) {
@@ -68,7 +82,14 @@ export function useComputerWorkspace(computerId: string | null) {
       try {
         const response = await cloudHostFetch(
           `/v1/computers/${encodeURIComponent(computerId)}/workspace?path=${encodeURIComponent(path)}`,
+          { signal: controller.signal },
         );
+        if (
+          computerIdRef.current !== computerId ||
+          inflightSeqRef.current[path] !== seq
+        ) {
+          return;
+        }
         const body = await response.json().catch(() => ({}));
         if (!response.ok) {
           const message =
@@ -84,13 +105,26 @@ export function useComputerWorkspace(computerId: string | null) {
           setRootError(null);
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Could not load folder";
+        if (
+          computerIdRef.current !== computerId ||
+          inflightSeqRef.current[path] !== seq
+        ) {
+          return;
+        }
+        const message = isAbortError(err)
+          ? "Timed out loading folder. Your computer may still be starting — try Refresh."
+          : err instanceof Error
+            ? err.message
+            : "Could not load folder";
         setErrors((prev) => ({ ...prev, [path]: message }));
         if (path === WORKSPACE_ROOT) {
           setRootError(message);
         }
       } finally {
-        setPathLoading(path, false);
+        window.clearTimeout(timeoutId);
+        if (inflightSeqRef.current[path] === seq) {
+          setPathLoading(path, false);
+        }
       }
     },
     [computerId, setPathLoading],
@@ -104,9 +138,11 @@ export function useComputerWorkspace(computerId: string | null) {
   }, [loadDir]);
 
   useEffect(() => {
+    inflightSeqRef.current = {};
     setDirs({});
     setErrors({});
     setRootError(null);
+    setLoadingPaths(new Set());
     if (!computerId) {
       return;
     }

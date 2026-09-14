@@ -158,11 +158,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   const showConversation = Boolean(selectedBotId);
 
-  const previewEnabled = Boolean(
-    bot?.computerId &&
-      activeRun &&
-      (activeRun.status === "queued" || activeRun.status === "running"),
-  );
+  const previewEnabled = Boolean(bot?.computerId);
 
   function PreviewLayer({ children }: { children: ReactNode }) {
     const { browserPreviewGeneration } = useActiveRun();

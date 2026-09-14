@@ -73,17 +73,57 @@ function PreviewChrome({
   loading,
   enabled,
   compact,
+  subtle,
   children,
 }: {
   frame: BrowserPreviewFrame | null;
   loading: boolean;
   enabled: boolean;
   compact?: boolean;
+  subtle?: boolean;
   children: ReactNode;
 }) {
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
   const addressLabel = host ?? (enabled ? "No page yet" : "Browser idle");
+
+  if (subtle) {
+    return (
+      <div className={cn("text-left", compact ? "max-w-full" : "w-full")}>
+        <div className="overflow-hidden rounded-lg border border-border/45 bg-background/80 shadow-sm">
+          <div
+            className={cn(
+              "flex items-center gap-1.5 border-b border-border/40 bg-muted/30 px-2",
+              compact ? "py-0.5" : "py-1",
+            )}
+          >
+            <div className="flex shrink-0 items-center gap-1" aria-hidden>
+              <span className="size-1.5 rounded-full bg-[#ff5f57]/80" />
+              <span className="size-1.5 rounded-full bg-[#febc2e]/80" />
+              <span className="size-1.5 rounded-full bg-[#28c840]/80" />
+            </div>
+            <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+              {addressLabel}
+            </span>
+          </div>
+          <div
+            className={cn(
+              "relative w-full overflow-hidden bg-[#e8ecf4]",
+              compact ? "aspect-[16/11]" : "aspect-[16/10]",
+            )}
+          >
+            {loading && showPlaceholder ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/30">
+                <Spinner className="size-4 text-muted-foreground" />
+              </div>
+            ) : null}
+            {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("text-left", compact ? "max-w-full" : "w-full")}>
@@ -257,7 +297,7 @@ export function BrowserPreviewView({
           </div>
         </div>
         <div ref={fullscreenRef} className={cn(isFullscreen && "flex min-h-0 flex-1 bg-black")}>
-          <PreviewChrome frame={frame} loading={loading} enabled={enabled} compact>
+          <PreviewChrome frame={frame} loading={loading} enabled={enabled} compact subtle>
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -324,7 +364,12 @@ export function BrowserPreviewView({
           disabled={!hasImage}
           aria-label={hasImage ? "Open expanded browser preview" : "Browser preview placeholder"}
         >
-          <PreviewChrome frame={frame} loading={loading} enabled={enabled}>
+          <PreviewChrome
+            frame={frame}
+            loading={loading}
+            enabled={enabled}
+            subtle={variant === "embedded"}
+          >
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
