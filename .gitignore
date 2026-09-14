@@ -29,8 +29,7 @@ apps/www/.next
 # SwiftPM build output (macos/gptbot-vmm)
 macos/gptbot-vmm/.build/
 
-# Rust / guest-agent build artifacts
-guest-agent/target/
-src-tauri/target/
+# Rust / Cargo build artifacts (workspace + member crates)
+target/
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
