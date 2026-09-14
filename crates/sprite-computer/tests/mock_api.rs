@@ -510,6 +510,66 @@ async fn temporary_egress_fails_when_baseline_not_restored() {
 }
 
 #[tokio::test]
+async fn browser_invoke_materializes_workspace_before_browser_work() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/sprites/cold-browser"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "id-cold",
+            "name": "cold-browser",
+            "organization": "org",
+            "status": "cold"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/cold-browser/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "rules": [{"action": "deny", "domain": "*"}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/sprites/cold-browser/fs/write"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "path": "/workspace/.elsewhere-bootstrap",
+            "size": 1,
+            "mode": "0644"
+        })))
+        .expect(1..)
+        .mount(&server)
+        .await;
+
+    let computer = SpriteComputer::new(SpriteComputerConfig {
+        base_url: server.uri(),
+        token: "test-token-secret".into(),
+        sprite_name: "cold-browser".into(),
+        workspace_root: "/workspace".into(),
+        request_timeout: Duration::from_secs(5),
+        auto_create: true,
+        network_policy: default_deny_network_policy(),
+        exec_timeout: Duration::from_secs(5),
+        browser_enabled: true,
+        browser_exec_timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+
+    let err = computer
+        .browser_invoke(
+            "navigate",
+            &serde_json::json!({ "url": "https://example.com" }),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        !matches!(err, agent_core::ComputerError::NotProvisioned),
+        "missing browser assets must not masquerade as an unprovisioned computer: {err:?}"
+    );
+}
+
+#[tokio::test]
 async fn oversized_file_and_error_bodies_are_rejected() {
     for status in [200, 400] {
         let server = MockServer::start().await;

@@ -6,6 +6,7 @@ export interface WorkspaceEntry {
 
 export interface WorkspaceListResponse {
   path: string;
+  revision?: number;
   entries: WorkspaceEntry[];
 }
 

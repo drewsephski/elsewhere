@@ -235,6 +235,9 @@ impl AgentComputer for SpriteComputer {
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let path = self.normalize_path(path)?;
         let response = self.client.fs_list(&path).await.map_err(|err| {
+            if let SpriteError::NotFound = err {
+                return ComputerError::ExecutionFailed(format!("directory not found: {path}"));
+            }
             if let SpriteError::Provider { status, message } = &err {
                 if *status == 400 {
                     warn!(
@@ -275,7 +278,10 @@ impl AgentComputer for SpriteComputer {
         self.client
             .fs_read(&path)
             .await
-            .map_err(map_sprite_error)
+            .map_err(|err| match err {
+                SpriteError::NotFound => ComputerError::ExecutionFailed(format!("file not found: {path}")),
+                other => map_sprite_error(other),
+            })
     }
 
     async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {

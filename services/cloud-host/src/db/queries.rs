@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
+use agent_core::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
+
 use agent_core::DEFAULT_MODEL;
 use sprite_computer::sprite_name_for_sandbox;
 
@@ -483,13 +485,25 @@ pub async fn bootstrap_run_from_bot(
 
     crate::db::resources::ensure_computer_provisioned(pool, owner_id, computer_id).await?;
 
+    let saved_context: Option<String> =
+        sqlx::query_scalar("SELECT content FROM bot_context WHERE bot_id = $1")
+            .bind(&bot.id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
+        bot_name: bot.name.clone(),
+        role_instructions: bot.system_prompt.clone(),
+        saved_context: saved_context.filter(|value| !value.is_empty()),
+    });
+
     bootstrap_run(
         pool,
         owner_id,
         request_id,
         &bot.id,
         &bot.name,
-        &bot.system_prompt,
+        &instructions,
         Some(bot.model.as_str()),
         computer_id,
         conversation_id,

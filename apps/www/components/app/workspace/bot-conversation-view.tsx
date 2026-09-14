@@ -12,7 +12,7 @@ import { useActiveRun } from "@/contexts/active-run-context";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
@@ -58,11 +58,21 @@ export function BotConversationView({
     return runs.find((run) => runIsActive(run.status)) ?? null;
   }, [runs, liveRunId]);
 
-  const streamRunId = activeRun && runIsActive(activeRun.status) ? activeRun.runId : null;
+  const streamRunId = useMemo(() => {
+    if (liveRunId) {
+      const tracked = runs.find((run) => run.runId === liveRunId);
+      if (!tracked || runIsActive(tracked.status)) {
+        return liveRunId;
+      }
+    }
+    const active = runs.find((run) => runIsActive(run.status));
+    return active?.runId ?? null;
+  }, [liveRunId, runs]);
+
   const { detail: liveDetail, timeline, assistantStream, error: streamError, connection } =
     useActiveRun();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onStreamRunIdChange?.(streamRunId);
   }, [onStreamRunIdChange, streamRunId]);
   const browserPreview = useOptionalBrowserPreviewContext();

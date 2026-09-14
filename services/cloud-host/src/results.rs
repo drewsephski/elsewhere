@@ -49,6 +49,10 @@ pub async fn collect(
             .map_err(|e| e.to_string())?;
     }
     let directory = output_directory(run_id);
+    let _ = computer
+        .ensure_ready()
+        .await
+        .map_err(|err| format!("The summary is saved. Could not prepare the computer: {err}"))?;
     // Missing output folder means no file deliverables; do not create or mutate the computer here.
     let root = computer.list_dir("/workspace").await.map_err(|_| {
         "The summary is saved. File results could not be checked on the computer.".to_string()

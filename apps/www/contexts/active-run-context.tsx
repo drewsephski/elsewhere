@@ -45,6 +45,12 @@ function toolNameFromPayload(payload: Record<string, unknown>): string {
   return String(payload.tool ?? payload.name ?? "").toLowerCase();
 }
 
+function normalizedToolName(payload: Record<string, unknown>): string {
+  const raw = toolNameFromPayload(payload);
+  const segment = raw.includes("/") ? raw.split("/").pop() ?? raw : raw;
+  return segment.replace(/^elsewhere[_-]/, "");
+}
+
 function isBrowserToolResult(eventType: string, payload: Record<string, unknown>): boolean {
   if (eventType !== "tool_result") {
     return false;
@@ -52,7 +58,7 @@ function isBrowserToolResult(eventType: string, payload: Record<string, unknown>
   if (payload.ok === false) {
     return false;
   }
-  const tool = toolNameFromPayload(payload);
+  const tool = normalizedToolName(payload);
   return tool.includes("browser");
 }
 
@@ -63,7 +69,7 @@ function isWorkspaceMutationToolResult(
   if (eventType !== "tool_result" || payload.ok === false) {
     return false;
   }
-  const tool = toolNameFromPayload(payload);
+  const tool = normalizedToolName(payload);
   return (
     tool === "workspace_write" ||
     tool === "workspace_exec" ||
@@ -231,7 +237,7 @@ export function ActiveRunProvider({
                     : [...previous.slice(-199), { id, kind: "text", text }],
                 );
               }
-              if (event.event === "tool_result" && toolNameFromPayload(payload).includes("browser")) {
+              if (event.event === "tool_result" && normalizedToolName(payload).includes("browser")) {
                 if (payload.ok === false) {
                   const message =
                     typeof payload.error === "string"
@@ -240,6 +246,7 @@ export function ActiveRunProvider({
                         ? payload.output
                         : "Browser operation failed";
                   setLastBrowserToolError(message);
+                  setBrowserPreviewGeneration((value) => value + 1);
                 } else {
                   setLastBrowserToolError(null);
                   setBrowserPreviewGeneration((value) => value + 1);

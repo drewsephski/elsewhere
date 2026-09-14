@@ -51,6 +51,10 @@ pub fn build_router(state: AppState) -> Router {
             get(api::computers::workspace_list),
         )
         .route(
+            "/v1/computers/{id}/workspace-revision",
+            get(api::computers::workspace_revision),
+        )
+        .route(
             "/v1/computers/{id}/workspace/file",
             get(api::computers::workspace_read),
         )

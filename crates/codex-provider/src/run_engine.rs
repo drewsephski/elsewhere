@@ -35,6 +35,8 @@ use agent_core::MessageStatus;
 
 const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals. Persistent workspace files live under /workspace; final user-retrievable artifacts for this assignment belong under the results directory described in your role instructions.";
 
+const WORKSPACE_CONTRACT_MARKER: &str = "\n\nComputer workspace contract:\n";
+
 #[derive(Debug, Clone)]
 pub struct CodexRunEngineConfig {
     pub executable: Option<PathBuf>,
@@ -557,30 +559,40 @@ struct InstructionBundle {
 }
 
 fn compose_instructions(user_instructions: &str) -> InstructionBundle {
-    let trimmed = user_instructions.trim();
-    let base = if trimmed.is_empty() {
+    let (identity, run_contract) = match user_instructions.split_once(WORKSPACE_CONTRACT_MARKER) {
+        Some((base, contract)) => (base.trim(), Some(contract.trim())),
+        None => (user_instructions.trim(), None),
+    };
+    let base = if identity.is_empty() {
         "You are an AI teammate in Elsewhere.".to_string()
     } else {
-        trimmed.to_string()
+        identity.to_string()
     };
-    InstructionBundle {
-        base,
-        developer: EXECUTION_POLICY.to_string(),
+    let mut developer = EXECUTION_POLICY.to_string();
+    if let Some(contract) = run_contract.filter(|value| !value.is_empty()) {
+        developer.push_str("\n\n");
+        developer.push_str(contract);
     }
+    InstructionBundle { base, developer }
 }
 
 #[cfg(test)]
 mod instruction_tests {
-    use super::compose_instructions;
+    use super::{compose_instructions, WORKSPACE_CONTRACT_MARKER};
 
     #[test]
     fn codex_thread_puts_identity_in_base_not_generic_chatgpt() {
         let snapshot = "You are \"Designer\", an AI teammate in Elsewhere.\n\nYour assigned role:\nDesign specialist.";
-        let bundle = compose_instructions(snapshot);
+        let contract = "Per-run output directory: /workspace/results/run-1";
+        let bundle = compose_instructions(&format!(
+            "{snapshot}{WORKSPACE_CONTRACT_MARKER}{contract}"
+        ));
         assert!(bundle.base.contains("Designer"));
         assert!(bundle.base.contains("assigned role"));
-        assert!(!bundle.developer.contains("Designer"));
+        assert!(!bundle.base.contains("/workspace/results/"));
         assert!(bundle.developer.contains("Elsewhere MCP"));
+        assert!(bundle.developer.contains("/workspace/results/run-1"));
+        assert!(!bundle.developer.contains("Designer"));
     }
 }
 
@@ -1229,7 +1241,8 @@ async fn handle_item_completed(
         "callId": call_id,
         "ok": ok,
         "durationMs": duration_ms,
-        "output": output
+        "output": output,
+        "error": if ok { Value::Null } else { json!(output) },
     });
     let result_message = persist_event(
         shared,

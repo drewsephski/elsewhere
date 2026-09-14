@@ -50,11 +50,14 @@ pub async fn ensure_browser_guest(
     _exec_timeout: Duration,
 ) -> Result<(), ComputerError> {
     let expected = BOOTSTRAP_VERSION.trim();
-    let installed_version = client
+    let version_matches = match client
         .fs_read(&format!("{BROWSER_ROOT}/bootstrap-version"))
         .await
-        .map_err(map_err)?;
-    let version_matches = installed_version == expected.as_bytes();
+    {
+        Ok(bytes) => bytes == expected.as_bytes(),
+        Err(crate::types::SpriteError::NotFound) => false,
+        Err(err) => return Err(map_err(err)),
+    };
     let bootstrapped = client.fs_read(BROWSER_BOOTSTRAP_MARKER).await.is_ok();
     if version_matches && bootstrapped && browser_install_healthy(client).await? {
         return Ok(());
@@ -465,7 +468,9 @@ pub fn map_browser_exec_error(stdout: &str, stderr: &str, exit_code: i32) -> Com
 
 fn map_err(err: crate::types::SpriteError) -> ComputerError {
     match err {
-        crate::types::SpriteError::NotFound => ComputerError::NotProvisioned,
+        crate::types::SpriteError::NotFound => ComputerError::ExecutionFailed(
+            "browser resource not found (sprite may still be installing)".into(),
+        ),
         crate::types::SpriteError::Timeout => {
             ComputerError::ExecutionFailed("browser command timed out".into())
         }

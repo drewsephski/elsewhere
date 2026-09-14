@@ -7,6 +7,11 @@ import {
   type WorkspaceEntry,
   type WorkspaceListResponse,
 } from "@/lib/computer-workspace";
+import {
+  filterPublicWorkspaceEntries,
+  pathsToRefreshOnInvalidation,
+  workspaceRevisionChanged,
+} from "@/lib/workspace-refresh";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface WorkspaceListJson {
@@ -21,15 +26,18 @@ interface WorkspaceListJson {
 
 function normalizeEntries(raw: WorkspaceListJson["entries"]): WorkspaceEntry[] {
   return sortWorkspaceEntries(
-    raw.map((entry) => ({
-      name: entry.name,
-      path: entry.path,
-      isDir: entry.isDir,
-    })),
+    filterPublicWorkspaceEntries(
+      raw.map((entry) => ({
+        name: entry.name,
+        path: entry.path,
+        isDir: entry.isDir,
+      })),
+    ),
   );
 }
 
 const FETCH_TIMEOUT_MS = 90_000;
+const REVISION_POLL_MS = 5_000;
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
@@ -38,7 +46,9 @@ function isAbortError(err: unknown): boolean {
 export function useComputerWorkspace(
   computerId: string | null,
   refreshGeneration = 0,
+  options?: { pollRevision?: boolean },
 ) {
+  const pollRevision = options?.pollRevision ?? true;
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -47,8 +57,12 @@ export function useComputerWorkspace(
   dirsRef.current = dirs;
   const inflightSeqRef = useRef<Record<string, number>>({});
   const inflightPromiseRef = useRef<Record<string, Promise<void>>>({});
+  const refreshAllPromiseRef = useRef<Promise<void> | null>(null);
   const computerIdRef = useRef(computerId);
   computerIdRef.current = computerId;
+  const revisionRef = useRef<number | null>(null);
+  const pollRevisionRef = useRef(pollRevision);
+  pollRevisionRef.current = pollRevision;
 
   const setPathLoading = useCallback((path: string, loading: boolean) => {
     setLoadingPaths((prev) => {
@@ -108,6 +122,9 @@ export function useComputerWorkspace(
             throw new Error(message);
           }
           const data = body as WorkspaceListResponse;
+          if (data.revision !== undefined) {
+            revisionRef.current = data.revision;
+          }
           setDirs((prev) => ({
             ...prev,
             [path]: normalizeEntries(data.entries),
@@ -151,30 +168,84 @@ export function useComputerWorkspace(
   );
 
   const refreshLoaded = useCallback(() => {
-    const paths = Object.keys(dirsRef.current);
-    const targets = paths.length > 0 ? paths : [WORKSPACE_ROOT];
-    for (const path of targets) {
-      void loadDir(path, { force: true });
+    if (refreshAllPromiseRef.current) {
+      return refreshAllPromiseRef.current;
     }
+    const paths = pathsToRefreshOnInvalidation(
+      Object.keys(dirsRef.current),
+      WORKSPACE_ROOT,
+    );
+    const run = async () => {
+      await Promise.all(paths.map((path) => loadDir(path, { force: true })));
+    };
+    const promise = run().finally(() => {
+      if (refreshAllPromiseRef.current === promise) {
+        refreshAllPromiseRef.current = null;
+      }
+    });
+    refreshAllPromiseRef.current = promise;
+    return promise;
   }, [loadDir]);
 
   const refresh = useCallback(() => {
-    setDirs({});
     setErrors({});
     setRootError(null);
-    void loadDir(WORKSPACE_ROOT, { force: true });
-  }, [loadDir]);
+    void refreshLoaded();
+  }, [refreshLoaded]);
+
+  const probeRevision = useCallback(async () => {
+    if (!computerId || !pollRevisionRef.current) {
+      return;
+    }
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await cloudHostFetch(
+        `/v1/computers/${encodeURIComponent(computerId)}/workspace-revision`,
+        { signal: controller.signal },
+      );
+      if (!response.ok || computerIdRef.current !== computerId) {
+        return;
+      }
+      const body = (await response.json().catch(() => ({}))) as { revision?: number };
+      if (workspaceRevisionChanged(revisionRef.current, body.revision)) {
+        revisionRef.current = body.revision ?? revisionRef.current;
+        await refreshLoaded();
+      } else if (body.revision !== undefined && revisionRef.current === null) {
+        revisionRef.current = body.revision;
+      }
+    } catch {
+      /* passive probe */
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }, [computerId, refreshLoaded]);
 
   useEffect(() => {
     if (!computerId || refreshGeneration === 0) {
       return;
     }
-    refreshLoaded();
+    void refreshLoaded();
   }, [computerId, refreshGeneration, refreshLoaded]);
+
+  useEffect(() => {
+    if (!computerId || !pollRevision) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      void probeRevision();
+    }, REVISION_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [computerId, pollRevision, probeRevision]);
 
   useEffect(() => {
     inflightSeqRef.current = {};
     inflightPromiseRef.current = {};
+    refreshAllPromiseRef.current = null;
+    revisionRef.current = null;
     setDirs({});
     setErrors({});
     setRootError(null);

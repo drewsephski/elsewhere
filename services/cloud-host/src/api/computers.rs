@@ -189,6 +189,12 @@ pub struct WorkspaceListResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceRevisionResponse {
+    pub revision: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceFileResponse {
     pub path: String,
     pub size: usize,
@@ -277,6 +283,27 @@ pub async fn workspace_list(
         path,
         entries: sort_workspace_entries(entries),
         revision,
+    }))
+}
+
+pub async fn workspace_revision(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<WorkspaceRevisionResponse>, ApiError> {
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    Ok(Json(WorkspaceRevisionResponse {
+        revision: computer.workspace_revision(),
     }))
 }
 
