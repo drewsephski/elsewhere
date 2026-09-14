@@ -65,8 +65,8 @@ pub async fn create(
     Extension(principal): Extension<Principal>,
     Json(body): Json<CreateComputerRequest>,
 ) -> Result<Json<ComputerResponse>, ApiError> {
-    if body.display_name.trim().is_empty() {
-        return Err(ApiError::Validation("displayName is required".into()));
+    if body.display_name.trim().is_empty() || body.display_name.len() > 100 {
+        return Err(ApiError::Validation("Computer names must contain 1 to 100 bytes".into()));
     }
     let row =
         insert_computer_placeholder(&state.pool, principal.owner_id(), body.display_name.trim())

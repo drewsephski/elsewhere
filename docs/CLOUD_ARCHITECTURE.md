@@ -1,6 +1,6 @@
 # Elsewhere — Cloud boundary
 
-Phase **3A** adds a Fly Sprites-backed `SpriteComputer` crate. The portable runtime in `agent-core` still has **zero Fly imports**.
+The cloud product runs through the Fly Sprites-backed `SpriteComputer` crate. The portable runtime in `agent-core` has **zero Fly imports**. Current orchestration, recovery, routines, context, and result guarantees are documented in [BACKGROUND_WORK.md](BACKGROUND_WORK.md).
 
 ## AgentComputer
 
@@ -30,10 +30,10 @@ The portable contract is **`AgentComputer`**, not a single RPC protocol.
 | Trait | Desktop | Cloud (3A) |
 |--------|---------|------------|
 | `AgentComputer` | `LocalMacComputer` | `SpriteComputer` (`crates/sprite-computer`) |
-| `RunStore` | `SqliteRunStore` | *(Phase 3B — Postgres)* |
-| `EventSink` | `TauriEventSink` | *(Phase 3B — SSE/WebSocket)* |
-| `ResponsesModel` | `OpenAiResponsesModel` | `OpenAiResponsesModel` (API key fallback) |
-| `RunEngine` | `ResponsesRunEngine` | `ResponsesRunEngine` today; `CodexRunEngine` in 3B.2 |
+| `RunStore` | `SqliteRunStore` | `PostgresRunStore` |
+| `EventSink` | `TauriEventSink` | Durable Postgres events and SSE replay |
+| `ResponsesModel` | `OpenAiResponsesModel` | `OpenAiResponsesModel` (explicit API selection only) |
+| `RunEngine` | `ResponsesRunEngine` | `CodexRunEngine` by default; explicit `ResponsesRunEngine` |
 
 ```text
 Elsewhere host process

@@ -67,7 +67,7 @@ export default function SignInPage() {
           {mode === "sign-in" ? "Sign in" : "Create account"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Elsewhere accounts are separate from ChatGPT / Codex runner auth.
+          Sign in to your workspace. You can connect your ChatGPT plan from the overview.
         </p>
 
         <form className="mt-8 space-y-4" onSubmit={handleEmailSubmit}>

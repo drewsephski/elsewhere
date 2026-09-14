@@ -9,6 +9,7 @@ use crate::auth::require_authenticated;
 
 pub fn build_router(state: AppState) -> Router {
     let protected = Router::new()
+        .route("/v1/workspace", get(api::workspace::overview))
         .route("/v1/bots/{id}/context", get(api::context_results::get_context).put(api::context_results::save_context))
         .route("/v1/results", get(api::context_results::list_results))
         .route("/v1/results/{id}/download", get(api::context_results::download))
@@ -82,6 +83,7 @@ pub fn build_router(state: AppState) -> Router {
 
     let mut router = Router::new()
         .route("/health", get(api::health::health))
+        .route("/ready", get(api::health::ready))
         .merge(protected)
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());

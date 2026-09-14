@@ -1,3 +1,4 @@
+import { WorkspaceOverview } from "@/components/app/workspace-overview";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { RecentRunsPanel } from "@/components/app/recent-runs-panel";
 
@@ -10,6 +11,7 @@ export default function AppDashboardPage() {
           A place for your bots to work, and for you to see what they’ve done.
         </p>
       </div>
+      <WorkspaceOverview />
       <div className="grid gap-6 lg:grid-cols-2">
         <ProviderStatusCard />
         <RecentRunsPanel />

@@ -11,6 +11,20 @@ use crate::db::resources::{
 };
 use crate::error::ApiError;
 
+fn validate_settings(name: Option<&str>, instructions: Option<&str>) -> Result<(), ApiError> {
+    if name.is_some_and(|value| value.trim().is_empty() || value.len() > 100) {
+        return Err(ApiError::Validation(
+            "Bot names must contain 1 to 100 bytes".into(),
+        ));
+    }
+    if instructions.is_some_and(|value| value.len() > 16_000) {
+        return Err(ApiError::Validation(
+            "Bot instructions must be at most 16,000 bytes".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BotResponse {
@@ -58,9 +72,7 @@ pub async fn create(
     Extension(principal): Extension<Principal>,
     Json(body): Json<CreateBotRequest>,
 ) -> Result<Json<BotResponse>, ApiError> {
-    if body.name.trim().is_empty() {
-        return Err(ApiError::Validation("name is required".into()));
-    }
+    validate_settings(Some(&body.name), Some(&body.instructions))?;
     let engine = normalize_engine_preference(body.engine_preference.as_deref().unwrap_or("auto"))?;
     if let Some(computer_id) = body.computer_id.as_deref().filter(|c| !c.is_empty()) {
         let computer = crate::db::resources::get_computer_for_owner(
@@ -116,6 +128,7 @@ pub async fn patch(
     Path(bot_id): Path<String>,
     Json(body): Json<PatchBotRequest>,
 ) -> Result<Json<BotResponse>, ApiError> {
+    validate_settings(body.name.as_deref(), body.instructions.as_deref())?;
     let engine = match body.engine_preference.as_deref() {
         Some(raw) => Some(normalize_engine_preference(raw)?),
         None => None,
@@ -137,8 +150,8 @@ pub async fn patch(
         &state.pool,
         principal.owner_id(),
         &bot_id,
-        body.name.as_deref(),
-        body.instructions.as_deref(),
+        body.name.as_deref().map(str::trim),
+        body.instructions.as_deref().map(str::trim),
         body.model.as_deref(),
         body.computer_id
             .as_deref()

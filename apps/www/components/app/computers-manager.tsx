@@ -10,15 +10,15 @@ import { Label } from "@/components/ui/label";
 export function ComputersManager() {
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
   const [displayName, setDisplayName] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const response = await cloudHostFetch("/v1/computers");
-    if (!response.ok) {
-      setError("Failed to load computers");
-      return;
-    }
-    setComputers((await response.json()) as ComputerSummary[]);
+    try {
+      const response = await cloudHostFetch("/v1/computers");
+      if (!response.ok) throw new Error("Could not load computers");
+      setComputers((await response.json()) as ComputerSummary[]);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load computers"); }
   }, []);
 
   useEffect(() => {
@@ -27,30 +27,29 @@ export function ComputersManager() {
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
-    setError(null);
-    const response = await cloudHostFetch("/v1/computers", {
-      method: "POST",
-      body: JSON.stringify({ displayName }),
-    });
-    if (!response.ok) {
-      setError("Create failed");
-      return;
-    }
-    setDisplayName("");
-    await load();
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const response = await cloudHostFetch("/v1/computers", { method: "POST", body: JSON.stringify({ displayName }) });
+      if (!response.ok) throw new Error("Could not create computer");
+      setDisplayName(""); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not create computer"); }
+    finally { setBusy(false); }
   }
 
   async function handleArchive(id: string) {
     if (!window.confirm("Archive this computer? Its files will be preserved. Finish or stop its work first.")) {
       return;
     }
-    setError(null);
-    const response = await cloudHostFetch(`/v1/computers/${id}`, { method: "DELETE" });
-    if (!response.ok) {
-      setError("Archive failed");
-      return;
-    }
-    await load();
+    if (busy) return;
+    setBusy(true); setError(null);
+    try {
+      const response = await cloudHostFetch(`/v1/computers/${id}`, { method: "DELETE" });
+      const body = response.ok ? null : await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Could not archive computer");
+      await load();
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not archive computer"); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -71,6 +70,7 @@ export function ComputersManager() {
               </div>
               <button
                 type="button"
+                disabled={busy}
                 onClick={() => void handleArchive(computer.id)}
                 className="text-xs text-brand-dark/50 underline-offset-4 hover:underline"
               >
@@ -92,6 +92,7 @@ export function ComputersManager() {
             <Input
               id="computer-name"
               required
+              maxLength={100}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
             />
@@ -101,7 +102,7 @@ export function ComputersManager() {
               {error}
             </p>
           ) : null}
-          <Button type="submit">Create</Button>
+          <Button type="submit" disabled={busy || !displayName.trim()}>{busy ? "Saving…" : "Create computer"}</Button>
         </form>
       </section>
     </div>

@@ -41,3 +41,15 @@ Every assignment receives a dedicated `/workspace/results/{run-id}` output locat
 An execution lease reserves the computer until result collection and cleanup finish, even if model execution has completed. Restart releases abandoned leases and marks possibly incomplete collection. Collection failure never causes automatic replay or changes a completed model assignment into failed work. Partial/interrupted work retains its assistant text and workspace files, but only completed assignments are collected into downloadable results.
 
 Operational limit: snapshots currently live in Postgres and have no retention automation or object-storage tier. Back up the database; monitor storage growth before a public launch. Saved context is explicit user memory, not automatic extraction from chats. File capture is a snapshot of the run's output directory, not an attestation of file provenance or content safety.
+
+## Readiness and deployment boundary
+
+`GET /health` is process liveness. `GET /ready` requires a database response and a dispatcher heartbeat within ten seconds; it returns 503 before startup finishes or when scheduling/dispatch stalls. `/v1/workspace` gives owner-scoped counts and bot presence with the same readiness signal. Presence is derived from durable work and approval state, not a claim that a model session is currently connected.
+
+To operate while the user's laptop is off, host the API/runner on an always-on machine. Run **one supervised cloud-host per database** with restart-on-failure, a stable persistent `ELSEWHERE_CODEX_PROFILES_DIR` outside all computer workspaces, and database backups. Use JWT-only authentication, HTTPS, correctly matched Better Auth issuer/audience/JWKS and web origin, and subscription mode. Keep provider secrets exclusively in the trusted host environment. Do not use ephemeral serverless processes for the runner or discard its profile volume on deploy. Use `/ready` for traffic/operational checks and structured host logs for failures, result-collection warnings, and recovery events.
+
+No deployment, paid resources, DNS changes, live ChatGPT login, or provider calls were performed during the September product build. Local QA runs against separate test databases with an unavailable provider and unreachable Sprite endpoint. A stopped development laptop still stops a locally hosted runner; persistent computers alone do not provide always-on orchestration.
+
+Bot settings apply only to new work. Changing the assigned computer does not transfer files. Concurrent partial settings updates preserve unrelated fields. The browser obtains authorization from the current Better Auth session for each request, avoiding stale-owner bearer reuse after account switching; existing JWTs remain subject to the server's configured expiration policy.
+
+Web downloads use the same-origin `/api/results/:id/download` route. It obtains a bearer for the current Better Auth session server-side and streams the owner-scoped attachment from the runner with no caching or redirects. Browser download links never carry a bearer token in the URL.

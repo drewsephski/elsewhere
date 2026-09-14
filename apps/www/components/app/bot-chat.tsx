@@ -4,6 +4,7 @@ import type { BotSummary, CreateRunResponse } from "@/lib/api-types";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { BotSettings } from "./bot-settings";
 import { BotContext } from "./bot-context";
 import { RecentRunsPanel } from "./recent-runs-panel";
 
@@ -38,7 +39,7 @@ export function BotChat({ botId }: { botId: string }) {
   return (
     <div className="mt-6 space-y-6">
       <section className="surface-card">
-        <h2 className="text-xl font-semibold">{bot?.name ?? "Your bot"}</h2>
+        <h1 className="text-2xl font-semibold">{bot?.name ?? "Your bot"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">Give your bot a job, useful context, and a clear description of the result you want.</p>
         <form className="mt-5 space-y-3" onSubmit={event => void submit(event)}>
           <label htmlFor="work-message" className="text-sm font-medium">What needs doing?</label>
@@ -50,6 +51,7 @@ export function BotChat({ botId }: { botId: string }) {
       </section>
       <BotContext botId={botId} />
       <RecentRunsPanel botId={botId} />
+      {bot ? <BotSettings bot={bot} onSaved={setBot} /> : null}
     </div>
   );
 }

@@ -3,36 +3,17 @@
 import { fetchCloudHostJwt } from "@/lib/auth-client";
 import { cloudHostBaseUrl } from "@/lib/auth.shared";
 
-let cachedToken: { value: string; expiresAtMs: number } | null = null;
-let inflightJwt: Promise<string> | null = null;
-
-export async function getCloudHostJwt(): Promise<string> {
-  const now = Date.now();
-  if (cachedToken && cachedToken.expiresAtMs > now + 30_000) {
-    return cachedToken.value;
-  }
-  if (inflightJwt) {
-    return inflightJwt;
-  }
-  inflightJwt = fetchCloudHostJwt()
-    .then((token) => {
-      cachedToken = {
-        value: token,
-        expiresAtMs: Date.now() + 4 * 60 * 1000,
-      };
-      return token;
-    })
-    .finally(() => {
-      inflightJwt = null;
-    });
-  return inflightJwt;
+// Bind every request to the current Better Auth session. A cached bearer can outlive
+// sign-out or an account switch in another tab and show the previous owner's workspace.
+export async function getCloudHostJwt(signal?: AbortSignal): Promise<string> {
+  return fetchCloudHostJwt(signal);
 }
 
 export async function cloudHostFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const token = await getCloudHostJwt();
+  const token = await getCloudHostJwt(init.signal ?? undefined);
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !headers.has("Content-Type")) {
@@ -56,7 +37,7 @@ export async function cloudHostEventStream(
   path: string,
   options: SseStreamOptions,
 ): Promise<void> {
-  const token = await getCloudHostJwt();
+  const token = await getCloudHostJwt(options.signal);
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     Accept: "text/event-stream",

@@ -50,6 +50,10 @@ pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), St
         dispatch_available(&state)
             .await
             .map_err(|e| e.to_string())?;
+        *state
+            .runner_heartbeat
+            .lock()
+            .map_err(|_| "Runner heartbeat unavailable")? = Some(std::time::Instant::now());
     }
 }
 

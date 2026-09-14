@@ -1,3 +1,19 @@
+# Elsewhere product specification
+
+## Current north star — September 14, 2026
+
+Elsewhere is a place to create AI workers and give them persistent computers. The primary product path is a web workspace backed by an always-on trusted runner, powered primarily by the user's ChatGPT/Codex subscription. The desktop app and local computer adapter remain supported foundations.
+
+The intended lifecycle is: sign up → connect ChatGPT → create a bot → assign a persistent computer → delegate work → watch progress and approve actions → leave → return to results. Product surfaces center on Bots, Computers, Work, Routines, Approvals, and Results.
+
+Current implementation and verification are recorded in [PRODUCT_PROGRESS.md](PRODUCT_PROGRESS.md); execution/recovery guarantees and operational limits are in [BACKGROUND_WORK.md](BACKGROUND_WORK.md); remaining priorities are in [ROADMAP.md](ROADMAP.md). Browser interaction, a deployed always-on runner, and a real subscription lifecycle remain explicit proof gates. Persistent Sprite files alone do not keep a laptop-hosted runner alive.
+
+Security invariants: all computer access goes through AgentComputer; credentials remain on the trusted host; each resource and result is owner-scoped; approval gates cannot be bypassed; no credential scraping or automatic paid API fallback. Infrastructure expansion and multi-agent systems follow a solid single-bot product.
+
+## Historical local-first brief
+
+The original brief below records the desktop foundation. The current cloud-oriented north star above supersedes its local-only deployment assumption.
+
 You are acting as the principal software architect, macOS engineer,or this project.
 
 I want to build **Elsewhere**, a production-quality macOS desktop application inspired by the functionality and interaction model of **Grok Bot**.

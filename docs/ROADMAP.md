@@ -1,49 +1,33 @@
-# Elsewhere Roadmap
+# Elsewhere product roadmap
 
-## 1. Foundation — **Phase 1 (this repo)**
+The north star is persistent ChatGPT-powered teammates, each with a computer, real assignments, visible progress, approval handoffs, routines, useful context, and finished results. See [PRODUCT_PROGRESS.md](PRODUCT_PROGRESS.md) for implementation checkpoints and proof boundaries.
 
-- [x] Tauri 2 + React shell
-- [x] SQLite persistence (bots, conversations, messages)
-- [x] macOS Keychain for OpenAI API key
-- [x] OpenAI model list + streaming chat
-- [x] ModelProvider abstraction (TS) + Rust provider implementation
-- [x] Core tests (Rust DB/stream, TS stream assembler)
+## Implemented in the web product
 
-## 2. Local Computer
+- Better Auth accounts and owner-scoped resources.
+- ChatGPT/Codex subscription engine, private persistent owner profiles, supported device connection, and explicit paid-API boundaries.
+- AgentComputer terminal/files tools and persistent Fly Sprite computers.
+- Durable work admission, queued dispatch, bot/computer serialization, cancellation, restart recovery, and replayable progress.
+- Human approval lifecycle, expiry, cancellation, and a readable work timeline.
+- Fixed-interval routines with atomic admission, overlap prevention, missed-occurrence coalescing, pause/resume, and failure review.
+- Explicit editable bot context, versioned updates, and snapshots for future work.
+- Immutable summaries and file results, private downloads, and per-work/result-library surfaces.
+- Live workspace counts and bot presence; bot role/computer settings; runner readiness.
 
-- [x] Virtualization.framework Linux guest (Phase 2A spike — Alpine + Swift `gptbot-vmm`)
-- [x] Persistent agent VM disk (`vm/disks/root.raw`, provision once)
-- [x] Native bridge to guest (Virtio socket + `gptbot-guest-agent` JSON RPC)
-- [ ] Production Agent Computer UI, desktop viewer, Chromium
+These are implementation claims with local regression coverage. They do not imply a deployed, authenticated, always-on subscription service.
 
-## 3. Agent Runtime
+## Next proof gates
 
-- [x] Portable `agent-core` (Luna Responses tool loop, async `AgentComputer`, `RunStore`, `EventSink`)
-- [x] Terminal / filesystem tools via guest RPC (`workspace_*` tools + `LocalMacComputer`)
-- [x] Fly Sprites adapter (`SpriteComputer` + mock/live proofs)
-- [x] `run_events` table (dual-write with structured `messages` during migration)
-- [x] Cloud host vertical slice (Postgres `RunStore`, SSE events, authenticated run API — Phase 3B.1)
-- [ ] **Phase 3B.2 — Codex subscription provider** (`CodexRunEngine`, app-server, Computer MCP; API key fallback)
-- [ ] Browser automation
-- [ ] Approvals and activity timeline
+1. Deploy one supervised runner with a persistent private profile volume and backed-up Postgres; configure Better Auth origins/JWKS, then verify a real owner device connection. No live credentials are checked into the repository.
+2. Complete an approved real assignment, disconnect the client, and return to its result. Restart the host between queued tasks and verify recovery. Check subscription exhaustion/re-authentication behavior without paid fallback.
+3. Add browser interaction behind AgentComputer and the existing approval contract, including screenshots, persistent browser state, safe navigation, and action evidence. Never expose the trusted host browser or credentials to a bot.
+4. Add timezone-aware calendar schedules, longer task/checkpoint strategies, result retention/storage quotas, and operational alerts based on measured usage.
+5. Improve contextual continuity from prior work with explicit provenance and controls. Current memory is owner-written context and persistent computer files, not automatic memory extraction.
 
-## 4. Persistence / Memory
+## Deliberately later
 
-- [ ] Long-term memory
-- [ ] Semantic search over local files
+Multi-bot handoffs, bot groups, semantic search, arbitrary skill packages, and collaboration follow a dependable single-bot product. Custom VM fleets, Kubernetes, GPUs, and generalized workflow engines are outside this scope.
 
-## 5. Skills / Routines
+## Desktop foundations retained
 
-- [ ] Skill packages
-- [ ] Scheduled routines / background execution
-
-## 6. Multi-Agent
-
-- [ ] Bot groups
-- [ ] Handoffs and delegation
-
-## 7. Polish
-
-- [ ] Updater
-- [ ] Cloud sync (if ever)
-- [ ] Production hardening
+The Tauri app, SQLite persistence, macOS VM/guest-agent adapter, streaming chat, Keychain integration, and portable runtime remain intact. Production desktop viewing/browser interaction and updater work are separate from the current cloud product path.

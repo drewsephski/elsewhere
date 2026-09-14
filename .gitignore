@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 apps/www/.next
+apps/www/.next-check
 *.local
 .env
 .env.*

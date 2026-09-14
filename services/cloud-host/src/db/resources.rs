@@ -117,28 +117,14 @@ pub async fn patch_bot(
     computer_id: Option<Option<&str>>,
     engine_preference: Option<&str>,
 ) -> Result<Option<BotRow>, ApiError> {
-    let existing = get_bot_for_owner(pool, owner_id, bot_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-    let Some(row) = existing else {
-        return Ok(None);
-    };
-    let name = name.unwrap_or(&row.name);
-    let instructions = instructions.unwrap_or(&row.system_prompt);
-    let model = model.unwrap_or(&row.model);
-    let computer_id = match computer_id {
-        Some(v) => v.map(str::to_string),
-        None => row.computer_id.clone(),
-    };
-    let engine_preference = engine_preference.unwrap_or(&row.engine_preference);
     sqlx::query_as(
         r#"
         UPDATE bots SET
-            name = $3,
-            system_prompt = $4,
-            model = $5,
-            computer_id = $6,
-            engine_preference = $7,
+            name = COALESCE($3, name),
+            system_prompt = COALESCE($4, system_prompt),
+            model = COALESCE($5, model),
+            computer_id = CASE WHEN $6 THEN $7 ELSE computer_id END,
+            engine_preference = COALESCE($8, engine_preference),
             updated_at = NOW()
         WHERE id = $1 AND owner_id = $2
         RETURNING id, owner_id, name, system_prompt, model, computer_id, engine_preference,
@@ -150,7 +136,8 @@ pub async fn patch_bot(
     .bind(name)
     .bind(instructions)
     .bind(model)
-    .bind(computer_id)
+    .bind(computer_id.is_some())
+    .bind(computer_id.flatten())
     .bind(engine_preference)
     .fetch_optional(pool)
     .await

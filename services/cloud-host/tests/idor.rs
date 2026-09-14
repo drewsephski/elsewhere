@@ -393,3 +393,64 @@ async fn result_downloads_and_context_are_owner_scoped(pool: PgPool) {
     let body = axum::body::to_bytes(response.into_body(), 100).await.unwrap();
     assert_eq!(&body[..], b"<script>secret</script>");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
+    let computer = insert_computer_placeholder(&pool, "alice", "Research computer").await.unwrap();
+    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let app = build_router(jwt_state(pool.clone()));
+    async fn overview(app: axum::Router, owner: &str) -> serde_json::Value {
+        let response = app.oneshot(http::Request::builder().uri("/v1/workspace").header("authorization", format!("Bearer {}", token(owner))).body(axum::body::Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), http::StatusCode::OK);
+        serde_json::from_slice(&axum::body::to_bytes(response.into_body(), 100000).await.unwrap()).unwrap()
+    }
+    assert_eq!(overview(app.clone(), "alice").await["bots"][0]["presence"], "ready");
+    let run = cloud_host::work::enqueue(&pool, "alice", "presence", &bot.id, None, "Research brief").await.unwrap();
+    assert_eq!(overview(app.clone(), "alice").await["bots"][0]["presence"], "queued");
+    cloud_host::work::claim_next(&pool).await.unwrap();
+    assert_eq!(overview(app.clone(), "alice").await["bots"][0]["presence"], "working");
+    sqlx::query("INSERT INTO tool_approval_requests (id, run_id, owner_id, tool_name, tool_kind, expires_at) VALUES ('presence-approval',$1,'alice','workspace_write','write',NOW()+INTERVAL '5 minutes')")
+        .bind(&run.run_id).execute(&pool).await.unwrap();
+    let waiting = overview(app.clone(), "alice").await;
+    assert_eq!(waiting["bots"][0]["presence"], "waiting_approval");
+    assert_eq!(waiting["counts"]["approvals"], 1);
+    let foreign = overview(app.clone(), "bob").await;
+    assert_eq!(foreign["bots"].as_array().unwrap().len(), 0);
+    assert_eq!(foreign["counts"]["working"], 0);
+    assert_eq!(foreign["counts"]["approvals"], 0);
+    sqlx::query("UPDATE tool_approval_requests SET status='approved' WHERE id='presence-approval'").execute(&pool).await.unwrap();
+    sqlx::query("UPDATE agent_runs SET status='completed' WHERE id=$1").bind(&run.run_id).execute(&pool).await.unwrap();
+    assert_eq!(overview(app.clone(), "alice").await["bots"][0]["presence"], "saving_results");
+    sqlx::query("UPDATE agent_runs SET execution_released_at=NOW() WHERE id=$1").bind(&run.run_id).execute(&pool).await.unwrap();
+    assert_eq!(overview(app.clone(), "alice").await["bots"][0]["presence"], "ready");
+    sqlx::query("UPDATE sandboxes SET state='archived' WHERE id=$1").bind(&computer.id).execute(&pool).await.unwrap();
+    assert_eq!(overview(app, "alice").await["bots"][0]["presence"], "needs_computer");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_bot_setting_edits_preserve_unrelated_fields(pool: PgPool) {
+    use cloud_host::db::resources::{insert_bot, patch_bot};
+    let computer = insert_computer_placeholder(&pool, "alice", "Computer").await.unwrap();
+    let bot = insert_bot(&pool, "alice", "Original", "Original", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let (name, instructions) = tokio::join!(
+        patch_bot(&pool, "alice", &bot.id, Some("Renamed"), None, None, None, None),
+        patch_bot(&pool, "alice", &bot.id, None, Some("Changed role"), None, None, None)
+    );
+    name.unwrap(); instructions.unwrap();
+    let updated = cloud_host::db::resources::get_bot_for_owner(&pool, "alice", &bot.id).await.unwrap().unwrap();
+    assert_eq!(updated.name, "Renamed"); assert_eq!(updated.system_prompt, "Changed role"); assert_eq!(updated.computer_id.as_deref(), Some(computer.id.as_str()));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn readiness_requires_a_recent_dispatcher_heartbeat(pool: PgPool) {
+    let state = jwt_state(pool);
+    let app = build_router(state.clone());
+    async fn ready(app: axum::Router) -> http::StatusCode {
+        app.oneshot(http::Request::builder().uri("/ready").body(axum::body::Body::empty()).unwrap()).await.unwrap().status()
+    }
+    assert_eq!(ready(app.clone()).await, http::StatusCode::SERVICE_UNAVAILABLE);
+    *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now());
+    assert_eq!(ready(app.clone()).await, http::StatusCode::OK);
+    *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now() - std::time::Duration::from_secs(11));
+    assert_eq!(ready(app).await, http::StatusCode::SERVICE_UNAVAILABLE);
+}

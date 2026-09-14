@@ -8,10 +8,12 @@ export const authClient = createAuthClient({
   plugins: [jwtClient()],
 });
 
-export async function fetchCloudHostJwt(): Promise<string> {
+export async function fetchCloudHostJwt(signal?: AbortSignal): Promise<string> {
   const base = process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "";
   const response = await fetch(`${base}/api/auth/token`, {
     method: "GET",
+    cache: "no-store",
+    signal,
     credentials: "include",
   });
   if (!response.ok) {

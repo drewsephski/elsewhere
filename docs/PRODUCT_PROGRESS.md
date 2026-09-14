@@ -1,4 +1,4 @@
-# Elsewhere product build — September 13, 2026
+# Elsewhere product build — September 13–14, 2026
 
 ## Product assessment
 
@@ -58,3 +58,15 @@ Milestone 3 verification: full cloud-host regressions and six routine-specific t
 - Tightened the Sprite client to reject oversized response bodies during reception, for both successful and failed requests.
 
 Milestone 4 verification: full cloud-host and Sprite regressions pass, including context ownership/conflicts/snapshots, bounded file capture, immutable snapshots, execution reservation/restart, and private download headers. Browser QA confirmed context persistence after reload and populated Results views using clearly labeled local fixtures. The in-app browser did not emit a download event; authenticated download bytes and headers are verified by the HTTP regression. No live model or paid infrastructure is implied by this verification.
+
+### 5 — Workspace presence and product usability
+
+- Live, owner-scoped workspace counts and bot presence distinguish working, queued, waiting for approval, saving results, ready, and needs-attention states. Empty workspaces have concrete setup links.
+- Bot creation centers on a teammate's name, role, and computer. Editable bot settings preserve queued execution snapshots; concurrent partial updates no longer overwrite unrelated fields.
+- Improved asynchronous failure handling and duplicate-submit protection for computer and approval actions, with product-level language instead of transport/tool identifiers.
+- Added dispatcher-backed readiness and a visible unavailable-runner state. Removed bearer caching across browser account changes.
+- Updated the roadmap and cloud architecture to match the implemented product, with explicit deployment and live-provider proof gates.
+
+Milestone 5 verification: 60 cloud-host tests and 55 portable runtime/provider/computer tests pass; desktop's 10 tests and both TypeScript checks pass. The production Next build succeeds. Cargo Clippy completes with existing warnings. Browser QA confirms live overview counts, bot-role updates, saved context, native authenticated result downloads, and a readable mobile layout without page overflow. The native download route also rejects anonymous access and returns exact saved fixture bytes for its owner.
+
+Final local state: five clean product checkpoints; no push or deployment. The pre-existing change in `apps/www/next-env.d.ts` is preserved outside these commits. QA uses an isolated database and visibly labeled result fixtures. Real ChatGPT authorization, paid infrastructure, and browser/computer-use execution were not exercised.
