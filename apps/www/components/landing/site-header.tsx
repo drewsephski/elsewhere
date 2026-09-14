@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { siteConfig } from "@elsewhere/brand";
+import { ProductLogo } from "@/components/product-logo";
 import { appRoutes } from "@/lib/app-routes";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
@@ -19,12 +20,7 @@ export function SiteHeader() {
           className="group flex items-center gap-2.5 text-foreground"
           aria-label={`${siteConfig.productName} home`}
         >
-          <span
-            className="relative flex size-8 items-center justify-center overflow-hidden rounded-md border border-border/80 bg-card font-mono text-xs font-medium text-foreground shadow-[inset_0_1px_0_oklch(1_0_0/6%)]"
-            aria-hidden
-          >
-            <span className="text-primary">▸</span>
-          </span>
+          <ProductLogo size="md" priority />
           <span className="text-sm font-medium tracking-tight">{siteConfig.productName}</span>
         </Link>
         <nav

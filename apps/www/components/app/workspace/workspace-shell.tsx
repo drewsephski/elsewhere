@@ -14,6 +14,7 @@ import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
+import { ProductLogo } from "@/components/product-logo";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
 
@@ -167,12 +168,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         >
           <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 px-4">
             <Link href="/app" className="flex items-center gap-2">
-              <span
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
-                aria-hidden
-              >
-                E
-              </span>
+              <ProductLogo size="md" />
               <span className="text-sm font-semibold tracking-tight">
                 {siteConfig.productName}
               </span>

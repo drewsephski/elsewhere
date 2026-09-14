@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShellNav } from "@/components/app/app-shell-nav";
+import { ProductLogo } from "@/components/product-logo";
 import Link from "next/link";
 import { siteConfig } from "@elsewhere/brand";
 
@@ -15,12 +16,7 @@ export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
       <header className="shrink-0 border-b border-border/70 bg-white/55 backdrop-blur-md">
         <div className="flex h-12 items-center justify-between gap-4 px-4 lg:px-5">
           <Link href="/app" className="flex items-center gap-2.5">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
-              aria-hidden
-            >
-              E
-            </span>
+            <ProductLogo size="md" />
             <span className="text-sm font-semibold tracking-tight">
               {siteConfig.productName}
             </span>

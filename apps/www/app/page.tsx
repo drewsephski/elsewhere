@@ -1,7 +1,8 @@
 "use client";
 
 import { siteConfig } from "@elsewhere/brand";
-import { ArrowRight, Triangle } from "@/components/icons/lucide";
+import { ArrowRight } from "@/components/icons/lucide";
+import { ProductLogo } from "@/components/product-logo";
 import {
   ProductMobileSection,
   ProductNavDropdown,
@@ -75,10 +76,7 @@ function Navbar() {
             className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 animate-fade-down items-center gap-2 stagger-2"
             aria-label={`${siteConfig.productName} home`}
           >
-            <Triangle
-              className="pointer-events-none h-5 w-5 fill-primary text-primary"
-              aria-hidden
-            />
+            <ProductLogo size="md" className="pointer-events-none" priority />
             <span className="pointer-events-auto font-helvetica-neue text-xl tracking-tight text-brand-dark">
               {siteConfig.productName}
             </span>
