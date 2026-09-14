@@ -142,6 +142,28 @@ struct HistoryRow {
     body: String,
 }
 
+/// Input items for a run. Codex uses `thread/resume` for prior context and accepts only the
+/// current user turn here; Responses loads bounded Postgres history plus this turn.
+pub async fn build_run_input_messages(
+    pool: &PgPool,
+    conversation_id: &str,
+    assistant_message_id: &str,
+    user_message: &str,
+    include_prior_turns: bool,
+) -> Result<Vec<Value>, String> {
+    let user_turn = json!({
+        "role": "user",
+        "content": user_message,
+    });
+    if !include_prior_turns {
+        return Ok(vec![user_turn]);
+    }
+    let mut messages =
+        load_bounded_responses_history(pool, conversation_id, assistant_message_id).await?;
+    messages.push(user_turn);
+    Ok(messages)
+}
+
 /// Prior turns for the Responses engine, oldest first, bounded by count and total bytes.
 pub async fn load_bounded_responses_history(
     pool: &PgPool,

@@ -232,16 +232,6 @@ async fn execute_run(
         instructions: input.records.instructions.clone(),
     };
 
-    let mut input_messages =
-        crate::conversation::load_bounded_responses_history(
-            &pool,
-            &input.records.conversation_id,
-            &input.records.assistant_message_id,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-    input_messages.push(json!({"role":"user","content": input.user_message}));
-
     let engine_mode = match input.engine_mode {
         Some(mode) => mode,
         None => effective_engine_mode(&pool, &input.bot_id, config.run_engine).await,
@@ -270,6 +260,15 @@ async fn execute_run(
         Ok(engine) => engine,
         Err(err) => return Err(resolve_error_to_host(err)),
     };
+
+    let input_messages = crate::conversation::build_run_input_messages(
+        &pool,
+        &input.records.conversation_id,
+        &input.records.assistant_message_id,
+        &input.user_message,
+        matches!(selected, SelectedRunEngine::ResponsesApi),
+    )
+    .await?;
 
     let permitted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agent_runs r JOIN sandboxes s ON s.id = r.computer_id AND s.owner_id = r.owner_id WHERE r.id = $1 AND r.owner_id = $2 AND NOT r.cancel_requested AND s.state <> 'archived')")
         .bind(&input.records.run_id).bind(&owner_id).fetch_one(&pool).await.map_err(|e| e.to_string())?;
