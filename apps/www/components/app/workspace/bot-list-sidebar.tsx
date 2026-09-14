@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Search } from "@/components/icons/lucide";
+import type { WorkspaceLoadPhase } from "@/hooks/use-workspace-overview";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -31,6 +32,8 @@ interface BotListSidebarProps {
   bots: WorkspaceBotPresence[];
   selectedBotId: string | null;
   runActivityAt: Record<string, string>;
+  workspacePhase?: WorkspaceLoadPhase;
+  workspaceError?: string | null;
   onCreateBot: () => void;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
   onDeleteBot?: (botId: string) => Promise<void>;
@@ -51,6 +54,8 @@ export function BotListSidebar({
   bots,
   selectedBotId,
   runActivityAt,
+  workspacePhase = "ready",
+  workspaceError = null,
   onCreateBot,
   onRenameBot,
   onDeleteBot,
@@ -264,7 +269,15 @@ export function BotListSidebar({
         })}
         {!filtered.length ? (
           <li className="px-3 py-8 text-center text-sm text-muted-foreground">
-            {query ? "No bots match your search." : "No bots yet."}
+            {workspacePhase === "initial" || workspacePhase === "loading" ? (
+              "Loading your bots…"
+            ) : workspacePhase === "unavailable" || workspacePhase === "stale" ? (
+              workspaceError ?? "Workspace runner is temporarily unavailable."
+            ) : query ? (
+              "No bots match your search."
+            ) : (
+              "No bots yet."
+            )}
           </li>
         ) : null}
       </ul>

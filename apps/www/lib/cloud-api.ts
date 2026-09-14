@@ -1,6 +1,14 @@
 "use client";
 
 import { abortAfter, mergeAbortSignals } from "@/lib/abort-utils";
+import {
+  type CloudApiErrorBody,
+  isRunnerUnreachableStatus,
+  readCloudApiErrorBody,
+} from "@/lib/cloud-bff-errors";
+
+export type { CloudApiErrorBody };
+export { isRunnerUnreachableStatus, readCloudApiErrorBody };
 
 /** Same-origin BFF; avoids CORS and localhost vs 127.0.0.1 cookie/port issues in the browser. */
 const CLOUD_BROWSER_PREFIX = "/api/cloud";
@@ -8,14 +16,6 @@ const CLOUD_BROWSER_PREFIX = "/api/cloud";
 export type CloudHostFetchInit = RequestInit & {
   /** Aborts the request after this many milliseconds (in addition to any passed `signal`). */
   timeoutMs?: number;
-};
-
-export type CloudApiErrorBody = {
-  code?: string;
-  error?: string;
-  message?: string;
-  retryable?: boolean;
-  requestId?: string;
 };
 
 function cloudRequestUrl(path: string): string {
@@ -40,21 +40,12 @@ export async function cloudHostErrorMessage(
   response: Response,
   fallback: string,
 ): Promise<string> {
-  const text = await response.text().catch(() => "");
-  if (text) {
-    try {
-      const body = JSON.parse(text) as CloudApiErrorBody;
-      if (typeof body.error === "string" && body.error.trim()) {
-        return body.error;
-      }
-      if (typeof body.message === "string" && body.message.trim()) {
-        return body.message;
-      }
-    } catch {
-      if (text.trim()) {
-        return text.trim();
-      }
-    }
+  const body = await readCloudApiErrorBody(response.clone());
+  if (body?.error?.trim()) {
+    return body.error;
+  }
+  if (body?.message?.trim()) {
+    return body.message;
   }
   return `${fallback} (${response.status})`;
 }

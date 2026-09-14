@@ -1,6 +1,6 @@
 "use client";
 
-import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudHostFetch, readCloudApiErrorBody } from "@/lib/cloud-api";
 import type { ProviderStatus } from "@/lib/api-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,27 +14,16 @@ export type ProviderStatusLoadPhase = "idle" | "loading" | "ready" | "error";
 type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
 
 async function readCloudJson<T>(response: Response): Promise<T> {
-  const text = await response.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    if (!response.ok) {
-      throw new Error(
-        text.trim() || `Could not connect to Elsewhere (${response.status})`,
-      );
-    }
-    throw new Error("Could not read workspace response");
-  }
+  const body = await readCloudApiErrorBody(response);
   if (!response.ok) {
     const message =
-      body &&
-      typeof body === "object" &&
-      "error" in body &&
-      typeof (body as { error: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : `Could not connect to Elsewhere (${response.status})`;
+      body?.error?.trim() ||
+      body?.message?.trim() ||
+      `Could not connect to Elsewhere (${response.status})`;
     throw new Error(message);
+  }
+  if (body === null) {
+    throw new Error("Could not read workspace response");
   }
   return body as T;
 }
@@ -77,7 +66,16 @@ export function useProviderStatus() {
       }
       consecutiveFailures.current += 1;
       setPhase("error");
-      setError(err instanceof Error ? err.message : "Connection check failed");
+      const message = err instanceof Error ? err.message : "Connection check failed";
+      setError(message);
+      if (
+        message.includes("temporarily unreachable") ||
+        message.includes("workspace service")
+      ) {
+        // Preserve last-known provider status during runner transport outages.
+        return;
+      }
+      setStatus(null);
     }
   }, []);
 

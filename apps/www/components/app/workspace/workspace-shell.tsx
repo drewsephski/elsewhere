@@ -34,7 +34,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: workspace, error: workspaceError, refresh } = useWorkspaceOverview();
+  const { data: workspace, error: workspaceError, phase: workspacePhase, refresh } =
+    useWorkspaceOverview();
 
   const selectedBotId = parseBotId(pathname);
   const [createOpen, setCreateOpen] = useState(false);
@@ -261,6 +262,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             bots={bots}
             selectedBotId={selectedBotId}
             runActivityAt={runActivityAt}
+            workspacePhase={workspacePhase}
+            workspaceError={workspaceError}
             onCreateBot={() => setCreateOpen(true)}
             onRenameBot={handleRenameBot}
             onDeleteBot={handleDeleteBot}

@@ -9,6 +9,8 @@ interface BotAvatarPickerProps {
   onChange: (avatarId: string) => void;
   disabled?: boolean;
   className?: string;
+  /** Tighter grid for dialogs and narrow layouts. */
+  compact?: boolean;
 }
 
 export function BotAvatarPicker({
@@ -16,12 +18,16 @@ export function BotAvatarPicker({
   onChange,
   disabled,
   className,
+  compact,
 }: BotAvatarPickerProps) {
   return (
-    <div className={cn("space-y-2", className)}>
-      <p className="text-sm font-medium">Avatar</p>
+    <div className={cn(compact ? "space-y-1.5" : "space-y-2", className)}>
+      <p className={cn("font-medium", compact ? "text-xs" : "text-sm")}>Avatar</p>
       <div
-        className="grid grid-cols-4 gap-2 sm:grid-cols-6"
+        className={cn(
+          "grid grid-cols-4 sm:grid-cols-6",
+          compact ? "max-h-[7.25rem] gap-1 overflow-y-auto pr-0.5" : "gap-2",
+        )}
         role="radiogroup"
         aria-label="Choose bot avatar"
       >
@@ -37,19 +43,31 @@ export function BotAvatarPicker({
               title={preset.suggestedName}
               onClick={() => onChange(preset.id)}
               className={cn(
-                "flex flex-col items-center gap-0.5 rounded-xl p-1.5 transition-colors",
+                "flex flex-col items-center rounded-xl transition-colors",
+                compact ? "gap-0 p-1" : "gap-0.5 p-1.5",
                 selected
                   ? "bg-primary/10 ring-2 ring-primary/35"
                   : "hover:bg-muted/80 ring-1 ring-transparent",
               )}
             >
-              <BotCreatureAvatar name={preset.suggestedName} avatarId={preset.id} size="md" />
-              <span className="w-full truncate text-center text-[10px] font-medium text-foreground">
+              <BotCreatureAvatar
+                name={preset.suggestedName}
+                avatarId={preset.id}
+                size={compact ? "sm" : "md"}
+              />
+              <span
+                className={cn(
+                  "w-full truncate text-center font-medium text-foreground",
+                  compact ? "text-[9px] leading-tight" : "text-[10px]",
+                )}
+              >
                 {preset.suggestedName}
               </span>
-              <span className="w-full truncate text-center text-[9px] text-muted-foreground">
-                {preset.label}
-              </span>
+              {!compact ? (
+                <span className="w-full truncate text-center text-[9px] text-muted-foreground">
+                  {preset.label}
+                </span>
+              ) : null}
             </button>
           );
         })}

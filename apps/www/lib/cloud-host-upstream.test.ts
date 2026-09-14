@@ -6,11 +6,12 @@ function env(values: Record<string, string | undefined>): NodeJS.ProcessEnv {
 }
 
 describe("cloudHostUpstreamCandidates", () => {
-  it("prefers the canonical server runtime URL before legacy and public fallbacks", () => {
+  it("prefers canonical server URL, then explicit fallback, then legacy/public keys", () => {
     const candidates = cloudHostUpstreamCandidates(
       env({
         NODE_ENV: "production",
         ELSEWHERE_CLOUD_HOST_URL: "http://runner.internal:8080/",
+        ELSEWHERE_CLOUD_HOST_FALLBACK_URL: "https://runner-public.example.com",
         ELSEWHERE_CLOUD_HOST_INTERNAL_URL: "http://legacy.internal:8080",
         NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL: "https://runner.example.com/",
       }),
@@ -18,6 +19,7 @@ describe("cloudHostUpstreamCandidates", () => {
 
     expect(candidates).toEqual([
       { baseUrl: "http://runner.internal:8080", source: "server" },
+      { baseUrl: "https://runner-public.example.com", source: "fallback" },
       { baseUrl: "http://legacy.internal:8080", source: "legacy-internal" },
       { baseUrl: "https://runner.example.com", source: "public-build" },
     ]);

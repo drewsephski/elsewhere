@@ -1,5 +1,6 @@
 export type CloudHostUpstreamSource =
   | "server"
+  | "fallback"
   | "legacy-internal"
   | "public-build"
   | "local-default";
@@ -32,15 +33,16 @@ function normalizeBaseUrl(raw: string, source: CloudHostUpstreamSource): string 
  * Server-side cloud-host destinations in priority order.
  *
  * ELSEWHERE_CLOUD_HOST_URL is the canonical runtime setting for hosted/self-hosted
- * deployments. ELSEWHERE_CLOUD_HOST_INTERNAL_URL remains supported for older Fly
- * deployments, and NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL is only a compatibility
- * fallback for images built before the server-only setting existed.
+ * deployments. ELSEWHERE_CLOUD_HOST_FALLBACK_URL is an optional explicit HTTPS (or
+ * alternate) route for migration and incident recovery. Legacy and build-time keys
+ * remain for backwards compatibility only.
  */
 export function cloudHostUpstreamCandidates(
   env: NodeJS.ProcessEnv = process.env,
 ): CloudHostUpstreamCandidate[] {
   const configured: Array<[string | undefined, CloudHostUpstreamSource]> = [
     [env.ELSEWHERE_CLOUD_HOST_URL, "server"],
+    [env.ELSEWHERE_CLOUD_HOST_FALLBACK_URL, "fallback"],
     [env.ELSEWHERE_CLOUD_HOST_INTERNAL_URL, "legacy-internal"],
     [env.NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL, "public-build"],
   ];
@@ -59,7 +61,6 @@ export function cloudHostUpstreamCandidates(
     candidates.push({ baseUrl, source });
   }
 
-  // Local development/self-hosting remains zero-config when no explicit endpoint exists.
   if (candidates.length === 0 && env.NODE_ENV !== "production") {
     candidates.push({
       baseUrl: "http://127.0.0.1:8080",

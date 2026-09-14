@@ -113,16 +113,21 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="gap-3 p-4 sm:max-w-lg">
         <form onSubmit={(event) => void handleSubmit(event)}>
-          <DialogHeader>
-            <DialogTitle>New bot</DialogTitle>
-            <DialogDescription>
+          <DialogHeader className="gap-1">
+            <DialogTitle className="text-base">New bot</DialogTitle>
+            <DialogDescription className="text-xs">
               Give it a name, a role, and a computer to work on.
             </DialogDescription>
           </DialogHeader>
-          <FormFields className="mt-4">
-            <BotAvatarPicker value={avatarId} onChange={handleAvatarChange} disabled={busy} />
+          <FormFields className="mt-2 gap-2.5">
+            <BotAvatarPicker
+              value={avatarId}
+              onChange={handleAvatarChange}
+              disabled={busy}
+              compact
+            />
             <FormItem>
               <Label htmlFor="create-bot-name">Name</Label>
               <Input
@@ -138,7 +143,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
               <Label htmlFor="create-bot-instructions">Role and instructions</Label>
               <Textarea
                 id="create-bot-instructions"
-                className="min-h-28"
+                className="min-h-20 resize-y"
                 maxLength={16000}
                 value={instructions}
                 onChange={(event) => setInstructions(event.target.value)}
@@ -161,7 +166,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
           {error ? (
             <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>
           ) : null}
-          <DialogFooter className="mt-4">
+          <DialogFooter className="mt-3">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>

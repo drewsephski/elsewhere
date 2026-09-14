@@ -1,6 +1,6 @@
 "use client";
 
-import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudHostErrorMessage, cloudHostFetch, isRunnerUnreachableStatus, readCloudApiErrorBody } from "@/lib/cloud-api";
 import type { BotSummary, ComputerSummary, RunSummary } from "@/lib/api-types";
 import { useActiveRun } from "@/contexts/active-run-context";
 import { workStatus } from "@/lib/work-events";
@@ -49,7 +49,14 @@ export function ComputerStatePanel({
     cloudHostFetch("/v1/computers", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error("Could not load computer");
+          const body = await readCloudApiErrorBody(response);
+          if (isRunnerUnreachableStatus(response.status, body)) {
+            throw new Error(
+              body?.error ??
+                "Workspace runner is temporarily unreachable. Your saved ChatGPT connection has not been changed.",
+            );
+          }
+          throw new Error(await cloudHostErrorMessage(response, "Could not load computer"));
         }
         const items: ComputerSummary[] = await response.json();
         setComputer(items.find((item) => item.id === bot.computerId) ?? null);

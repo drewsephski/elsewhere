@@ -55,9 +55,10 @@ The Fly web-to-runner address is deployment topology, **not a secret**. `infra/f
 
 ```dotenv
 ELSEWHERE_CLOUD_HOST_URL=http://elsewhere-alpha-runner.internal:8080
+ELSEWHERE_CLOUD_HOST_FALLBACK_URL=https://elsewhere-alpha-runner.fly.dev
 ```
 
-`ELSEWHERE_CLOUD_HOST_INTERNAL_URL` is retained only for backwards compatibility. The BFF probes `/health`, remembers a healthy upstream briefly, and can use the public build-time compatibility endpoint for safe GET/HEAD transport fallback while public runner ingress still exists. Do not treat that fallback as a substitute for proving Fly 6PN. Before removing public runner ingress, verify successful BFF responses include `X-Elsewhere-Upstream: server`; that proves the canonical `.internal` path is carrying requests.
+Use `GET /api/health/runner` on the web app to verify the **web → runner dependency** (configured, reachable, `/ready`). Keep `GET /api/auth/ok` as web liveness only.
 
 For other hosted or self-hosted environments, set `ELSEWHERE_CLOUD_HOST_URL` at web runtime to the service URL reachable **from the web server**, not from the end user's browser. Local development defaults to `http://127.0.0.1:8080` only when no explicit endpoint is configured and `NODE_ENV` is not production.
 

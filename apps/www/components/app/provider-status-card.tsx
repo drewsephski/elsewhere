@@ -72,51 +72,46 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         </Button>
       </div>
 
-      <div
-        className={cn(
-          "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
-          checkFailed
-            ? "border-red-200/80 bg-red-50/80 text-red-950"
-            : providerUnavailable
+      {!checkFailed ? (
+        <div
+          className={cn(
+            "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
+            providerUnavailable
               ? "border-amber-200/80 bg-amber-50/80 text-amber-950"
               : connected
                 ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
                 : "border-amber-200/80 bg-amber-50/80 text-amber-950",
-        )}
-        role="status"
-      >
-        {checking ? (
-          <>
-            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
-            <span>Checking connection…</span>
-          </>
-        ) : checkFailed ? (
-          <>
-            <span className="size-2 shrink-0 rounded-full bg-red-500" aria-hidden />
-            <span>Runner unavailable — your saved ChatGPT connection has not been changed</span>
-          </>
-        ) : providerUnavailable ? (
-          <>
-            <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
-            <span>ChatGPT status is temporarily unavailable — your saved pairing is unchanged</span>
-          </>
-        ) : connected ? (
-          <>
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden />
-            <span>
-              Connected
-              {status?.chatgptPlanType ? (
-                <span className="text-emerald-800/80"> · {status.chatgptPlanType}</span>
-              ) : null}
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
-            <span>Not connected — connect to run bots on your plan</span>
-          </>
-        )}
-      </div>
+          )}
+          role="status"
+        >
+          {checking ? (
+            <>
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+              <span>Checking connection…</span>
+            </>
+          ) : providerUnavailable ? (
+            <>
+              <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              <span>ChatGPT status is temporarily unavailable — your saved pairing is unchanged</span>
+            </>
+          ) : connected ? (
+            <>
+              <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden />
+              <span>
+                Connected
+                {status?.chatgptPlanType ? (
+                  <span className="text-emerald-800/80"> · {status.chatgptPlanType}</span>
+                ) : null}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              <span>Not connected — connect to run bots on your plan</span>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {(!connected || temporarilyUnavailable) && !challenge ? (
         <div className="mt-4 space-y-2">

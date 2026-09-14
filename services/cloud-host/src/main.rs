@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     config.log_summary();
 
-    let mut leadership = cloud_host::worker::acquire_runner(&config.database_url).await?;
+    let leadership = cloud_host::worker::acquire_runner(&config.database_url).await?;
     let pool = sqlx::PgPool::connect(&config.database_url).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
@@ -37,13 +37,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let app = build_router(state.clone());
 
+    // Keep HTTP serving even if the dispatcher loop errors; liveness must not depend on queue work.
+    let worker_state = state.clone();
+    tokio::spawn(async move {
+        let mut leadership = leadership;
+        if let Err(err) = cloud_host::worker::run(worker_state, &mut leadership).await {
+            tracing::error!(error = %err, "runner dispatcher exited");
+        }
+    });
+
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "Elsewhere cloud-host listening");
-    // Keep the dedicated session lock until all execution futures and their Codex children
-    // have been dropped. The dispatcher continues checking leadership while draining.
     let outcome: Result<(), String> = tokio::select! {
         result = axum::serve(listener, app) => result.map_err(|e| e.to_string()),
-        result = cloud_host::worker::run(state.clone(), &mut leadership) => result,
         result = async {
             shutdown_signal().await?;
             cloud_host::worker::drain(&state, std::time::Duration::from_secs(240)).await;

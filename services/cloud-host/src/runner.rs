@@ -267,6 +267,11 @@ async fn execute_run(
             plan_type: None,
         },
         RunEngineMode::Auto => {
+            let _permit = host_state
+                .codex_ops_semaphore
+                .acquire()
+                .await
+                .map_err(|_| "Codex is busy on this host".to_string())?;
             codex_provider::probe_codex_subscription_availability_with_profile(
                 config.codex_executable.clone(),
                 profile_home.clone(),

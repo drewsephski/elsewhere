@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  diagnoseRunnerDependency,
   resetCloudHostUpstreamCacheForTests,
   selectCloudHostUpstream,
 } from "./cloud-host-server";
@@ -14,7 +15,7 @@ afterEach(() => {
 });
 
 describe("selectCloudHostUpstream", () => {
-  it("falls through to a reachable compatibility candidate when the private route is down", async () => {
+  it("falls through to explicit HTTPS fallback when the private route is down", async () => {
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("connect refused"))
@@ -25,13 +26,13 @@ describe("selectCloudHostUpstream", () => {
       env: env({
         NODE_ENV: "production",
         ELSEWHERE_CLOUD_HOST_URL: "http://runner.internal:8080",
-        NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL: "https://runner.example.com",
+        ELSEWHERE_CLOUD_HOST_FALLBACK_URL: "https://runner.example.com",
       }),
     });
 
     expect(selected).toEqual({
       baseUrl: "https://runner.example.com",
-      source: "public-build",
+      source: "fallback",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0][0]).toBe("http://runner.internal:8080/health");
@@ -67,5 +68,30 @@ describe("selectCloudHostUpstream", () => {
       name: "CloudHostUnavailableError",
       attemptedSources: ["server"],
     });
+  });
+});
+
+describe("diagnoseRunnerDependency", () => {
+  it("reports reachable upstream and optional ready state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const diagnostics = await diagnoseRunnerDependency({
+      env: env({
+        NODE_ENV: "production",
+        ELSEWHERE_CLOUD_HOST_URL: "http://runner.internal:8080",
+      }),
+    });
+
+    expect(diagnostics).toMatchObject({
+      configured: true,
+      reachable: true,
+      ready: true,
+      upstream: "server",
+    });
+    expect(typeof diagnostics.latencyMs).toBe("number");
   });
 });

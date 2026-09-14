@@ -43,7 +43,7 @@ kill_timeout = 300
     timeout = "3s"
     grace_period = "30s"
     method = "GET"
-    path = "/ready"
+    path = "/health"
 
 [[restart]]
   policy = "always"
