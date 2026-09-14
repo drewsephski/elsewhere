@@ -1,20 +1,10 @@
 "use client";
 
-import { cloudHostFetch } from "@/lib/cloud-api";
-import type { ProviderStatus } from "@/lib/api-types";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "cn";
 import { CodexIcon } from "@/components/icons/codex-icon";
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from "@/components/icons/lucide";
-import { useCallback, useEffect, useState } from "react";
-
-type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
-
-async function readResponse<T>(response: Response): Promise<T> {
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? "Could not connect to Elsewhere");
-  return body as T;
-}
+import { Button, buttonVariants } from "@/components/ui/button";
+import { useProviderStatus } from "@/hooks/use-provider-status";
+import { cn } from "cn";
 
 interface ProviderStatusCardProps {
   /** Larger layout for empty workspace / mobile sheet. */
@@ -23,80 +13,20 @@ interface ProviderStatusCardProps {
 }
 
 export function ProviderStatusCard({ variant = "panel", className }: ProviderStatusCardProps) {
-  const [status, setStatus] = useState<ProviderStatus | null>(null);
-  const [challenge, setChallenge] = useState<LoginChallenge | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const next = await readResponse<ProviderStatus>(await cloudHostFetch("/v1/providers/status"));
-      setStatus(next);
-      setError(null);
-      if (next.chatgptConnected) setChallenge(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Connection check failed");
-    }
-  }, []);
-
-  useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    if (!challenge) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const expires = Date.now() + 10 * 60_000;
-    async function check() {
-      try {
-        const result = await readResponse<{ connected: boolean }>(
-          await cloudHostFetch("/v1/providers/codex/login/status"),
-        );
-        if (stopped) return;
-        if (result.connected) { setChallenge(null); await load(); return; }
-        if (Date.now() >= expires) {
-          setChallenge(null);
-          setError("Sign-in expired. Connect ChatGPT again to get a new code.");
-          return;
-        }
-      } catch (err) {
-        if (!stopped) setError(err instanceof Error ? err.message : "Connection check failed");
-      }
-      if (!stopped) timer = setTimeout(() => void check(), 5000);
-    }
-    timer = setTimeout(() => void check(), 3000);
-    return () => { stopped = true; clearTimeout(timer); };
-  }, [challenge, load]);
-
-  async function handleConnect() {
-    setBusy(true);
-    setError(null);
-    try {
-      setChallenge(await readResponse<LoginChallenge>(
-        await cloudHostFetch("/v1/providers/codex/login/start", { method: "POST" }),
-      ));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start sign-in");
-    } finally { setBusy(false); }
-  }
-
-  async function cancel() {
-    if (!challenge) return;
-    setBusy(true);
-    try {
-      const response = await cloudHostFetch("/v1/providers/codex/login/cancel", {
-        method: "POST", body: JSON.stringify({ loginId: challenge.loginId }),
-      });
-      if (!response.ok && response.status !== 404) throw new Error("Could not cancel sign-in. Try again.");
-      setChallenge(null);
-      setError(null);
-    } catch (err) { setError(err instanceof Error ? err.message : "Cancellation failed"); }
-    finally { setBusy(false); }
-  }
-
-  const connected = Boolean(status?.chatgptConnected);
-  const loading = status === null;
-  const canConnect = Boolean(status && !connected && status.codexLoginAllowed && !challenge);
-  const connectBlocked = Boolean(status && !connected && !status.codexLoginAllowed);
+  const {
+    status,
+    challenge,
+    busy,
+    error,
+    connected,
+    checking,
+    checkFailed,
+    canConnect,
+    connectBlocked,
+    load,
+    handleConnect,
+    cancelLogin,
+  } = useProviderStatus();
 
   const featured = variant === "featured";
 
@@ -114,7 +44,10 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         <div className="min-w-0">
           <h2
             id="chatgpt-heading"
-            className={cn("font-semibold tracking-tight text-foreground", featured ? "text-xl" : "text-lg font-medium")}
+            className={cn(
+              "font-semibold tracking-tight text-foreground",
+              featured ? "text-xl" : "text-lg font-medium",
+            )}
           >
             {featured ? "Connect ChatGPT" : "Your ChatGPT connection"}
           </h2>
@@ -130,10 +63,10 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
           size="sm"
           className="shrink-0 text-muted-foreground"
           onClick={() => void load()}
-          disabled={loading}
+          disabled={checking}
           aria-label="Refresh connection status"
         >
-          <RefreshCw className={cn("size-4", loading && "animate-spin")} aria-hidden />
+          <RefreshCw className={cn("size-4", checking && "animate-spin")} aria-hidden />
         </Button>
       </div>
 
@@ -142,14 +75,21 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
           "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
           connected
             ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
-            : "border-amber-200/80 bg-amber-50/80 text-amber-950",
+            : checkFailed
+              ? "border-red-200/80 bg-red-50/80 text-red-950"
+              : "border-amber-200/80 bg-amber-50/80 text-amber-950",
         )}
         role="status"
       >
-        {loading ? (
+        {checking ? (
           <>
-            <Loader2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
             <span>Checking connection…</span>
+          </>
+        ) : checkFailed ? (
+          <>
+            <span className="size-2 shrink-0 rounded-full bg-red-500" aria-hidden />
+            <span>Could not verify connection — you can retry or connect below</span>
           </>
         ) : connected ? (
           <>
@@ -178,15 +118,29 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
               "w-full gap-2 shadow-sm",
               featured ? "h-11 rounded-full text-base" : "rounded-xl",
             )}
-            disabled={busy || loading || !canConnect}
-            onClick={() => void handleConnect()}
+            disabled={
+              busy ||
+              checking ||
+              (!canConnect && !(checkFailed && !status))
+            }
+            onClick={() => {
+              if (checkFailed && !status) {
+                void load();
+                return;
+              }
+              void handleConnect();
+            }}
           >
             {busy ? (
-              <Loader2 className="size-4" aria-hidden />
+              <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : (
               <CodexIcon className="size-4" />
             )}
-            {busy ? "Preparing sign-in…" : "Connect ChatGPT"}
+            {busy
+              ? "Preparing sign-in…"
+              : checkFailed && !status
+                ? "Retry connection check"
+                : "Connect ChatGPT"}
           </Button>
           {connectBlocked ? (
             <p className="text-center text-xs text-muted-foreground">
@@ -240,7 +194,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
               size="lg"
               className="w-full sm:w-auto"
               disabled={busy}
-              onClick={() => void cancel()}
+              onClick={() => void cancelLogin()}
             >
               Cancel
             </Button>

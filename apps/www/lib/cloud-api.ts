@@ -1,7 +1,14 @@
 "use client";
 
+import { abortAfter, mergeAbortSignals } from "@/lib/abort-utils";
+
 /** Same-origin BFF; avoids CORS and localhost vs 127.0.0.1 cookie/port issues in the browser. */
 const CLOUD_BROWSER_PREFIX = "/api/cloud";
+
+export type CloudHostFetchInit = RequestInit & {
+  /** Aborts the request after this many milliseconds (in addition to any passed `signal`). */
+  timeoutMs?: number;
+};
 
 function cloudRequestUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
@@ -22,19 +29,38 @@ function wrapNetworkError(error: unknown): Error {
 
 export async function cloudHostFetch(
   path: string,
-  init: RequestInit = {},
+  init: CloudHostFetchInit = {},
 ): Promise<Response> {
-  const headers = new Headers(init.headers);
-  if (init.body && !headers.has("Content-Type")) {
+  const { timeoutMs, ...requestInit } = init;
+  const headers = new Headers(requestInit.headers);
+  if (requestInit.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+
+  const signals: AbortSignal[] = [];
+  if (requestInit.signal) {
+    signals.push(requestInit.signal);
+  }
+  if (timeoutMs !== undefined && timeoutMs > 0) {
+    signals.push(abortAfter(timeoutMs));
+  }
+  const signal = signals.length > 0 ? mergeAbortSignals(signals) : undefined;
+
   try {
     return await fetch(cloudRequestUrl(path), {
-      ...init,
+      ...requestInit,
       headers,
       credentials: "include",
+      signal,
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return Promise.reject(
+        new Error(
+          "Connection check timed out. The runner may be starting Codex—try again in a moment.",
+        ),
+      );
+    }
     throw wrapNetworkError(error);
   }
 }

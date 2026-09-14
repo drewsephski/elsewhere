@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::State;
 use axum::Extension;
@@ -12,6 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
+
+/// Bound how long status checks block on Codex app-server probes (launch + account read).
+const PROVIDER_STATUS_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,7 +33,8 @@ pub async fn status(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<ProviderStatusResponse>, ApiError> {
-    let availability = owner_availability(&state, principal.owner_id()).await?;
+    let availability =
+        owner_availability_with_timeout(&state, principal.owner_id()).await?;
     let (codex_installed, chatgpt_connected, plan_type) = map_availability(availability);
 
     Ok(Json(ProviderStatusResponse {
@@ -213,4 +218,21 @@ async fn owner_availability(
         profile,
     )
     .await)
+}
+
+async fn owner_availability_with_timeout(
+    state: &AppState,
+    owner_id: &str,
+) -> Result<CodexSubscriptionAvailability, ApiError> {
+    match tokio::time::timeout(
+        PROVIDER_STATUS_PROBE_TIMEOUT,
+        owner_availability(state, owner_id),
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Ok(CodexSubscriptionAvailability::Unavailable(
+            "ChatGPT connection check timed out on the runner".into(),
+        )),
+    }
 }
