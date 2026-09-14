@@ -1,7 +1,9 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use agent_core::{dispatch_tool, AgentComputer, ToolError};
+use agent_core::{
+    dispatch_tool_with_gate, AgentComputer, AllowAllApprovalGate, ToolError,
+};
 use rmcp::{
     ErrorData, ServerHandler,
     model::{
@@ -129,11 +131,12 @@ impl ServerHandler for ComputerHandler {
         }
 
         let args_str = args.to_string();
-        let dispatch = dispatch_tool(
+        let dispatch = dispatch_tool_with_gate(
             self.computer.as_ref(),
             &request.name,
             &args_str,
             self.cancel.as_ref(),
+            &AllowAllApprovalGate,
         )
         .await;
 

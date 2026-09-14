@@ -34,8 +34,15 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 dotenvy = "0.15"
+jsonwebtoken = "9"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+rcgen = { version = "0.14", optional = true }
+
+[features]
+test-utils = ["rcgen"]
 
 [dev-dependencies]
+rcgen = "0.14"
 axum = { version = "0.8", features = ["macros"] }
 http = "1"
 http-body-util = "0.1"
@@ -43,6 +50,3 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"
 uuid = { version = "1", features = ["v4"] }
-
-[features]
-test-utils = []

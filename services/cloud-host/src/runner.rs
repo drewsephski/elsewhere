@@ -135,13 +135,14 @@ async fn execute_run(
 
     let input_messages = vec![json!({"role":"user","content": input.user_message})];
 
-    let codex_availability = if config.run_engine == RunEngineMode::Responses {
+    let engine_mode = effective_engine_mode(&pool, &input.bot_id, config.run_engine).await;
+    let codex_availability = if engine_mode == RunEngineMode::Responses {
         codex_provider::CodexSubscriptionAvailability::NotInstalled
     } else {
         probe_codex_subscription_availability(config.codex_executable.clone()).await
     };
     let selected = match resolve_run_engine(
-        config.run_engine,
+        engine_mode,
         config.openai_api_key.as_deref(),
         &codex_availability,
     ) {
@@ -162,7 +163,7 @@ async fn execute_run(
             run_codex_engine(&config, ctx, shared, input_messages).await
         }
         SelectedRunEngine::ResponsesApi => {
-            if config.run_engine == RunEngineMode::Auto {
+            if engine_mode == RunEngineMode::Auto {
                 tracing::warn!(
                     engine = "auto",
                     codex = ?codex_availability,
@@ -205,17 +206,50 @@ async fn run_responses_engine(
     shared: SharedRunDeps,
     input: Vec<serde_json::Value>,
 ) -> Result<(), String> {
-    let api_key = config
-        .openai_api_key
-        .clone()
-        .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
+    #[cfg(any(test, feature = "test-utils"))]
+    let model: Arc<dyn ResponsesModel> = if let Some(o) = test_overrides() {
+        o.model
+    } else {
+        let api_key = config
+            .openai_api_key
+            .clone()
+            .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
+        Arc::new(OpenAiResponsesModel::new(api_key, shared.cancel.clone()))
+    };
+
+    #[cfg(not(any(test, feature = "test-utils")))]
+    let model: Arc<dyn ResponsesModel> = {
+        let api_key = config
+            .openai_api_key
+            .clone()
+            .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
+        Arc::new(OpenAiResponsesModel::new(api_key, shared.cancel.clone()))
+    };
+
     tracing::info!(engine = "responses_api", "cloud-host selected Responses engine");
-    let model = OpenAiResponsesModel::new(api_key, shared.cancel.clone());
-    let engine = ResponsesRunEngine::new(Arc::new(model));
+    let engine = ResponsesRunEngine::new(model);
     engine
         .run(ctx, shared, input)
         .await
         .map_err(|e| e.to_string())
+}
+
+async fn effective_engine_mode(
+    pool: &sqlx::PgPool,
+    bot_id: &str,
+    host_default: RunEngineMode,
+) -> RunEngineMode {
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT engine_preference FROM bots WHERE id = $1")
+            .bind(bot_id)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+    let Some((pref,)) = row else {
+        return host_default;
+    };
+    crate::run_engine_select::parse_run_engine_mode(&pref).unwrap_or(host_default)
 }
 
 async fn build_computer(
@@ -248,17 +282,19 @@ async fn sprite_resource_for_computer(
     pool: &sqlx::PgPool,
     computer_id: &str,
 ) -> Result<String, String> {
-    let sandbox_id = format!("sandbox-{computer_id}");
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT provider_resource_id FROM sandboxes WHERE id = $1",
     )
-    .bind(&sandbox_id)
+    .bind(computer_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| e.to_string())?;
-    Ok(row
-        .map(|(name,)| name)
-        .unwrap_or_else(|| sprite_computer::sprite_name_for_sandbox(computer_id)))
+    if let Some((name,)) = row {
+        if !name.is_empty() {
+            return Ok(name);
+        }
+    }
+    Ok(sprite_computer::sprite_name_for_sandbox(computer_id))
 }
 
 #[cfg(any(test, feature = "test-utils"))]

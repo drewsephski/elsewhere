@@ -106,6 +106,12 @@ fn test_config() -> Config {
         openai_api_key: Some("test-key".into()),
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
+        auth_mode: cloud_host::config::AuthMode::InternalToken,
+        jwt_issuer: None,
+        jwt_audience: None,
+        jwt_jwks_url: None,
+        cors_web_origin: None,
+        allow_codex_login: false,
         sprites_api_base: "http://127.0.0.1:9".into(),
         max_concurrent_runs: 2,
         run_timeout_secs: 120,
@@ -349,12 +355,12 @@ async fn conversation_ownership_is_enforced() {
     let bot_a = format!("bot_a_{}", Uuid::new_v4());
     let bot_b = format!("bot_b_{}", Uuid::new_v4());
     let conv = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO bots (id, name, system_prompt, model) VALUES ($1, 'a', '', 'gpt-5.6-luna')")
+    sqlx::query("INSERT INTO bots (id, owner_id, name, system_prompt, model) VALUES ($1, 'legacy-local', 'a', '', 'gpt-5.6-luna')")
         .bind(&bot_a)
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO conversations (id, bot_id) VALUES ($1, $2)")
+    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'legacy-local', $2)")
         .bind(&conv)
         .bind(&bot_a)
         .execute(&pool)
@@ -385,12 +391,12 @@ async fn message_sequences_increment_per_conversation() {
 
     let bot = format!("bot_seq_{}", Uuid::new_v4());
     let conv = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO bots (id, name, system_prompt, model) VALUES ($1, 'a', '', 'gpt-5.6-luna')")
+    sqlx::query("INSERT INTO bots (id, owner_id, name, system_prompt, model) VALUES ($1, 'legacy-local', 'a', '', 'gpt-5.6-luna')")
         .bind(&bot)
         .execute(&pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO conversations (id, bot_id) VALUES ($1, $2)")
+    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'legacy-local', $2)")
         .bind(&conv)
         .bind(&bot)
         .execute(&pool)

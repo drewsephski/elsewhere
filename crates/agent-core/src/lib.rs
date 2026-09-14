@@ -1,5 +1,6 @@
 //! Portable Elsewhere agent runtime — no Tauri, SQLite, or VM dependencies.
 
+mod approval;
 mod computer;
 mod events;
 mod fake_computer;
@@ -11,6 +12,10 @@ mod runtime;
 mod run_store;
 mod tools;
 
+pub use approval::{
+    operation_kind_for_tool, AllowAllApprovalGate, ApprovalDecision, ToolApprovalContext,
+    ToolApprovalGate, ToolOperationKind,
+};
 pub use computer::{
     AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
 };
@@ -31,4 +36,4 @@ pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use run_store::{
     CreateRunParams, PersistedMessage, RunEventReceipt, RunStore, StructuredMessageInput,
 };
-pub use tools::{dispatch_tool, openai_tool_definitions, ToolError};
+pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};

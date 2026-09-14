@@ -1,6 +1,6 @@
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     Json,
 };
@@ -11,12 +11,21 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::auth::{require_internal_token, AuthKind, Principal};
 use crate::db::queries::{
-    assistant_message_body, bootstrap_run, find_run_by_id, find_run_by_request_id,
+    assistant_message_body, bootstrap_run_from_bot, bootstrap_run_legacy, find_run_for_owner,
     list_run_events_after,
 };
 use crate::error::ApiError;
 use crate::runner::{spawn_agent_run, RunExecutionInput};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProductCreateRunRequest {
+    pub bot_id: String,
+    pub conversation_id: Option<String>,
+    pub message: String,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateRunRequest {
@@ -66,16 +75,10 @@ pub struct RunDetailResponse {
 
 pub async fn create_run(
     State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
     headers: HeaderMap,
-    Json(body): Json<CreateRunRequest>,
+    body: axum::body::Bytes,
 ) -> Result<(StatusCode, Json<CreateRunResponse>), ApiError> {
-    if body.message.trim().is_empty() {
-        return Err(ApiError::Validation("message cannot be empty".into()));
-    }
-    if body.bot.id.trim().is_empty() || body.bot.computer_id.trim().is_empty() {
-        return Err(ApiError::Validation("bot.id and bot.computerId are required".into()));
-    }
-
     let request_id = headers
         .get("Idempotency-Key")
         .and_then(|v| v.to_str().ok())
@@ -84,14 +87,78 @@ pub async fn create_run(
         .map(str::to_string)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    let model = body
-        .bot
-        .model
-        .as_deref()
-        .filter(|m| !m.trim().is_empty())
-        .map(str::to_string);
+    if principal.auth_kind == AuthKind::Jwt {
+        let product: ProductCreateRunRequest = serde_json::from_slice(&body)
+            .map_err(|_| ApiError::Validation("invalid product run payload".into()))?;
+        return create_product_run(state, principal, request_id, product).await;
+    }
 
-    let existing_before = find_run_by_request_id(&state.pool, &request_id)
+    require_internal_token(&principal)?;
+    let legacy: CreateRunRequest = serde_json::from_slice(&body)
+        .map_err(|_| ApiError::Validation("invalid legacy run payload".into()))?;
+    create_legacy_run(state, request_id, legacy).await
+}
+
+async fn create_product_run(
+    state: AppState,
+    principal: Principal,
+    request_id: String,
+    body: ProductCreateRunRequest,
+) -> Result<(StatusCode, Json<CreateRunResponse>), ApiError> {
+    if body.message.trim().is_empty() {
+        return Err(ApiError::Validation("message cannot be empty".into()));
+    }
+    if body.bot_id.trim().is_empty() {
+        return Err(ApiError::Validation("botId is required".into()));
+    }
+
+    let existing_before = crate::db::queries::find_run_by_request_id(&state.pool, &request_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if let Some(existing) = &existing_before {
+        let owned = find_run_for_owner(&state.pool, principal.owner_id(), &existing.id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        if owned.is_none() {
+            return Err(ApiError::NotFound);
+        }
+    }
+
+    let permit = if existing_before.is_none() {
+        match state.run_semaphore.clone().try_acquire_owned() {
+            Ok(permit) => Some(permit),
+            Err(_) => return Err(ApiError::TooManyRequests),
+        }
+    } else {
+        None
+    };
+
+    let records = bootstrap_run_from_bot(
+        &state.pool,
+        principal.owner_id(),
+        &request_id,
+        body.bot_id.trim(),
+        body.conversation_id.as_deref(),
+        body.message.trim(),
+    )
+    .await?;
+
+    finish_create_run(state, records, body.bot_id.trim().to_string(), body.message, permit).await
+}
+
+async fn create_legacy_run(
+    state: AppState,
+    request_id: String,
+    body: CreateRunRequest,
+) -> Result<(StatusCode, Json<CreateRunResponse>), ApiError> {
+    if body.message.trim().is_empty() {
+        return Err(ApiError::Validation("message cannot be empty".into()));
+    }
+    if body.bot.id.trim().is_empty() || body.bot.computer_id.trim().is_empty() {
+        return Err(ApiError::Validation("bot.id and bot.computerId are required".into()));
+    }
+
+    let existing_before = crate::db::queries::find_run_by_request_id(&state.pool, &request_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -104,20 +171,37 @@ pub async fn create_run(
         None
     };
 
-    let records = bootstrap_run(
+    let records = bootstrap_run_legacy(
         &state.pool,
         &request_id,
         &body.bot.id,
         &body.bot.name,
         &body.bot.instructions,
-        model.as_deref(),
+        body.bot.model.as_deref(),
         &body.bot.computer_id,
         body.conversation_id.as_deref(),
         body.message.trim(),
     )
     .await?;
 
-    let run_row = find_run_by_id(&state.pool, &records.run_id)
+    finish_create_run(
+        state,
+        records,
+        body.bot.id,
+        body.message,
+        permit,
+    )
+    .await
+}
+
+async fn finish_create_run(
+    state: AppState,
+    records: crate::db::queries::BootstrapRunRecords,
+    bot_id: String,
+    user_message: String,
+    permit: Option<tokio::sync::OwnedSemaphorePermit>,
+) -> Result<(StatusCode, Json<CreateRunResponse>), ApiError> {
+    let run_row = crate::db::queries::find_run_by_id(&state.pool, &records.run_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
@@ -155,8 +239,8 @@ pub async fn create_run(
         state.clone(),
         RunExecutionInput {
             records,
-            bot_id: body.bot.id,
-            user_message: body.message.trim().to_string(),
+            bot_id,
+            user_message: user_message.trim().to_string(),
         },
         permit,
     );
@@ -166,9 +250,10 @@ pub async fn create_run(
 
 pub async fn get_run(
     State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
 ) -> Result<Json<RunDetailResponse>, ApiError> {
-    let run = find_run_by_id(&state.pool, &run_id)
+    let run = find_run_for_owner(&state.pool, principal.owner_id(), &run_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
@@ -199,9 +284,10 @@ pub async fn get_run(
 
 pub async fn cancel_run(
     State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
 ) -> Result<(StatusCode, Json<RunDetailResponse>), ApiError> {
-    let run = find_run_by_id(&state.pool, &run_id)
+    let run = find_run_for_owner(&state.pool, principal.owner_id(), &run_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
@@ -210,16 +296,17 @@ pub async fn cancel_run(
         state.registry.cancel(&run_id);
     }
 
-    let updated = get_run(State(state), Path(run_id)).await?;
+    let updated = get_run(State(state), Extension(principal), Path(run_id)).await?;
     Ok((StatusCode::ACCEPTED, updated))
 }
 
 pub async fn run_events_sse(
     State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, ApiError> {
-    let run = find_run_by_id(&state.pool, &run_id)
+    let run = find_run_for_owner(&state.pool, principal.owner_id(), &run_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;

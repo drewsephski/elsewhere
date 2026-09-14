@@ -5,12 +5,25 @@ use agent_core::DEFAULT_MODEL;
 
 use crate::run_engine_select::RunEngineMode;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMode {
+    InternalToken,
+    Jwt,
+    Hybrid,
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
     pub openai_api_key: Option<String>,
     pub sprite_token: String,
     pub api_token: String,
+    pub auth_mode: AuthMode,
+    pub jwt_issuer: Option<String>,
+    pub jwt_audience: Option<String>,
+    pub jwt_jwks_url: Option<String>,
+    pub cors_web_origin: Option<String>,
+    pub allow_codex_login: bool,
     pub sprites_api_base: String,
     pub max_concurrent_runs: usize,
     pub run_timeout_secs: u64,
@@ -33,6 +46,28 @@ impl Config {
             .or_else(|_| env::var("SPRITES_TOKEN"))
             .map_err(|_| "SPRITE_TOKEN (or deprecated SPRITES_TOKEN) is required".to_string())?;
         let api_token = require_env("ELSEWHERE_CLOUD_API_TOKEN")?;
+        let auth_mode = parse_auth_mode(
+            env::var("ELSEWHERE_AUTH_MODE")
+                .unwrap_or_else(|_| "hybrid".into())
+                .as_str(),
+        )?;
+        let jwt_issuer = env::var("ELSEWHERE_JWT_ISSUER").ok().filter(|v| !v.is_empty());
+        let jwt_audience =
+            env::var("ELSEWHERE_JWT_AUDIENCE").ok().filter(|v| !v.is_empty());
+        let jwt_jwks_url = env::var("ELSEWHERE_JWT_JWKS_URL").ok().filter(|v| !v.is_empty());
+        if auth_mode == AuthMode::Jwt {
+            if jwt_jwks_url.is_none() || jwt_issuer.is_none() || jwt_audience.is_none() {
+                return Err(
+                    "ELSEWHERE_JWT_JWKS_URL, ELSEWHERE_JWT_ISSUER, and ELSEWHERE_JWT_AUDIENCE are required when ELSEWHERE_AUTH_MODE=jwt".into(),
+                );
+            }
+        }
+        let cors_web_origin =
+            env::var("ELSEWHERE_WEB_ORIGIN").ok().filter(|v| !v.is_empty());
+        let allow_codex_login = env::var("ELSEWHERE_ALLOW_CODEX_LOGIN")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
         let max_concurrent_runs = env::var("ELSEWHERE_MAX_CONCURRENT_RUNS")
             .ok()
@@ -53,6 +88,12 @@ impl Config {
             openai_api_key,
             sprite_token,
             api_token,
+            auth_mode,
+            jwt_issuer,
+            jwt_audience,
+            jwt_jwks_url,
+            cors_web_origin,
+            allow_codex_login,
             sprites_api_base: env::var("SPRITES_API_BASE")
                 .unwrap_or_else(|_| sprite_computer::DEFAULT_API_BASE.to_string()),
             max_concurrent_runs,
@@ -69,6 +110,10 @@ impl Config {
             openai_api_key_configured = self.openai_api_key.is_some(),
             sprite = true,
             cloud_api_auth = true,
+            auth_mode = ?self.auth_mode,
+            jwt_configured = self.jwt_jwks_url.is_some(),
+            cors_web_origin = ?self.cors_web_origin,
+            allow_codex_login = self.allow_codex_login,
             run_engine = ?self.run_engine,
             codex_on_path = self.codex_executable.is_some(),
             sprites_api_base = %self.sprites_api_base,
@@ -86,4 +131,13 @@ fn which_codex_on_path() -> Option<PathBuf> {
 
 fn require_env(key: &str) -> Result<String, String> {
     env::var(key).map_err(|_| format!("{key} is required"))
+}
+
+fn parse_auth_mode(raw: &str) -> Result<AuthMode, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "internal_token" | "internal" => Ok(AuthMode::InternalToken),
+        "jwt" => Ok(AuthMode::Jwt),
+        "hybrid" => Ok(AuthMode::Hybrid),
+        other => Err(format!("invalid ELSEWHERE_AUTH_MODE: {other}")),
+    }
 }

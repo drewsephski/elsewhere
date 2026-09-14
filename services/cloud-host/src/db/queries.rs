@@ -6,6 +6,7 @@ use uuid::Uuid;
 use agent_core::DEFAULT_MODEL;
 use sprite_computer::sprite_name_for_sandbox;
 
+use crate::auth::LEGACY_LOCAL_OWNER;
 use crate::error::ApiError;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -93,6 +94,24 @@ pub async fn find_run_by_id(pool: &PgPool, run_id: &str) -> Result<Option<AgentR
         "#,
     )
     .bind(run_id)
+    .fetch_optional(pool)
+    .await
+}
+
+pub async fn find_run_for_owner(
+    pool: &PgPool,
+    owner_id: &str,
+    run_id: &str,
+) -> Result<Option<AgentRunRow>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
+               error_code, step_count, assistant_message_id, started_at, finished_at
+        FROM agent_runs WHERE id = $1 AND owner_id = $2
+        "#,
+    )
+    .bind(run_id)
+    .bind(owner_id)
     .fetch_optional(pool)
     .await
 }
@@ -225,6 +244,7 @@ fn resolve_sprite_resource(computer_id: &str) -> String {
 
 pub async fn bootstrap_run(
     pool: &PgPool,
+    owner_id: &str,
     request_id: &str,
     bot_id: &str,
     bot_name: &str,
@@ -233,6 +253,7 @@ pub async fn bootstrap_run(
     computer_id: &str,
     conversation_id: Option<&str>,
     user_message: &str,
+    engine_preference: &str,
 ) -> Result<BootstrapRunRecords, ApiError> {
     let model = model
         .filter(|m| !m.trim().is_empty())
@@ -270,32 +291,51 @@ pub async fn bootstrap_run(
     let now = Utc::now();
     sqlx::query(
         r#"
-        INSERT INTO bots (id, name, system_prompt, model, computer_enabled, computer_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, TRUE, $5, $6, $6)
+        INSERT INTO bots (id, owner_id, name, system_prompt, model, computer_enabled, computer_id, engine_preference, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $8)
         ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             system_prompt = EXCLUDED.system_prompt,
             model = EXCLUDED.model,
             computer_id = EXCLUDED.computer_id,
+            engine_preference = EXCLUDED.engine_preference,
             updated_at = EXCLUDED.updated_at
         "#,
     )
     .bind(bot_id)
+    .bind(owner_id)
     .bind(bot_name)
     .bind(instructions)
     .bind(&model)
     .bind(computer_id)
+    .bind(engine_preference)
     .bind(now)
     .execute(&mut *tx)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let sprite_resource = resolve_sprite_resource(computer_id);
-    let sandbox_id = format!("sandbox-{computer_id}");
+    let sandbox_id = computer_id.to_string();
+    if let Some((legacy_id,)) = sqlx::query_as::<_, (String,)>(
+        "SELECT id FROM sandboxes WHERE provider = 'fly_sprite' AND provider_resource_id = $1",
+    )
+    .bind(&sprite_resource)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?
+    {
+        if legacy_id != sandbox_id {
+            sqlx::query("DELETE FROM sandboxes WHERE id = $1")
+                .bind(&legacy_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+        }
+    }
     sqlx::query(
         r#"
-        INSERT INTO sandboxes (id, provider, provider_resource_id, state, last_used_at, created_at, updated_at)
-        VALUES ($1, 'fly_sprite', $2, 'active', $3, $3, $3)
+        INSERT INTO sandboxes (id, owner_id, provider, provider_resource_id, state, last_used_at, created_at, updated_at)
+        VALUES ($1, $2, 'fly_sprite', $3, 'active', $4, $4, $4)
         ON CONFLICT (id) DO UPDATE SET
             provider_resource_id = EXCLUDED.provider_resource_id,
             last_used_at = EXCLUDED.last_used_at,
@@ -303,6 +343,7 @@ pub async fn bootstrap_run(
         "#,
     )
     .bind(&sandbox_id)
+    .bind(owner_id)
     .bind(&sprite_resource)
     .bind(now)
     .execute(&mut *tx)
@@ -310,14 +351,17 @@ pub async fn bootstrap_run(
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let (conversation_id, conversation_exists) = if let Some(id) = conversation_id.filter(|c| !c.is_empty()) {
-        let row: Option<(String,)> =
-            sqlx::query_as("SELECT bot_id FROM conversations WHERE id = $1")
+        let row: Option<(String, String)> =
+            sqlx::query_as("SELECT bot_id, owner_id FROM conversations WHERE id = $1")
                 .bind(id)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
         match row {
-            Some((existing_bot,)) if existing_bot != bot_id => {
+            Some((existing_bot, existing_owner)) if existing_owner != owner_id => {
+                return Err(ApiError::NotFound);
+            }
+            Some((existing_bot, _)) if existing_bot != bot_id => {
                 return Err(ApiError::Conflict(
                     "conversation belongs to a different bot".into(),
                 ));
@@ -336,11 +380,12 @@ pub async fn bootstrap_run(
     if !conversation_exists {
         sqlx::query(
             r#"
-            INSERT INTO conversations (id, bot_id, created_at, updated_at)
-            VALUES ($1, $2, $3, $3)
+            INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $4)
             "#,
         )
         .bind(&conversation_id)
+        .bind(owner_id)
         .bind(bot_id)
         .bind(now)
         .execute(&mut *tx)
@@ -396,12 +441,13 @@ pub async fn bootstrap_run(
     sqlx::query(
         r#"
         INSERT INTO agent_runs (
-            id, request_id, bot_id, conversation_id, computer_id, model, status,
+            id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status,
             assistant_message_id, step_count, started_at, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, 0, $8, $8, $8)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'running', $8, 0, $9, $9, $9)
         "#,
     )
     .bind(&run_id)
+    .bind(owner_id)
     .bind(request_id)
     .bind(bot_id)
     .bind(&conversation_id)
@@ -427,4 +473,68 @@ pub async fn bootstrap_run(
         instructions: instructions.to_string(),
         is_new_run: true,
     })
+}
+
+/// Product run bootstrap: load persisted bot + computer; never trust client instructions.
+pub async fn bootstrap_run_from_bot(
+    pool: &PgPool,
+    owner_id: &str,
+    request_id: &str,
+    bot_id: &str,
+    conversation_id: Option<&str>,
+    user_message: &str,
+) -> Result<BootstrapRunRecords, ApiError> {
+    let bot = crate::db::resources::get_bot_for_owner(pool, owner_id, bot_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    let computer_id = bot
+        .computer_id
+        .as_deref()
+        .filter(|c| !c.is_empty())
+        .ok_or_else(|| ApiError::Validation("bot has no assigned computer".into()))?;
+
+    crate::db::resources::ensure_computer_provisioned(pool, owner_id, computer_id).await?;
+
+    bootstrap_run(
+        pool,
+        owner_id,
+        request_id,
+        &bot.id,
+        &bot.name,
+        &bot.system_prompt,
+        Some(bot.model.as_str()),
+        computer_id,
+        conversation_id,
+        user_message,
+        &bot.engine_preference,
+    )
+    .await
+}
+
+pub async fn bootstrap_run_legacy(
+    pool: &PgPool,
+    request_id: &str,
+    bot_id: &str,
+    bot_name: &str,
+    instructions: &str,
+    model: Option<&str>,
+    computer_id: &str,
+    conversation_id: Option<&str>,
+    user_message: &str,
+) -> Result<BootstrapRunRecords, ApiError> {
+    bootstrap_run(
+        pool,
+        LEGACY_LOCAL_OWNER,
+        request_id,
+        bot_id,
+        bot_name,
+        instructions,
+        model,
+        computer_id,
+        conversation_id,
+        user_message,
+        "responses",
+    )
+    .await
 }

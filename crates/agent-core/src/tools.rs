@@ -2,6 +2,10 @@ use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use crate::approval::{
+    operation_kind_for_tool, AllowAllApprovalGate, ApprovalDecision, ToolApprovalContext,
+    ToolApprovalGate,
+};
 use crate::computer::{AgentComputer, ComputerError};
 
 pub const MAX_AGENT_TOOL_STEPS: usize = 25;
@@ -106,6 +110,23 @@ pub async fn dispatch_tool(
     arguments: &str,
     cancel: &AtomicBool,
 ) -> Result<Value, ToolError> {
+    dispatch_tool_with_gate(
+        computer,
+        name,
+        arguments,
+        cancel,
+        &AllowAllApprovalGate,
+    )
+    .await
+}
+
+pub async fn dispatch_tool_with_gate(
+    computer: &dyn AgentComputer,
+    name: &str,
+    arguments: &str,
+    cancel: &AtomicBool,
+    gate: &dyn ToolApprovalGate,
+) -> Result<Value, ToolError> {
     if cancel.load(Ordering::Relaxed) {
         return Err(ToolError::Cancelled);
     }
@@ -113,6 +134,15 @@ pub async fn dispatch_tool(
     let args: Value = serde_json::from_str(arguments).map_err(|e| {
         ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
     })?;
+
+    let approval = gate.authorize(&ToolApprovalContext {
+        tool_name: name.to_string(),
+        operation_kind: operation_kind_for_tool(name),
+        arguments: args.clone(),
+    });
+    if let ApprovalDecision::Deny { reason } = approval {
+        return Err(ToolError::MalformedArguments(reason));
+    }
 
     computer
         .ensure_ready()

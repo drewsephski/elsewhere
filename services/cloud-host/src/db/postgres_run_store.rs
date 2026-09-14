@@ -8,6 +8,8 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::auth::LEGACY_LOCAL_OWNER;
+
 pub struct PostgresRunStore {
     pool: PgPool,
 }
@@ -45,12 +47,13 @@ impl RunStore for PostgresRunStore {
         sqlx::query(
             r#"
             INSERT INTO agent_runs (
-                id, request_id, bot_id, conversation_id, computer_id, model,
+                id, owner_id, request_id, bot_id, conversation_id, computer_id, model,
                 status, step_count, started_at, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, 'running', 0, $7, $7, $7)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'running', 0, $8, $8, $8)
             "#,
         )
         .bind(&run_id)
+        .bind(LEGACY_LOCAL_OWNER)
         .bind(&params.request_id)
         .bind(&params.bot_id)
         .bind(&params.conversation_id)
@@ -278,14 +281,14 @@ mod tests {
         let bot_id = Uuid::new_v4().to_string();
         let conv_id = Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO bots (id, name, system_prompt, model) VALUES ($1, 't', '', $2)",
+            "INSERT INTO bots (id, owner_id, name, system_prompt, model) VALUES ($1, 'legacy-local', 't', '', $2)",
         )
         .bind(&bot_id)
         .bind(DEFAULT_MODEL)
         .execute(&pool)
         .await
         .unwrap();
-        sqlx::query("INSERT INTO conversations (id, bot_id) VALUES ($1, $2)")
+        sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'legacy-local', $2)")
             .bind(&conv_id)
             .bind(&bot_id)
             .execute(&pool)
