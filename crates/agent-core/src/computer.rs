@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,4 +72,11 @@ pub trait AgentComputer: Send + Sync {
     async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError>;
 
     async fn exec(&self, command: &str) -> Result<ExecResult, ComputerError>;
+
+    /// Headless browser automation inside the agent computer (Sprite guest). Default: unavailable.
+    async fn browser_invoke(&self, _action: &str, _args: &Value) -> Result<Value, ComputerError> {
+        Err(ComputerError::SandboxRejected(
+            "browser automation is not available on this computer".into(),
+        ))
+    }
 }

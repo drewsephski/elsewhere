@@ -13,7 +13,10 @@ use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use futures_util::FutureExt;
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
-use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
+use sprite_computer::{
+    browser_workload_network_policy, default_deny_network_policy, SpriteComputer,
+    SpriteComputerConfig,
+};
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
@@ -296,7 +299,7 @@ async fn execute_run(
         Arc::new(AllowAllApprovalGate)
     };
 
-    ctx.instructions.push_str(&format!("\n\nDeliverables: save final files directly inside {} using your computer tools. This directory belongs to this assignment. Downloads support up to 20 top-level files, 1 MB each, 5 MB total. Include a clear final summary. File creation and commands still require approval.", crate::results::output_directory(&input.records.run_id)));
+    ctx.instructions.push_str(&format!("\n\nDeliverables: save final files directly inside {} using your computer tools. This directory belongs to this assignment. Downloads support up to 20 top-level files, 1 MB each, 5 MB total. Include a clear final summary. File creation, shell commands, and browser mutations still require approval.", crate::results::output_directory(&input.records.run_id)));
     let shared = SharedRunDeps {
         computer: computer.clone(),
         store,
@@ -416,6 +419,11 @@ async fn build_computer(
     }
 
     let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
+    let network_policy = if config.browser_enabled {
+        browser_workload_network_policy()
+    } else {
+        default_deny_network_policy()
+    };
     let computer = SpriteComputer::new(SpriteComputerConfig {
         base_url: config.sprites_api_base.clone(),
         token: config.sprite_token.clone(),
@@ -423,8 +431,10 @@ async fn build_computer(
         workspace_root: "/workspace".into(),
         request_timeout: Duration::from_secs(120),
         auto_create: true,
-        network_policy: default_deny_network_policy(),
+        network_policy,
         exec_timeout: Duration::from_secs(60),
+        browser_enabled: config.browser_enabled,
+        browser_exec_timeout: Duration::from_secs(120),
     })
     .map_err(|e| format!("SpriteComputer: {e}"))?;
 

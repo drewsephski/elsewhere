@@ -33,6 +33,7 @@ pub struct Config {
     pub codex_profiles_dir: Option<PathBuf>,
     pub tool_approval_timeout_secs: u64,
     pub enforce_tool_approvals_internal: bool,
+    pub browser_enabled: bool,
 }
 
 impl Config {
@@ -101,6 +102,16 @@ impl Config {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
 
+        let browser_enabled = match env::var("ELSEWHERE_BROWSER_ENABLED")
+            .ok()
+            .filter(|v| !v.is_empty())
+        {
+            Some(v) if v == "0" || v.eq_ignore_ascii_case("false") => false,
+            Some(v) if v == "1" || v.eq_ignore_ascii_case("true") => true,
+            Some(_) => true,
+            None => true,
+        };
+
         let codex_executable = env::var("CODEX_EXECUTABLE")
             .ok()
             .map(PathBuf::from)
@@ -141,6 +152,7 @@ impl Config {
             codex_profiles_dir,
             tool_approval_timeout_secs,
             enforce_tool_approvals_internal,
+            browser_enabled,
         })
     }
 
@@ -160,6 +172,7 @@ impl Config {
             sprites_api_base = %self.sprites_api_base,
             max_concurrent_runs = self.max_concurrent_runs,
             run_timeout_secs = self.run_timeout_secs,
+            browser_enabled = self.browser_enabled,
             default_model = DEFAULT_MODEL,
             "cloud-host configuration loaded"
         );

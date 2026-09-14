@@ -54,6 +54,8 @@ async fn run_live() -> Result<(), Box<dyn std::error::Error>> {
         auto_create: true,
         network_policy: default_deny_network_policy(),
         exec_timeout: Duration::from_secs(60),
+        browser_enabled: false,
+        browser_exec_timeout: Duration::from_secs(120),
     };
     let computer = Arc::new(SpriteComputer::new(config)?);
     run_scripted_agent(computer).await?;

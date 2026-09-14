@@ -13,8 +13,10 @@
 //! For CI-safe checks without Fly credentials, use `agent_cloud_proof` (mock path).
 
 use agent_core::AgentComputer;
+use serde_json::json;
 use sprite_computer::{
-    default_deny_network_policy, SpriteComputer, SpriteComputerConfig,
+    browser_workload_network_policy, default_deny_network_policy, SpriteComputer,
+    SpriteComputerConfig,
 };
 use std::path::PathBuf;
 use std::time::Duration;
@@ -96,6 +98,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_url = std::env::var("SPRITES_API_BASE")
         .unwrap_or_else(|_| sprite_computer::DEFAULT_API_BASE.into());
 
+    let browser_smoke = std::env::var("ELSEWHERE_BROWSER_SMOKE")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
     let config = SpriteComputerConfig {
         base_url,
         token,
@@ -103,8 +110,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         workspace_root: "/workspace".into(),
         request_timeout: Duration::from_secs(120),
         auto_create: true,
-        network_policy: default_deny_network_policy(),
+        network_policy: if browser_smoke {
+            browser_workload_network_policy()
+        } else {
+            default_deny_network_policy()
+        },
         exec_timeout: Duration::from_secs(60),
+        browser_enabled: browser_smoke,
+        browser_exec_timeout: Duration::from_secs(120),
     };
 
     let computer = SpriteComputer::new(config)?;
@@ -144,6 +157,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .create_checkpoint(Some("Elsewhere Phase 3A proof"))
         .await?;
     println!("checkpoint created: {}", checkpoint.id);
+
+    if browser_smoke {
+        let navigate = computer
+            .browser_invoke(
+                "navigate",
+                &json!({ "url": "https://example.com" }),
+            )
+            .await?;
+        println!("browser navigate: {navigate}");
+        let snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
+        println!("browser snapshot: {snapshot}");
+    }
 
     println!("smoke test passed (sprite left running)");
     Ok(())

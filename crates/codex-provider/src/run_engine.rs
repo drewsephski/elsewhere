@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use agent_core::{
     AgentLoopContext, RunEngine, RunEngineKind, RuntimeError, SharedRunDeps, ToolRunContext,
-    DEFAULT_MODEL,
+    ALL_COMPUTER_TOOL_NAMES, DEFAULT_MODEL,
 };
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
@@ -31,7 +31,7 @@ use crate::run_persistence::{
 };
 use agent_core::MessageStatus;
 
-const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for computer operations. Do not attempt to access the host environment. Request approval by invoking the workspace tool: Elsewhere pauses protected operations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals.";
+const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals.";
 
 #[derive(Debug, Clone)]
 pub struct CodexRunEngineConfig {
@@ -267,7 +267,7 @@ impl CodexRunEngine {
         let instructions = compose_instructions(&ctx.instructions);
         if using_real_codex {
             if let Err(err) = ensure_codex_mcp_tool_exposure_supported() {
-                cleanup_run(client, mcp).await;
+                cleanup_run(client, mcp, None).await;
                 return map_boot_failure(&shared, &ctx, err).await;
             }
         }
@@ -295,7 +295,7 @@ impl CodexRunEngine {
         {
             Ok(id) => id,
             Err(()) => {
-                cleanup_run(client, mcp).await;
+                cleanup_run(client, mcp, None).await;
                 return Ok(());
             }
         };
@@ -311,7 +311,7 @@ impl CodexRunEngine {
             .await
             .is_err()
             {
-                cleanup_run(client, mcp).await;
+                cleanup_run(client, mcp, None).await;
                 return Ok(());
             }
         }
@@ -322,18 +322,13 @@ impl CodexRunEngine {
         {
             Ok(tools) => tools,
             Err(err) => {
-                cleanup_run(client, mcp).await;
+                cleanup_run(client, mcp, None).await;
                 return map_boot_failure(&shared, &ctx, err).await;
             }
         };
-        for required in [
-            "workspace_list",
-            "workspace_read",
-            "workspace_write",
-            "workspace_exec",
-        ] {
+        for required in ALL_COMPUTER_TOOL_NAMES {
             if !tools.iter().any(|name| name == required) {
-                cleanup_run(client, mcp).await;
+                cleanup_run(client, mcp, None).await;
                 fail_run(
                     &shared,
                     &ctx,
@@ -348,31 +343,25 @@ impl CodexRunEngine {
         }
 
         let mut notifications = client.notifications();
-        let turn_id = match tokio::time::timeout(
-            self.config.turn_start_timeout,
-            client.turn_start(&thread_id, &user_text, self.config.turn_start_timeout),
+        let mut active_thread_id = thread_id;
+        let turn_id = match start_codex_turn(
+            &client,
+            &shared,
+            &ctx,
+            &thread_config,
+            self.config.thread_start_timeout,
+            &mut active_thread_id,
+            &user_text,
         )
         .await
         {
-            Ok(Ok(id)) => id,
-            Ok(Err(err)) => {
-                cleanup_run(client, mcp).await;
-                return map_boot_failure(&shared, &ctx, err).await;
-            }
-            Err(_) => {
-                cleanup_run(client, mcp).await;
-                fail_run(
-                    &shared,
-                    &ctx,
-                    "codex_turn_start_timeout",
-                    "Codex turn/start timed out",
-                    "",
-                    0,
-                )
-                .await?;
+            Ok(id) => id,
+            Err(()) => {
+                cleanup_run(client, mcp, None).await;
                 return Ok(());
             }
         };
+        let thread_id = active_thread_id;
 
         tracing::info!(
             target: "elsewhere_run_engine",
@@ -422,7 +411,7 @@ impl CodexRunEngine {
         let run_outcome = match turn_result {
             Ok(Ok(outcome)) => outcome,
             Ok(Err(err)) => {
-                cleanup_run(client, mcp).await;
+                cleanup_run_with_turn(client, mcp, &state).await;
                 return Err(err);
             }
             Err(_) => {
@@ -438,7 +427,7 @@ impl CodexRunEngine {
                 tokio::time::sleep(self.config.interrupt_grace).await;
                 let partial = state.lock().await.assistant.partial_output();
                 finalize_interrupted(&shared, &ctx, &partial, "run_timeout").await?;
-                cleanup_run(client, mcp).await;
+                cleanup_run_with_turn(client, mcp, &state).await;
                 return Ok(());
             }
         };
@@ -499,7 +488,7 @@ impl CodexRunEngine {
             }
         }
 
-        cleanup_run(client, mcp).await;
+        cleanup_run_with_turn(client, mcp, &state).await;
         Ok(())
     }
 }
@@ -585,6 +574,45 @@ async fn open_elsewhere_codex_thread(
                         .store
                         .clear_codex_thread_id(&ctx.conversation_id)
                         .await;
+                } else if is_codex_active_writer_error(&err) {
+                    tracing::warn!(
+                        conversation_id = %ctx.conversation_id,
+                        thread_id = %existing,
+                        error = %err,
+                        "codex thread has orphaned active writer; archiving and retrying resume"
+                    );
+                    archive_codex_thread_best_effort(client, &existing).await;
+                    match tokio::time::timeout(
+                        timeout,
+                        client.thread_resume_elsewhere(&existing, thread_config),
+                    )
+                    .await
+                    {
+                        Ok(Ok(id)) => return Ok(id),
+                        Ok(Err(retry_err)) => {
+                            tracing::warn!(
+                                conversation_id = %ctx.conversation_id,
+                                error = %retry_err,
+                                "codex thread resume still failed after archive; starting a new thread"
+                            );
+                            let _ = shared
+                                .store
+                                .clear_codex_thread_id(&ctx.conversation_id)
+                                .await;
+                        }
+                        Err(_) => {
+                            let _ = fail_run(
+                                shared,
+                                ctx,
+                                "codex_thread_timeout",
+                                "Codex thread/resume timed out after archive",
+                                "",
+                                0,
+                            )
+                            .await;
+                            return Err(());
+                        }
+                    }
                 } else {
                     let _ = map_boot_failure(shared, ctx, err).await;
                     return Err(());
@@ -651,15 +679,167 @@ fn codex_compact_milestone_due(
     }
 }
 
+fn codex_error_message_lower(err: &CodexProviderError) -> Option<String> {
+    match err {
+        CodexProviderError::Protocol(msg) | CodexProviderError::Process(msg) => {
+            Some(msg.to_lowercase())
+        }
+        _ => None,
+    }
+}
+
 fn is_stale_codex_thread_resume_error(err: &CodexProviderError) -> bool {
-    let message = match err {
-        CodexProviderError::Protocol(msg) | CodexProviderError::Process(msg) => msg.to_lowercase(),
-        _ => return false,
+    let Some(message) = codex_error_message_lower(err) else {
+        return false;
     };
     message.contains("thread not found")
         || message.contains("unknown thread")
         || message.contains("thread does not exist")
         || message.contains("no such thread")
+}
+
+fn is_codex_active_writer_error(err: &CodexProviderError) -> bool {
+    codex_error_message_lower(err)
+        .is_some_and(|message| message.contains("active writer"))
+}
+
+async fn archive_codex_thread_best_effort(client: &CodexAppServerClient, thread_id: &str) {
+    if let Err(err) = client.thread_archive(thread_id).await {
+        tracing::warn!(
+            thread_id = %thread_id,
+            error = %err,
+            "codex thread/archive failed during lock recovery"
+        );
+    }
+}
+
+async fn start_codex_turn(
+    client: &CodexAppServerClient,
+    shared: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    thread_config: &ElsewhereThreadConfig,
+    thread_open_timeout: Duration,
+    thread_id: &mut String,
+    user_text: &str,
+) -> Result<String, ()> {
+    let turn_start_timeout = thread_open_timeout;
+    let first = tokio::time::timeout(
+        turn_start_timeout,
+        client.turn_start(thread_id, user_text, turn_start_timeout),
+    )
+    .await;
+
+    let needs_reopen = match first {
+        Ok(Ok(turn_id)) => return Ok(turn_id),
+        Ok(Err(err)) if is_codex_active_writer_error(&err) => {
+            tracing::warn!(
+                conversation_id = %ctx.conversation_id,
+                thread_id = %thread_id,
+                error = %err,
+                "codex turn blocked by orphaned writer; archiving thread and retrying"
+            );
+            archive_codex_thread_best_effort(client, thread_id).await;
+            match tokio::time::timeout(
+                turn_start_timeout,
+                client.turn_start(thread_id, user_text, turn_start_timeout),
+            )
+            .await
+            {
+                Ok(Ok(turn_id)) => return Ok(turn_id),
+                Ok(Err(retry_err)) if is_codex_active_writer_error(&retry_err) => true,
+                Ok(Err(retry_err)) => {
+                    let _ = map_boot_failure(shared, ctx, retry_err).await;
+                    return Err(());
+                }
+                Err(_) => {
+                    let _ = fail_run(
+                        shared,
+                        ctx,
+                        "codex_turn_start_timeout",
+                        "Codex turn/start timed out after archive",
+                        "",
+                        0,
+                    )
+                    .await;
+                    return Err(());
+                }
+            }
+        }
+        Ok(Err(err)) => {
+            let _ = map_boot_failure(shared, ctx, err).await;
+            return Err(());
+        }
+        Err(_) => {
+            let _ = fail_run(
+                shared,
+                ctx,
+                "codex_turn_start_timeout",
+                "Codex turn/start timed out",
+                "",
+                0,
+            )
+            .await;
+            return Err(());
+        }
+    };
+
+    if needs_reopen {
+        tracing::warn!(
+            conversation_id = %ctx.conversation_id,
+            thread_id = %thread_id,
+            "codex thread still locked after archive; starting a fresh thread"
+        );
+        let _ = shared.store.clear_codex_thread_id(&ctx.conversation_id).await;
+        *thread_id = match open_elsewhere_codex_thread(
+            client,
+            shared,
+            ctx,
+            thread_config,
+            thread_open_timeout,
+        )
+        .await
+        {
+            Ok(id) => id,
+            Err(()) => return Err(()),
+        };
+    }
+
+    match tokio::time::timeout(
+        turn_start_timeout,
+        client.turn_start(thread_id, user_text, turn_start_timeout),
+    )
+    .await
+    {
+        Ok(Ok(turn_id)) => Ok(turn_id),
+        Ok(Err(err)) => {
+            let _ = map_boot_failure(shared, ctx, err).await;
+            Err(())
+        }
+        Err(_) => {
+            let _ = fail_run(
+                shared,
+                ctx,
+                "codex_turn_start_timeout",
+                "Codex turn/start timed out",
+                "",
+                0,
+            )
+            .await;
+            Err(())
+        }
+    }
+}
+
+async fn cleanup_run_with_turn(
+    client: CodexAppServerClient,
+    mcp: ComputerMcpServer,
+    state: &Arc<Mutex<TurnRunState>>,
+) {
+    let active = state.lock().await;
+    let thread_id = active.thread_id.clone();
+    let turn_id = active.turn_id.clone();
+    drop(active);
+    cleanup_run(client, mcp, Some((thread_id, turn_id))).await;
 }
 
 async fn maybe_compact_codex_thread(
@@ -719,7 +899,16 @@ async fn maybe_compact_codex_thread(
     }
 }
 
-async fn cleanup_run(client: CodexAppServerClient, mcp: ComputerMcpServer) {
+async fn cleanup_run(
+    client: CodexAppServerClient,
+    mcp: ComputerMcpServer,
+    active_turn: Option<(String, String)>,
+) {
+    if let Some((thread_id, turn_id)) = active_turn {
+        let _ = client
+            .turn_interrupt(&thread_id, &turn_id, Duration::from_secs(30))
+            .await;
+    }
     let _ = tokio::time::timeout(Duration::from_secs(30), client.shutdown()).await;
     mcp.shutdown().await;
 }
@@ -1068,6 +1257,11 @@ mod continuity_tests {
         ));
         assert!(!is_stale_codex_thread_resume_error(
             &CodexProviderError::Timeout("thread/resume".into())
+        ));
+        assert!(is_codex_active_writer_error(
+            &CodexProviderError::Protocol(
+                "json-rpc -32600: thread abc already has an active writer".into(),
+            )
         ));
     }
 

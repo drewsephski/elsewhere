@@ -2,9 +2,13 @@ use agent_core::{
     AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
 };
 use async_trait::async_trait;
+use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::browser::{
+    ensure_browser_guest, map_browser_exec_error, BROWSER_CLI, BROWSER_DIR, BROWSER_REQUEST,
+};
 use crate::client::{SpriteClient, SpriteClientConfig};
 use crate::policy::NetworkPolicyConfig;
 use crate::types::{Checkpoint, SpriteError};
@@ -19,6 +23,8 @@ pub struct SpriteComputerConfig {
     pub auto_create: bool,
     pub network_policy: NetworkPolicyConfig,
     pub exec_timeout: Duration,
+    pub browser_enabled: bool,
+    pub browser_exec_timeout: Duration,
 }
 
 impl SpriteComputerConfig {
@@ -39,17 +45,23 @@ pub struct SpriteComputer {
     client: Arc<SpriteClient>,
     workspace_root: String,
     exec_timeout: Duration,
+    browser_enabled: bool,
+    browser_exec_timeout: Duration,
 }
 
 impl SpriteComputer {
     pub fn new(config: SpriteComputerConfig) -> Result<Self, SpriteError> {
         let exec_timeout = config.exec_timeout;
+        let browser_exec_timeout = config.browser_exec_timeout;
+        let browser_enabled = config.browser_enabled;
         let workspace_root = config.workspace_root.clone();
         let client = Arc::new(SpriteClient::new(config.into_client_config())?);
         Ok(Self {
             client,
             workspace_root,
             exec_timeout,
+            browser_enabled,
+            browser_exec_timeout,
         })
     }
 
@@ -117,6 +129,10 @@ impl AgentComputer for SpriteComputer {
             ));
         }
 
+        if self.browser_enabled {
+            ensure_browser_guest(&self.client, self.browser_exec_timeout).await?;
+        }
+
         Ok(ComputerInfo {
             ready: true,
             protocol_version: 1,
@@ -165,6 +181,48 @@ impl AgentComputer for SpriteComputer {
             stdout,
             stderr,
             exit_code,
+        })
+    }
+
+    async fn browser_invoke(&self, action: &str, args: &Value) -> Result<Value, ComputerError> {
+        if !self.browser_enabled {
+            return Err(ComputerError::SandboxRejected(
+                "browser automation is disabled for this computer".into(),
+            ));
+        }
+
+        ensure_browser_guest(&self.client, self.browser_exec_timeout).await?;
+
+        let mut request = args.clone();
+        if let Some(obj) = request.as_object_mut() {
+            obj.insert("action".into(), json!(action));
+        }
+        let payload = serde_json::to_string(&request).map_err(|e| {
+            ComputerError::MalformedArguments(format!("browser request JSON: {e}"))
+        })?;
+        self.client
+            .fs_write(BROWSER_REQUEST, payload.as_bytes(), true)
+            .await
+            .map_err(map_sprite_error)?;
+
+        let command = format!(
+            "export PLAYWRIGHT_BROWSERS_PATH={BROWSER_DIR}/browsers; \
+             export PATH={BROWSER_DIR}/node-runtime/bin:$PATH; \
+             node {BROWSER_CLI} --request {BROWSER_REQUEST}"
+        );
+        let (stdout, stderr, exit_code) = self
+            .client
+            .exec_http(&command, &self.workspace_root, self.browser_exec_timeout)
+            .await
+            .map_err(map_sprite_error)?;
+
+        if exit_code != 0 {
+            return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
+        }
+
+        let line = stdout.lines().last().unwrap_or(stdout.trim());
+        serde_json::from_str(line).map_err(|e| {
+            ComputerError::ExecutionFailed(format!("browser CLI returned invalid JSON: {e}"))
         })
     }
 }

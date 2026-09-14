@@ -2,6 +2,38 @@ export function workStatus(status: string): string {
   return ({ queued: "Waiting", running: "Working", completed: "Finished", complete: "Finished", failed: "Needs attention", interrupted: "Interrupted", cancelled: "Stopped" } as Record<string, string>)[status] ?? status;
 }
 
+function toolLabel(tool: string, payload: Record<string, unknown>): string | null {
+  const tools: Record<string, string> = {
+    workspace_list: "Exploring files",
+    workspace_read: "Reading a file",
+    workspace_write: "Writing a file",
+    workspace_exec: "Working in the terminal",
+    browser_navigate: "Opening a web page",
+    browser_snapshot: "Inspecting the web page",
+    browser_click: "Clicking on the page",
+    browser_type: "Typing on the page",
+    browser_screenshot: "Capturing a screenshot",
+    browser_download: "Downloading a file",
+  };
+  const base = tools[tool];
+  if (!base) {
+    return null;
+  }
+  const args =
+    payload.arguments && typeof payload.arguments === "object"
+      ? (payload.arguments as Record<string, unknown>)
+      : null;
+  if (tool === "browser_navigate" && args && typeof args.url === "string") {
+    try {
+      const host = new URL(args.url).hostname;
+      return `${base} (${host})`;
+    } catch {
+      return base;
+    }
+  }
+  return base;
+}
+
 export function activityText(event: string, payload: Record<string, unknown>): string | null {
   if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
   if (event === "queued") return "Work saved. Waiting for an available computer.";
@@ -9,8 +41,8 @@ export function activityText(event: string, payload: Record<string, unknown>): s
   if (event === "terminal") return typeof payload.status === "string" ? workStatus(payload.status) : "Work updated";
   if (event === "cancelled") return "Work stopped before it started.";
   const tool = typeof payload.tool === "string" ? payload.tool : typeof payload.name === "string" ? payload.name : "";
-  const tools: Record<string, string> = { workspace_list: "Exploring files", workspace_read: "Reading a file", workspace_write: "Writing a file", workspace_exec: "Working in the terminal" };
-  if (tool && tools[tool]) return tools[tool];
+  const labeled = tool ? toolLabel(tool, payload) : null;
+  if (labeled) return labeled;
   if (typeof payload.detail === "string") return payload.detail;
   if (typeof payload.status === "string") return workStatus(payload.status);
   if (/delta|token|assistant/.test(event)) return null;

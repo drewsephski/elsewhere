@@ -6,7 +6,9 @@ use crate::approval::{
     AllowAllApprovalGate, ApprovalDecision, ApprovalError, ToolApprovalContext, ToolApprovalGate,
     ToolRunContext, MAX_EXEC_COMMAND_CHARS,
 };
+use crate::browser_tools::{browser_openai_tool_definitions, dispatch_browser_tool};
 use crate::computer::{AgentComputer, ComputerError};
+use crate::tool_catalog::is_browser_tool;
 
 pub const MAX_AGENT_TOOL_STEPS: usize = 25;
 
@@ -46,7 +48,7 @@ impl ToolError {
 }
 
 pub fn openai_tool_definitions() -> Vec<Value> {
-    vec![
+    let mut tools = vec![
         json!({
             "type": "function",
             "name": "workspace_list",
@@ -104,7 +106,9 @@ pub fn openai_tool_definitions() -> Vec<Value> {
             },
             "strict": true
         }),
-    ]
+    ];
+    tools.extend(browser_openai_tool_definitions());
+    tools
 }
 
 pub async fn dispatch_tool(
@@ -159,12 +163,16 @@ pub async fn dispatch_tool_with_gate(
     }
 
     let started = Instant::now();
-    let result = match name {
-        "workspace_list" => workspace_list(computer, &args).await,
-        "workspace_read" => workspace_read(computer, &args).await,
-        "workspace_write" => workspace_write(computer, &args).await,
-        "workspace_exec" => workspace_exec(computer, &args).await,
-        other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
+    let result = if is_browser_tool(name) {
+        dispatch_browser_tool(computer, name, &args).await
+    } else {
+        match name {
+            "workspace_list" => workspace_list(computer, &args).await,
+            "workspace_read" => workspace_read(computer, &args).await,
+            "workspace_write" => workspace_write(computer, &args).await,
+            "workspace_exec" => workspace_exec(computer, &args).await,
+            other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
+        }
     }?;
 
     let mut envelope = result;

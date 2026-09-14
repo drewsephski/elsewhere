@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use agent_core::{dispatch_tool_with_gate, AgentComputer, ToolApprovalGate, ToolRunContext, ToolError};
+use agent_core::{dispatch_tool_with_gate, is_browser_tool, AgentComputer, ToolApprovalGate, ToolRunContext, ToolError};
 use rmcp::{
     ErrorData, ServerHandler,
     model::{
@@ -102,6 +102,75 @@ fn tool_definitions() -> Vec<Tool> {
                 "additionalProperties": false
             })),
         ),
+        Tool::new(
+            "browser_navigate",
+            "Open a URL in the agent computer headless browser.",
+            schema_object(json!({
+                "type": "object",
+                "properties": { "url": { "type": "string" } },
+                "required": ["url"],
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "browser_snapshot",
+            "List interactive elements on the current page with refs for click/type.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "browser_click",
+            "Click an element by ref from browser_snapshot.",
+            schema_object(json!({
+                "type": "object",
+                "properties": { "ref": { "type": "string" } },
+                "required": ["ref"],
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "browser_type",
+            "Type into an element by ref from browser_snapshot.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {
+                    "ref": { "type": "string" },
+                    "text": { "type": "string" },
+                    "submit": { "type": "boolean" }
+                },
+                "required": ["ref", "text"],
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "browser_screenshot",
+            "Save a PNG screenshot under /workspace.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "fullPage": { "type": "boolean" }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "browser_download",
+            "Download a URL into a workspace file.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string" },
+                    "path": { "type": "string" }
+                },
+                "required": ["url", "path"],
+                "additionalProperties": false
+            })),
+        ),
     ]
 }
 
@@ -109,7 +178,7 @@ impl ServerHandler for ComputerHandler {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions(
-                "Elsewhere computer tools. All paths must be under /workspace on the agent VM.",
+                "Elsewhere computer tools. Paths must be under /workspace. Browser tools run headless Chromium inside the agent VM, not on the runner host.",
             )
     }
 
@@ -174,6 +243,15 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
             Ok(())
         }
         "workspace_exec" => Ok(()),
+        "browser_screenshot" | "browser_download" => {
+            let path = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| ComputerMcpError::MalformedArguments("missing path".into()))?;
+            require_workspace_path(path)?;
+            Ok(())
+        }
+        name if is_browser_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
             "unknown tool: {other}"
         ))),

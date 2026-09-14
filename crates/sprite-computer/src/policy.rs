@@ -11,6 +11,17 @@ pub fn default_deny_network_policy() -> NetworkPolicyConfig {
     }
 }
 
+/// Allow outbound HTTPS/HTTP for headless browser workloads inside the Sprite.
+pub fn browser_workload_network_policy() -> NetworkPolicyConfig {
+    NetworkPolicyConfig {
+        rules: vec![NetworkPolicyRuleBody {
+            domain: Some("*".into()),
+            action: Some("allow".into()),
+            include: None,
+        }],
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NetworkPolicyConfig {
     pub rules: Vec<NetworkPolicyRuleBody>,

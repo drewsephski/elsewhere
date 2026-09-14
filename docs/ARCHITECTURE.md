@@ -12,6 +12,8 @@ Current cloud product: [authenticated pairing](PHASE_3C1.md), [background work](
 | `agent-core` | `crates/agent-core/` | Host-independent Luna agent loop |
 | `sprite-computer` | `crates/sprite-computer/` | Fly Sprites `AgentComputer` adapter |
 
+Browser automation inside Sprites: [BROWSER.md](BROWSER.md).
+
 Desktop and web are separate bundles. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
 
 ## Runtime boundary (portable core)

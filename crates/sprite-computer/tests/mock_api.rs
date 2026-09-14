@@ -276,6 +276,8 @@ async fn sprite_computer_enforces_workspace_boundary() {
         auto_create: false,
         network_policy: default_deny_network_policy(),
         exec_timeout: Duration::from_secs(5),
+        browser_enabled: false,
+        browser_exec_timeout: Duration::from_secs(120),
     };
     let computer = SpriteComputer::new(config).unwrap();
     let err = computer.read_file("/etc/passwd").await.unwrap_err();

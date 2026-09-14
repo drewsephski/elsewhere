@@ -2,11 +2,12 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, ComputerSummary, RunSummary } from "@/lib/api-types";
+import { useRunEventStream } from "@/hooks/use-run-event-stream";
 import { workStatus } from "@/lib/work-events";
 import { cn } from "cn";
 import { Monitor } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface ComputerStatePanelProps {
   bot: BotSummary | null;
@@ -23,6 +24,21 @@ export function ComputerStatePanel({
 }: ComputerStatePanelProps) {
   const [computer, setComputer] = useState<ComputerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const streamRunId =
+    activeRun && (activeRun.status === "queued" || activeRun.status === "running")
+      ? activeRun.runId
+      : null;
+  const { timeline } = useRunEventStream(streamRunId);
+  const latestActivity = useMemo(() => {
+    for (let i = timeline.length - 1; i >= 0; i -= 1) {
+      const item = timeline[i];
+      if (item.kind === "text") {
+        return item.text;
+      }
+    }
+    return null;
+  }, [timeline]);
 
   useEffect(() => {
     if (!bot?.computerId) {
@@ -94,7 +110,9 @@ export function ComputerStatePanel({
                   {workStatus(activeRun.status)}
                 </span>
                 {" · "}
-                <span className="line-clamp-2">{activeRun.task}</span>
+                <span className="line-clamp-2">
+                  {latestActivity ?? activeRun.task}
+                </span>
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">Idle — waiting for your next message.</p>
@@ -151,7 +169,10 @@ export function ComputerStatePanel({
                     Current assignment
                   </p>
                   <p className="mt-1 line-clamp-3 text-white/90">{activeRun.task}</p>
-                  <p className="mt-2 text-xs text-white/55">{workStatus(activeRun.status)}</p>
+                  <p className="mt-2 text-xs text-white/55">
+                    {workStatus(activeRun.status)}
+                    {latestActivity ? ` · ${latestActivity}` : null}
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-white/65">Idle — waiting for your next message.</p>

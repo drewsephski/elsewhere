@@ -3,6 +3,9 @@ use serde_json::{json, Value};
 
 pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
 pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
+pub const MAX_BROWSER_URL_CHARS: usize = 2048;
+
+use crate::tool_catalog::is_browser_tool;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -83,7 +86,11 @@ impl ToolApprovalGate for AllowAllApprovalGate {
 pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
+        "browser_snapshot" | "browser_screenshot" => ToolOperationKind::Read,
         "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
+        name if is_browser_tool(name) && name != "browser_snapshot" && name != "browser_screenshot" => {
+            ToolOperationKind::Mutation
+        }
         _ => ToolOperationKind::Mutation,
     }
 }
@@ -119,6 +126,22 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         "workspace_list" | "workspace_read" => json!({
             "path": args.get("path").and_then(|v| v.as_str()).unwrap_or("")
         }),
+        "browser_navigate" | "browser_download" => {
+            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            let url = truncate_str(url, MAX_BROWSER_URL_CHARS);
+            json!({ "url": url })
+        }
+        "browser_click" | "browser_type" => json!({
+            "ref": args.get("ref").and_then(|v| v.as_str()).unwrap_or(""),
+            "textPreview": args
+                .get("text")
+                .and_then(|v| v.as_str())
+                .map(|t| truncate_str(t, 80))
+        }),
+        "browser_screenshot" => json!({
+            "path": args.get("path").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        "browser_snapshot" => json!({}),
         _ => json!({}),
     }
 }
@@ -139,7 +162,39 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .unwrap_or("");
             format!("Run: {command}")
         }
+        "browser_navigate" => {
+            let url = sanitized.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            format!("Browse: {url}")
+        }
+        "browser_click" => {
+            let ref_id = sanitized.get("ref").and_then(|v| v.as_str()).unwrap_or("");
+            format!("Click {ref_id}")
+        }
+        "browser_type" => {
+            let ref_id = sanitized.get("ref").and_then(|v| v.as_str()).unwrap_or("");
+            format!("Type into {ref_id}")
+        }
+        "browser_download" => {
+            let url = sanitized.get("url").and_then(|v| v.as_str()).unwrap_or("");
+            format!("Download: {url}")
+        }
+        "browser_screenshot" => {
+            let path = sanitized
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("/workspace");
+            format!("Screenshot {path}")
+        }
+        "browser_snapshot" => "Inspect web page".into(),
         other => format!("Approve {other}"),
+    }
+}
+
+fn truncate_str(value: &str, max: usize) -> String {
+    if value.len() > max {
+        value[..max].to_string()
+    } else {
+        value.to_string()
     }
 }
 
@@ -155,7 +210,11 @@ mod tests {
             ToolOperationKind::Read
         );
         assert_eq!(
-            operation_kind_for_tool("workspace_read"),
+            operation_kind_for_tool("browser_snapshot"),
+            ToolOperationKind::Read
+        );
+        assert_eq!(
+            operation_kind_for_tool("browser_screenshot"),
             ToolOperationKind::Read
         );
     }
@@ -164,6 +223,10 @@ mod tests {
     fn mutation_tools_classified() {
         assert_eq!(
             operation_kind_for_tool("workspace_write"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("browser_navigate"),
             ToolOperationKind::Mutation
         );
         assert_eq!(

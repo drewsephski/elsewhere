@@ -1,17 +1,13 @@
 use std::path::PathBuf;
 
+use agent_core::ALL_COMPUTER_TOOL_NAMES;
 use serde_json::{json, Value};
 
 use crate::error::CodexProviderError;
 
 pub const MCP_SERVER_NAME: &str = "elsewhere";
 
-pub const ELSEWHERE_ENABLED_MCP_TOOLS: &[&str] = &[
-    "workspace_list",
-    "workspace_read",
-    "workspace_write",
-    "workspace_exec",
-];
+pub const ELSEWHERE_ENABLED_MCP_TOOLS: &[&str] = ALL_COMPUTER_TOOL_NAMES;
 
 pub const ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES: &[&str] = &["deferred", "code_mode"];
 
@@ -73,7 +69,13 @@ pub fn build_elsewhere_thread_start_params(
                 "workspace_list": { "approval_mode": "approve" },
                 "workspace_read": { "approval_mode": "approve" },
                 "workspace_write": { "approval_mode": "approve" },
-                "workspace_exec": { "approval_mode": "approve" }
+                "workspace_exec": { "approval_mode": "approve" },
+                "browser_navigate": { "approval_mode": "approve" },
+                "browser_snapshot": { "approval_mode": "approve" },
+                "browser_click": { "approval_mode": "approve" },
+                "browser_type": { "approval_mode": "approve" },
+                "browser_screenshot": { "approval_mode": "approve" },
+                "browser_download": { "approval_mode": "approve" }
             }
         }
     });
