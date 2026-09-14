@@ -4,7 +4,8 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ProviderStatus } from "@/lib/api-types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
-import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Sparkles } from "@/components/icons/lucide";
+import { CodexIcon } from "@/components/icons/codex-icon";
+import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from "@/components/icons/lucide";
 import { useCallback, useEffect, useState } from "react";
 
 type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
@@ -183,7 +184,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
             {busy ? (
               <Loader2 className="size-4" aria-hidden />
             ) : (
-              <Sparkles className="size-4" aria-hidden />
+              <CodexIcon className="size-4" />
             )}
             {busy ? "Preparing sign-in…" : "Connect ChatGPT"}
           </Button>
