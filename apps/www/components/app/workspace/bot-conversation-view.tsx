@@ -43,6 +43,7 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [optimisticUserMessage, setOptimisticUserMessage] = useState<string | null>(null);
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
   const requestRef = useRef<{ message: string; key: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -55,7 +56,7 @@ export function BotConversationView({
   }, [runs, liveRunId]);
 
   const streamRunId = activeRun && runIsActive(activeRun.status) ? activeRun.runId : null;
-  const { detail: liveDetail, timeline, error: streamError, connection } =
+  const { detail: liveDetail, timeline, assistantStream, error: streamError, connection } =
     useRunEventStream(streamRunId);
   const browserPreview = useOptionalBrowserPreviewContext();
 
@@ -224,6 +225,8 @@ export function BotConversationView({
     setPending(true);
     setError(null);
     const trimmed = message.trim();
+    setOptimisticUserMessage(trimmed);
+    setMessage("");
     if (requestRef.current?.message !== trimmed) {
       requestRef.current = { message: trimmed, key: crypto.randomUUID() };
     }
@@ -247,10 +250,11 @@ export function BotConversationView({
       const created = body as CreateRunResponse;
       setConversationId(created.conversationId);
       setLiveRunId(created.runId);
-      setMessage("");
       requestRef.current = null;
+      setOptimisticUserMessage(null);
       await loadRuns(created.conversationId);
     } catch (err) {
+      setOptimisticUserMessage(null);
       setError(err instanceof Error ? err.message : "Could not delegate work");
     } finally {
       setPending(false);
@@ -337,14 +341,21 @@ export function BotConversationView({
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
-            const assistantText =
-              isLive && liveDetail?.assistantResult
-                ? liveDetail.assistantResult
-                : undefined;
+            const assistantText = isLive
+              ? assistantStream.answerText ||
+                (assistantStream.streaming ? "" : liveDetail?.assistantResult)
+              : undefined;
+            const showOptimisticUser =
+              isLive &&
+              optimisticUserMessage &&
+              run.runId === liveRunId &&
+              !run.task?.trim();
 
             return (
               <div key={run.runId} className="space-y-3">
-                <UserPromptBubble sentAt={run.createdAt}>{run.task}</UserPromptBubble>
+                <UserPromptBubble sentAt={run.createdAt}>
+                  {showOptimisticUser ? optimisticUserMessage : run.task}
+                </UserPromptBubble>
 
                 {(isLive ? timeline : []).map((item) =>
                   item.kind === "approval" ? (
@@ -388,13 +399,26 @@ export function BotConversationView({
                       <p className="text-xs font-medium text-primary">
                         {workStatus(liveDetail?.status ?? run.status)}
                       </p>
+                      {assistantStream.commentaryText ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {assistantStream.commentaryText}
+                        </p>
+                      ) : null}
                       {assistantText ? (
                         <p className="mt-2 whitespace-pre-wrap break-words leading-relaxed">
                           {assistantText}
+                          {assistantStream.streaming ? (
+                            <span
+                              className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
+                              aria-hidden
+                            />
+                          ) : null}
                         </p>
                       ) : (
                         <p className="mt-2 text-muted-foreground">
-                          Your bot is working on this…
+                          {assistantStream.streaming
+                            ? "Composing a reply…"
+                            : "Your bot is working on this…"}
                         </p>
                       )}
                       <ChatResultCards runId={run.runId} />

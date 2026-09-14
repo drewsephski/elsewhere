@@ -173,7 +173,13 @@ pub async fn dispatch_tool_with_gate(
             "workspace_exec" => workspace_exec(computer, &args).await,
             other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
         }
-    }?;
+    };
+
+    if let Err(ToolError::ComputerNotReady(_)) = &result {
+        computer.invalidate_cached_readiness();
+    }
+
+    let result = result?;
 
     let mut envelope = result;
     if let Some(obj) = envelope.as_object_mut() {

@@ -107,6 +107,10 @@ impl SpriteComputer {
 
 #[async_trait]
 impl AgentComputer for SpriteComputer {
+    fn invalidate_cached_readiness(&self) {
+        // SpriteComputer has no in-memory readiness cache; ReadinessCachedComputer wraps this.
+    }
+
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
         let info = self
             .client
@@ -134,15 +138,6 @@ impl AgentComputer for SpriteComputer {
                 return Err(ComputerError::GuestUnavailable(
                     "workspace exec probe failed".into(),
                 ));
-            }
-
-            if self.browser_enabled {
-                ensure_browser_guest(
-                    &self.client,
-                    &self.network_policy,
-                    self.browser_exec_timeout,
-                )
-                .await?;
             }
         }
 

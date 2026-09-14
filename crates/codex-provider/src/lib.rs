@@ -1,6 +1,8 @@
 //! Codex app-server client, MCP bridge integration, and subscription run engine scaffold.
 
 mod assistant_accumulator;
+mod assistant_stream;
+mod run_phases;
 mod client;
 mod compat;
 mod error;

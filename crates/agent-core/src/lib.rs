@@ -11,6 +11,7 @@ mod luna;
 mod model;
 mod run_engine;
 mod runtime;
+mod readiness_cache;
 mod run_store;
 mod tool_catalog;
 mod tools;
@@ -32,6 +33,7 @@ pub use model::{
     ModelError, ResponsesModel,
 };
 pub use fake_computer::FakeAgentComputer;
+pub use readiness_cache::ReadinessCachedComputer;
 pub use run_engine::{
     legacy_local_loop_deps, responses_loop_deps, ResponsesRunEngine, RunEngine, RunEngineKind,
     SharedRunDeps,

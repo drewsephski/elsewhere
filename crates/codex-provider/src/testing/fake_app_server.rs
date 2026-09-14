@@ -52,6 +52,7 @@ pub async fn spawn_fake_app_server_with_mode(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FakeServerMode {
     HappyPath,
+    TextOnly,
     TurnFailed,
     TurnInterrupted,
     WrongThreadNotifications,
@@ -104,7 +105,13 @@ fn handle_fake_request(method: &str, params: serde_json::Value) -> serde_json::V
                     "workspace_list": {},
                     "workspace_read": {},
                     "workspace_write": {},
-                    "workspace_exec": {}
+                    "workspace_exec": {},
+                    "browser_navigate": {},
+                    "browser_snapshot": {},
+                    "browser_click": {},
+                    "browser_type": {},
+                    "browser_screenshot": {},
+                    "browser_download": {}
                 }
             }]
         }),
@@ -133,7 +140,7 @@ async fn emit_turn_sequence(
         thread_id
     };
 
-    if mode != FakeServerMode::WrongThreadNotifications {
+    if mode != FakeServerMode::WrongThreadNotifications && mode != FakeServerMode::TextOnly {
         write_notification(
             writer,
             "item/started",
@@ -171,7 +178,9 @@ async fn emit_turn_sequence(
             }),
         )
         .await?;
+    }
 
+    if mode != FakeServerMode::WrongThreadNotifications {
         write_notification(
             writer,
             "item/agentMessage/delta",
@@ -230,7 +239,9 @@ async fn emit_turn_sequence(
     }
 
     let status = match mode {
-        FakeServerMode::HappyPath | FakeServerMode::WrongThreadNotifications => "completed",
+        FakeServerMode::HappyPath
+        | FakeServerMode::TextOnly
+        | FakeServerMode::WrongThreadNotifications => "completed",
         FakeServerMode::TurnFailed => "failed",
         FakeServerMode::TurnInterrupted => "interrupted",
     };

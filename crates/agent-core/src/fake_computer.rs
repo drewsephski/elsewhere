@@ -18,6 +18,7 @@ pub struct FakeAgentComputer {
 #[derive(Debug, Default)]
 struct FakeState {
     ready: bool,
+    ensure_ready_calls: usize,
     files: HashMap<String, Vec<u8>>,
     listings: HashMap<String, Vec<WorkspaceEntry>>,
     exec_results: HashMap<String, ExecResult>,
@@ -45,6 +46,10 @@ impl FakeAgentComputer {
         self
     }
 
+    pub fn ensure_ready_calls(&self) -> usize {
+        self.inner.lock().unwrap().ensure_ready_calls
+    }
+
     pub fn set_exec_result(mut self, command: &str, result: ExecResult) -> Self {
         self.inner
             .get_mut()
@@ -70,7 +75,8 @@ fn ensure_workspace_path(path: &str, enforce: bool) -> Result<(), ComputerError>
 #[async_trait]
 impl AgentComputer for FakeAgentComputer {
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
-        let state = self.inner.lock().unwrap();
+        let mut state = self.inner.lock().unwrap();
+        state.ensure_ready_calls += 1;
         if !state.ready {
             return Err(ComputerError::NotProvisioned);
         }

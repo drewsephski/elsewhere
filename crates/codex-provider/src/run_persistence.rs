@@ -1,9 +1,15 @@
 use serde_json::{json, Value};
 
+use std::time::{Duration, Instant};
+
 use agent_core::{
     AgentEvent, AgentLoopContext, EventSink, MessageRole, MessageStatus, RuntimeError, RunStore,
     SharedRunDeps, StructuredMessageInput,
 };
+
+use crate::assistant_stream::{phase_to_event_str, CoalescedAssistantDelta};
+const CHECKPOINT_INTERVAL: Duration = Duration::from_secs(2);
+const CHECKPOINT_BYTE_DELTA: usize = 512;
 
 pub(crate) async fn persist_event(
     deps: &SharedRunDeps,
@@ -57,6 +63,89 @@ pub(crate) async fn emit_status(
         detail,
         message: Some(message),
     })?;
+    Ok(())
+}
+
+pub(crate) async fn persist_assistant_delta(
+    deps: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    chunk: &CoalescedAssistantDelta,
+) -> Result<(), RuntimeError> {
+    let payload = json!({
+        "itemId": chunk.item_id,
+        "phase": phase_to_event_str(chunk.phase),
+        "delta": chunk.delta,
+        "cumulativeLength": chunk.cumulative_length,
+    });
+    let receipt = deps
+        .store
+        .append_run_event(&ctx.request_id, "assistant_delta", &payload)
+        .await?;
+    deps.events
+        .emit_durable(receipt.id, "assistant_delta", &payload)?;
+    Ok(())
+}
+
+#[derive(Clone)]
+pub(crate) struct AssistantCheckpointState {
+    pub last_at: Instant,
+    pub last_len: usize,
+    pub last_body: String,
+}
+
+impl Default for AssistantCheckpointState {
+    fn default() -> Self {
+        Self {
+            last_at: Instant::now() - CHECKPOINT_INTERVAL,
+            last_len: 0,
+            last_body: String::new(),
+        }
+    }
+}
+
+pub(crate) async fn maybe_checkpoint_assistant_stream(
+    deps: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    visible_body: &str,
+    checkpoint: &mut AssistantCheckpointState,
+) -> Result<(), RuntimeError> {
+    if visible_body == checkpoint.last_body {
+        return Ok(());
+    }
+    let now = Instant::now();
+    let byte_growth = visible_body.len().saturating_sub(checkpoint.last_len);
+    if now.duration_since(checkpoint.last_at) < CHECKPOINT_INTERVAL
+        && byte_growth < CHECKPOINT_BYTE_DELTA
+    {
+        return Ok(());
+    }
+    deps.store
+        .update_assistant_message(
+            &ctx.assistant_message_id,
+            visible_body,
+            MessageStatus::Streaming,
+            None,
+        )
+        .await?;
+    checkpoint.last_at = now;
+    checkpoint.last_len = visible_body.len();
+    checkpoint.last_body = visible_body.to_string();
+    Ok(())
+}
+
+pub(crate) async fn flush_assistant_stream(
+    deps: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    chunks: &[CoalescedAssistantDelta],
+    visible_body: &str,
+    checkpoint: &mut AssistantCheckpointState,
+) -> Result<(), RuntimeError> {
+    for chunk in chunks {
+        persist_assistant_delta(deps, ctx, chunk).await?;
+    }
+    if !visible_body.is_empty() {
+        maybe_checkpoint_assistant_stream(deps, ctx, visible_body, checkpoint).await?;
+    }
     Ok(())
 }
 

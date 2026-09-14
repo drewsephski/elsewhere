@@ -26,6 +26,10 @@ name = "run_engine_mapping"
 required-features = ["test-utils"]
 
 [[test]]
+name = "assistant_streaming"
+required-features = ["test-utils"]
+
+[[test]]
 name = "subscription_availability"
 required-features = ["test-utils"]
 

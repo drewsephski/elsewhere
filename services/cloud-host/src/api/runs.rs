@@ -8,6 +8,7 @@ use futures_util::stream::Stream;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -334,12 +335,13 @@ pub async fn run_events_sse(
         .unwrap_or(0);
 
     let pool = state.pool.clone();
+    let registry = state.registry.clone();
     let request_id = run.request_id.clone();
     let stream = async_stream::stream! {
         let mut last_id = after_id;
+        let mut live_rx = registry.subscribe_live(&run_id);
+
         loop {
-            // The database is the event source. This also works before dispatch,
-            // after reconnect, and when a subscriber falls behind.
             let durable = match list_run_events_after(&pool, &request_id, last_id, 500).await {
                 Ok(rows) => rows,
                 Err(_) => {
@@ -352,13 +354,15 @@ pub async fn run_events_sse(
                 last_id = row.id;
                 yield Ok(Event::default().id(row.id.to_string()).event(row.event_type).data(row.payload_json.to_string()));
             }
-            if batch_full { continue; }
+            if batch_full {
+                continue;
+            }
+
             let current = match crate::db::queries::find_run_by_id(&pool, &run_id).await {
                 Ok(Some(run)) => run,
                 _ => break,
             };
             if !matches!(current.status.as_str(), "queued" | "running") {
-                // Drain again after observing terminal state to close the commit race.
                 match list_run_events_after(&pool, &request_id, last_id, 500).await {
                     Ok(rows) if !rows.is_empty() => { continue; }
                     Err(_) => break,
@@ -367,7 +371,33 @@ pub async fn run_events_sse(
                 yield Ok(Event::default().event("terminal").data(serde_json::json!({"status":current.status,"errorCode":current.error_code}).to_string()));
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            if live_rx.is_none() {
+                live_rx = registry.subscribe_live(&run_id);
+            }
+
+            if let Some(rx) = live_rx.as_mut() {
+                match tokio::time::timeout(Duration::from_millis(750), rx.recv()).await {
+                    Ok(Ok(live)) => {
+                        if live.id > last_id {
+                            last_id = live.id;
+                            yield Ok(Event::default()
+                                .id(live.id.to_string())
+                                .event(live.event_type)
+                                .data(live.payload.to_string()));
+                        }
+                    }
+                    Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
+                        live_rx = None;
+                    }
+                    Ok(Err(_)) => {
+                        live_rx = None;
+                    }
+                    Err(_) => {}
+                }
+            } else {
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
         }
     };
 

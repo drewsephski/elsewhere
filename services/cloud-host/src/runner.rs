@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    AgentComputer, AgentLoopContext, AllowAllApprovalGate, ResponsesModel, ResponsesRunEngine,
-    RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
+    AgentComputer, AgentLoopContext, AllowAllApprovalGate, ReadinessCachedComputer, ResponsesModel,
+    ResponsesRunEngine, RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
 };
 
 use crate::approval::RunScopedApprovalGate;
@@ -24,8 +24,6 @@ use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
 use crate::finalizer::{sanitize_host_error, HostFinalizer};
-use codex_provider::probe_codex_subscription_availability_with_profile;
-
 use crate::run_engine_select::{
     resolve_run_engine, ResolveRunEngineError, RunEngineMode, SelectedRunEngine,
 };
@@ -243,14 +241,18 @@ async fn execute_run(
             .await
             .map_err(|e| e.to_string())?
     };
-    let codex_availability = if engine_mode == RunEngineMode::Responses {
-        codex_provider::CodexSubscriptionAvailability::NotInstalled
-    } else {
-        probe_codex_subscription_availability_with_profile(
-            config.codex_executable.clone(),
-            profile_home.clone(),
-        )
-        .await
+    let codex_availability = match engine_mode {
+        RunEngineMode::Responses => codex_provider::CodexSubscriptionAvailability::NotInstalled,
+        RunEngineMode::Codex => codex_provider::CodexSubscriptionAvailability::Available {
+            plan_type: None,
+        },
+        RunEngineMode::Auto => {
+            codex_provider::probe_codex_subscription_availability_with_profile(
+                config.codex_executable.clone(),
+                profile_home.clone(),
+            )
+            .await
+        }
     };
     let selected = match resolve_run_engine(
         engine_mode,
@@ -276,11 +278,6 @@ async fn execute_run(
         return Err("Work was cancelled or its computer is no longer available".into());
     }
     let computer = build_computer(&config, &pool, &input).await?;
-
-    computer
-        .ensure_ready()
-        .await
-        .map_err(|e| format!("ensure_ready: {e}"))?;
 
     sqlx::query("UPDATE sandboxes SET state = 'active', last_used_at = NOW(), updated_at = NOW() WHERE id = $1 AND owner_id = $2 AND state <> 'archived'")
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
@@ -412,7 +409,7 @@ async fn build_computer(
 ) -> Result<Arc<dyn AgentComputer>, String> {
     #[cfg(any(test, feature = "test-utils"))]
     if let Some(o) = test_overrides() {
-        return Ok(o.computer);
+        return Ok(Arc::new(ReadinessCachedComputer::new(o.computer)));
     }
 
     let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
@@ -432,7 +429,7 @@ async fn build_computer(
     })
     .map_err(|e| format!("SpriteComputer: {e}"))?;
 
-    Ok(Arc::new(computer))
+    Ok(Arc::new(ReadinessCachedComputer::new(Arc::new(computer))))
 }
 
 pub(crate) async fn sprite_resource_for_computer(

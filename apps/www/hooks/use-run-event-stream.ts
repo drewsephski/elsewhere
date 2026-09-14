@@ -10,13 +10,65 @@ export type RunActivityItem =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState };
 
+export type AssistantStreamState = {
+  answerText: string;
+  commentaryText: string | null;
+  streaming: boolean;
+};
+
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
+}
+
+function emptyAssistantStream(): AssistantStreamState {
+  return { answerText: "", commentaryText: null, streaming: false };
+}
+
+function applyAssistantDelta(
+  stream: AssistantStreamState,
+  itemProgress: Map<string, number>,
+  payload: Record<string, unknown>,
+): AssistantStreamState {
+  const itemId = typeof payload.itemId === "string" ? payload.itemId : "";
+  const phase = typeof payload.phase === "string" ? payload.phase : "unknown";
+  const delta = typeof payload.delta === "string" ? payload.delta : "";
+  const cumulative =
+    typeof payload.cumulativeLength === "number" ? payload.cumulativeLength : 0;
+
+  if (!delta) {
+    return stream;
+  }
+
+  if (itemId) {
+    const previous = itemProgress.get(itemId) ?? 0;
+    if (cumulative > 0 && cumulative <= previous) {
+      return stream;
+    }
+    if (cumulative > 0) {
+      itemProgress.set(itemId, cumulative);
+    }
+  }
+
+  if (phase === "commentary") {
+    const nextCommentary = `${stream.commentaryText ?? ""}${delta}`;
+    return {
+      ...stream,
+      commentaryText: nextCommentary.trim() ? nextCommentary : stream.commentaryText,
+      streaming: true,
+    };
+  }
+
+  return {
+    ...stream,
+    answerText: `${stream.answerText}${delta}`,
+    streaming: true,
+  };
 }
 
 export function useRunEventStream(runId: string | null) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [timeline, setTimeline] = useState<RunActivityItem[]>([]);
+  const [assistantStream, setAssistantStream] = useState<AssistantStreamState>(emptyAssistantStream);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<string | null>(null);
 
@@ -24,6 +76,7 @@ export function useRunEventStream(runId: string | null) {
     if (!runId) {
       setDetail(null);
       setTimeline([]);
+      setAssistantStream(emptyAssistantStream());
       setError(null);
       setConnection(null);
       return;
@@ -32,6 +85,19 @@ export function useRunEventStream(runId: string | null) {
     const controller = new AbortController();
     let lastEventId: string | undefined;
     let timer: ReturnType<typeof setTimeout>;
+    const seenEventIds = new Set<string>();
+    const itemProgress = new Map<string, number>();
+
+    function rememberEventId(id: string | undefined): boolean {
+      if (!id) {
+        return true;
+      }
+      if (seenEventIds.has(id)) {
+        return false;
+      }
+      seenEventIds.add(id);
+      return true;
+    }
 
     async function sync() {
       try {
@@ -64,6 +130,40 @@ export function useRunEventStream(runId: string | null) {
             if (event.event === "stream_error") {
               throw new Error("Progress connection interrupted");
             }
+
+            const isNew = rememberEventId(event.id);
+            if (!isNew && event.event === "assistant_delta") {
+              return;
+            }
+
+            if (event.event === "assistant_delta") {
+              setAssistantStream((previous) =>
+                applyAssistantDelta(previous, itemProgress, payload),
+              );
+              return;
+            }
+
+            if (event.event === "terminal") {
+              const fullContent =
+                typeof payload.fullContent === "string"
+                  ? payload.fullContent
+                  : typeof payload.fullContent === "number"
+                    ? String(payload.fullContent)
+                    : null;
+              if (fullContent) {
+                setAssistantStream({
+                  answerText: fullContent,
+                  commentaryText: null,
+                  streaming: false,
+                });
+              } else {
+                setAssistantStream((previous) => ({
+                  ...previous,
+                  streaming: false,
+                }));
+              }
+            }
+
             if (typeof payload.status === "string") {
               setDetail((previous) =>
                 previous ? { ...previous, status: payload.status as string } : previous,
@@ -102,7 +202,7 @@ export function useRunEventStream(runId: string | null) {
               }
             } else {
               const text = activityText(event.event, payload);
-              if (text) {
+              if (text && isNew) {
                 setTimeline((previous) =>
                   previous.some((item) => item.id === id)
                     ? previous
@@ -125,6 +225,9 @@ export function useRunEventStream(runId: string | null) {
         }
         const result: RunDetail = await refreshed.json();
         setDetail(result);
+        if (!runIsActive(result.status)) {
+          setAssistantStream((previous) => ({ ...previous, streaming: false }));
+        }
         if (runIsActive(result.status)) {
           timer = setTimeout(() => void sync(), 1500);
         } else {
@@ -142,6 +245,7 @@ export function useRunEventStream(runId: string | null) {
 
     setDetail(null);
     setTimeline([]);
+    setAssistantStream(emptyAssistantStream());
     void sync();
 
     return () => {
@@ -150,5 +254,5 @@ export function useRunEventStream(runId: string | null) {
     };
   }, [runId]);
 
-  return { detail, timeline, error, connection };
+  return { detail, timeline, assistantStream, error, connection };
 }

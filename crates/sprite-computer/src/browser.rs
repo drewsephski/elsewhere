@@ -21,12 +21,40 @@ const BOOTSTRAP_VERSION: &str = include_str!("../guest/browser-bootstrap-version
 
 const PACKAGE_JSON: &str = r#"{"name":"elsewhere-browser","private":true,"type":"module"}"#;
 
+async fn browser_install_healthy(client: &SpriteClient) -> Result<bool, ComputerError> {
+    let (_, _, code) = client
+        .exec_http(
+            "test -f /var/elsewhere/browser/node_modules/playwright-core/package.json \
+             && test -f /var/elsewhere/browser/.bootstrapped \
+             && ls /var/elsewhere/browser/browsers/chromium-* >/dev/null 2>&1 \
+             && test -f /var/elsewhere/browser/.deps-ready",
+            "/workspace",
+            Duration::from_secs(15),
+        )
+        .await
+        .map_err(map_err)?;
+    Ok(code == 0)
+}
+
 /// Install headless Chromium tooling and browser daemon assets (idempotent).
 pub async fn ensure_browser_guest(
     client: &SpriteClient,
     baseline_policy: &NetworkPolicyConfig,
     _exec_timeout: Duration,
 ) -> Result<(), ComputerError> {
+    let expected = BOOTSTRAP_VERSION.trim();
+    let installed_version = client
+        .fs_read(&format!("{BROWSER_ROOT}/bootstrap-version"))
+        .await
+        .map_err(map_err)?;
+    let version_matches = installed_version == expected.as_bytes();
+    let bootstrapped = client.fs_read(BROWSER_BOOTSTRAP_MARKER).await.is_ok();
+    if version_matches && bootstrapped && browser_install_healthy(client).await? {
+        return Ok(());
+    }
+
+    let _ = restart_browser_daemon(client, baseline_policy).await;
+
     client
         .fs_write(BROWSER_CLIENT, CLIENT_SOURCE.as_bytes(), true)
         .await
@@ -47,36 +75,6 @@ pub async fn ensure_browser_guest(
         )
         .await
         .map_err(map_err)?;
-    client
-        .fs_write(
-            &format!("{BROWSER_ROOT}/bootstrap-version"),
-            BOOTSTRAP_VERSION.trim().as_bytes(),
-            true,
-        )
-        .await
-        .map_err(map_err)?;
-
-    let version_ok = client
-        .fs_read(&format!("{BROWSER_ROOT}/bootstrap-version"))
-        .await
-        .map_err(map_err)?;
-    let bootstrapped = client.fs_read(BROWSER_BOOTSTRAP_MARKER).await.is_ok();
-    if bootstrapped && version_ok == BOOTSTRAP_VERSION.trim().as_bytes() {
-        let (_, _, code) = client
-            .exec_http(
-                "test -f /var/elsewhere/browser/node_modules/playwright-core/package.json \
-                 && test -f /var/elsewhere/browser/.bootstrapped \
-                 && ls /var/elsewhere/browser/browsers/chromium-* >/dev/null 2>&1 \
-                 && test -f /var/elsewhere/browser/.deps-ready",
-                "/workspace",
-                Duration::from_secs(15),
-            )
-            .await
-            .map_err(map_err)?;
-        if code == 0 {
-            return Ok(());
-        }
-    }
 
     let bootstrap = r#"
 set -e
@@ -133,6 +131,21 @@ touch "$BROWSER_DIR/.bootstrapped"
         Ok(())
     })
     .await?;
+
+    if !browser_install_healthy(client).await? {
+        return Err(ComputerError::GuestUnavailable(
+            "browser bootstrap verification failed".into(),
+        ));
+    }
+
+    client
+        .fs_write(
+            &format!("{BROWSER_ROOT}/bootstrap-version"),
+            expected.as_bytes(),
+            true,
+        )
+        .await
+        .map_err(map_err)?;
 
     Ok(())
 }

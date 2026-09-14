@@ -161,6 +161,56 @@ impl CodexAssistantAccumulator {
         self.canonical_from_notifications()
     }
 
+    /// Live assistant bubble text: final_answer and unknown phases only (never commentary).
+    pub fn streaming_answer_text(&self) -> String {
+        if let Some(text) = self.final_answer_from_buffers() {
+            return text;
+        }
+        if let Some(text) = self.unknown_from_buffers() {
+            return text;
+        }
+        String::new()
+    }
+
+    fn final_answer_from_buffers(&self) -> Option<String> {
+        self.latest_delta_for_phase(MessagePhase::FinalAnswer, true)
+    }
+
+    fn unknown_from_buffers(&self) -> Option<String> {
+        self.latest_delta_for_phase(MessagePhase::Unknown, true)
+    }
+
+    fn latest_delta_for_phase(&self, phase: MessagePhase, include_in_progress: bool) -> Option<String> {
+        let mut ordered: Vec<&AssistantItemState> = self.items.values().collect();
+        ordered.sort_by(|a, b| {
+            a.completion_order
+                .cmp(&b.completion_order)
+                .then_with(|| a.insertion_order.cmp(&b.insertion_order))
+                .then_with(|| a.item_id.cmp(&b.item_id))
+        });
+        for item in ordered.iter().rev() {
+            if item.phase != phase {
+                continue;
+            }
+            if let Some(ref completed) = item.completed_text {
+                if !completed.is_empty() {
+                    return Some(completed.clone());
+                }
+            }
+            if include_in_progress && !item.delta_buffer.is_empty() {
+                return Some(item.delta_buffer.clone());
+            }
+        }
+        None
+    }
+
+    pub fn phase_for_item(&self, item_id: &str) -> MessagePhase {
+        self.items
+            .get(item_id)
+            .map(|item| item.phase)
+            .unwrap_or(MessagePhase::Unknown)
+    }
+
     /// Best-effort text when the turn did not complete successfully.
     pub fn partial_output(&self) -> String {
         if let Some(text) = self.final_answer.clone() {

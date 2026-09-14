@@ -65,6 +65,9 @@ impl ComputerError {
 pub trait AgentComputer: Send + Sync {
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError>;
 
+    /// Clear any host-side readiness cache after guest/provider errors.
+    fn invalidate_cached_readiness(&self) {}
+
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError>;
 
     async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError>;

@@ -15,6 +15,8 @@ use agent_core::{
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
 use crate::assistant_accumulator::CodexAssistantAccumulator;
+use crate::assistant_stream::AssistantDeltaCoalescer;
+use crate::run_phases::RunPhaseRecorder;
 use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
@@ -27,7 +29,7 @@ use crate::protocol::{
 use crate::run_input::user_text_from_run_input;
 use crate::run_persistence::{
     emit_run_started, fail_run, finalize_cancelled, finalize_interrupted, finalize_success,
-    persist_event,
+    flush_assistant_stream, persist_event, AssistantCheckpointState,
 };
 use agent_core::MessageStatus;
 
@@ -126,12 +128,7 @@ impl CodexRunEngine {
         );
 
         let user_text = user_text_from_run_input(&input)?;
-
-        if let Err(err) = shared.computer.ensure_ready().await {
-            let message = err.to_string();
-            fail_run(&shared, &ctx, "computer_not_ready", &message, "", 0).await?;
-            return Ok(());
-        }
+        let mut phases = RunPhaseRecorder::new();
 
         let tool_run = ToolRunContext {
             run_id: shared.run_id.clone(),
@@ -195,6 +192,7 @@ impl CodexRunEngine {
             .unwrap_or_else(|_| cwd_dir.path().to_path_buf());
 
         let using_real_codex = injected_process.is_none();
+        phases.mark_codex_launch();
         let client = if let Some(process) = injected_process {
             match CodexAppServerClient::from_process(process).await {
                 Ok(client) => client,
@@ -299,6 +297,7 @@ impl CodexRunEngine {
                 return Ok(());
             }
         };
+        phases.mark_thread_open();
 
         if self.config.compact_after_completed_turns > 0 {
             if maybe_compact_codex_thread(
@@ -362,6 +361,7 @@ impl CodexRunEngine {
             }
         };
         let thread_id = active_thread_id;
+        phases.mark_turn_start();
 
         tracing::info!(
             target: "elsewhere_run_engine",
@@ -383,6 +383,8 @@ impl CodexRunEngine {
             thread_id,
             turn_id,
             assistant: CodexAssistantAccumulator::default(),
+            stream: AssistantDeltaCoalescer::new(),
+            checkpoint: AssistantCheckpointState::default(),
             last_turn_completed: None,
             step_count: 0,
             tool_calls_seen: HashSet::new(),
@@ -404,6 +406,7 @@ impl CodexRunEngine {
                 shared.cancel.clone(),
                 interrupt_sent.clone(),
                 self.config.interrupt_grace,
+                &mut phases,
             ),
         )
         .await;
@@ -425,12 +428,39 @@ impl CodexRunEngine {
                         .await;
                 }
                 tokio::time::sleep(self.config.interrupt_grace).await;
-                let partial = state.lock().await.assistant.partial_output();
+                let partial = {
+                    let mut active = state.lock().await;
+                    let chunks = active.stream.flush_all();
+                    let visible = active.assistant.streaming_answer_text();
+                    let _ = flush_assistant_stream(
+                        &shared,
+                        &ctx,
+                        &chunks,
+                        &visible,
+                        &mut active.checkpoint,
+                    )
+                    .await;
+                    active.assistant.partial_output()
+                };
                 finalize_interrupted(&shared, &ctx, &partial, "run_timeout").await?;
                 cleanup_run_with_turn(client, mcp, &state).await;
                 return Ok(());
             }
         };
+
+        {
+            let mut active = state.lock().await;
+            let chunks = active.stream.flush_all();
+            let visible = active.assistant.streaming_answer_text();
+            let _ = flush_assistant_stream(
+                &shared,
+                &ctx,
+                &chunks,
+                &visible,
+                &mut active.checkpoint,
+            )
+            .await;
+        }
 
         let final_state = state.lock().await;
         let step_count = final_state.step_count;
@@ -442,6 +472,9 @@ impl CodexRunEngine {
             _ => final_state.assistant.partial_output(),
         };
         drop(final_state);
+
+        phases.mark_completed();
+        phases.log_summary(&ctx.request_id);
 
         match run_outcome {
             TurnOutcome::Completed => {
@@ -506,6 +539,8 @@ struct TurnRunState {
     thread_id: String,
     turn_id: String,
     assistant: CodexAssistantAccumulator,
+    stream: AssistantDeltaCoalescer,
+    checkpoint: AssistantCheckpointState,
     last_turn_completed: Option<Value>,
     step_count: i64,
     tool_calls_seen: HashSet<String>,
@@ -950,10 +985,26 @@ async fn consume_turn_notifications(
     cancel: Arc<AtomicBool>,
     interrupt_sent: Arc<AtomicBool>,
     interrupt_grace: Duration,
+    phases: &mut RunPhaseRecorder,
 ) -> Result<TurnOutcome, RuntimeError> {
     loop {
         let message = tokio::select! {
             msg = notifications.recv() => msg,
+            _ = tokio::time::sleep(std::time::Duration::from_millis(75)) => {
+                let now = std::time::Instant::now();
+                let mut active = state.lock().await;
+                let chunks = active.stream.take_if_due(now);
+                let visible = active.assistant.streaming_answer_text();
+                let _ = flush_assistant_stream(
+                    shared,
+                    ctx,
+                    &chunks,
+                    &visible,
+                    &mut active.checkpoint,
+                )
+                .await;
+                continue;
+            },
             _ = async {
                 while !cancel.load(Ordering::Relaxed) {
                     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -988,7 +1039,7 @@ async fn consume_turn_notifications(
             match method.as_str() {
                 "item/started" => {
                     if let Some(item) = item_from_notification(&params) {
-                        handle_item_started(shared, ctx, &state, item).await?;
+                        handle_item_started(shared, ctx, &state, item, phases).await?;
                     }
                 }
                 "item/completed" => {
@@ -997,7 +1048,7 @@ async fn consume_turn_notifications(
                     }
                 }
                 "item/agentMessage/delta" => {
-                    handle_agent_delta(&state, &params).await?;
+                    handle_agent_delta(shared, ctx, &state, phases, &params).await?;
                 }
                 "turn/completed" => {
                     let _ = interrupt_grace;
@@ -1034,6 +1085,7 @@ async fn handle_item_started(
     ctx: &AgentLoopContext,
     state: &Arc<Mutex<TurnRunState>>,
     item: &Value,
+    phases: &mut RunPhaseRecorder,
 ) -> Result<(), RuntimeError> {
     let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if is_disallowed_host_item(item_type) {
@@ -1065,6 +1117,7 @@ async fn handle_item_started(
     if !active.tool_calls_seen.insert(call_id.clone()) {
         return Ok(());
     }
+    phases.mark_first_tool();
     active.step_count += 1;
     let step_count = active.step_count;
     shared
@@ -1110,11 +1163,12 @@ async fn handle_item_completed(
         return Ok(());
     }
     if item_type == "agentMessage" {
-        state
-            .lock()
-            .await
-            .assistant
-            .on_agent_message_completed(item);
+        let mut active = state.lock().await;
+        active.assistant.on_agent_message_completed(item);
+        let chunks = active.stream.flush_all();
+        let visible = active.assistant.streaming_answer_text();
+        let _ = flush_assistant_stream(shared, ctx, &chunks, &visible, &mut active.checkpoint)
+            .await;
         return Ok(());
     }
     if item_type != "mcpToolCall" {
@@ -1175,10 +1229,26 @@ async fn handle_item_completed(
 }
 
 async fn handle_agent_delta(
+    shared: &SharedRunDeps,
+    ctx: &AgentLoopContext,
     state: &Arc<Mutex<TurnRunState>>,
+    phases: &mut RunPhaseRecorder,
     params: &Value,
 ) -> Result<(), RuntimeError> {
-    state.lock().await.assistant.on_agent_message_delta(params);
+    let item_id = params
+        .get("itemId")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let delta = params.get("delta").and_then(|v| v.as_str()).unwrap_or("");
+    let mut active = state.lock().await;
+    active.assistant.on_agent_message_delta(params);
+    let phase = active.assistant.phase_for_item(item_id);
+    active.stream.ingest(item_id, phase, delta);
+    phases.mark_first_assistant_delta();
+    let now = std::time::Instant::now();
+    let chunks = active.stream.take_if_due(now);
+    let visible = active.assistant.streaming_answer_text();
+    let _ = flush_assistant_stream(shared, ctx, &chunks, &visible, &mut active.checkpoint).await;
     Ok(())
 }
 
