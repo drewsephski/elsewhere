@@ -73,7 +73,6 @@ async function probeCandidate(
       cache: "no-store",
       signal: timeout.signal,
     });
-    // Any HTTP response proves transport reachability, but /health should be 2xx.
     return response.ok;
   } catch {
     return false;
@@ -114,6 +113,54 @@ export async function selectCloudHostUpstream(options?: {
   }
 
   throw new CloudHostUnavailableError(attempted);
+}
+
+/**
+ * Server-only GET/HEAD helper used by result/viewer routes that do not pass
+ * through /api/cloud. Transport failures may safely try the next configured
+ * upstream; HTTP responses are returned as-is and are never retried.
+ */
+export async function fetchCloudHostRead(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    throw new Error("fetchCloudHostRead only supports GET/HEAD");
+  }
+
+  const excluded = new Set<string>();
+  const attempted: string[] = [];
+  while (!(init.signal?.aborted ?? false)) {
+    let candidate: CloudHostUpstreamCandidate;
+    try {
+      candidate = await selectCloudHostUpstream({
+        signal: init.signal ?? undefined,
+        excludeBaseUrls: excluded,
+      });
+    } catch (error) {
+      if (error instanceof CloudHostUnavailableError) {
+        attempted.push(...error.attemptedSources);
+      }
+      throw new CloudHostUnavailableError([...new Set(attempted)]);
+    }
+
+    attempted.push(candidate.source);
+    try {
+      const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+      const response = await fetch(`${candidate.baseUrl}${normalizedPath}`, {
+        ...init,
+        method,
+      });
+      markCloudHostUpstreamHealthy(candidate);
+      return response;
+    } catch {
+      invalidateCloudHostUpstream(candidate.baseUrl);
+      excluded.add(candidate.baseUrl);
+    }
+  }
+
+  throw new CloudHostUnavailableError([...new Set(attempted)]);
 }
 
 /** Test helper; never used by production code. */
