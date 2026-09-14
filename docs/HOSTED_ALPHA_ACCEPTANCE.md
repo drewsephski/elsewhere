@@ -36,7 +36,7 @@ Approved scope is two Fly Machines, one encrypted 3 GB volume, and at most one n
 
 ## Laptop-off handoff
 
-- Timed assignment `c78fc79e-7f4f-4b13-94cb-85fc2665bd6a` requests one approved 50-second foreground command that records UTC start/end times and the existing sentinel in `laptop-off.txt`. The user should approve its action, observe it start, then immediately close the laptop. Return after **04:45 Central** in another browser/session and inspect this work and the 04:40 routine. The actual offline interval must be confirmed by the user and compared with durable timestamps.
+- Timed assignment `c78fc79e-7f4f-4b13-94cb-85fc2665bd6a` read the existing sentinel after the image update and local-service shutdown. Its command approval `4b034902-13ba-4fba-b938-a3956a630825` is pending and expires at **09:38:45 UTC / 04:38:45 Central**. The assignment requests one approved 50-second foreground command that records UTC start/end times and the existing sentinel in `laptop-off.txt`. The user should approve its action, observe it start, then immediately close the laptop. Return after **04:45 Central** in another browser/session and inspect this work and the 04:40 routine. The actual offline interval must be confirmed by the user and compared with durable timestamps.
 - At **09:32:58 UTC**, local `elsewhere-web-preflight` and `dev-postgres-1` were stopped; localhost ports 1420, 3000, 8080, 18949, and 5432 were closed. Hosted readiness remained healthy. Local database/container data was retained.
 - Pre-update opaque volume snapshot `vs_njAg8l59voZkS3GA7xOQ` completed at 09:27:47 UTC, retained seven days. No credential file was inspected/copied. Snapshot creation is proven; restore is not.
 
@@ -49,7 +49,7 @@ Approved scope is two Fly Machines, one encrypted 3 GB volume, and at most one n
 | Restart persistence | Same owner remains paired after hosted restart; real Luna work succeeds | Passed: pairing persisted after restart/full reload; real Luna tool assignment completed |
 | Laptop-off work | Assignment completes after local services stop and laptop is offline | Pending |
 | Laptop-off routine | Scheduled occurrence is admitted and completes while laptop is offline | Pending |
-| Sprite persistence | Same computer/resource and known sentinel bytes survive later work | Pending |
+| Sprite persistence | Same computer/resource and known sentinel bytes survive later work | Passed across the runner image update: timed assignment read the original sentinel; laptop-off revisit still pending |
 | Saved results | Fresh browser session reads durable progress and downloads exact artifact bytes | Current session: live results and browser download event passed; fresh-session/offline retrieval pending |
 | Recovery | Graceful drain and claim exclusion; interrupted work never auto-replays | Local proof only |
 | Backup restore | Opaque profile-volume snapshot and database backup restore drill | Pending |
