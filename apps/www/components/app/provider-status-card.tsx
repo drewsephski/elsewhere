@@ -21,6 +21,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
     connected,
     checking,
     checkFailed,
+    providerUnavailable,
     canConnect,
     connectBlocked,
     load,
@@ -29,6 +30,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
   } = useProviderStatus();
 
   const featured = variant === "featured";
+  const temporarilyUnavailable = checkFailed || providerUnavailable;
 
   return (
     <section
@@ -75,9 +77,11 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
           "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
           checkFailed
             ? "border-red-200/80 bg-red-50/80 text-red-950"
-            : connected
-              ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
-              : "border-amber-200/80 bg-amber-50/80 text-amber-950",
+            : providerUnavailable
+              ? "border-amber-200/80 bg-amber-50/80 text-amber-950"
+              : connected
+                ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
+                : "border-amber-200/80 bg-amber-50/80 text-amber-950",
         )}
         role="status"
       >
@@ -90,6 +94,11 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
           <>
             <span className="size-2 shrink-0 rounded-full bg-red-500" aria-hidden />
             <span>Runner unavailable — your saved ChatGPT connection has not been changed</span>
+          </>
+        ) : providerUnavailable ? (
+          <>
+            <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+            <span>ChatGPT status is temporarily unavailable — your saved pairing is unchanged</span>
           </>
         ) : connected ? (
           <>
@@ -109,7 +118,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         )}
       </div>
 
-      {(!connected || checkFailed) && !challenge ? (
+      {(!connected || temporarilyUnavailable) && !challenge ? (
         <div className="mt-4 space-y-2">
           <Button
             type="button"
@@ -118,9 +127,9 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
               "w-full gap-2 shadow-sm",
               featured ? "h-11 rounded-full text-base" : "rounded-xl",
             )}
-            disabled={busy || checking || (!checkFailed && !canConnect)}
+            disabled={busy || checking || (!temporarilyUnavailable && !canConnect)}
             onClick={() => {
-              if (checkFailed) {
+              if (temporarilyUnavailable) {
                 void load();
                 return;
               }
@@ -136,13 +145,13 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
               ? "Preparing sign-in…"
               : checking
                 ? "Checking runner…"
-                : checkFailed
-                  ? "Retry workspace connection"
+                : temporarilyUnavailable
+                  ? "Retry connection check"
                   : "Connect ChatGPT"}
           </Button>
-          {checkFailed ? (
+          {temporarilyUnavailable ? (
             <p className="text-center text-xs text-muted-foreground">
-              Elsewhere will retry automatically. Reconnecting ChatGPT is not required unless the runner later reports that your saved pairing is missing.
+              Elsewhere retries automatically. Reconnecting ChatGPT is only necessary after a successful status check explicitly reports that the profile is not connected.
             </p>
           ) : connectBlocked ? (
             <p className="text-center text-xs text-muted-foreground">
@@ -158,7 +167,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         </div>
       ) : null}
 
-      {connected && !checkFailed ? (
+      {connected && !temporarilyUnavailable ? (
         <p className="mt-3 text-xs text-muted-foreground">
           Uses your Codex allowance. Elsewhere never switches to paid API usage automatically.
         </p>
