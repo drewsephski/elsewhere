@@ -1,8 +1,15 @@
 "use client";
 
 import { cloudHostFetch } from "@/lib/cloud-api";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+
+export type ApprovalTerminalState =
+  | "pending"
+  | "approved"
+  | "denied"
+  | "cancelled"
+  | "expired";
 
 export interface ApprovalRequestedPayload {
   approvalId: string;
@@ -14,12 +21,43 @@ export interface ApprovalRequestedPayload {
 
 interface ApprovalCardProps {
   payload: ApprovalRequestedPayload;
-  onResolved?: (decision: "approved" | "denied") => void;
+  externalStatus?: ApprovalTerminalState;
+  onResolved?: (decision: ApprovalTerminalState) => void;
 }
 
-export function ApprovalCard({ payload, onResolved }: ApprovalCardProps) {
-  const [status, setStatus] = useState<"pending" | "approved" | "denied" | "resolved">("pending");
+function decisionFromApi(decision: "approve" | "deny"): ApprovalTerminalState {
+  return decision === "approve" ? "approved" : "denied";
+}
+
+function labelForStatus(status: ApprovalTerminalState): string {
+  switch (status) {
+    case "approved":
+      return "Approved";
+    case "denied":
+      return "Denied";
+    case "cancelled":
+      return "Cancelled";
+    case "expired":
+      return "Expired";
+    default:
+      return "Pending";
+  }
+}
+
+export function ApprovalCard({
+  payload,
+  externalStatus,
+  onResolved,
+}: ApprovalCardProps) {
+  const [status, setStatus] = useState<ApprovalTerminalState>("pending");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!externalStatus || externalStatus === "pending") {
+      return;
+    }
+    setStatus(externalStatus);
+  }, [externalStatus]);
 
   async function handleDecision(decision: "approve" | "deny") {
     if (status !== "pending") {
@@ -35,7 +73,7 @@ export function ApprovalCard({ payload, onResolved }: ApprovalCardProps) {
       setError("Could not update approval");
       return;
     }
-    const next = decision === "approve" ? "approved" : "denied";
+    const next = decisionFromApi(decision);
     setStatus(next);
     onResolved?.(next);
   }
@@ -44,14 +82,14 @@ export function ApprovalCard({ payload, onResolved }: ApprovalCardProps) {
 
   return (
     <div
-      className="my-2 border border-amber-600/40 bg-amber-50/80 p-3 text-sm dark:border-amber-500/30 dark:bg-amber-950/30"
+      className="my-2 rounded-lg border border-amber-500/35 bg-amber-50 p-3 text-sm shadow-sm"
       role="region"
       aria-label="Tool approval required"
     >
-      <p className="font-medium text-brand-dark dark:text-brand-cream">Approval required</p>
-      <p className="mt-1 text-brand-dark/80 dark:text-brand-cream/80">{payload.summary}</p>
-      <p className="mt-1 font-mono text-[11px] text-brand-dark/50">{payload.tool}</p>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <p className="font-medium text-foreground">Approval required</p>
+      <p className="mt-1 text-foreground/85">{payload.summary}</p>
+      <p className="mt-1 font-mono text-[11px] text-muted-foreground">{payload.tool}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -70,8 +108,8 @@ export function ApprovalCard({ payload, onResolved }: ApprovalCardProps) {
           Deny
         </Button>
         {resolved ? (
-          <span className="text-xs uppercase tracking-wide text-brand-dark/50">
-            {status === "approved" ? "Approved" : "Denied"}
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {labelForStatus(status)}
           </span>
         ) : null}
       </div>

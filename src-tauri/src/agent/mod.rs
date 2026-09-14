@@ -11,4 +11,4 @@ pub use runtime::{build_responses_input_from_messages, run_agent_chat};
 pub use sqlite_run_store::SqliteRunStore;
 pub use tauri_event_sink::TauriEventSink;
 
-pub use agent_core::{AgentLoopContext, AgentLoopDeps};
+pub use agent_core::{legacy_local_loop_deps, AgentLoopContext, AgentLoopDeps};

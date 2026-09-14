@@ -36,8 +36,8 @@ export default function ApprovalsPage() {
 
   return (
     <div>
-      <h1 className="text-lg font-medium">Pending approvals</h1>
-      <p className="mt-2 text-sm text-brand-dark/60">
+      <h1 className="text-2xl font-semibold tracking-tight">Pending approvals</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
         Mutating computer tools blocked until you approve or deny.
       </p>
       {error ? (
@@ -47,11 +47,11 @@ export default function ApprovalsPage() {
       ) : null}
       <div className="mt-6 flex flex-col gap-3">
         {items.length === 0 ? (
-          <p className="text-sm text-brand-dark/50">No pending approvals.</p>
+          <p className="text-sm text-muted-foreground">No pending approvals.</p>
         ) : (
           items.map((item) => (
             <div key={item.approvalId}>
-              <p className="mb-1 text-xs text-brand-dark/45">Run {item.runId.slice(0, 8)}…</p>
+              <p className="mb-1 text-xs text-muted-foreground">Run {item.runId.slice(0, 8)}…</p>
               <ApprovalCard
                 payload={{
                   approvalId: item.approvalId,

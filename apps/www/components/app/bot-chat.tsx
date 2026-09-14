@@ -3,7 +3,11 @@
 import { cloudHostEventStream, cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, CreateRunResponse, RunDetail } from "@/lib/api-types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApprovalCard, type ApprovalRequestedPayload } from "@/components/app/approval-card";
+import {
+  ApprovalCard,
+  type ApprovalRequestedPayload,
+  type ApprovalTerminalState,
+} from "@/components/app/approval-card";
 import { Button } from "@/components/ui/button";
 
 interface BotChatProps {
@@ -20,7 +24,21 @@ interface TimelineItem {
   kind: "activity" | "approval";
   text?: string;
   approval?: ApprovalRequestedPayload;
-  resolved?: boolean;
+  resolution?: ApprovalTerminalState;
+}
+
+function parseApprovalDecision(
+  decision: string | undefined,
+): ApprovalTerminalState | undefined {
+  switch (decision) {
+    case "approved":
+    case "denied":
+    case "cancelled":
+    case "expired":
+      return decision;
+    default:
+      return undefined;
+  }
 }
 
 export function BotChat({ botId }: BotChatProps) {
@@ -122,12 +140,16 @@ export function BotChat({ botId }: BotChatProps) {
           }
           if (event.event === "approval_resolved") {
             try {
-              const body = JSON.parse(event.data) as { approvalId?: string };
-              if (body.approvalId) {
+              const body = JSON.parse(event.data) as {
+                approvalId?: string;
+                decision?: string;
+              };
+              const decision = parseApprovalDecision(body.decision);
+              if (body.approvalId && decision) {
                 setTimeline((prev) =>
                   prev.map((item) =>
                     item.kind === "approval" && item.approval?.approvalId === body.approvalId
-                      ? { ...item, resolved: true }
+                      ? { ...item, resolution: decision }
                       : item,
                   ),
                 );
@@ -135,6 +157,7 @@ export function BotChat({ botId }: BotChatProps) {
             } catch {
               // ignore
             }
+            return;
           }
           setTimeline((prev) => [
             ...prev,
@@ -162,7 +185,7 @@ export function BotChat({ botId }: BotChatProps) {
   }, []);
 
   return (
-    <div className="mt-8 border border-brand-dark/15 bg-white p-5">
+    <div className="mt-8 surface-card">
       <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Chat</h2>
       {bot ? (
         <p className="mt-2 text-xs text-brand-dark/55">
@@ -171,7 +194,7 @@ export function BotChat({ botId }: BotChatProps) {
       ) : null}
       <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={(e) => void handleSubmit(e)}>
         <textarea
-          className="min-h-20 flex-1 border border-brand-dark/15 px-3 py-2 text-sm"
+          className="min-h-20 flex-1 border border-border rounded-lg px-3 py-2 text-sm"
           placeholder="Ask Luna to use the computer…"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -192,10 +215,21 @@ export function BotChat({ botId }: BotChatProps) {
         </p>
       ) : null}
       {timeline.length > 0 ? (
-        <div className="mt-4 max-h-64 overflow-y-auto border border-brand-dark/10 bg-brand-cream/40 p-3 text-[11px] leading-relaxed">
+        <div className="mt-4 max-h-64 overflow-y-auto border border-border bg-brand-cream/40 p-3 text-[11px] leading-relaxed">
           {timeline.map((item) =>
             item.kind === "approval" && item.approval ? (
-              <ApprovalCard key={item.id} payload={item.approval} />
+              <ApprovalCard
+                key={item.id}
+                payload={item.approval}
+                externalStatus={item.resolution}
+                onResolved={(decision) => {
+                  setTimeline((prev) =>
+                    prev.map((entry) =>
+                      entry.id === item.id ? { ...entry, resolution: decision } : entry,
+                    ),
+                  );
+                }}
+              />
             ) : (
               <div key={item.id} className="font-mono">{item.text}</div>
             ),

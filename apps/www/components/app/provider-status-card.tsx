@@ -26,7 +26,7 @@ export function ProviderStatusCard() {
   }, [load]);
 
   return (
-    <section className="border border-brand-dark/15 bg-white p-5">
+    <section className="surface-card">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Runner provider</h2>
         <button
@@ -142,7 +142,7 @@ function CodexLoginPanel({
         <button
           type="button"
           onClick={() => void handleStartLogin()}
-          className="mt-3 border border-brand-dark/20 px-3 py-1.5 text-sm hover:bg-brand-cream"
+          className="mt-3 rounded-lg border border-border bg-card px-3 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent"
         >
           Connect ChatGPT on runner
         </button>

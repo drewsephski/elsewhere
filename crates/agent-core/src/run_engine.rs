@@ -116,3 +116,27 @@ pub fn responses_loop_deps(
         computer_id: shared.computer_id.clone(),
     }
 }
+
+/// Local/demo `AgentLoopDeps` with automatic tool approval.
+pub fn legacy_local_loop_deps(
+    computer: Arc<dyn AgentComputer>,
+    store: Arc<dyn RunStore>,
+    events: Arc<dyn EventSink>,
+    model: Arc<dyn ResponsesModel>,
+    cancel: Arc<AtomicBool>,
+    run_id: impl Into<String>,
+    computer_id: impl Into<String>,
+) -> AgentLoopDeps {
+    responses_loop_deps(
+        SharedRunDeps::allow_all_approval(
+            computer,
+            store,
+            events,
+            cancel,
+            run_id.into(),
+            "legacy-local".into(),
+            computer_id.into(),
+        ),
+        model,
+    )
+}

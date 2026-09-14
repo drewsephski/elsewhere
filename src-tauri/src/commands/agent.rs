@@ -1,5 +1,5 @@
 use crate::agent::{
-    build_responses_input_from_messages, run_agent_chat, AgentLoopContext, AgentLoopDeps,
+    build_responses_input_from_messages, legacy_local_loop_deps, run_agent_chat, AgentLoopContext,
     LocalMacComputer, OpenAiResponsesModel, SqliteRunStore, TauriEventSink,
 };
 use crate::error::AppError;
@@ -124,6 +124,7 @@ pub async fn start_agent_chat(
     let db = state.db.clone();
 
     tauri::async_runtime::spawn(async move {
+        let computer_id = bot_id.clone();
         let ctx = AgentLoopContext {
             request_id: request_id.clone(),
             conversation_id,
@@ -133,18 +134,20 @@ pub async fn start_agent_chat(
             instructions: system_prompt,
         };
 
-        let deps = AgentLoopDeps {
-            computer: Arc::new(LocalMacComputer::new(vm)),
-            store: Arc::new(SqliteRunStore::new(db)),
-            events: Arc::new(TauriEventSink::new(
+        let deps = legacy_local_loop_deps(
+            Arc::new(LocalMacComputer::new(vm)),
+            Arc::new(SqliteRunStore::new(db)),
+            Arc::new(TauriEventSink::new(
                 app_handle.clone(),
                 request_id.clone(),
                 ctx.conversation_id.clone(),
                 ctx.assistant_message_id.clone(),
             )),
-            model: Arc::new(OpenAiResponsesModel::new(api_key, cancel_token.clone())),
-            cancel: cancel_token.clone(),
-        };
+            Arc::new(OpenAiResponsesModel::new(api_key, cancel_token.clone())),
+            cancel_token.clone(),
+            request_id.clone(),
+            computer_id,
+        );
 
         if let Err(err) = run_agent_chat(deps, ctx, input_items).await {
             error!(request_id = %request_id, error = %err, "agent run task failed");

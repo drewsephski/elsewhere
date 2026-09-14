@@ -21,8 +21,8 @@ export function RecentRunsPanel() {
   }, []);
 
   return (
-    <section className="border border-brand-dark/15 bg-white p-5">
-      <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Recent runs</h2>
+    <section className="surface-card">
+      <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
       {error ? (
         <p className="mt-3 text-sm text-red-700" role="alert">
           {error}

@@ -111,7 +111,7 @@ export function ProductNavDropdown() {
               >
                 {link.label}
                 <ArrowUpRight
-                  className="h-3 w-3 text-brand-dark/30 transition-transform duration-200 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 group-hover/link:text-brand-green"
+                  className="h-3 w-3 text-brand-dark/30 transition-transform duration-200 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 group-hover/link:text-primary"
                   strokeWidth={2}
                   aria-hidden
                 />

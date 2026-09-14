@@ -7,7 +7,8 @@
 //! `cargo run -p sprite-computer --example agent_cloud_proof`
 
 use agent_core::{
-    run_agent_loop, AgentComputer, AgentEvent, AgentLoopContext, AgentLoopDeps, ComputerError,
+    legacy_local_loop_deps, run_agent_loop, AgentComputer, AgentEvent, AgentLoopContext,
+    ComputerError,
     ComputerInfo, CreateResponseResult, CreateRunParams, EventSink, ExecResult, MessageStatus,
     PersistedMessage, ResponsesModel, RunStore, RuntimeError, StructuredMessageInput,
     WorkspaceEntry,
@@ -93,13 +94,15 @@ async fn run_scripted_agent(
         ]),
     });
 
-    let deps = AgentLoopDeps {
+    let deps = legacy_local_loop_deps(
         computer,
-        store: Arc::new(MemStore::default()),
-        events: Arc::new(RecordingEvents::default()),
+        Arc::new(MemStore::default()),
+        Arc::new(RecordingEvents::default()),
         model,
-        cancel: Arc::new(AtomicBool::new(false)),
-    };
+        Arc::new(AtomicBool::new(false)),
+        "run-cloud-proof",
+        "comp-cloud-proof",
+    );
 
     let ctx = AgentLoopContext {
         request_id: "req-cloud".into(),

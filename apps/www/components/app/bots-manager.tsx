@@ -62,11 +62,11 @@ export function BotsManager() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-      <section className="border border-brand-dark/15 bg-white p-5">
+      <section className="surface-card">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Your bots</h2>
         <ul className="mt-4 space-y-3">
           {bots.map((bot) => (
-            <li key={bot.id} className="border border-brand-dark/10 p-3">
+            <li key={bot.id} className="border border-border rounded-lg p-3">
               <Link href={`/app/bots/${bot.id}`} className="font-medium underline-offset-4 hover:underline">
                 {bot.name}
               </Link>
@@ -82,7 +82,7 @@ export function BotsManager() {
         </ul>
       </section>
 
-      <section className="border border-brand-dark/15 bg-white p-5">
+      <section className="surface-card">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">New bot</h2>
         <form className="mt-4 space-y-3" onSubmit={(e) => void handleCreate(e)}>
           <div>
@@ -93,7 +93,7 @@ export function BotsManager() {
             <Label htmlFor="bot-instructions">Instructions</Label>
             <textarea
               id="bot-instructions"
-              className="mt-1 min-h-24 w-full border border-brand-dark/15 bg-white px-3 py-2 text-sm"
+              className="mt-1 min-h-24 w-full border border-border rounded-lg bg-white px-3 py-2 text-sm"
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
             />
@@ -102,7 +102,7 @@ export function BotsManager() {
             <Label htmlFor="bot-computer">Computer</Label>
             <select
               id="bot-computer"
-              className="mt-1 w-full border border-brand-dark/15 bg-white px-3 py-2 text-sm"
+              className="mt-1 w-full border border-border rounded-lg bg-white px-3 py-2 text-sm"
               value={computerId}
               onChange={(e) => setComputerId(e.target.value)}
             >

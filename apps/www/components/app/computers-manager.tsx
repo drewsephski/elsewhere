@@ -55,14 +55,14 @@ export function ComputersManager() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
-      <section className="border border-brand-dark/15 bg-white p-5">
+      <section className="surface-card">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Computers</h2>
         <p className="mt-2 text-xs text-brand-dark/55">
           Fly Sprites provision lazily on first run. Provider resource IDs are assigned server-side.
         </p>
         <ul className="mt-4 space-y-3">
           {computers.map((computer) => (
-            <li key={computer.id} className="flex items-start justify-between gap-3 border border-brand-dark/10 p-3">
+            <li key={computer.id} className="flex items-start justify-between gap-3 border border-border rounded-lg p-3">
               <div>
                 <p className="font-medium">{computer.displayName}</p>
                 <p className="mt-1 text-xs text-brand-dark/55">
@@ -85,7 +85,7 @@ export function ComputersManager() {
         </ul>
       </section>
 
-      <section className="border border-brand-dark/15 bg-white p-5">
+      <section className="surface-card">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">New computer</h2>
         <form className="mt-4 space-y-3" onSubmit={(e) => void handleCreate(e)}>
           <div>

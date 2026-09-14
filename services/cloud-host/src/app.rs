@@ -70,8 +70,7 @@ pub fn build_router(state: AppState) -> Router {
                 "http://127.0.0.1:0".parse().unwrap()
             }))
             .allow_methods(Any)
-            .allow_headers(Any)
-            .allow_credentials(true);
+            .allow_headers(Any);
         router = router.layer(cors);
     }
 

@@ -129,6 +129,7 @@ async fn user_cannot_stream_other_users_run_events() {
         return;
     };
     let run_id = Uuid::new_v4().to_string();
+    let request_id = Uuid::new_v4().to_string();
     let bot_id = Uuid::new_v4().to_string();
     let conv_id = Uuid::new_v4().to_string();
     sqlx::query(
@@ -150,10 +151,11 @@ async fn user_cannot_stream_other_users_run_events() {
         r#"
         INSERT INTO agent_runs (
             id, owner_id, request_id, bot_id, conversation_id, model, status, step_count, created_at, updated_at
-        ) VALUES ($1, 'user-a', 'req-a', $2, $3, 'gpt-5.6-luna', 'complete', 0, NOW(), NOW())
+        ) VALUES ($1, 'user-a', $2, $3, $4, 'gpt-5.6-luna', 'complete', 0, NOW(), NOW())
         "#,
     )
     .bind(&run_id)
+    .bind(&request_id)
     .bind(&bot_id)
     .bind(&conv_id)
     .execute(&pool)

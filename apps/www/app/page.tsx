@@ -49,7 +49,7 @@ function Navbar() {
     <>
       <header
         className={`fixed top-0 right-0 left-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-300 ${
-          scrolled ? "bg-brand-cream/90 shadow-sm backdrop-blur-md" : "bg-transparent"
+          scrolled ? "border-b border-border/60 bg-white/90 shadow-sm backdrop-blur-md" : "bg-transparent"
         }`}
       >
         <div className="relative mx-auto flex h-16 w-full max-w-7xl items-center px-6 md:h-20 lg:px-8">
@@ -77,7 +77,7 @@ function Navbar() {
             aria-label={`${siteConfig.productName} home`}
           >
             <Triangle
-              className="pointer-events-none h-5 w-5 fill-brand-dark text-brand-dark"
+              className="pointer-events-none h-5 w-5 fill-primary text-primary"
               strokeWidth={0}
               aria-hidden
             />
@@ -88,7 +88,7 @@ function Navbar() {
 
           <a
             href={siteConfig.links.download}
-            className="ml-auto hidden shrink-0 animate-fade-down items-center rounded-full bg-brand-dark px-5 py-2.5 text-sm tracking-wide text-white uppercase transition-colors stagger-3 hover:bg-brand-green md:inline-flex"
+            className="ml-auto hidden shrink-0 animate-fade-down items-center rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors stagger-3 hover:bg-primary/90 md:inline-flex"
           >
             Download
           </a>
@@ -115,7 +115,7 @@ function Navbar() {
       </header>
 
       <div
-        className={`fixed inset-0 z-40 bg-brand-cream transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden ${
+        className={`fixed inset-0 z-40 bg-background transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:hidden ${
           menuOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
         aria-hidden={!menuOpen}
@@ -140,7 +140,7 @@ function Navbar() {
           </a>
           <a
             href={siteConfig.links.download}
-            className="mt-4 inline-flex items-center rounded-full bg-brand-dark px-8 py-3.5 text-lg tracking-wide text-white"
+            className="mt-4 inline-flex items-center rounded-lg bg-primary px-8 py-3.5 text-lg font-medium text-primary-foreground shadow-sm"
             onClick={closeMenu}
           >
             Download
@@ -173,7 +173,7 @@ function CapabilityRow() {
 
 function Hero() {
   return (
-    <section className="relative h-screen min-h-[700px] w-full overflow-hidden bg-brand-cream">
+    <section className="relative h-screen min-h-[700px] w-full overflow-hidden marketing-bg">
       <div className="absolute inset-0 z-0">
         <video
           className="h-full w-full -scale-x-100 object-cover object-bottom"
@@ -217,7 +217,7 @@ function Hero() {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen font-helvetica-neue text-brand-dark">
+    <div className="marketing-bg min-h-screen font-sans text-foreground">
       <Navbar />
       <Hero />
     </div>

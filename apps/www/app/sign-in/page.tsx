@@ -60,13 +60,13 @@ export default function SignInPage() {
       : false;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-brand-cream px-6">
-      <div className="w-full max-w-md border border-brand-dark/10 bg-white p-8 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.2em] text-brand-dark/60">Elsewhere</p>
-        <h1 className="mt-2 text-2xl font-medium text-brand-dark">
+    <main className="app-shell-bg flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="surface-panel w-full max-w-md p-8">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Elsewhere</p>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
           {mode === "sign-in" ? "Sign in" : "Create account"}
         </h1>
-        <p className="mt-2 text-sm text-brand-dark/70">
+        <p className="mt-2 text-sm text-muted-foreground">
           Elsewhere accounts are separate from ChatGPT / Codex runner auth.
         </p>
 
@@ -128,7 +128,7 @@ export default function SignInPage() {
 
         <button
           type="button"
-          className="mt-6 text-sm text-brand-dark/80 underline-offset-4 hover:underline"
+          className="mt-6 text-sm text-primary underline-offset-4 hover:underline"
           onClick={() => setMode(mode === "sign-in" ? "sign-up" : "sign-in")}
         >
           {mode === "sign-in" ? "Need an account? Sign up" : "Already have an account? Sign in"}
@@ -136,7 +136,7 @@ export default function SignInPage() {
 
         <Link
           href="/"
-          className="mt-4 block text-center text-xs text-brand-dark/50 hover:text-brand-dark"
+          className="mt-4 block text-center text-xs text-muted-foreground hover:text-foreground"
         >
           Back to home
         </Link>

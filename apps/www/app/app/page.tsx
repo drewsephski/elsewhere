@@ -5,8 +5,8 @@ export default function AppDashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-medium">Control plane</h1>
-        <p className="mt-1 text-sm text-brand-dark/70">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Control plane</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Signed-in Elsewhere account · resources scoped to your user id · cloud-host JWT auth.
         </p>
       </div>
