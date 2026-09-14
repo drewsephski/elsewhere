@@ -15,11 +15,12 @@ pub const BROWSER_BOOTSTRAP_MARKER: &str = "/var/elsewhere/browser/.bootstrapped
 pub const BROWSER_DAEMON_PID: &str = "/var/elsewhere/browser/daemon.pid";
 pub const BROWSER_PREVIEW_DIR: &str = "/var/elsewhere/browser/preview";
 pub const BROWSER_PREVIEW_META: &str = "/var/elsewhere/browser/preview/meta.json";
-pub const BROWSER_PREVIEW_IMAGE: &str = "/var/elsewhere/browser/preview/latest.jpg";
+pub const BROWSER_PREVIEW_FRAMES: &str = "/var/elsewhere/browser/preview/frames";
 
 const CLIENT_SOURCE: &str = include_str!("../guest/browser-client.mjs");
 const DAEMON_SOURCE: &str = include_str!("../guest/browser-daemon.mjs");
 const COMMON_SOURCE: &str = include_str!("../guest/browser-common.mjs");
+const PREVIEW_CACHE_SOURCE: &str = include_str!("../guest/browser-preview-cache.mjs");
 const BOOTSTRAP_VERSION: &str = include_str!("../guest/browser-bootstrap-version.txt");
 
 const PACKAGE_JSON: &str = r#"{"name":"elsewhere-browser","private":true,"type":"module"}"#;
@@ -68,6 +69,14 @@ pub async fn ensure_browser_guest(
         .map_err(map_err)?;
     client
         .fs_write(BROWSER_COMMON, COMMON_SOURCE.as_bytes(), true)
+        .await
+        .map_err(map_err)?;
+    client
+        .fs_write(
+            &format!("{BROWSER_ROOT}/browser-preview-cache.mjs"),
+            PREVIEW_CACHE_SOURCE.as_bytes(),
+            true,
+        )
         .await
         .map_err(map_err)?;
     client
@@ -417,15 +426,16 @@ pub async fn read_browser_preview_cache(
         .get("capturedAt")
         .and_then(|v| v.as_str())
         .map(str::to_string);
-    let image_jpeg = if available {
-        client
-            .fs_read(BROWSER_PREVIEW_IMAGE)
-            .await
-            .map_err(map_err)
-            .ok()
-    } else {
-        None
-    };
+    let frame_rel = meta.get("framePath").and_then(|v| v.as_str());
+    let mut image_jpeg = None;
+    if available {
+        if let Some(rel) = frame_rel {
+            let abs = format!("{BROWSER_PREVIEW_DIR}/{rel}");
+            if abs.starts_with(BROWSER_PREVIEW_FRAMES) {
+                image_jpeg = client.fs_read(&abs).await.map_err(map_err).ok();
+            }
+        }
+    }
     Ok(BrowserPreviewCache {
         available: available && image_jpeg.is_some(),
         version,
@@ -482,8 +492,10 @@ mod tests {
         assert!(COMMON_SOURCE.contains("assertPublicHttpUrl"));
         assert!(COMMON_SOURCE.contains("downloadHttpWithRedirects"));
         assert!(DAEMON_SOURCE.contains("runExclusive"));
-        assert!(DAEMON_SOURCE.contains("writePreviewCacheAtomic"));
-        assert!(DAEMON_SOURCE.contains("loadPreviewVersionFromDisk"));
+        assert!(DAEMON_SOURCE.contains("browser-preview-cache.mjs"));
+        assert!(PREVIEW_CACHE_SOURCE.contains("computeFrameEtag"));
+        assert!(PREVIEW_CACHE_SOURCE.contains("writePreviewCacheAtomic"));
+        assert!(PREVIEW_CACHE_SOURCE.contains("loadPreviewVersionFromDisk"));
     }
 
     #[test]
@@ -491,12 +503,17 @@ mod tests {
         let meta = serde_json::json!({
             "version": 12,
             "etag": "abc123",
+            "framePath": "frames/abc123.jpg",
             "available": true,
             "url": "https://example.com",
             "contentType": "image/jpeg",
         });
         let etag = meta.get("etag").and_then(|v| v.as_str());
         assert_eq!(etag, Some("abc123"));
+        assert_eq!(
+            meta.get("framePath").and_then(|v| v.as_str()),
+            Some("frames/abc123.jpg")
+        );
         assert_eq!(meta.get("version").and_then(|v| v.as_u64()), Some(12));
     }
 }

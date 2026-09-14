@@ -17,7 +17,11 @@ export default defineConfig(() => ({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "apps/www/lib/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "apps/www/lib/**/*.test.ts",
+      "crates/sprite-computer/guest/**/*.test.mjs",
+    ],
   },
   clearScreen: false,
   server: {

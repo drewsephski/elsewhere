@@ -1,6 +1,7 @@
 "use client";
 
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { BrowserPreviewFetchScheduler } from "@/lib/browser-preview-fetch-scheduler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface BrowserPreviewFrame {
@@ -43,18 +44,26 @@ export function useBrowserPreview(
   const etagRef = useRef<string | null>(null);
   const fetchSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
-  const refreshGenerationRef = useRef(refreshGeneration);
-  const pendingRefreshRef = useRef(false);
+  const schedulerRef = useRef(new BrowserPreviewFetchScheduler());
+  const computerIdRef = useRef(computerId);
+  const enabledRef = useRef(enabled);
 
-  const fetchFrame = useCallback(async () => {
-    if (!computerId || !enabled) {
+  const cancelInFlight = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    fetchSeqRef.current += 1;
+    schedulerRef.current.reset();
+  }, []);
+
+  const executeFetch = useCallback(async () => {
+    const activeComputerId = computerIdRef.current;
+    if (!activeComputerId || !enabledRef.current) {
       return;
     }
 
-    abortRef.current?.abort();
+    const seq = fetchSeqRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
-    const seq = ++fetchSeqRef.current;
     const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     if (!hasFrame.current) {
@@ -66,7 +75,7 @@ export function useBrowserPreview(
         headers["If-None-Match"] = etagRef.current;
       }
       const response = await cloudHostFetch(
-        `/v1/computers/${encodeURIComponent(computerId)}/browser-preview`,
+        `/v1/computers/${encodeURIComponent(activeComputerId)}/browser-preview`,
         { headers, signal: controller.signal },
       );
       if (seq !== fetchSeqRef.current) {
@@ -116,23 +125,25 @@ export function useBrowserPreview(
       window.clearTimeout(timeoutId);
       if (seq === fetchSeqRef.current) {
         setLoading(false);
-        if (pendingRefreshRef.current) {
-          pendingRefreshRef.current = false;
-          void fetchFrame();
-        }
       }
     }
+  }, []);
+
+  const requestRefresh = useCallback((): Promise<void> => {
+    if (!computerIdRef.current || !enabledRef.current) {
+      return Promise.resolve();
+    }
+    return schedulerRef.current.runCoalesced(executeFetch);
+  }, [executeFetch]);
+
+  useEffect(() => {
+    computerIdRef.current = computerId;
+    enabledRef.current = enabled;
   }, [computerId, enabled]);
 
   useEffect(() => {
-    refreshGenerationRef.current = refreshGeneration;
-  }, [refreshGeneration]);
-
-  useEffect(() => {
     if (!computerId || !enabled) {
-      abortRef.current?.abort();
-      fetchSeqRef.current += 1;
-      pendingRefreshRef.current = false;
+      cancelInFlight();
       hasFrame.current = false;
       etagRef.current = null;
       setFrame(null);
@@ -141,22 +152,18 @@ export function useBrowserPreview(
       return;
     }
 
-    void fetchFrame();
+    requestRefresh();
     return () => {
-      abortRef.current?.abort();
+      cancelInFlight();
     };
-  }, [computerId, enabled, fetchFrame]);
+  }, [computerId, enabled, requestRefresh, cancelInFlight]);
 
   useEffect(() => {
     if (!computerId || !enabled || refreshGeneration === 0) {
       return;
     }
-    if (loading) {
-      pendingRefreshRef.current = true;
-      return;
-    }
-    void fetchFrame();
-  }, [computerId, enabled, refreshGeneration, loading, fetchFrame]);
+    requestRefresh();
+  }, [computerId, enabled, refreshGeneration, requestRefresh]);
 
   useEffect(() => {
     if (!computerId || !enabled) {
@@ -164,10 +171,10 @@ export function useBrowserPreview(
     }
     const pollMs = frame?.imageDataUrl ? RECOVERY_POLL_MS : INITIAL_POLL_MS;
     const timer = window.setInterval(() => {
-      void fetchFrame();
+      requestRefresh();
     }, pollMs);
     return () => window.clearInterval(timer);
-  }, [computerId, enabled, fetchFrame, frame?.imageDataUrl]);
+  }, [computerId, enabled, requestRefresh, frame?.imageDataUrl]);
 
-  return { frame, loading, error, refresh: fetchFrame };
+  return { frame, loading, error, refresh: requestRefresh };
 }

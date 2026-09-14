@@ -1,7 +1,6 @@
 import net from "net";
 import fs from "fs";
 import path from "path";
-import crypto from "crypto";
 import {
   BROWSER_ROOT,
   SOCKET_PATH,
@@ -17,75 +16,33 @@ import {
   requireWorkspacePath,
   resolveRef,
 } from "./browser-common.mjs";
+import {
+  loadPreviewVersionFromDisk,
+  readPreviewCacheFromDisk,
+  writePreviewCacheAtomic,
+} from "./browser-preview-cache.mjs";
 
 let contextPromise;
 let shuttingDown = false;
-let previewVersion = 0;
 
 const PREVIEW_DIR = path.join(BROWSER_ROOT, "preview");
-const PREVIEW_META = path.join(PREVIEW_DIR, "meta.json");
-const PREVIEW_IMAGE = path.join(PREVIEW_DIR, "latest.jpg");
+let previewVersion = loadPreviewVersionFromDisk(PREVIEW_DIR);
 
-function sha256Hex(buffer) {
-  return crypto.createHash("sha256").update(buffer).digest("hex");
-}
-
-function loadPreviewVersionFromDisk() {
-  try {
-    const meta = JSON.parse(fs.readFileSync(PREVIEW_META, "utf8"));
-    if (typeof meta.version === "number" && meta.version >= 0) {
-      previewVersion = meta.version;
-    }
-  } catch {
-    // no cache yet
-  }
-}
-
-loadPreviewVersionFromDisk();
-
-function writePreviewCacheAtomic(metaFields, imageBuffer) {
-  fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
-  previewVersion += 1;
-  const capturedAt = new Date().toISOString();
-  const etag = imageBuffer
-    ? sha256Hex(imageBuffer)
-    : sha256Hex(
-        Buffer.from(
-          JSON.stringify({
-            available: metaFields.available,
-            url: metaFields.url,
-            capturedAt,
-          }),
-        ),
-      );
-  const fullMeta = {
-    version: previewVersion,
-    etag,
-    capturedAt,
-    contentType: "image/jpeg",
-    ...metaFields,
-  };
-  const metaTmp = `${PREVIEW_META}.tmp.${process.pid}`;
-  const imageTmp = `${PREVIEW_IMAGE}.tmp.${process.pid}`;
-  if (imageBuffer) {
-    fs.writeFileSync(imageTmp, imageBuffer);
-    fs.renameSync(imageTmp, PREVIEW_IMAGE);
-  } else {
-    try {
-      fs.unlinkSync(PREVIEW_IMAGE);
-    } catch {
-      // ignore missing image
-    }
-  }
-  fs.writeFileSync(metaTmp, JSON.stringify(fullMeta));
-  fs.renameSync(metaTmp, PREVIEW_META);
+function persistPreviewCache(metaFields, imageBuffer) {
+  const result = writePreviewCacheAtomic(
+    PREVIEW_DIR,
+    previewVersion,
+    metaFields,
+    imageBuffer,
+  );
+  previewVersion = result.version;
 }
 
 async function refreshPreviewCache(page) {
   const currentUrl = page.url();
   if (!currentUrl || currentUrl === "about:blank") {
     try {
-      writePreviewCacheAtomic(
+      persistPreviewCache(
         {
           available: false,
           url: currentUrl || null,
@@ -107,7 +64,7 @@ async function refreshPreviewCache(page) {
   if (buffer.length > MAX_PREVIEW_BYTES) {
     throw new Error("preview frame exceeds size limit");
   }
-  writePreviewCacheAtomic(
+  persistPreviewCache(
     {
       available: true,
       url: currentUrl,
@@ -211,36 +168,7 @@ async function handleRequest(req) {
       return { ok: true, url: page.url() };
     }
     case "preview": {
-      let meta = null;
-      try {
-        meta = JSON.parse(fs.readFileSync(PREVIEW_META, "utf8"));
-      } catch {
-        return { ok: true, available: false };
-      }
-      if (!meta?.available) {
-        return {
-          ok: true,
-          available: false,
-          url: meta.url ?? null,
-          version: meta.version ?? previewVersion,
-        };
-      }
-      let imageBase64 = null;
-      try {
-        imageBase64 = fs.readFileSync(PREVIEW_IMAGE).toString("base64");
-      } catch {
-        return { ok: true, available: false, url: meta.url ?? null };
-      }
-      return {
-        ok: true,
-        available: true,
-        url: meta.url ?? null,
-        title: meta.title ?? null,
-        contentType: meta.contentType ?? "image/jpeg",
-        imageBase64,
-        version: meta.version ?? previewVersion,
-        capturedAt: meta.capturedAt ?? null,
-      };
+      return readPreviewCacheFromDisk(PREVIEW_DIR);
     }
     case "screenshot": {
       const outPath = requireWorkspacePath(String(req.path ?? ""));
