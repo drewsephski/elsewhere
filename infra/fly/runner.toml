@@ -14,7 +14,8 @@ kill_timeout = 300
   ELSEWHERE_MAX_CONCURRENT_RUNS = "1"
   ELSEWHERE_RUN_TIMEOUT_SECS = "900"
   ELSEWHERE_TOOL_APPROVAL_TIMEOUT_SECS = "300"
-  ELSEWHERE_BIND = "0.0.0.0:8080"
+  # IPv6 wildcard so other Fly apps can reach this process on 6PN (see Fly private networking docs).
+  ELSEWHERE_BIND = "[::]:8080"
   ELSEWHERE_JWT_ISSUER = "https://elsewhere-alpha-web.fly.dev"
   ELSEWHERE_JWT_AUDIENCE = "elsewhere-cloud-host"
   ELSEWHERE_JWT_JWKS_URL = "https://elsewhere-alpha-web.fly.dev/api/auth/jwks"
