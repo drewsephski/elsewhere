@@ -224,7 +224,7 @@ impl AgentComputer for SpriteComputer {
             ComputerError::MalformedArguments(format!("browser request JSON: {e}"))
         })?;
 
-        let require_egress = matches!(action, "navigate" | "download");
+        let require_egress = browser_action_requires_network_egress(action);
         let stdout = invoke_browser_daemon(
             &self.client,
             &self.network_policy,
@@ -241,6 +241,11 @@ impl AgentComputer for SpriteComputer {
     }
 }
 
+/// Browser actions that may trigger navigation, subresource loads, or form submits.
+pub fn browser_action_requires_network_egress(action: &str) -> bool {
+    matches!(action, "navigate" | "download" | "click" | "type")
+}
+
 fn map_sprite_error(err: SpriteError) -> ComputerError {
     match err {
         SpriteError::NotFound => ComputerError::NotProvisioned,
@@ -253,5 +258,20 @@ fn map_sprite_error(err: SpriteError) -> ComputerError {
             ComputerError::SandboxRejected(message)
         }
         SpriteError::Provider { message, .. } => ComputerError::GuestUnavailable(message),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::browser_action_requires_network_egress;
+
+    #[test]
+    fn interactive_browser_actions_require_temporary_egress() {
+        for action in ["navigate", "download", "click", "type"] {
+            assert!(browser_action_requires_network_egress(action));
+        }
+        for action in ["snapshot", "screenshot", "preview", "health"] {
+            assert!(!browser_action_requires_network_egress(action));
+        }
     }
 }

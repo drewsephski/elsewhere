@@ -39,16 +39,15 @@ function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
 }
 
-function isBrowserToolEvent(eventType: string, payload: Record<string, unknown>): boolean {
-  if (eventType === "tool_result" || eventType === "tool_call") {
-    const tool = String(payload.tool ?? payload.name ?? "").toLowerCase();
-    return tool.includes("browser");
-  }
-  const text = activityText(eventType, payload);
-  if (!text) {
+function isBrowserToolResult(eventType: string, payload: Record<string, unknown>): boolean {
+  if (eventType !== "tool_result") {
     return false;
   }
-  return text.toLowerCase().includes("browser");
+  if (payload.ok === false) {
+    return false;
+  }
+  const tool = String(payload.tool ?? payload.name ?? "").toLowerCase();
+  return tool.includes("browser");
 }
 
 export function ActiveRunProvider({
@@ -204,7 +203,7 @@ export function ActiveRunProvider({
                     : [...previous.slice(-199), { id, kind: "text", text }],
                 );
               }
-              if (isBrowserToolEvent(event.event, payload)) {
+              if (isBrowserToolResult(event.event, payload)) {
                 setBrowserPreviewGeneration((value) => value + 1);
               }
             }

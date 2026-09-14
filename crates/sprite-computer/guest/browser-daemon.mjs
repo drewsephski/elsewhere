@@ -1,6 +1,7 @@
 import net from "net";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import {
   BROWSER_ROOT,
   SOCKET_PATH,
@@ -25,28 +26,73 @@ const PREVIEW_DIR = path.join(BROWSER_ROOT, "preview");
 const PREVIEW_META = path.join(PREVIEW_DIR, "meta.json");
 const PREVIEW_IMAGE = path.join(PREVIEW_DIR, "latest.jpg");
 
+function sha256Hex(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function loadPreviewVersionFromDisk() {
+  try {
+    const meta = JSON.parse(fs.readFileSync(PREVIEW_META, "utf8"));
+    if (typeof meta.version === "number" && meta.version >= 0) {
+      previewVersion = meta.version;
+    }
+  } catch {
+    // no cache yet
+  }
+}
+
+loadPreviewVersionFromDisk();
+
+function writePreviewCacheAtomic(metaFields, imageBuffer) {
+  fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
+  previewVersion += 1;
+  const capturedAt = new Date().toISOString();
+  const etag = imageBuffer
+    ? sha256Hex(imageBuffer)
+    : sha256Hex(
+        Buffer.from(
+          JSON.stringify({
+            available: metaFields.available,
+            url: metaFields.url,
+            capturedAt,
+          }),
+        ),
+      );
+  const fullMeta = {
+    version: previewVersion,
+    etag,
+    capturedAt,
+    contentType: "image/jpeg",
+    ...metaFields,
+  };
+  const metaTmp = `${PREVIEW_META}.tmp.${process.pid}`;
+  const imageTmp = `${PREVIEW_IMAGE}.tmp.${process.pid}`;
+  if (imageBuffer) {
+    fs.writeFileSync(imageTmp, imageBuffer);
+    fs.renameSync(imageTmp, PREVIEW_IMAGE);
+  } else {
+    try {
+      fs.unlinkSync(PREVIEW_IMAGE);
+    } catch {
+      // ignore missing image
+    }
+  }
+  fs.writeFileSync(metaTmp, JSON.stringify(fullMeta));
+  fs.renameSync(metaTmp, PREVIEW_META);
+}
+
 async function refreshPreviewCache(page) {
   const currentUrl = page.url();
   if (!currentUrl || currentUrl === "about:blank") {
-    previewVersion += 1;
     try {
-      fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
-      fs.writeFileSync(
-        PREVIEW_META,
-        JSON.stringify({
-          version: previewVersion,
+      writePreviewCacheAtomic(
+        {
           available: false,
           url: currentUrl || null,
           title: null,
-          contentType: "image/jpeg",
-          capturedAt: new Date().toISOString(),
-        }),
+        },
+        null,
       );
-      try {
-        fs.unlinkSync(PREVIEW_IMAGE);
-      } catch {
-        // ignore missing image
-      }
     } catch {
       // best-effort cache update
     }
@@ -61,19 +107,13 @@ async function refreshPreviewCache(page) {
   if (buffer.length > MAX_PREVIEW_BYTES) {
     throw new Error("preview frame exceeds size limit");
   }
-  previewVersion += 1;
-  fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(PREVIEW_IMAGE, buffer);
-  fs.writeFileSync(
-    PREVIEW_META,
-    JSON.stringify({
-      version: previewVersion,
+  writePreviewCacheAtomic(
+    {
       available: true,
       url: currentUrl,
       title: await page.title(),
-      contentType: "image/jpeg",
-      capturedAt: new Date().toISOString(),
-    }),
+    },
+    buffer,
   );
 }
 

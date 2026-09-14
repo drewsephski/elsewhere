@@ -32,5 +32,6 @@ pub mod bot_avatar;
 pub mod bot_context;
 pub mod conversation;
 pub mod computer_registry;
+pub use computer_registry::ComputerRegistry;
 pub mod computer_session;
 pub mod results;

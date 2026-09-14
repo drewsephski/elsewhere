@@ -43,6 +43,8 @@ export function useBrowserPreview(
   const etagRef = useRef<string | null>(null);
   const fetchSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const refreshGenerationRef = useRef(refreshGeneration);
+  const pendingRefreshRef = useRef(false);
 
   const fetchFrame = useCallback(async () => {
     if (!computerId || !enabled) {
@@ -114,14 +116,23 @@ export function useBrowserPreview(
       window.clearTimeout(timeoutId);
       if (seq === fetchSeqRef.current) {
         setLoading(false);
+        if (pendingRefreshRef.current) {
+          pendingRefreshRef.current = false;
+          void fetchFrame();
+        }
       }
     }
   }, [computerId, enabled]);
 
   useEffect(() => {
+    refreshGenerationRef.current = refreshGeneration;
+  }, [refreshGeneration]);
+
+  useEffect(() => {
     if (!computerId || !enabled) {
       abortRef.current?.abort();
       fetchSeqRef.current += 1;
+      pendingRefreshRef.current = false;
       hasFrame.current = false;
       etagRef.current = null;
       setFrame(null);
@@ -134,7 +145,18 @@ export function useBrowserPreview(
     return () => {
       abortRef.current?.abort();
     };
-  }, [computerId, enabled, refreshGeneration, fetchFrame]);
+  }, [computerId, enabled, fetchFrame]);
+
+  useEffect(() => {
+    if (!computerId || !enabled || refreshGeneration === 0) {
+      return;
+    }
+    if (loading) {
+      pendingRefreshRef.current = true;
+      return;
+    }
+    void fetchFrame();
+  }, [computerId, enabled, refreshGeneration, loading, fetchFrame]);
 
   useEffect(() => {
     if (!computerId || !enabled) {

@@ -102,7 +102,10 @@ pub struct BrowserPreviewResponse {
     pub version: u64,
 }
 
-fn preview_etag(version: u64) -> String {
+fn preview_etag(version: u64, frame_etag: Option<&str>) -> String {
+    if let Some(etag) = frame_etag {
+        return format!("\"{etag}\"");
+    }
     format!("\"preview-v{version}\"")
 }
 
@@ -128,7 +131,7 @@ pub async fn browser_preview(
         .await
         .map_err(|e| ApiError::Internal(format!("browser preview cache read failed: {e}")))?;
 
-    let etag = preview_etag(cache.version);
+    let etag = preview_etag(cache.version, cache.etag.as_deref());
     if headers
         .get(header::IF_NONE_MATCH)
         .and_then(|v| v.to_str().ok())
@@ -329,6 +332,9 @@ pub async fn delete(
 ) -> Result<axum::http::StatusCode, ApiError> {
     let archived = archive_computer(&state.pool, principal.owner_id(), &computer_id).await?;
     if archived {
+        state
+            .computer_registry
+            .evict(principal.owner_id(), &computer_id);
         Ok(axum::http::StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::NotFound)

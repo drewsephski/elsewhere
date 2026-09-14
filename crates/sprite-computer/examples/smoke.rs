@@ -17,7 +17,9 @@
 
 use agent_core::AgentComputer;
 use serde_json::{json, Value};
-use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
+use sprite_computer::{
+    default_deny_network_policy, network_policy_matches, SpriteComputer, SpriteComputerConfig,
+};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -206,6 +208,19 @@ async fn run_browser_smoke(computer: &SpriteComputer) -> Result<(), Box<dyn std:
         return Err("second type changed page URL unexpectedly".into());
     }
     println!("browser type persistence verified");
+
+    let baseline = default_deny_network_policy();
+    let policy = computer
+        .client()
+        .get_network_policy()
+        .await
+        .map_err(|e| format!("network policy read failed: {e}"))?;
+    if !network_policy_matches(&policy, &baseline) {
+        return Err(
+            "default-deny network policy was not restored after browser smoke".into(),
+        );
+    }
+    println!("default-deny network policy verified after browser smoke");
 
     Ok(())
 }

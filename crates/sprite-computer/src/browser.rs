@@ -372,6 +372,8 @@ where
 pub struct BrowserPreviewCache {
     pub available: bool,
     pub version: u64,
+    /// Restart-safe frame identity (SHA-256 of preview JPEG or empty-state payload).
+    pub etag: Option<String>,
     pub url: Option<String>,
     pub title: Option<String>,
     pub content_type: String,
@@ -389,6 +391,7 @@ pub async fn read_browser_preview_cache(
             return Ok(BrowserPreviewCache {
                 available: false,
                 version: 0,
+                etag: None,
                 url: None,
                 title: None,
                 content_type: "image/jpeg".into(),
@@ -401,6 +404,7 @@ pub async fn read_browser_preview_cache(
         ComputerError::ExecutionFailed(format!("invalid browser preview meta: {e}"))
     })?;
     let version = meta.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let etag = meta.get("etag").and_then(|v| v.as_str()).map(str::to_string);
     let available = meta.get("available").and_then(|v| v.as_bool()).unwrap_or(false);
     let url = meta.get("url").and_then(|v| v.as_str()).map(str::to_string);
     let title = meta.get("title").and_then(|v| v.as_str()).map(str::to_string);
@@ -425,6 +429,7 @@ pub async fn read_browser_preview_cache(
     Ok(BrowserPreviewCache {
         available: available && image_jpeg.is_some(),
         version,
+        etag,
         url,
         title,
         content_type,
@@ -477,5 +482,21 @@ mod tests {
         assert!(COMMON_SOURCE.contains("assertPublicHttpUrl"));
         assert!(COMMON_SOURCE.contains("downloadHttpWithRedirects"));
         assert!(DAEMON_SOURCE.contains("runExclusive"));
+        assert!(DAEMON_SOURCE.contains("writePreviewCacheAtomic"));
+        assert!(DAEMON_SOURCE.contains("loadPreviewVersionFromDisk"));
+    }
+
+    #[test]
+    fn preview_meta_parses_content_etag() {
+        let meta = serde_json::json!({
+            "version": 12,
+            "etag": "abc123",
+            "available": true,
+            "url": "https://example.com",
+            "contentType": "image/jpeg",
+        });
+        let etag = meta.get("etag").and_then(|v| v.as_str());
+        assert_eq!(etag, Some("abc123"));
+        assert_eq!(meta.get("version").and_then(|v| v.as_u64()), Some(12));
     }
 }
