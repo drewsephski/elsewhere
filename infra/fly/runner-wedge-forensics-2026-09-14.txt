@@ -1,0 +1,26 @@
+Elsewhere alpha runner wedge forensics (Machine 185d96dc3d0958)
+Captured ~2026-09-14T17:58Z UTC while public /health timed out.
+
+## Summary
+- cloud-host PID 647, Threads: 2 (main + one tokio-rt-worker TID 665).
+- Both runtime threads: State S, wchan=futex_wait_queue (not pegged CPU, not in blocking syscall).
+- Live Codex app-server despite "no runs": child PID 675 (node) -> 682 (codex), PPID 647.
+- Port 8080: 133 TCP sockets in state 08 (CLOSE_WAIT), 1 LISTEN (0A).
+- VmRSS ~13 MB, 28 FDs on cloud-host — no OOM / FD exhaustion on process.
+- Postgres: leadership pid 73282 idle; several pool sessions idle ~12m; zero blocking lock rows.
+- strace: not installed in image.
+
+## Implication
+Not wrong Supabase project. Wedge correlates with orphaned Codex app-server child and
+CLOSE_WAIT pile-up on :8080 while Tokio workers are parked. On 1 shared CPU, default
+Tokio worker count is effectively one worker thread — supports starvation/deadlock hypothesis.
+
+## Raw captures
+See companion files on operator machine:
+  /tmp/elsewhere-runner-forensics-pid.txt
+  /tmp/elsewhere-runner-forensics-threads.txt
+  /tmp/elsewhere-runner-forensics-children.txt
+  /tmp/elsewhere-runner-forensics-resources.txt
+  /tmp/elsewhere-runner-forensics-stacks.txt
+  /tmp/elsewhere-runner-forensics-fds.txt
+  /tmp/elsewhere-runner-soak.log

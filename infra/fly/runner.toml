@@ -20,7 +20,7 @@ kill_timeout = 300
   ELSEWHERE_JWT_AUDIENCE = "elsewhere-cloud-host"
   ELSEWHERE_JWT_JWKS_URL = "https://elsewhere-alpha-web.fly.dev/api/auth/jwks"
   ELSEWHERE_WEB_ORIGIN = "https://elsewhere-alpha-web.fly.dev"
-  RUST_LOG = "cloud_host=info,codex_provider=info,sprite_computer=info"
+  RUST_LOG = "cloud_host=info,codex_provider=info,sprite_computer=info,elsewhere_codex_ops=info"
 
 [[mounts]]
   source = "codex_profiles"
