@@ -16,6 +16,7 @@ pub struct BotRow {
     pub model: String,
     pub computer_id: Option<String>,
     pub engine_preference: String,
+    pub avatar_id: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -46,7 +47,7 @@ pub async fn list_bots(pool: &PgPool, owner_id: &str) -> Result<Vec<BotRow>, sql
     sqlx::query_as(
         r#"
         SELECT id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-               created_at, updated_at
+               avatar_id, created_at, updated_at
         FROM bots WHERE owner_id = $1 ORDER BY updated_at DESC
         "#,
     )
@@ -63,7 +64,7 @@ pub async fn get_bot_for_owner(
     sqlx::query_as(
         r#"
         SELECT id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-               created_at, updated_at
+               avatar_id, created_at, updated_at
         FROM bots WHERE id = $1 AND owner_id = $2
         "#,
     )
@@ -81,6 +82,7 @@ pub async fn insert_bot(
     model: &str,
     computer_id: Option<&str>,
     engine_preference: &str,
+    avatar_id: &str,
 ) -> Result<BotRow, ApiError> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now();
@@ -88,10 +90,10 @@ pub async fn insert_bot(
         r#"
         INSERT INTO bots (
             id, owner_id, name, system_prompt, model, computer_enabled, computer_id,
-            engine_preference, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $8)
+            engine_preference, avatar_id, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $9)
         RETURNING id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-                  created_at, updated_at
+                  avatar_id, created_at, updated_at
         "#,
     )
     .bind(&id)
@@ -101,6 +103,7 @@ pub async fn insert_bot(
     .bind(model)
     .bind(computer_id)
     .bind(engine_preference)
+    .bind(avatar_id)
     .bind(now)
     .fetch_one(pool)
     .await
@@ -116,6 +119,7 @@ pub async fn patch_bot(
     model: Option<&str>,
     computer_id: Option<Option<&str>>,
     engine_preference: Option<&str>,
+    avatar_id: Option<&str>,
 ) -> Result<Option<BotRow>, ApiError> {
     sqlx::query_as(
         r#"
@@ -125,10 +129,11 @@ pub async fn patch_bot(
             model = COALESCE($5, model),
             computer_id = CASE WHEN $6 THEN $7 ELSE computer_id END,
             engine_preference = COALESCE($8, engine_preference),
+            avatar_id = COALESCE($9, avatar_id),
             updated_at = NOW()
         WHERE id = $1 AND owner_id = $2
         RETURNING id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-                  created_at, updated_at
+                  avatar_id, created_at, updated_at
         "#,
     )
     .bind(bot_id)
@@ -139,18 +144,147 @@ pub async fn patch_bot(
     .bind(computer_id.is_some())
     .bind(computer_id.flatten())
     .bind(engine_preference)
+    .bind(avatar_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))
 }
 
 pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<bool, ApiError> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let exists: Option<(String,)> = sqlx::query_as(
+        "SELECT id FROM bots WHERE id = $1 AND owner_id = $2 FOR UPDATE",
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if exists.is_none() {
+        return Ok(false);
+    }
+
+    // Remove dependent rows in FK-safe order (all scoped to this owner + bot).
+    sqlx::query(
+        r#"
+        DELETE FROM work_queue
+        WHERE routine_id IN (
+            SELECT id FROM routines WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM routines WHERE bot_id = $1 AND owner_id = $2")
+        .bind(bot_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM tool_approval_requests
+        WHERE run_id IN (
+            SELECT id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM work_queue
+        WHERE run_id IN (
+            SELECT id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM work_results
+        WHERE run_id IN (
+            SELECT id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM run_events
+        WHERE request_id IN (
+            SELECT request_id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM agent_runs WHERE bot_id = $1 AND owner_id = $2")
+        .bind(bot_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM messages
+        WHERE conversation_id IN (
+            SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM conversations WHERE bot_id = $1 AND owner_id = $2")
+        .bind(bot_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     let result = sqlx::query("DELETE FROM bots WHERE id = $1 AND owner_id = $2")
         .bind(bot_id)
         .bind(owner_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     Ok(result.rows_affected() > 0)
 }
 

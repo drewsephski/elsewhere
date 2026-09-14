@@ -555,6 +555,7 @@ async fn draining_preserves_queue_and_waits_for_execution_release(pool: PgPool) 
         "gpt-5.6-luna",
         Some(&computer.id),
         "codex",
+        "sky-wisp",
     )
     .await
     .unwrap();

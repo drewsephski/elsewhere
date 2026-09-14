@@ -62,6 +62,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/conversations", get(api::catalog::list_conversations))
         .route("/v1/runs/{id}", get(api::runs::get_run))
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
+        .route("/v1/runs/{id}/archive", post(api::runs::archive_run))
         .route("/v1/runs/{id}/events", get(api::runs::run_events_sse))
         .route("/v1/approvals", get(crate::approval::api::list_approvals))
         .route(

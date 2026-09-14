@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Bot, ArrowUpRight, Monitor } from "lucide-react";
+import { Bot, ArrowUpRight, Monitor } from "@/components/icons/lucide";
 import { cloudHostFetch } from "@/lib/cloud-api";
 
 import {

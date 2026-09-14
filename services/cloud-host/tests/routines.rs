@@ -18,6 +18,7 @@ async fn input(pool: &PgPool, owner: &str) -> RoutineInput {
         "gpt-5.6-luna",
         Some(&computer.id),
         "codex",
+        "sky-wisp",
     )
     .await
     .unwrap();

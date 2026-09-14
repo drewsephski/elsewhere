@@ -2,6 +2,7 @@
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
+import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -51,8 +52,9 @@ export default function ForgotPasswordPage() {
           </Link>
         </div>
       ) : (
-        <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-          <div className="space-y-2">
+        <form className="mt-8" onSubmit={handleSubmit}>
+          <FormFields>
+          <FormItem>
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -62,7 +64,7 @@ export default function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
+          </FormItem>
           {error ? (
             <p className="text-sm text-red-700" role="alert">
               {error}
@@ -77,6 +79,7 @@ export default function ForgotPasswordPage() {
           >
             Back to sign in
           </Link>
+          </FormFields>
         </form>
       )}
     </AuthShell>

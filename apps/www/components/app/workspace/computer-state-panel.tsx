@@ -4,7 +4,7 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, ComputerSummary, RunSummary } from "@/lib/api-types";
 import { workStatus } from "@/lib/work-events";
 import { cn } from "cn";
-import { FolderOpen, Monitor, Terminal } from "lucide-react";
+import { Monitor } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -12,9 +12,15 @@ interface ComputerStatePanelProps {
   bot: BotSummary | null;
   activeRun: RunSummary | null;
   className?: string;
+  variant?: "default" | "minimal";
 }
 
-export function ComputerStatePanel({ bot, activeRun, className }: ComputerStatePanelProps) {
+export function ComputerStatePanel({
+  bot,
+  activeRun,
+  className,
+  variant = "default",
+}: ComputerStatePanelProps) {
   const [computer, setComputer] = useState<ComputerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +47,69 @@ export function ComputerStatePanel({ bot, activeRun, className }: ComputerStateP
     return () => controller.abort();
   }, [bot?.computerId]);
 
-  const displayName = computer?.displayName ?? bot?.computerId ? "Computer" : null;
+  const displayName = computer?.displayName ?? (bot?.computerId ? "Computer" : null);
+  const readyLabel = computer?.providerMetadata.provisioned
+    ? "Ready for work"
+    : "Provisions on first use";
+
+  if (variant === "minimal") {
+    return (
+      <section
+        className={cn("border-b border-border/60 py-3", className)}
+        aria-labelledby="computer-panel-title"
+      >
+        <div className="flex items-center justify-between gap-2 px-1">
+          <h2 id="computer-panel-title" className="text-sm font-semibold">
+            Computer
+          </h2>
+          <Link
+            href="/app/computers"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Manage
+          </Link>
+        </div>
+
+        {!bot?.computerId ? (
+          <p className="mt-2 px-1 text-xs leading-relaxed text-muted-foreground">
+            Assign a computer in Settings so your bot can keep files between assignments.
+          </p>
+        ) : (
+          <div className="mt-2 space-y-2 px-1">
+            <div className="flex items-start gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/70">
+              <span
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15"
+                aria-hidden
+              >
+                <Monitor className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{displayName}</p>
+                <p className="text-xs text-muted-foreground">{readyLabel}</p>
+              </div>
+            </div>
+            {activeRun ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {workStatus(activeRun.status)}
+                </span>
+                {" · "}
+                <span className="line-clamp-2">{activeRun.task}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Idle — waiting for your next message.</p>
+            )}
+          </div>
+        )}
+
+        {error ? (
+          <p className="mt-2 px-1 text-xs text-red-600" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
 
   return (
     <section className={cn("workspace-rail-card", className)} aria-labelledby="computer-panel-title">
@@ -75,7 +143,7 @@ export function ComputerStatePanel({ bot, activeRun, className }: ComputerStateP
             <>
               <div className="flex items-center gap-2 text-sm">
                 <Monitor className="size-4 text-violet-300" aria-hidden />
-                <span>{computer?.providerMetadata.provisioned ? "Ready for work" : "Will provision on first use"}</span>
+                <span>{readyLabel}</span>
               </div>
               {activeRun ? (
                 <div className="rounded-lg bg-white/5 p-3 text-sm">
@@ -88,31 +156,15 @@ export function ComputerStatePanel({ bot, activeRun, className }: ComputerStateP
               ) : (
                 <p className="text-sm text-white/65">Idle — waiting for your next message.</p>
               )}
-              <ul className="grid grid-cols-3 gap-2 text-center text-[10px] text-white/55">
-                <li className="rounded-lg bg-white/5 px-2 py-2">
-                  <FolderOpen className="mx-auto mb-1 size-4 text-white/70" aria-hidden />
-                  Files
-                </li>
-                <li className="rounded-lg bg-white/5 px-2 py-2 opacity-60">
-                  <Monitor className="mx-auto mb-1 size-4" aria-hidden />
-                  Browser
-                  <span className="mt-0.5 block text-[9px]">Soon</span>
-                </li>
-                <li className="rounded-lg bg-white/5 px-2 py-2">
-                  <Terminal className="mx-auto mb-1 size-4 text-white/70" aria-hidden />
-                  Terminal
-                </li>
-              </ul>
             </>
           )}
         </div>
       </div>
       {error ? (
-        <p className="mt-2 text-xs text-red-600" role="alert">{error}</p>
+        <p className="mt-2 text-xs text-red-600" role="alert">
+          {error}
+        </p>
       ) : null}
-      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        Live browser view will replace this panel when streaming is available. Status reflects real work on the server.
-      </p>
     </section>
   );
 }

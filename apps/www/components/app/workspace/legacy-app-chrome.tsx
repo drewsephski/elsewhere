@@ -11,12 +11,12 @@ interface LegacyAppChromeProps {
 
 export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
   return (
-    <div className="app-shell-bg min-h-screen text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-white/90 backdrop-blur-md">
-        <div className="flex h-12 items-center justify-between gap-4 px-4 lg:px-6">
+    <div className="app-shell-bg flex min-h-[100dvh] flex-col overflow-hidden text-foreground">
+      <header className="shrink-0 border-b border-border/70 bg-white/55 backdrop-blur-md">
+        <div className="flex h-12 items-center justify-between gap-4 px-4 lg:px-5">
           <Link href="/app" className="flex items-center gap-2.5">
             <span
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground"
               aria-hidden
             >
               E
@@ -25,30 +25,22 @@ export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
               {siteConfig.productName}
             </span>
           </Link>
-          <Link
-            href="/app"
-            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            Back to bots
-          </Link>
           <span className="truncate text-xs text-muted-foreground">{userEmail}</span>
         </div>
       </header>
 
-      <div className="flex min-h-[calc(100vh-3rem)]">
+      <div className="flex min-h-0 flex-1">
         <aside
-          className="hidden w-52 shrink-0 border-r border-border/70 bg-white/55 p-4 md:flex md:flex-col"
-          aria-label="Legacy navigation"
+          className="hidden w-[min(100%,16rem)] shrink-0 border-r border-border/70 bg-white/55 backdrop-blur-md px-3 py-4 md:flex md:flex-col"
+          aria-label="Manage navigation"
         >
-          <AppShellNav layout="sidebar" />
+          <AppShellNav layout="sidebar" showBackToChat />
         </aside>
-        <main className="min-w-0 flex-1 p-4 lg:p-6">
-          <div className="mb-4 md:hidden">
-            <AppShellNav layout="mobile" />
+        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+          <div className="mb-3 px-4 pt-3 md:hidden">
+            <AppShellNav layout="mobile" showBackToChat />
           </div>
-          <div className="surface-panel min-h-[calc(100vh-7rem)] p-5 sm:p-6 md:min-h-[calc(100vh-6rem)]">
-            {children}
-          </div>
+          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
         </main>
       </div>
     </div>

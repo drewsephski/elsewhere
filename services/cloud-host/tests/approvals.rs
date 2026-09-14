@@ -165,6 +165,7 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -249,6 +250,7 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -310,6 +312,7 @@ async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap();

@@ -4,12 +4,14 @@ import { ApprovalCard } from "@/components/app/approval-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, CreateRunResponse, RunSummary } from "@/lib/api-types";
 import { formatMessageTime } from "@/lib/format";
-import { botAvatarClass, getBotInitials } from "@/lib/bot-visual";
+import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
+import { InlineRenameLabel } from "@/components/app/inline-rename-label";
+import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { workStatus } from "@/lib/work-events";
 import { useRunEventStream } from "@/hooks/use-run-event-stream";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import { ChevronLeft, Info, Monitor, PanelRight } from "lucide-react";
+import { ChevronLeft, Info, Monitor, PanelRight } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatResultCards } from "./chat-result-cards";
@@ -23,12 +25,14 @@ interface BotConversationViewProps {
   botId: string;
   onOpenContext?: () => void;
   onBotLoaded?: (bot: BotSummary) => void;
+  onRenameBot?: (botId: string, name: string) => Promise<void>;
 }
 
 export function BotConversationView({
   botId,
   onOpenContext,
   onBotLoaded,
+  onRenameBot,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -140,7 +144,7 @@ export function BotConversationView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
           <Link
             href="/app"
             className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted lg:hidden"
@@ -148,17 +152,26 @@ export function BotConversationView({
           >
             <ChevronLeft className="size-5" />
           </Link>
-          <span
-            className={cn(
-              "flex size-10 shrink-0 items-center justify-center rounded-2xl text-sm font-semibold ring-1",
-              botAvatarClass(botId),
-            )}
-            aria-hidden
-          >
-            {getBotInitials(bot?.name ?? "Bot")}
-          </span>
+          <BotCreatureAvatar
+            name={bot?.name ?? "Bot"}
+            avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+            size="xl"
+            animated={Boolean(streamRunId)}
+          />
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold">{bot?.name ?? "Bot"}</h1>
+            {onRenameBot && bot ? (
+              <InlineRenameLabel
+                value={bot.name}
+                onCommit={(next) => onRenameBot(bot.id, next)}
+                className="text-base font-semibold leading-tight"
+                inputClassName="text-base"
+                ariaLabel={`Rename ${bot.name}`}
+              />
+            ) : (
+              <h1 className="truncate text-base font-semibold leading-tight">
+                {bot?.name ?? "Bot"}
+              </h1>
+            )}
             <p className="truncate text-xs text-muted-foreground">
               {streamRunId ? connection ?? "Working" : "Ready for your next message"}
             </p>

@@ -1,8 +1,17 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { appRoutes } from "@/lib/app-routes";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "cn";
-import { LogOut, Plug, Settings2 } from "lucide-react";
+import { LogOut, MoreHorizontal, Plug, Settings2 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -25,7 +34,7 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
 
   return (
     <div className={cn("space-y-2", compact && "space-y-1")}>
-      <div className="flex items-center gap-2.5 rounded-xl px-1 py-1">
+      <div className="flex items-center gap-2 rounded-xl px-1 py-1">
         <span
           className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground"
           aria-hidden
@@ -36,33 +45,38 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
           <p className="truncate text-sm font-medium">Account</p>
           <p className="truncate text-xs text-muted-foreground">{email}</p>
         </div>
-      </div>
-      <div className="flex flex-wrap gap-1">
-        <Link
-          href="/app/computers"
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-        >
-          <Plug className="size-3.5" aria-hidden />
-          Plugins
-        </Link>
-        {onOpenSettings ? (
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="size-8 shrink-0 px-0"
+                aria-label="Account menu"
+              />
+            }
           >
-            <Settings2 className="size-3.5" aria-hidden />
-            Connection
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => void handleSignOut()}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-        >
-          <LogOut className="size-3.5" aria-hidden />
-          Sign out
-        </button>
+            <MoreHorizontal className="size-4" aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem render={<Link href={appRoutes.computers} />}>
+              <Plug className="size-4" aria-hidden />
+              Computers
+            </DropdownMenuItem>
+            {onOpenSettings ? (
+              <DropdownMenuItem onClick={onOpenSettings}>
+                <Settings2 className="size-4" aria-hidden />
+                ChatGPT connection
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={() => void handleSignOut()}>
+              <LogOut className="size-4" aria-hidden />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );

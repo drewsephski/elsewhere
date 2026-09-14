@@ -10,6 +10,7 @@ export type BotPresenceState =
 export interface WorkspaceBotPresence {
   id: string;
   name: string;
+  avatarId?: string;
   computerName: string | null;
   presence: BotPresenceState | string;
   workId: string | null;

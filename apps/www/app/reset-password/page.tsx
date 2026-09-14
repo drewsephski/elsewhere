@@ -2,6 +2,7 @@
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
+import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -78,8 +79,9 @@ export default function ResetPasswordPage() {
       title="Choose a new password"
       description="Enter a new password for your account. You will sign in again after saving it."
     >
-      <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
-        <div className="space-y-2">
+      <form className="mt-8" onSubmit={handleSubmit}>
+        <FormFields>
+        <FormItem>
           <Label htmlFor="password">New password</Label>
           <Input
             id="password"
@@ -90,8 +92,8 @@ export default function ResetPasswordPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-        </div>
-        <div className="space-y-2">
+        </FormItem>
+        <FormItem>
           <Label htmlFor="confirm-password">Confirm password</Label>
           <Input
             id="confirm-password"
@@ -102,7 +104,7 @@ export default function ResetPasswordPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
           />
-        </div>
+        </FormItem>
         {error ? (
           <p className="text-sm text-red-700" role="alert">
             {error}
@@ -117,6 +119,7 @@ export default function ResetPasswordPage() {
         >
           Back to sign in
         </Link>
+        </FormFields>
       </form>
     </AuthShell>
   );

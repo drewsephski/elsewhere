@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "cn";
-import { X } from "lucide-react";
+import { X } from "@/components/icons/lucide";
 import { useEffect } from "react";
 
 interface MobileSheetProps {

@@ -2,7 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { formatBytes } from "@/lib/format";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText } from "@/components/icons/lucide";
 import { useEffect, useState } from "react";
 
 type ResultItem = {

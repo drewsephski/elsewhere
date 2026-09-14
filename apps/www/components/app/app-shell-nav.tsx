@@ -1,35 +1,38 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { appRoutes, appShellNavLinks } from "@/lib/app-routes";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 import {
-  Bot,
   BriefcaseBusiness,
   CalendarClock,
-  Files,
   CheckCircle2,
-  LayoutDashboard,
-  Monitor,
+  Files,
   LogOut,
-} from "lucide-react";
+  MessageSquare,
+  Monitor,
+} from "@/components/icons/lucide";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-const links = [
-  { href: "/app", label: "Overview", icon: LayoutDashboard },
-  { href: "/app/bots", label: "Bots", icon: Bot },
-  { href: "/app/work", label: "Work", icon: BriefcaseBusiness },
-  { href: "/app/computers", label: "Computers", icon: Monitor },
-  { href: "/app/routines", label: "Routines", icon: CalendarClock },
-  { href: "/app/results", label: "Results", icon: Files },
-  { href: "/app/approvals", label: "Approvals", icon: CheckCircle2 },
-] as const;
+const linkIcons = {
+  [appRoutes.work]: BriefcaseBusiness,
+  [appRoutes.approvals]: CheckCircle2,
+  [appRoutes.results]: Files,
+  [appRoutes.routines]: CalendarClock,
+  [appRoutes.computers]: Monitor,
+} as const;
 
 interface AppShellNavProps {
   layout?: "sidebar" | "mobile";
+  showBackToChat?: boolean;
 }
 
-export function AppShellNav({ layout = "sidebar" }: AppShellNavProps) {
+export function AppShellNav({
+  layout = "sidebar",
+  showBackToChat = false,
+}: AppShellNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const isMobile = layout === "mobile";
@@ -49,23 +52,46 @@ export function AppShellNav({ layout = "sidebar" }: AppShellNavProps) {
       )}
       aria-label="App navigation"
     >
+      {showBackToChat && !isMobile ? (
+        <Link
+          href={appRoutes.workspace}
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "mb-3 w-full justify-start gap-2",
+          )}
+        >
+          <MessageSquare className="size-4 shrink-0" aria-hidden />
+          Back to chat
+        </Link>
+      ) : null}
+
+      {showBackToChat && isMobile ? (
+        <Link
+          href={appRoutes.workspace}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium"
+        >
+          <MessageSquare className="size-4" aria-hidden />
+          Chat
+        </Link>
+      ) : null}
+
       {!isMobile ? (
-        <p className="mb-3 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Workspace
+        <p className="mb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Manage
         </p>
       ) : null}
 
-      {links.map((link) => {
+      {appShellNavLinks.map((link) => {
         const active =
-          pathname === link.href || (link.href !== "/app" && pathname.startsWith(`${link.href}/`));
-        const Icon = link.icon;
+          pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const Icon = linkIcons[link.href];
 
         return (
           <Link
             key={link.href}
             href={link.href}
             className={cn(
-              "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               isMobile && "shrink-0 whitespace-nowrap",
               active
                 ? "bg-accent text-accent-foreground"
@@ -80,7 +106,6 @@ export function AppShellNav({ layout = "sidebar" }: AppShellNavProps) {
             ) : null}
             <Icon
               className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "")}
-              strokeWidth={1.75}
               aria-hidden
             />
             {link.label}
@@ -90,13 +115,13 @@ export function AppShellNav({ layout = "sidebar" }: AppShellNavProps) {
 
       <button
         type="button"
-        onClick={handleSignOut}
+        onClick={() => void handleSignOut()}
         className={cn(
           "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",
           isMobile ? "ml-auto shrink-0" : "mt-auto",
         )}
       >
-        <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+        <LogOut className="h-4 w-4 shrink-0" aria-hidden />
         Sign out
       </button>
     </nav>

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_state::AppState;
 use crate::auth::Principal;
+use crate::bot_avatar::normalize_avatar_id;
 use crate::db::resources::{
     delete_bot, get_bot_for_owner, insert_bot, list_bots, normalize_engine_preference,
     normalize_model, patch_bot,
@@ -34,6 +35,7 @@ pub struct BotResponse {
     pub model: String,
     pub computer_id: Option<String>,
     pub engine_preference: String,
+    pub avatar_id: String,
 }
 
 fn to_response(row: crate::db::resources::BotRow) -> BotResponse {
@@ -44,6 +46,7 @@ fn to_response(row: crate::db::resources::BotRow) -> BotResponse {
         model: row.model,
         computer_id: row.computer_id,
         engine_preference: row.engine_preference,
+        avatar_id: row.avatar_id,
     }
 }
 
@@ -65,6 +68,7 @@ pub struct CreateBotRequest {
     pub model: Option<String>,
     pub computer_id: Option<String>,
     pub engine_preference: Option<String>,
+    pub avatar_id: Option<String>,
 }
 
 pub async fn create(
@@ -87,6 +91,7 @@ pub async fn create(
             return Err(ApiError::Validation("computer is archived".into()));
         }
     }
+    let avatar_id = normalize_avatar_id(body.avatar_id.as_deref())?;
     let row = insert_bot(
         &state.pool,
         principal.owner_id(),
@@ -95,6 +100,7 @@ pub async fn create(
         &normalize_model(body.model.as_deref()),
         body.computer_id.as_deref(),
         engine,
+        &avatar_id,
     )
     .await?;
     Ok(Json(to_response(row)))
@@ -120,6 +126,7 @@ pub struct PatchBotRequest {
     pub model: Option<String>,
     pub computer_id: Option<String>,
     pub engine_preference: Option<String>,
+    pub avatar_id: Option<String>,
 }
 
 pub async fn patch(
@@ -146,6 +153,10 @@ pub async fn patch(
             return Err(ApiError::Validation("computer is archived".into()));
         }
     }
+    let avatar_id = match body.avatar_id.as_deref() {
+        Some(raw) => Some(normalize_avatar_id(Some(raw))?),
+        None => None,
+    };
     let row = patch_bot(
         &state.pool,
         principal.owner_id(),
@@ -157,6 +168,7 @@ pub async fn patch(
             .as_deref()
             .map(|id| if id.is_empty() { None } else { Some(id) }),
         engine,
+        avatar_id.as_deref(),
     )
     .await?
     .ok_or(ApiError::NotFound)?;

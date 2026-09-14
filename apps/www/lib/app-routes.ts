@@ -24,3 +24,12 @@ export const capabilityAppHrefs: Record<string, string> = {
   Memory: appRoutes.workspace,
   Approvals: appRoutes.approvals,
 };
+
+/** Sidebar links for legacy management pages (chat lives at `/app`). */
+export const appShellNavLinks = [
+  { href: appRoutes.work, label: "Work" },
+  { href: appRoutes.approvals, label: "Approvals" },
+  { href: appRoutes.results, label: "Results" },
+  { href: appRoutes.routines, label: "Routines" },
+  { href: appRoutes.computers, label: "Computers" },
+] as const;

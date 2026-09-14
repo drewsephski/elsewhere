@@ -278,6 +278,21 @@ pub async fn get_run(
     }))
 }
 
+pub async fn archive_run(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(run_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    crate::run_archive::archive_run(
+        &state.pool,
+        &state.config,
+        principal.owner_id(),
+        &run_id,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn cancel_run(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,

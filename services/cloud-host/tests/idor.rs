@@ -75,6 +75,7 @@ async fn user_cannot_read_other_users_bot() {
         "gpt-5.6-luna",
         Some(computer.id.as_str()),
         "auto",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -106,6 +107,7 @@ async fn user_cannot_delete_other_users_bot() {
         "gpt-5.6-luna",
         None,
         "auto",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -122,6 +124,60 @@ async fn user_cannot_delete_other_users_bot() {
         .await
         .unwrap();
     assert_eq!(resp.status(), http::StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn user_can_delete_own_bot_with_conversations() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let bot = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "Bot A",
+        "i",
+        "gpt-5.6-luna",
+        None,
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    let conv_id = Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'user-a', $2)")
+        .bind(&conv_id)
+        .bind(&bot.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let app = build_router(jwt_state(pool.clone()));
+    let resp = app
+        .oneshot(
+            http::Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/bots/{}", bot.id))
+                .header("authorization", format!("Bearer {}", token("user-a")))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), http::StatusCode::NO_CONTENT);
+
+    let still_there: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1)")
+        .bind(&bot.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!still_there);
+    let conv_left: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)")
+            .bind(&conv_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!conv_left);
 }
 
 #[tokio::test]
@@ -330,6 +386,7 @@ async fn progress_replay_drains_every_page_and_respects_cursor() {
         "gpt-5.6-luna",
         Some(&computer.id),
         "codex",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -376,7 +433,7 @@ async fn progress_replay_drains_every_page_and_respects_cursor() {
 #[sqlx::test(migrations = "./migrations")]
 async fn result_downloads_and_context_are_owner_scoped(pool: PgPool) {
     let computer = insert_computer_placeholder(&pool, "alice", "Computer").await.unwrap();
-    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex", "sky-wisp").await.unwrap();
     let run = cloud_host::work::enqueue(&pool, "alice", "private-result", &bot.id, None, "Work").await.unwrap();
     cloud_host::results::save(&pool, &run.run_id, "report.html", "file", b"<script>secret</script>").await.unwrap();
     let id: Uuid = sqlx::query_scalar("SELECT id FROM work_results WHERE run_id = $1").bind(&run.run_id).fetch_one(&pool).await.unwrap();
@@ -397,7 +454,7 @@ async fn result_downloads_and_context_are_owner_scoped(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
     let computer = insert_computer_placeholder(&pool, "alice", "Research computer").await.unwrap();
-    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex", "sky-wisp").await.unwrap();
     let app = build_router(jwt_state(pool.clone()));
     async fn overview(app: axum::Router, owner: &str) -> serde_json::Value {
         let response = app.oneshot(http::Request::builder().uri("/v1/workspace").header("authorization", format!("Bearer {}", token(owner))).body(axum::body::Body::empty()).unwrap()).await.unwrap();
@@ -431,10 +488,10 @@ async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
 async fn concurrent_bot_setting_edits_preserve_unrelated_fields(pool: PgPool) {
     use cloud_host::db::resources::{insert_bot, patch_bot};
     let computer = insert_computer_placeholder(&pool, "alice", "Computer").await.unwrap();
-    let bot = insert_bot(&pool, "alice", "Original", "Original", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let bot = insert_bot(&pool, "alice", "Original", "Original", "gpt-5.6-luna", Some(&computer.id), "codex", "sky-wisp").await.unwrap();
     let (name, instructions) = tokio::join!(
-        patch_bot(&pool, "alice", &bot.id, Some("Renamed"), None, None, None, None),
-        patch_bot(&pool, "alice", &bot.id, None, Some("Changed role"), None, None, None)
+        patch_bot(&pool, "alice", &bot.id, Some("Renamed"), None, None, None, None, None),
+        patch_bot(&pool, "alice", &bot.id, None, Some("Changed role"), None, None, None, None)
     );
     name.unwrap(); instructions.unwrap();
     let updated = cloud_host::db::resources::get_bot_for_owner(&pool, "alice", &bot.id).await.unwrap().unwrap();

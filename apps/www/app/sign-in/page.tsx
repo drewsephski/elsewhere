@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
@@ -74,9 +75,10 @@ export default function SignInPage() {
           Sign in to your workspace. You can connect your ChatGPT plan from the overview.
         </p>
 
-        <form className="mt-8 space-y-4" onSubmit={handleEmailSubmit}>
+        <form className="mt-8" onSubmit={handleEmailSubmit}>
+          <FormFields>
           {mode === "sign-up" ? (
-            <div className="space-y-2">
+            <FormItem>
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
@@ -84,9 +86,9 @@ export default function SignInPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </div>
+            </FormItem>
           ) : null}
-          <div className="space-y-2">
+          <FormItem>
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -96,8 +98,8 @@ export default function SignInPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </div>
-          <div className="space-y-2">
+          </FormItem>
+          <FormItem>
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="password">Password</Label>
               {mode === "sign-in" ? (
@@ -118,14 +120,14 @@ export default function SignInPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-          </div>
+          </FormItem>
           {resetSuccess && mode === "sign-in" ? (
             <p className="text-sm text-muted-foreground" role="status">
               Your password was reset. Sign in with your new password.
             </p>
           ) : null}
           {mode === "sign-up" && invitationRequired ? (
-            <div className="space-y-2">
+            <FormItem>
               <Label htmlFor="invitation">Alpha invitation code</Label>
               <Input
                 id="invitation"
@@ -135,7 +137,7 @@ export default function SignInPage() {
                 value={invitation}
                 onChange={(e) => setInvitation(e.target.value)}
               />
-            </div>
+            </FormItem>
           ) : null}
           {error ? (
             <p className="text-sm text-red-700" role="alert">
@@ -145,6 +147,7 @@ export default function SignInPage() {
           <Button type="submit" className="w-full" disabled={pending}>
             {pending ? "Working…" : mode === "sign-in" ? "Sign in" : "Sign up"}
           </Button>
+          </FormFields>
         </form>
 
         {googleEnabled ? (

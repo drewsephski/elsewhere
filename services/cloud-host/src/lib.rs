@@ -11,6 +11,7 @@ pub mod finalizer;
 pub mod provider_profile;
 pub mod redact;
 pub mod run_engine_select;
+pub mod run_archive;
 pub mod runner;
 
 pub use app::build_router;
@@ -27,5 +28,6 @@ pub mod worker;
 
 pub mod routines;
 
+pub mod bot_avatar;
 pub mod bot_context;
 pub mod results;

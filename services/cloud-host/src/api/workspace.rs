@@ -7,6 +7,7 @@ use serde::Serialize;
 pub struct BotPresence {
     pub id: String,
     pub name: String,
+    pub avatar_id: String,
     pub computer_name: Option<String>,
     pub presence: String,
     pub work_id: Option<String>,
@@ -37,7 +38,7 @@ pub async fn overview(
     let counts = sqlx::query_as("SELECT (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='running') AS working, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='queued') AS queued, (SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id=$1 AND status='pending' AND expires_at > NOW()) AS approvals, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='completed') AS finished, (SELECT COUNT(*) FROM work_results f JOIN agent_runs r ON r.id=f.run_id WHERE r.owner_id=$1) AS results, (SELECT COUNT(*) FROM routines WHERE owner_id=$1 AND enabled) AS routines")
         .bind(owner.owner_id()).fetch_one(&state.pool).await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let bots = sqlx::query_as(r#"
-        SELECT b.id, b.name, s.display_name AS computer_name,
+        SELECT b.id, b.name, b.avatar_id, s.display_name AS computer_name,
         CASE
           WHEN EXISTS(SELECT 1 FROM tool_approval_requests a JOIN agent_runs r ON r.id=a.run_id WHERE r.bot_id=b.id AND a.owner_id=b.owner_id AND a.status='pending' AND a.expires_at > NOW() AND r.status='running') THEN 'waiting_approval'
           WHEN current.status = 'running' THEN 'working'

@@ -15,6 +15,7 @@ export interface BotSummary {
   model: string;
   computerId: string | null;
   enginePreference: string;
+  avatarId?: string;
 }
 
 export interface ComputerSummary {
@@ -39,6 +40,7 @@ export interface RunSummary {
   computerId: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  archivedAt?: string | null;
 }
 
 export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "createdAt"> {

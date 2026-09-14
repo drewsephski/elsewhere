@@ -2,6 +2,7 @@
 
 import { siteConfig } from "@elsewhere/brand";
 import { Button } from "@/components/ui/button";
+import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -19,8 +20,9 @@ export function EarlyAccessForm() {
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-      <div className="space-y-2 text-left">
+    <form onSubmit={handleSubmit}>
+      <FormFields>
+      <FormItem className="text-left">
         <Label htmlFor="waitlist-email">Work email</Label>
         <Input
           id="waitlist-email"
@@ -30,13 +32,14 @@ export function EarlyAccessForm() {
           autoComplete="email"
           required
         />
-      </div>
+      </FormItem>
       <Button type="submit" size="lg" className="w-full">
         Request early access
       </Button>
       <p className="text-xs text-muted-foreground">
         Opens your mail client for now. Add a server action when you pick a waitlist provider.
       </p>
+      </FormFields>
     </form>
   );
 }

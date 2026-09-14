@@ -1,4 +1,14 @@
 import { ResultsPanel } from "@/components/app/results-panel";
+import { WorkspacePageHeader } from "@/components/app/workspace-page-header";
+
 export default function ResultsPage() {
-  return <div className="space-y-6"><div><h1 className="text-2xl font-semibold">Results</h1><p className="mt-2 text-sm text-muted-foreground">Finished work you can take with you. Saved independently of your bots’ computers.</p></div><ResultsPanel /></div>;
+  return (
+    <div className="space-y-8">
+      <WorkspacePageHeader
+        title="Results"
+        description="Finished work you can take with you. Saved independently of your bots' computers."
+      />
+      <ResultsPanel />
+    </div>
+  );
 }

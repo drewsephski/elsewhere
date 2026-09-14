@@ -12,6 +12,8 @@ use crate::error::ApiError;
 pub struct ListRunsQuery {
     pub bot_id: Option<String>,
     pub limit: Option<i64>,
+    /// When true, return only archived runs. When false or omitted, return active runs only.
+    pub archived: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -29,6 +31,7 @@ pub struct RunSummaryResponse {
     pub computer_id: Option<String>,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub archived_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub async fn list_runs(
@@ -37,8 +40,18 @@ pub async fn list_runs(
     Query(query): Query<ListRunsQuery>,
 ) -> Result<Json<Vec<RunSummaryResponse>>, ApiError> {
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
-    let rows = sqlx::query_as::<_,RunSummaryResponse>("SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task FROM agent_runs r JOIN bots b ON b.id = r.bot_id LEFT JOIN work_queue q ON q.run_id = r.id WHERE r.owner_id = $1 AND ($3::text IS NULL OR r.bot_id = $3) ORDER BY r.created_at DESC LIMIT $2")
-        .bind(principal.owner_id()).bind(limit).bind(query.bot_id).fetch_all(&state.pool).await
+    let archived_only = query.archived.unwrap_or(false);
+    let rows = sqlx::query_as::<_,RunSummaryResponse>(
+        "SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.archived_at, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task \
+         FROM agent_runs r \
+         JOIN bots b ON b.id = r.bot_id \
+         LEFT JOIN work_queue q ON q.run_id = r.id \
+         WHERE r.owner_id = $1 \
+         AND ($3::text IS NULL OR r.bot_id = $3) \
+         AND (($4::bool AND r.archived_at IS NOT NULL) OR (NOT $4::bool AND r.archived_at IS NULL)) \
+         ORDER BY r.created_at DESC LIMIT $2",
+    )
+        .bind(principal.owner_id()).bind(limit).bind(query.bot_id).bind(archived_only).fetch_all(&state.pool).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(rows))
 }

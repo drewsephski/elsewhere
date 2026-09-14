@@ -2,9 +2,22 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ComputerSummary } from "@/lib/api-types";
+import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
+import { ComputerSelect } from "@/components/app/computer-select";
+import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -17,19 +30,32 @@ interface CreateBotDialogProps {
 export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
   const router = useRouter();
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
-  const [name, setName] = useState("");
-  const [instructions, setInstructions] = useState(
-    "Complete delegated work carefully, keep useful files on your computer, and explain your results clearly. Ask for approval before making changes.",
-  );
+  const defaultForm = botAvatarFormDefaults(DEFAULT_BOT_AVATAR_ID);
+  const [name, setName] = useState(defaultForm.name);
+  const [instructions, setInstructions] = useState(defaultForm.instructions);
   const [computerId, setComputerId] = useState("");
+  const [avatarId, setAvatarId] = useState(DEFAULT_BOT_AVATAR_ID);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function handleAvatarChange(nextAvatarId: string) {
+    setAvatarId(nextAvatarId);
+    const defaults = botAvatarFormDefaults(nextAvatarId);
+    setName(defaults.name);
+    setInstructions(defaults.instructions);
+  }
 
   useEffect(() => {
     if (!open) {
       return;
     }
+    const defaults = botAvatarFormDefaults(DEFAULT_BOT_AVATAR_ID);
+    setAvatarId(DEFAULT_BOT_AVATAR_ID);
+    setName(defaults.name);
+    setInstructions(defaults.instructions);
+    setError(null);
+    setLoading(true);
     const controller = new AbortController();
     cloudHostFetch("/v1/computers", { signal: controller.signal })
       .then(async (response) => {
@@ -53,23 +79,6 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
     return () => controller.abort();
   }, [open]);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) {
-    return null;
-  }
-
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (busy) {
@@ -85,6 +94,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
           instructions,
           computerId,
           enginePreference: "codex",
+          avatarId,
         }),
       });
       const body = await response.json();
@@ -102,80 +112,65 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="create-bot-title">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/30 backdrop-blur-[2px]"
-        aria-label="Close"
-        onClick={onClose}
-      />
-      <form
-        onSubmit={(event) => void handleSubmit(event)}
-        className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl"
-      >
-        <h2 id="create-bot-title" className="text-lg font-semibold">New bot</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Give it a name, a role, and a computer to work on.
-        </p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <Label htmlFor="create-bot-name">Name</Label>
-            <Input
-              id="create-bot-name"
-              required
-              maxLength={100}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Chief of Staff"
-            />
-          </div>
-          <div>
-            <Label htmlFor="create-bot-instructions">Role and instructions</Label>
-            <textarea
-              id="create-bot-instructions"
-              className="mt-1 min-h-28 w-full rounded-lg border border-border bg-background p-3 text-sm leading-6"
-              maxLength={16000}
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="create-bot-computer">Computer</Label>
-            <select
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <form onSubmit={(event) => void handleSubmit(event)}>
+          <DialogHeader>
+            <DialogTitle>New bot</DialogTitle>
+            <DialogDescription>
+              Give it a name, a role, and a computer to work on.
+            </DialogDescription>
+          </DialogHeader>
+          <FormFields className="mt-4">
+            <BotAvatarPicker value={avatarId} onChange={handleAvatarChange} disabled={busy} />
+            <FormItem>
+              <Label htmlFor="create-bot-name">Name</Label>
+              <Input
+                id="create-bot-name"
+                required
+                maxLength={100}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Chief of Staff"
+              />
+            </FormItem>
+            <FormItem>
+              <Label htmlFor="create-bot-instructions">Role and instructions</Label>
+              <Textarea
+                id="create-bot-instructions"
+                className="min-h-28"
+                maxLength={16000}
+                value={instructions}
+                onChange={(event) => setInstructions(event.target.value)}
+              />
+            </FormItem>
+            <ComputerSelect
               id="create-bot-computer"
-              className="mt-1 w-full rounded-lg border border-border bg-background p-3 text-sm"
               value={computerId}
-              onChange={(event) => setComputerId(event.target.value)}
+              onValueChange={setComputerId}
+              computers={computers}
+              loading={loading}
               disabled={loading}
-            >
-              <option value="">
-                {loading ? "Loading computers…" : "Choose a computer"}
-              </option>
-              {computers.map((computer) => (
-                <option key={computer.id} value={computer.id}>
-                  {computer.displayName}
-                </option>
-              ))}
-            </select>
+            />
             {!loading && !computers.length ? (
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 <Link href="/app/computers" className="underline">Create a computer</Link> first.
               </p>
             ) : null}
-          </div>
-        </div>
-        {error ? (
-          <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>
-        ) : null}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={busy || !computerId || !name.trim()}>
-            {busy ? "Creating…" : "Create bot"}
-          </Button>
-        </div>
-      </form>
-    </div>
+          </FormFields>
+          {error ? (
+            <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>
+          ) : null}
+          <DialogFooter className="mt-4">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !computerId || !name.trim()}>
+              {busy ? "Creating…" : "Create bot"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

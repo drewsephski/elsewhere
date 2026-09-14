@@ -14,6 +14,7 @@ import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
+import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
 
 interface WorkspaceShellProps {
@@ -30,7 +31,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: workspace, error: workspaceError } = useWorkspaceOverview();
+  const { data: workspace, error: workspaceError, refresh } = useWorkspaceOverview();
 
   const selectedBotId = parseBotId(pathname);
   const [createOpen, setCreateOpen] = useState(false);
@@ -115,6 +116,42 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     setBot(loaded);
   }, []);
 
+  const handleDeleteBot = useCallback(
+    async (botId: string) => {
+      const response = await cloudHostFetch(`/v1/bots/${botId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === "string" ? body.error : "Could not delete bot",
+        );
+      }
+      await refresh();
+      if (selectedBotId === botId) {
+        router.push("/app");
+      }
+      router.refresh();
+    },
+    [refresh, router, selectedBotId],
+  );
+
+  const handleRenameBot = useCallback(
+    async (botId: string, name: string) => {
+      const response = await cloudHostFetch(`/v1/bots/${botId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not rename bot");
+      }
+      await refresh();
+      if (bot?.id === botId) {
+        setBot(body as BotSummary);
+      }
+    },
+    [bot?.id, refresh],
+  );
+
   const showConversation = Boolean(selectedBotId);
 
   return (
@@ -146,6 +183,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             selectedBotId={selectedBotId}
             runActivityAt={runActivityAt}
             onCreateBot={() => setCreateOpen(true)}
+            onRenameBot={handleRenameBot}
+            onDeleteBot={handleDeleteBot}
             footer={
               <ProfileFooter
                 email={userEmail}
@@ -178,6 +217,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
               botId={selectedBotId}
               onOpenContext={() => setContextSheetOpen(true)}
               onBotLoaded={handleBotLoaded}
+              onRenameBot={handleRenameBot}
             />
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
@@ -187,13 +227,14 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
                 <p className="text-sm text-muted-foreground">
                   After ChatGPT is connected, create a bot to start chatting and running work.
                 </p>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  className="rounded-full border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
                   onClick={() => setCreateOpen(true)}
-                  className="rounded-full border border-primary/30 bg-primary/5 px-5 py-2 text-sm font-medium text-primary hover:bg-primary/10"
                 >
                   Create your first bot
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -202,7 +243,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         {/* Right: context rail — desktop */}
         <aside
           className={cn(
-            "hidden w-[min(100%,18rem)] shrink-0 border-l border-border/70 bg-white/45 lg:flex lg:flex-col",
+            "hidden w-[min(100%,20rem)] shrink-0 border-l border-border/70 bg-white/55 backdrop-blur-md lg:flex lg:flex-col",
             !selectedBotId && "lg:hidden",
           )}
           aria-label="Bot context"

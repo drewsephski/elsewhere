@@ -132,6 +132,7 @@ async fn setup_bot(pool: &PgPool, owner: &str) -> cloud_host::db::resources::Bot
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap()
@@ -688,6 +689,7 @@ async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap();
@@ -763,6 +765,7 @@ async fn host_restart_cancels_stale_pending(pool: PgPool) {
         "gpt-5.6-luna",
         Some(computer_row.id.as_str()),
         "responses",
+        "sky-wisp",
     )
     .await
     .unwrap();

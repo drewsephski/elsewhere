@@ -107,6 +107,17 @@ impl CodexAppServerClient {
         Ok(())
     }
 
+    pub async fn thread_archive(&self, thread_id: &str) -> Result<(), CodexProviderError> {
+        self.process
+            .request(
+                "thread/archive",
+                json!({ "threadId": thread_id }),
+                DEFAULT_REQUEST_TIMEOUT,
+            )
+            .await?;
+        Ok(())
+    }
+
     pub async fn list_mcp_server_tools(
         &self,
         thread_id: &str,

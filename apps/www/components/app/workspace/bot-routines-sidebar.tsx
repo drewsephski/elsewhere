@@ -3,7 +3,7 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { Routine } from "@/lib/api-types";
 import { cn } from "cn";
-import { CalendarClock, Pause, Play } from "lucide-react";
+import { CalendarClock, Pause, Play } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
@@ -24,9 +24,14 @@ function scheduleLabel(routine: Routine): string {
 interface BotRoutinesSidebarProps {
   botId: string;
   className?: string;
+  variant?: "default" | "minimal";
 }
 
-export function BotRoutinesSidebar({ botId, className }: BotRoutinesSidebarProps) {
+export function BotRoutinesSidebar({
+  botId,
+  className,
+  variant = "default",
+}: BotRoutinesSidebarProps) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export function BotRoutinesSidebar({ botId, className }: BotRoutinesSidebarProps
     return () => clearInterval(timer);
   }, [load]);
 
-  async function toggle(routine: Routine) {
+  async function handleToggle(routine: Routine) {
     setBusy(routine.id);
     try {
       const response = await cloudHostFetch(`/v1/routines/${routine.id}/enabled`, {
@@ -69,10 +74,86 @@ export function BotRoutinesSidebar({ botId, className }: BotRoutinesSidebarProps
     }
   }
 
+  const list = (
+    <>
+      {error ? (
+        <p className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <ul className={cn("space-y-0.5", variant === "default" && "mt-3 space-y-2")}>
+        {routines.map((routine) => (
+          <li key={routine.id}>
+            <div
+              className={cn(
+                "flex items-start gap-2",
+                variant === "minimal"
+                  ? "rounded-xl px-2 py-2 transition-colors hover:bg-white/70"
+                  : "rounded-xl border border-border/70 bg-white/60 px-3 py-2.5",
+              )}
+            >
+              <span className="mt-0.5 text-muted-foreground" aria-hidden>
+                {routine.enabled ? (
+                  <CalendarClock className="size-4 text-primary" />
+                ) : (
+                  <Pause className="size-4" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{routine.name}</p>
+                <p className="text-xs text-muted-foreground">{scheduleLabel(routine)}</p>
+                {routine.enabled ? (
+                  <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                    Next {new Date(routine.nextRunAt).toLocaleString()}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleToggle(routine)}
+                className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                aria-label={routine.enabled ? "Pause routine" : "Resume routine"}
+              >
+                {routine.enabled ? <Pause className="size-4" /> : <Play className="size-4" />}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {!routines.length ? (
+        <p className={cn("text-xs text-muted-foreground", variant === "default" && "mt-3 text-sm")}>
+          No routines yet.{" "}
+          <Link href="/app/routines" className="underline underline-offset-2">
+            Create one
+          </Link>
+        </p>
+      ) : null}
+    </>
+  );
+
+  if (variant === "minimal") {
+    return (
+      <div className={cn("px-1", className)}>
+        <div className="mb-2 flex justify-end">
+          <Link
+            href="/app/routines"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            All routines
+          </Link>
+        </div>
+        {list}
+      </div>
+    );
+  }
+
   return (
     <section className={cn("workspace-rail-card", className)} aria-labelledby="routines-panel-title">
       <div className="flex items-center justify-between gap-2">
-        <h2 id="routines-panel-title" className="text-sm font-semibold">Routines</h2>
+        <h2 id="routines-panel-title" className="text-sm font-semibold">
+          Routines
+        </h2>
         <Link
           href="/app/routines"
           className="text-xs text-muted-foreground underline-offset-2 hover:underline"
@@ -80,55 +161,7 @@ export function BotRoutinesSidebar({ botId, className }: BotRoutinesSidebarProps
           All routines
         </Link>
       </div>
-      {error ? (
-        <p className="mt-2 text-xs text-red-600" role="alert">{error}</p>
-      ) : null}
-      <ul className="mt-3 space-y-2">
-        {routines.map((routine) => (
-          <li
-            key={routine.id}
-            className="flex items-start gap-2 rounded-xl border border-border/70 bg-white/60 px-3 py-2.5"
-          >
-            <span className="mt-0.5 text-muted-foreground" aria-hidden>
-              {routine.enabled ? (
-                <CalendarClock className="size-4 text-primary" />
-              ) : (
-                <Pause className="size-4" />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">{routine.name}</p>
-              <p className="text-xs text-muted-foreground">{scheduleLabel(routine)}</p>
-              {routine.enabled ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Next {new Date(routine.nextRunAt).toLocaleString()}
-                </p>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => void toggle(routine)}
-              className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
-              aria-label={routine.enabled ? "Pause routine" : "Resume routine"}
-            >
-              {routine.enabled ? (
-                <Pause className="size-4" />
-              ) : (
-                <Play className="size-4" />
-              )}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {!routines.length ? (
-        <p className="mt-3 text-sm text-muted-foreground">
-          No routines for this bot yet.{" "}
-          <Link href="/app/routines" className="underline underline-offset-2">
-            Create one
-          </Link>
-        </p>
-      ) : null}
+      {list}
     </section>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { siteConfig } from "@elsewhere/brand";
-import { ArrowRight, Triangle } from "lucide-react";
+import { ArrowRight, Triangle } from "@/components/icons/lucide";
 import {
   ProductMobileSection,
   ProductNavDropdown,
@@ -77,7 +77,6 @@ function Navbar() {
           >
             <Triangle
               className="pointer-events-none h-5 w-5 fill-primary text-primary"
-              strokeWidth={0}
               aria-hidden
             />
             <span className="pointer-events-auto font-helvetica-neue text-xl tracking-tight text-brand-dark">
@@ -200,7 +199,7 @@ function Hero() {
           <span className="text-sm text-brand-dark">
             macOS desktop is live — open your cloud workspace.
           </span>
-          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-dark" strokeWidth={2} aria-hidden />
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-dark" aria-hidden />
         </Link>
 
         <h1

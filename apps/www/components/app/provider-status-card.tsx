@@ -4,7 +4,7 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ProviderStatus } from "@/lib/api-types";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
-import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { CheckCircle2, ExternalLink, Loader2, RefreshCw, Sparkles } from "@/components/icons/lucide";
 import { useCallback, useEffect, useState } from "react";
 
 type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
@@ -147,7 +147,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
       >
         {loading ? (
           <>
-            <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+            <Loader2 className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span>Checking connection…</span>
           </>
         ) : connected ? (
@@ -181,7 +181,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
             onClick={() => void handleConnect()}
           >
             {busy ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
+              <Loader2 className="size-4" aria-hidden />
             ) : (
               <Sparkles className="size-4" aria-hidden />
             )}

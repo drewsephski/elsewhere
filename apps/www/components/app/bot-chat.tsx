@@ -4,6 +4,8 @@ import type { BotSummary, CreateRunResponse } from "@/lib/api-types";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FormFields, FormItem } from "@/components/ui/form-item";
+import { Label } from "@/components/ui/label";
 import { BotSettings } from "./bot-settings";
 import { BotContext } from "./bot-context";
 import { RecentRunsPanel } from "./recent-runs-panel";
@@ -41,10 +43,14 @@ export function BotChat({ botId }: { botId: string }) {
       <section className="surface-card">
         <h1 className="text-2xl font-semibold">{bot?.name ?? "Your bot"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">Give your bot a job, useful context, and a clear description of the result you want.</p>
-        <form className="mt-5 space-y-3" onSubmit={event => void submit(event)}>
-          <label htmlFor="work-message" className="text-sm font-medium">What needs doing?</label>
-          <textarea id="work-message" className="min-h-32 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm" placeholder="Review the files on your computer and prepare a summary of what needs attention. Save your findings and include the sources." value={message} onChange={event => setMessage(event.target.value)} disabled={pending} maxLength={100000} />
-          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Progress is saved. Computer changes need your approval.</p><Button type="submit" disabled={pending || !message.trim() || !bot?.computerId}>{pending ? "Saving work…" : "Delegate work"}</Button></div>
+        <form className="mt-5" onSubmit={event => void submit(event)}>
+          <FormFields>
+            <FormItem>
+              <Label htmlFor="work-message">What needs doing?</Label>
+              <textarea id="work-message" className="min-h-32 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm" placeholder="Review the files on your computer and prepare a summary of what needs attention. Save your findings and include the sources." value={message} onChange={event => setMessage(event.target.value)} disabled={pending} maxLength={100000} />
+            </FormItem>
+            <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Progress is saved. Computer changes need your approval.</p><Button type="submit" disabled={pending || !message.trim() || !bot?.computerId}>{pending ? "Saving work…" : "Delegate work"}</Button></div>
+          </FormFields>
         </form>
         {bot && !bot.computerId ? <p className="mt-3 text-sm text-amber-700">Assign this bot a computer before delegating work.</p> : null}
         {error ? <p className="mt-3 text-sm text-red-700" role="alert">{error}</p> : null}

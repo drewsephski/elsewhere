@@ -1,0 +1,2 @@
+ALTER TABLE bots
+    ADD COLUMN IF NOT EXISTS avatar_id TEXT NOT NULL DEFAULT 'sky-wisp';

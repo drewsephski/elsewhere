@@ -20,6 +20,7 @@ async fn bot(pool: &PgPool) -> resources::BotRow {
         "gpt-5.6-luna",
         Some(&computer.id),
         "codex",
+        "sky-wisp",
     )
     .await
     .unwrap()
