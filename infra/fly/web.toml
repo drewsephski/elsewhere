@@ -7,13 +7,16 @@ kill_timeout = 30
   dockerfile = "Dockerfile.web"
   [build.args]
     NEXT_PUBLIC_BETTER_AUTH_URL = "https://elsewhere-alpha-web.fly.dev"
+    # Compatibility fallback only. Browser traffic always uses the same-origin BFF.
     NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL = "https://elsewhere-alpha-runner.fly.dev"
 
 [env]
   BETTER_AUTH_URL = "https://elsewhere-alpha-web.fly.dev"
   BETTER_AUTH_DATABASE_SCHEMA = "elsewhere_auth"
   NEXT_PUBLIC_ELSEWHERE_ALPHA_INVITE_REQUIRED = "1"
-  # Server-only BFF upstream (set via `fly secrets set` on web): http://elsewhere-alpha-runner.internal:8080
+  # Canonical server-only BFF upstream. This is deployment topology, not a secret.
+  # Fly .internal resolves over 6PN to started Machines in the same organization.
+  ELSEWHERE_CLOUD_HOST_URL = "http://elsewhere-alpha-runner.internal:8080"
   NODE_ENV = "production"
   PORT = "3000"
 
