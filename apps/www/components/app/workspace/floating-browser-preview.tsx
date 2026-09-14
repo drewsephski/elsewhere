@@ -128,18 +128,33 @@ export function FloatingBrowserPreview() {
     }
   }
 
-  async function handleResetSession() {
-    setControlError(null);
-    setControlBusy(true);
-    try {
-      await ctx.resetBrowserSession();
-      setUrlDraft("");
-    } catch (err) {
-      setControlError(err instanceof Error ? err.message : "Could not reset session");
-    } finally {
-      setControlBusy(false);
-    }
-  }
+  const addressBar = (
+    <form
+      onSubmit={(event) => void handleNavigate(event)}
+      className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/50 bg-background px-1.5 py-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+    >
+      <span className="shrink-0 text-[9px] text-muted-foreground/80" aria-hidden>
+        🔒
+      </span>
+      <Input
+        value={urlDraft}
+        onChange={(event) => setUrlDraft(event.target.value)}
+        placeholder="Enter URL"
+        className="h-6 min-w-0 flex-1 border-0 bg-transparent px-0 text-[10px] shadow-none focus-visible:ring-0"
+        aria-label="Navigate browser to URL"
+        disabled={controlBusy}
+      />
+      <Button
+        type="submit"
+        variant="ghost"
+        size="sm"
+        className="h-6 shrink-0 px-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
+        disabled={controlBusy}
+      >
+        Go
+      </Button>
+    </form>
+  );
 
   if (!ctx.pipOpen || !ctx.frame?.imageDataUrl) {
     return null;
@@ -158,7 +173,7 @@ export function FloatingBrowserPreview() {
     >
       <div
         className={cn(
-          "rounded-xl border border-border/60 bg-background/95 shadow-lg backdrop-blur-md",
+          "overflow-hidden rounded-xl border border-border/60 bg-background/95 shadow-lg backdrop-blur-md",
           dragging && "ring-2 ring-primary/25",
         )}
       >
@@ -205,34 +220,17 @@ export function FloatingBrowserPreview() {
           </div>
         </div>
 
-        <div className="p-2 pt-1.5" data-no-drag>
-          <form onSubmit={(event) => void handleNavigate(event)} className="mb-2 flex gap-1">
-            <Input
-              value={urlDraft}
-              onChange={(event) => setUrlDraft(event.target.value)}
-              placeholder="https://…"
-              className="h-7 text-xs"
-              aria-label="Navigate browser to URL"
-              disabled={controlBusy}
-            />
-            <Button type="submit" size="sm" className="h-7 shrink-0 px-2 text-xs" disabled={controlBusy}>
-              Go
-            </Button>
-          </form>
-          <div className="flex items-center justify-between gap-2 pb-1.5">
-            <button
-              type="button"
-              className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-              onClick={() => void handleResetSession()}
-              disabled={controlBusy}
-            >
-              Clear browser session
-            </button>
-          </div>
+        <div data-no-drag>
+          <BrowserPreviewView
+            variant="floating"
+            chromeAttached
+            addressBar={addressBar}
+          />
           {controlError ? (
-            <p className="mb-1.5 text-[10px] text-red-600" role="alert">{controlError}</p>
+            <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-red-600" role="alert">
+              {controlError}
+            </p>
           ) : null}
-          <BrowserPreviewView variant="floating" />
         </div>
       </div>
     </div>

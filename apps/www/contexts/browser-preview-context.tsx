@@ -28,7 +28,6 @@ interface BrowserPreviewContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   navigateBrowser: (url: string) => Promise<void>;
-  resetBrowserSession: () => Promise<void>;
   pipOpen: boolean;
   openPip: () => void;
   closePip: () => void;
@@ -57,8 +56,11 @@ export function BrowserPreviewProvider({
   refreshGeneration?: number;
   children: ReactNode;
 }) {
-  const { frame, loading, error, refresh, navigateBrowser, resetBrowserSession } =
-    useBrowserPreview(computerId, enabled, refreshGeneration);
+  const { frame, loading, error, refresh, navigateBrowser } = useBrowserPreview(
+    computerId,
+    enabled,
+    refreshGeneration,
+  );
   const [pipOpen, setPipOpen] = useState(false);
   const [pipDismissed, setPipDismissed] = useState(false);
   const [pipPosition, setPipPosition] = useState<BrowserPreviewPipPosition | null>(null);
@@ -111,7 +113,6 @@ export function BrowserPreviewProvider({
       error,
       refresh,
       navigateBrowser,
-      resetBrowserSession,
       pipOpen,
       openPip,
       closePip,
@@ -130,7 +131,6 @@ export function BrowserPreviewProvider({
       error,
       refresh,
       navigateBrowser,
-      resetBrowserSession,
       pipOpen,
       openPip,
       closePip,

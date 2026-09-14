@@ -51,10 +51,6 @@ pub fn build_router(state: AppState) -> Router {
             post(api::computers::browser_navigate),
         )
         .route(
-            "/v1/computers/{id}/browser/reset",
-            post(api::computers::browser_reset),
-        )
-        .route(
             "/v1/computers/{id}/workspace",
             get(api::computers::workspace_list),
         )

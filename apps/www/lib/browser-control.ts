@@ -22,14 +22,3 @@ export async function navigateComputerBrowser(computerId: string, url: string): 
     throw new Error(body || "Could not navigate browser");
   }
 }
-
-export async function resetComputerBrowserSession(computerId: string): Promise<void> {
-  const response = await cloudHostFetch(
-    `/v1/computers/${encodeURIComponent(computerId)}/browser/reset`,
-    { method: "POST" },
-  );
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || "Could not reset browser session");
-  }
-}

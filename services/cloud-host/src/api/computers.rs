@@ -142,28 +142,6 @@ pub async fn browser_navigate(
     Ok(Json(result))
 }
 
-pub async fn browser_reset(
-    State(state): State<AppState>,
-    Extension(principal): Extension<Principal>,
-    Path(computer_id): Path<String>,
-) -> Result<Json<serde_json::Value>, ApiError> {
-    let computer = state
-        .computer_registry
-        .connect_sprite_computer(
-            &state.config,
-            &state.pool,
-            principal.owner_id(),
-            &computer_id,
-            state.config.browser_enabled,
-        )
-        .await?;
-    let result = computer
-        .browser_invoke("reset", &json!({}))
-        .await
-        .map_err(map_computer_error)?;
-    Ok(Json(result))
-}
-
 pub async fn browser_preview(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,

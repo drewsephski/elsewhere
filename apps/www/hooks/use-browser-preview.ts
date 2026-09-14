@@ -1,10 +1,7 @@
 "use client";
 
 import { cloudHostFetch } from "@/lib/cloud-api";
-import {
-  navigateComputerBrowser,
-  resetComputerBrowserSession,
-} from "@/lib/browser-control";
+import { navigateComputerBrowser } from "@/lib/browser-control";
 import { BrowserPreviewFetchScheduler } from "@/lib/browser-preview-fetch-scheduler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -166,21 +163,6 @@ export function useBrowserPreview(
     [invalidateLocalPreview, requestRefresh],
   );
 
-  const resetBrowserSession = useCallback(async () => {
-    const activeComputerId = computerIdRef.current;
-    if (!activeComputerId || !enabledRef.current) {
-      return;
-    }
-    setLoading(true);
-    try {
-      await resetComputerBrowserSession(activeComputerId);
-      invalidateLocalPreview();
-      await requestRefresh();
-    } finally {
-      setLoading(false);
-    }
-  }, [invalidateLocalPreview, requestRefresh]);
-
   useEffect(() => {
     computerIdRef.current = computerId;
     enabledRef.current = enabled;
@@ -241,6 +223,5 @@ export function useBrowserPreview(
     error,
     refresh: requestRefresh,
     navigateBrowser,
-    resetBrowserSession,
   };
 }

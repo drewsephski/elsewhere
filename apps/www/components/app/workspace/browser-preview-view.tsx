@@ -33,6 +33,10 @@ interface BrowserPreviewViewProps {
   loading?: boolean;
   error?: string | null;
   enabled?: boolean;
+  /** Replaces the read-only address label in compact chrome (e.g. floating URL bar). */
+  addressBar?: ReactNode;
+  /** Flush chrome with parent card — no extra border or outer rounding. */
+  chromeAttached?: boolean;
 }
 
 function BrowserIdleScene({ enabled }: { enabled: boolean }) {
@@ -75,6 +79,8 @@ function PreviewChrome({
   compact,
   subtle,
   className,
+  addressBar,
+  attached,
   children,
 }: {
   frame: BrowserPreviewFrame | null;
@@ -84,6 +90,8 @@ function PreviewChrome({
   compact?: boolean;
   subtle?: boolean;
   className?: string;
+  addressBar?: ReactNode;
+  attached?: boolean;
   children: ReactNode;
 }) {
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
@@ -91,11 +99,19 @@ function PreviewChrome({
   if (subtle) {
     return (
       <div className={cn("text-left", compact ? "max-w-full" : "w-full", className)}>
-        <div className="overflow-hidden rounded-lg border border-border/45 bg-background/80 shadow-sm">
+        <div
+          className={cn(
+            "overflow-hidden bg-background/80",
+            attached
+              ? "rounded-none border-0 shadow-none"
+              : "rounded-lg border border-border/45 shadow-sm",
+          )}
+        >
           <div
             className={cn(
               "flex items-center gap-1.5 border-b border-border/40 bg-muted/30 px-2",
-              compact ? "py-0.5" : "py-1",
+              compact ? "py-1" : "py-1.5",
+              addressBar && "gap-2",
             )}
           >
             <div className="flex shrink-0 items-center gap-1" aria-hidden>
@@ -103,9 +119,13 @@ function PreviewChrome({
               <span className="size-1.5 rounded-full bg-[#febc2e]/80" />
               <span className="size-1.5 rounded-full bg-[#28c840]/80" />
             </div>
-            <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
-              {addressLabel}
-            </span>
+            {addressBar ? (
+              <div className="min-w-0 flex-1">{addressBar}</div>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+                {addressLabel}
+              </span>
+            )}
           </div>
           <div
             className={cn(
@@ -197,6 +217,8 @@ export function BrowserPreviewView({
   loading: loadingProp,
   error: errorProp,
   enabled: enabledProp,
+  addressBar,
+  chromeAttached,
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
@@ -272,6 +294,8 @@ export function BrowserPreviewView({
         loading={loading}
         enabled={enabled}
         addressLabel={addressLabel}
+        addressBar={addressBar}
+        attached={chromeAttached}
         compact
         subtle
         className={className}
