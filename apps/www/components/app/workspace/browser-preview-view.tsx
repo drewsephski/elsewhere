@@ -14,7 +14,14 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "cn";
-import { ArrowUpRight, Monitor, PanelRight, X } from "@/components/icons/lucide";
+import {
+  ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
+  Monitor,
+  PanelRight,
+  X,
+} from "@/components/icons/lucide";
 import { useMemo, useState, type ReactNode } from "react";
 
 export type BrowserPreviewVariant = "embedded" | "pip" | "work";
@@ -27,6 +34,38 @@ interface BrowserPreviewViewProps {
   loading?: boolean;
   error?: string | null;
   enabled?: boolean;
+}
+
+function BrowserIdleScene({ enabled }: { enabled: boolean }) {
+  return (
+    <div
+      className="absolute inset-0 overflow-hidden bg-[#e8ecf4]"
+      aria-hidden
+    >
+      <div
+        className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#ffffff_0%,#e4eaf5_45%,#d4dce8_100%)]"
+      />
+      <div
+        className="absolute -left-[20%] top-[8%] h-[55%] w-[70%] rounded-full bg-[#c8d8f0]/40 blur-3xl"
+      />
+      <div
+        className="absolute -right-[15%] top-[25%] h-[45%] w-[55%] rounded-full bg-[#dfe8f8]/70 blur-2xl"
+      />
+      <div className="absolute inset-x-[12%] bottom-[18%] top-[22%] rounded-md border border-white/60 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-[2px]" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
+        <div
+          className="flex size-11 items-center justify-center rounded-2xl bg-white/70 shadow-sm ring-1 ring-black/[0.06]"
+        >
+          <Monitor className="size-5 text-[#6b7280]" aria-hidden />
+        </div>
+        <p className="max-w-[14rem] text-[11px] font-medium leading-snug text-[#4b5563]">
+          {enabled
+            ? "Live view appears when your bot opens a page."
+            : "Send a message to watch the browser here."}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function PreviewChrome({
@@ -44,50 +83,67 @@ function PreviewChrome({
 }) {
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
+  const addressLabel = host ?? (enabled ? "No page yet" : "Browser idle");
 
   return (
-    <div
-      className={cn(
-        "overflow-hidden rounded-xl border border-border/80 bg-[#0f0d14] text-left shadow-inner",
-        compact ? "shadow-lg ring-1 ring-black/10" : "",
-      )}
-    >
+    <div className={cn("text-left", compact ? "max-w-full" : "w-full")}>
       <div
         className={cn(
-          "flex items-center gap-1.5 border-b border-white/10 px-2.5 py-1.5",
-          compact && "py-1",
+          "rounded-[14px] bg-gradient-to-b from-[#ececf1] via-[#e3e3e8] to-[#d8d8de] p-[5px] shadow-[0_8px_24px_-8px_rgba(15,23,42,0.22),0_2px_6px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.08]",
+          compact && "shadow-md",
         )}
       >
-        <span className="size-2 rounded-full bg-[#ff5f57]" aria-hidden />
-        <span className="size-2 rounded-full bg-[#febc2e]" aria-hidden />
-        <span className="size-2 rounded-full bg-[#28c840]" aria-hidden />
-        <span className="ml-1.5 flex min-w-0 flex-1 items-center gap-1 truncate text-[10px] text-white/55">
-          <Monitor className="size-3 shrink-0" aria-hidden />
-          <span className="truncate">{host ?? frame?.title ?? "Waiting for a page"}</span>
-        </span>
-      </div>
-      <div
-        className={cn(
-          "relative w-full bg-[#1a1625]",
-          compact ? "aspect-[16/11]" : "aspect-[16/10]",
-        )}
-      >
-        {loading && showPlaceholder ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Spinner className="size-5 text-white/50" />
+        <div className="overflow-hidden rounded-[10px] bg-[#1c1c1e] p-[3px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
+          <div className="overflow-hidden rounded-[7px] bg-[#f5f5f7]">
+            <div
+              className={cn(
+                "flex items-center gap-1.5 border-b border-black/[0.06] bg-[linear-gradient(180deg,#fafafa_0%,#f0f0f2_100%)] px-2",
+                compact ? "py-1" : "py-1.5",
+              )}
+            >
+              <div className="flex shrink-0 items-center gap-1" aria-hidden>
+                <span className="size-[9px] rounded-full bg-[#ff5f57] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
+                <span className="size-[9px] rounded-full bg-[#febc2e] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
+                <span className="size-[9px] rounded-full bg-[#28c840] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-0.5 text-[#9ca3af]" aria-hidden>
+                  <ChevronLeft className="size-3 opacity-50" />
+                  <ChevronRight className="size-3 opacity-35" />
+                </div>
+                <div
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-black/[0.06] bg-white px-2 py-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+                >
+                  <span
+                    className="shrink-0 text-[9px] text-[#9ca3af]"
+                    aria-hidden
+                  >
+                    🔒
+                  </span>
+                  <span className="truncate text-[10px] text-[#374151]">{addressLabel}</span>
+                </div>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "relative w-full overflow-hidden bg-[#e8ecf4]",
+                compact ? "aspect-[16/11]" : "aspect-[16/10]",
+              )}
+            >
+              {loading && showPlaceholder ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[1px]">
+                  <Spinner className="size-5 text-[#6b7280]" />
+                </div>
+              ) : null}
+              {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
+              {children}
+            </div>
           </div>
-        ) : null}
-        {children}
-        {!frame?.imageDataUrl ? (
-          <div className="flex h-full min-h-[7rem] flex-col items-center justify-center gap-2 px-4 text-center text-xs text-white/50">
-            <Monitor className="size-5 opacity-60" aria-hidden />
-            <p>
-              {enabled
-                ? "Preview appears when your bot opens a web page."
-                : "Start work to watch the browser here."}
-            </p>
-          </div>
-        ) : null}
+        </div>
+        <div
+          className="mx-auto mt-[3px] h-[5px] w-[42%] rounded-b-md bg-gradient-to-b from-[#c4c4c9] to-[#a8a8ae] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+          aria-hidden
+        />
       </div>
     </div>
   );
@@ -208,7 +264,7 @@ export function BrowserPreviewView({
                 src={frame.imageDataUrl}
                 alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
                 className={cn(
-                  "h-full w-full object-cover object-top",
+                  "absolute inset-0 z-[1] h-full w-full object-cover object-top",
                   isFullscreen && "object-contain",
                 )}
               />
@@ -221,9 +277,9 @@ export function BrowserPreviewView({
 
   return (
     <>
-      <div className={cn(variant === "embedded" ? "mt-3" : "space-y-2", className)}>
-        <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 px-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <div className={cn(variant === "embedded" ? "mt-0" : "space-y-2", className)}>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/90">
               Live browser
             </p>
             <div className="flex flex-wrap items-center gap-1">
@@ -274,7 +330,7 @@ export function BrowserPreviewView({
               <img
                 src={frame.imageDataUrl}
                 alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
-                className="h-full w-full object-cover object-top"
+                className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
               />
             ) : null}
             {hasImage ? (

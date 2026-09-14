@@ -27,11 +27,16 @@ export function ComputerStatePanel({
   const [error, setError] = useState<string | null>(null);
 
   const streamRunId =
-    activeRun && (activeRun.status === "queued" || activeRun.status === "running")
+    variant !== "minimal" &&
+    activeRun &&
+    (activeRun.status === "queued" || activeRun.status === "running")
       ? activeRun.runId
       : null;
   const { timeline } = useRunEventStream(streamRunId);
   const latestActivity = useMemo(() => {
+    if (variant === "minimal") {
+      return null;
+    }
     for (let i = timeline.length - 1; i >= 0; i -= 1) {
       const item = timeline[i];
       if (item.kind === "text") {
@@ -39,7 +44,7 @@ export function ComputerStatePanel({
       }
     }
     return null;
-  }, [timeline]);
+  }, [timeline, variant]);
 
   useEffect(() => {
     if (!bot?.computerId) {
@@ -71,7 +76,7 @@ export function ComputerStatePanel({
   if (variant === "minimal") {
     return (
       <section
-        className={cn("border-b border-border/60 py-3", className)}
+        className={cn("border-b border-border/60 pb-3 pt-2", className)}
         aria-labelledby="computer-panel-title"
       >
         <div className="flex items-center justify-between gap-2 px-1">
@@ -91,8 +96,8 @@ export function ComputerStatePanel({
             Assign a computer in Settings so your bot can keep files between assignments.
           </p>
         ) : (
-          <div className="mt-2 space-y-2 px-1">
-            <div className="flex items-start gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-white/70">
+          <div className="mt-1.5 space-y-2 px-1">
+            <div className="flex items-start gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/70">
               <span
                 className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15"
                 aria-hidden
@@ -104,20 +109,7 @@ export function ComputerStatePanel({
                 <p className="text-xs text-muted-foreground">{readyLabel}</p>
               </div>
             </div>
-            {activeRun ? (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  {workStatus(activeRun.status)}
-                </span>
-                {" · "}
-                <span className="line-clamp-2">
-                  {latestActivity ?? activeRun.task}
-                </span>
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Idle — waiting for your next message.</p>
-            )}
-            {bot.computerId ? <ComputerBrowserPreview /> : null}
+            {bot.computerId ? <ComputerBrowserPreview className="!mt-0" /> : null}
           </div>
         )}
 
