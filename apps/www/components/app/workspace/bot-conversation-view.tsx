@@ -461,7 +461,8 @@ export function BotConversationView({
             <div className="rounded-2xl border border-dashed border-border bg-white/50 px-6 py-10 text-center">
               <p className="text-sm font-medium">Start a conversation</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Delegate a report, draft, or task. Progress and approvals stay in this thread.
+                Describe the outcome you want—a report, draft, or task on your computer. Follow
+                live progress, results, and approval prompts right here in chat.
               </p>
             </div>
           ) : null}
