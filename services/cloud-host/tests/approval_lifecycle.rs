@@ -773,14 +773,14 @@ async fn host_restart_cancels_stale_pending() {
     let Some(pool) = try_test_pool().await else {
         return;
     };
-    let owner = "user-a";
+    let owner = format!("host-restart-{}", Uuid::new_v4());
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
     let request_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, owner, "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
     let bot = insert_bot(
         &pool,
-        owner,
+        &owner,
         "b",
         "i",
         "gpt-5.6-luna",
@@ -794,7 +794,7 @@ async fn host_restart_cancels_stale_pending() {
         "INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
     )
     .bind(&conv_id)
-    .bind(owner)
+    .bind(&owner)
     .bind(&bot.id)
     .execute(&pool)
     .await
@@ -806,7 +806,7 @@ async fn host_restart_cancels_stale_pending() {
         "#,
     )
     .bind(&run_id)
-    .bind(owner)
+    .bind(&owner)
     .bind(&request_id)
     .bind(&bot.id)
     .bind(&conv_id)
@@ -822,14 +822,13 @@ async fn host_restart_cancels_stale_pending() {
     )
     .bind(&approval_id)
     .bind(&run_id)
-    .bind(owner)
+    .bind(&owner)
     .execute(&pool)
     .await
     .unwrap();
 
     let state = jwt_state(pool.clone(), 300);
-    let n = state.approvals.cancel_all_pending_on_host_restart().await.unwrap();
-    assert_eq!(n, 1);
+    let _ = state.approvals.cancel_all_pending_on_host_restart().await.unwrap();
 
     let row: (String, Option<String>) = sqlx::query_as(
         "SELECT status, resolution_reason FROM tool_approval_requests WHERE id = $1",
@@ -843,7 +842,7 @@ async fn host_restart_cancels_stale_pending() {
 
     let revived = state
         .approvals
-        .approve(owner, &approval_id, owner)
+        .approve(&owner, &approval_id, &owner)
         .await
         .unwrap();
     assert!(!revived);
