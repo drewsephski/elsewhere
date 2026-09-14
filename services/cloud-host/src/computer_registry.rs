@@ -116,13 +116,11 @@ impl ComputerRegistry {
 
         let key = (owner_id.to_string(), computer_id.to_string());
 
-        if let Some(existing) = self.sprites.get(&key) {
-            if existing.sprite_name == sprite_name && existing.browser_enabled == browser_enabled {
-                let computer = existing.computer.clone();
-                if let Some(mut entry) = self.sprites.get_mut(&key) {
-                    entry.last_used = Instant::now();
-                }
-                return Ok(computer);
+        // Never call `get_mut` while a `get` guard is live on the same key — DashMap will deadlock.
+        if let Some(mut entry) = self.sprites.get_mut(&key) {
+            if entry.sprite_name == sprite_name && entry.browser_enabled == browser_enabled {
+                entry.last_used = Instant::now();
+                return Ok(entry.computer.clone());
             }
         }
         self.sprites.remove(&key);
@@ -138,15 +136,10 @@ impl ComputerRegistry {
             last_used: Instant::now(),
         };
 
-        if let Some(existing) = self.sprites.get(&key) {
-            if existing.sprite_name == entry.sprite_name
-                && existing.browser_enabled == entry.browser_enabled
-            {
-                let computer = existing.computer.clone();
-                if let Some(mut hit) = self.sprites.get_mut(&key) {
-                    hit.last_used = Instant::now();
-                }
-                return Ok(computer);
+        if let Some(mut hit) = self.sprites.get_mut(&key) {
+            if hit.sprite_name == entry.sprite_name && hit.browser_enabled == entry.browser_enabled {
+                hit.last_used = Instant::now();
+                return Ok(hit.computer.clone());
             }
             self.sprites.remove(&key);
         }

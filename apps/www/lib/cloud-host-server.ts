@@ -50,6 +50,31 @@ function signalWithTimeout(parent: AbortSignal | undefined, timeoutMs: number) {
   return { signal, clear: () => clearTimeout(timer) };
 }
 
+function transportErrorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      const code =
+        typeof current === "object" &&
+        current !== null &&
+        "code" in current &&
+        typeof (current as { code?: unknown }).code === "string"
+          ? (current as { code: string }).code
+          : null;
+      if (code) {
+        parts.push(code);
+      }
+      current = current.cause;
+      continue;
+    }
+    parts.push(String(current));
+    break;
+  }
+  return parts.join(" ").toLowerCase();
+}
+
 export function classifyCloudHostTransportError(error: unknown): CloudHostTransportCategory {
   if (error instanceof DOMException && error.name === "AbortError") {
     return "abort";
@@ -57,18 +82,24 @@ export function classifyCloudHostTransportError(error: unknown): CloudHostTransp
   if (error instanceof DOMException && error.name === "TimeoutError") {
     return "timeout";
   }
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-  if (message.includes("getaddrinfo") || message.includes("enotfound") || message.includes("dns")) {
+  const message = transportErrorText(error);
+  if (
+    message.includes("getaddrinfo") ||
+    message.includes("enotfound") ||
+    message.includes("dns") ||
+    message.includes("eai_again")
+  ) {
     return "dns";
   }
   if (
     message.includes("econnrefused") ||
     message.includes("connect refused") ||
-    message.includes("connection refused")
+    message.includes("connection refused") ||
+    message.includes("fetch failed")
   ) {
     return "tcp";
   }
-  if (message.includes("timeout") || message.includes("timed out")) {
+  if (message.includes("timeout") || message.includes("timed out") || message.includes("etimedout")) {
     return "timeout";
   }
   return "unknown";
@@ -110,7 +141,12 @@ export function invalidateCloudHostUpstream(baseUrl?: string) {
 async function probeCandidateHealth(
   candidate: CloudHostUpstreamCandidate,
   parentSignal?: AbortSignal,
-): Promise<{ ok: boolean; latencyMs: number; category?: CloudHostTransportCategory }> {
+): Promise<{
+  ok: boolean;
+  latencyMs: number;
+  category?: CloudHostTransportCategory;
+  detail?: string;
+}> {
   const started = Date.now();
   const timeout = signalWithTimeout(parentSignal, HEALTH_PROBE_TIMEOUT_MS);
   try {
@@ -125,6 +161,7 @@ async function probeCandidateHealth(
       ok: false,
       latencyMs: Date.now() - started,
       category: classifyCloudHostTransportError(error),
+      detail: error instanceof Error ? error.message : String(error),
     };
   } finally {
     timeout.clear();
@@ -242,8 +279,10 @@ export async function selectCloudHostUpstream(options?: {
     }
     logBffEvent("error", "upstream_probe_failed", {
       upstream: candidate.source,
+      baseUrl: candidate.baseUrl,
       probeMs: Date.now() - probeStarted,
       transportError: health.category ?? "unknown",
+      probeDetail: health.detail,
     });
   }
 

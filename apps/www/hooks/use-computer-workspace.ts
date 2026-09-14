@@ -42,6 +42,7 @@ export function useComputerWorkspace(computerId: string | null) {
   const dirsRef = useRef(dirs);
   dirsRef.current = dirs;
   const inflightSeqRef = useRef<Record<string, number>>({});
+  const inflightPromiseRef = useRef<Record<string, Promise<void>>>({});
   const computerIdRef = useRef(computerId);
   computerIdRef.current = computerId;
 
@@ -65,67 +66,82 @@ export function useComputerWorkspace(computerId: string | null) {
       if (!force && dirsRef.current[path]) {
         return;
       }
-      const seq = (inflightSeqRef.current[path] ?? 0) + 1;
-      inflightSeqRef.current[path] = seq;
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-      setPathLoading(path, true);
-      setErrors((prev) => {
-        if (!prev[path]) {
-          return prev;
-        }
-        const next = { ...prev };
-        delete next[path];
-        return next;
-      });
-      try {
-        const response = await cloudHostFetch(
-          `/v1/computers/${encodeURIComponent(computerId)}/workspace?path=${encodeURIComponent(path)}`,
-          { signal: controller.signal },
-        );
-        if (
-          computerIdRef.current !== computerId ||
-          inflightSeqRef.current[path] !== seq
-        ) {
-          return;
-        }
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const message =
-            typeof body.error === "string" ? body.error : "Could not load folder";
-          throw new Error(message);
-        }
-        const data = body as WorkspaceListResponse;
-        setDirs((prev) => ({
-          ...prev,
-          [path]: normalizeEntries(data.entries),
-        }));
-        if (path === WORKSPACE_ROOT) {
-          setRootError(null);
-        }
-      } catch (err) {
-        if (
-          computerIdRef.current !== computerId ||
-          inflightSeqRef.current[path] !== seq
-        ) {
-          return;
-        }
-        const message = isAbortError(err)
-          ? "Timed out loading folder. Your computer may still be starting — try Refresh."
-          : err instanceof Error
-            ? err.message
-            : "Could not load folder";
-        setErrors((prev) => ({ ...prev, [path]: message }));
-        if (path === WORKSPACE_ROOT) {
-          setRootError(message);
-        }
-      } finally {
-        window.clearTimeout(timeoutId);
-        if (inflightSeqRef.current[path] === seq) {
-          setPathLoading(path, false);
-        }
+      const existing = inflightPromiseRef.current[path];
+      if (existing && !force) {
+        return existing;
       }
+
+      const run = async () => {
+        const seq = (inflightSeqRef.current[path] ?? 0) + 1;
+        inflightSeqRef.current[path] = seq;
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+        setPathLoading(path, true);
+        setErrors((prev) => {
+          if (!prev[path]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        });
+        try {
+          const response = await cloudHostFetch(
+            `/v1/computers/${encodeURIComponent(computerId)}/workspace?path=${encodeURIComponent(path)}`,
+            { signal: controller.signal },
+          );
+          if (
+            computerIdRef.current !== computerId ||
+            inflightSeqRef.current[path] !== seq
+          ) {
+            return;
+          }
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            const message =
+              typeof body.error === "string" ? body.error : "Could not load folder";
+            throw new Error(message);
+          }
+          const data = body as WorkspaceListResponse;
+          setDirs((prev) => ({
+            ...prev,
+            [path]: normalizeEntries(data.entries),
+          }));
+          if (path === WORKSPACE_ROOT) {
+            setRootError(null);
+          }
+        } catch (err) {
+          if (
+            computerIdRef.current !== computerId ||
+            inflightSeqRef.current[path] !== seq
+          ) {
+            return;
+          }
+          const message = isAbortError(err)
+            ? "Timed out loading folder. Your computer may still be starting — try Refresh."
+            : err instanceof Error
+              ? err.message
+              : "Could not load folder";
+          setErrors((prev) => ({ ...prev, [path]: message }));
+          if (path === WORKSPACE_ROOT) {
+            setRootError(message);
+          }
+        } finally {
+          window.clearTimeout(timeoutId);
+          if (inflightSeqRef.current[path] === seq) {
+            setPathLoading(path, false);
+          }
+        }
+      };
+
+      const promise = run().finally(() => {
+        if (inflightPromiseRef.current[path] === promise) {
+          delete inflightPromiseRef.current[path];
+        }
+      });
+      inflightPromiseRef.current[path] = promise;
+      return promise;
     },
     [computerId, setPathLoading],
   );
@@ -139,6 +155,7 @@ export function useComputerWorkspace(computerId: string | null) {
 
   useEffect(() => {
     inflightSeqRef.current = {};
+    inflightPromiseRef.current = {};
     setDirs({});
     setErrors({});
     setRootError(null);

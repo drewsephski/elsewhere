@@ -119,11 +119,108 @@ async fn lifecycle_missing_without_auto_create() {
 }
 
 #[tokio::test]
+async fn list_dir_materializes_workspace() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/sprites/list-bootstrap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "id-list",
+            "name": "list-bootstrap",
+            "organization": "org",
+            "status": "ready"
+        })))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/list-bootstrap/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "rules": [{"action": "deny", "domain": "*"}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/sprites/list-bootstrap/fs/write"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "path": "/workspace/.elsewhere-bootstrap",
+            "size": 1,
+            "mode": "0644"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/sprites/list-bootstrap/fs/list"))
+        .and(query_param("path", "."))
+        .and(query_param("workingDir", "/workspace"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "path": "/workspace",
+            "entries": [{"name":"README.md","path":"README.md","isDir":false}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let computer = SpriteComputer::new(SpriteComputerConfig {
+        base_url: server.uri(),
+        token: "test-token-secret".into(),
+        sprite_name: "list-bootstrap".into(),
+        workspace_root: "/workspace".into(),
+        request_timeout: Duration::from_secs(5),
+        auto_create: true,
+        network_policy: default_deny_network_policy(),
+        exec_timeout: Duration::from_secs(5),
+        browser_enabled: false,
+        browser_exec_timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+
+    let entries = computer.list_dir("/workspace").await.unwrap();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "README.md");
+    assert_eq!(entries[0].path, "/workspace/README.md");
+}
+
+#[tokio::test]
 async fn filesystem_roundtrip_and_errors() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
+        .and(path("/sprites/fs-test"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "id-fs",
+            "name": "fs-test",
+            "organization": "org",
+            "status": "ready"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/fs-test/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "rules": [{"action": "deny", "domain": "*"}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/sprites/fs-test/fs/write"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "path": "/workspace/.elsewhere-bootstrap",
+            "size": 1,
+            "mode": "0644"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
         .and(path("/sprites/fs-test/fs/list"))
-        .and(query_param("path", "/workspace"))
+        .and(query_param("path", "."))
+        .and(query_param("workingDir", "/workspace"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "path": "/workspace",
             "entries": [{"name":"a.bin","path":"/workspace/a.bin","isDir":false}]
@@ -148,7 +245,23 @@ async fn filesystem_roundtrip_and_errors() {
         .await;
 
     let client = SpriteClient::new(test_config(&server.uri(), "fs-test")).unwrap();
-    assert_eq!(client.fs_read("/workspace/a.bin").await.unwrap(), vec![0, 1, 2]);
+    let computer = SpriteComputer::new(SpriteComputerConfig {
+        base_url: server.uri(),
+        token: "test-token-secret".into(),
+        sprite_name: "fs-test".into(),
+        workspace_root: "/workspace".into(),
+        request_timeout: Duration::from_secs(5),
+        auto_create: true,
+        network_policy: default_deny_network_policy(),
+        exec_timeout: Duration::from_secs(5),
+        browser_enabled: false,
+        browser_exec_timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+    assert_eq!(
+        computer.read_file("/workspace/a.bin").await.unwrap(),
+        vec![0, 1, 2]
+    );
     client
         .fs_write("/workspace/x", b"abc", true)
         .await

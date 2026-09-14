@@ -11,6 +11,19 @@ use tracing::{debug, info, warn};
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Sprites FS APIs take `path` relative to `workingDir`; absolute workspace paths 400 when both match.
+pub(crate) fn fs_query_path(workspace_root: &str, absolute_path: &str) -> String {
+    let root = workspace_root.trim_end_matches('/');
+    let path = absolute_path.trim();
+    if path == root || path == format!("{root}/") {
+        return ".".to_string();
+    }
+    if let Some(suffix) = path.strip_prefix(&format!("{root}/")) {
+        return suffix.to_string();
+    }
+    path.to_string()
+}
+
 #[derive(Debug, Clone)]
 pub struct SpriteClientConfig {
     pub base_url: String,
@@ -134,30 +147,33 @@ impl SpriteClient {
     }
 
     pub(crate) async fn fs_list(&self, path: &str) -> Result<FsListResponse, SpriteError> {
+        let query_path = fs_query_path(&self.config.workspace_root, path);
         let path = format!(
             "/sprites/{}/fs/list?path={}&workingDir={}",
             urlencoding(&self.config.sprite_name),
-            urlencoding(path),
+            urlencoding(&query_path),
             urlencoding(&self.config.workspace_root),
         );
         self.send_json(Method::GET, &path, None::<&()>, true).await
     }
 
     pub async fn fs_read(&self, path: &str) -> Result<Vec<u8>, SpriteError> {
+        let query_path = fs_query_path(&self.config.workspace_root, path);
         let path = format!(
             "/sprites/{}/fs/read?path={}&workingDir={}",
             urlencoding(&self.config.sprite_name),
-            urlencoding(path),
+            urlencoding(&query_path),
             urlencoding(&self.config.workspace_root),
         );
         self.send_bytes(Method::GET, &path, None, true).await
     }
 
     pub async fn fs_write(&self, path: &str, data: &[u8], mkdir: bool) -> Result<(), SpriteError> {
+        let query_path = fs_query_path(&self.config.workspace_root, path);
         let path = format!(
             "/sprites/{}/fs/write?path={}&workingDir={}&mkdir={}",
             urlencoding(&self.config.sprite_name),
-            urlencoding(path),
+            urlencoding(&query_path),
             urlencoding(&self.config.workspace_root),
             mkdir,
         );
@@ -565,6 +581,14 @@ mod tests {
         let (stdout, _, code) = parse_exec_response(&body).unwrap();
         assert_eq!(stdout, "hi");
         assert_eq!(code, 0);
+    }
+
+    #[test]
+    fn fs_query_path_is_relative_to_workspace_root() {
+        assert_eq!(fs_query_path("/workspace", "/workspace"), ".");
+        assert_eq!(fs_query_path("/workspace", "/workspace/"), ".");
+        assert_eq!(fs_query_path("/workspace", "/workspace/docs"), "docs");
+        assert_eq!(fs_query_path("/workspace", "/other"), "/other");
     }
 
     #[test]

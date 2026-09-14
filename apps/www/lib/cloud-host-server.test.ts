@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  classifyCloudHostTransportError,
   diagnoseRunnerDependency,
   resetCloudHostUpstreamCacheForTests,
   selectCloudHostUpstream,
@@ -12,6 +13,17 @@ function env(values: Record<string, string | undefined>): NodeJS.ProcessEnv {
 afterEach(() => {
   resetCloudHostUpstreamCacheForTests();
   vi.unstubAllGlobals();
+});
+
+describe("classifyCloudHostTransportError", () => {
+  it("classifies undici fetch failures with ECONNREFUSED causes as tcp", () => {
+    const error = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:8080"), {
+        code: "ECONNREFUSED",
+      }),
+    });
+    expect(classifyCloudHostTransportError(error)).toBe("tcp");
+  });
 });
 
 describe("selectCloudHostUpstream", () => {

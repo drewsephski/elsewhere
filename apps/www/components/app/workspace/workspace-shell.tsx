@@ -20,6 +20,31 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 
+/** Must be module-scoped — an inline component remounts the whole workspace on every parent render. */
+function WorkspaceBrowserPreviewLayer({
+  computerId,
+  enabled,
+  sessionKey,
+  children,
+}: {
+  computerId: string | null;
+  enabled: boolean;
+  sessionKey: string | null | undefined;
+  children: ReactNode;
+}) {
+  const { browserPreviewGeneration } = useActiveRun();
+  return (
+    <BrowserPreviewProvider
+      computerId={computerId}
+      enabled={enabled}
+      sessionKey={sessionKey}
+      refreshGeneration={browserPreviewGeneration}
+    >
+      {children}
+    </BrowserPreviewProvider>
+  );
+}
+
 interface WorkspaceShellProps {
   userEmail: string;
   children: React.ReactNode;
@@ -160,20 +185,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const showConversation = Boolean(selectedBotId);
 
   const previewEnabled = Boolean(bot?.computerId);
-
-  function PreviewLayer({ children }: { children: ReactNode }) {
-    const { browserPreviewGeneration } = useActiveRun();
-    return (
-      <BrowserPreviewProvider
-        computerId={bot?.computerId ?? null}
-        enabled={previewEnabled}
-        sessionKey={activeRun?.runId ?? streamRunId}
-        refreshGeneration={browserPreviewGeneration}
-      >
-        {children}
-      </BrowserPreviewProvider>
-    );
-  }
+  const previewComputerId = bot?.computerId ?? null;
+  const previewSessionKey = activeRun?.runId ?? streamRunId;
 
   const conversationMain = (
     <main
@@ -312,7 +325,13 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     <div className="app-shell-bg flex h-[100dvh] flex-col overflow-hidden text-foreground">
       {selectedBotId ? (
         <ActiveRunProvider runId={streamRunId}>
-          <PreviewLayer>{workspaceBody}</PreviewLayer>
+          <WorkspaceBrowserPreviewLayer
+            computerId={previewComputerId}
+            enabled={previewEnabled}
+            sessionKey={previewSessionKey}
+          >
+            {workspaceBody}
+          </WorkspaceBrowserPreviewLayer>
         </ActiveRunProvider>
       ) : (
         workspaceBody

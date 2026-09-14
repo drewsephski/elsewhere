@@ -3,9 +3,11 @@ use agent_core::{
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tracing::warn;
 
 use crate::browser::{
     ensure_browser_guest, invoke_browser_daemon, read_browser_preview_cache, BrowserPreviewCache,
@@ -51,6 +53,10 @@ pub struct SpriteComputer {
     network_policy: NetworkPolicyConfig,
     /// Serializes `workspace_exec` and browser work so egress cannot overlap shell exec.
     execution_gate: Mutex<()>,
+    /// One-time workspace directory bootstrap (cold sprites).
+    workspace_bootstrap: Mutex<()>,
+    /// Cold sprites may exist before `/workspace` is created on disk.
+    workspace_materialized: AtomicBool,
 }
 
 impl SpriteComputer {
@@ -69,7 +75,63 @@ impl SpriteComputer {
             browser_exec_timeout,
             network_policy,
             execution_gate: Mutex::new(()),
+            workspace_bootstrap: Mutex::new(()),
+            workspace_materialized: AtomicBool::new(false),
         })
+    }
+
+    /// Sprites can be provisioned while the workspace directory still does not exist.
+    async fn materialize_workspace(&self) -> Result<(), ComputerError> {
+        if self.workspace_materialized.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let _guard = self.workspace_bootstrap.lock().await;
+        if self.workspace_materialized.load(Ordering::Acquire) {
+            return Ok(());
+        }
+
+        self.client
+            .ensure_sprite()
+            .await
+            .map_err(map_sprite_error)?;
+
+        let root = self.workspace_root.trim_end_matches('/');
+        let marker = format!("{root}/.elsewhere-bootstrap");
+
+        if self
+            .client
+            .fs_write(&marker, b"1", true)
+            .await
+            .is_ok()
+        {
+            self.workspace_materialized.store(true, Ordering::Release);
+            return Ok(());
+        }
+
+        let _gate = self.execution_gate.lock().await;
+        for workdir in ["/home/sprite", root] {
+            let (_, _, code) = self
+                .client
+                .exec_http(&format!("mkdir -p {root}"), workdir, self.exec_timeout)
+                .await
+                .map_err(map_sprite_error)?;
+            if code != 0 {
+                continue;
+            }
+            if self
+                .client
+                .fs_write(&marker, b"1", true)
+                .await
+                .is_ok()
+            {
+                self.workspace_materialized.store(true, Ordering::Release);
+                return Ok(());
+            }
+        }
+
+        Err(ComputerError::GuestUnavailable(
+            "failed to initialize workspace directory".into(),
+        ))
     }
 
     pub fn client(&self) -> &SpriteClient {
@@ -110,6 +172,17 @@ impl SpriteComputer {
         }
         Ok(normalized)
     }
+
+    fn absolutize_workspace_path(&self, path: &str) -> String {
+        let root = self.workspace_root.trim_end_matches('/');
+        if path.starts_with('/') {
+            return path.to_string();
+        }
+        if path == "." || path.is_empty() {
+            return root.to_string();
+        }
+        format!("{root}/{path}")
+    }
 }
 
 #[async_trait]
@@ -119,9 +192,10 @@ impl AgentComputer for SpriteComputer {
     }
 
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
+        self.materialize_workspace().await?;
         let info = self
             .client
-            .ensure_sprite()
+            .get_sprite()
             .await
             .map_err(map_sprite_error)?;
 
@@ -157,13 +231,26 @@ impl AgentComputer for SpriteComputer {
 
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let path = self.normalize_path(path)?;
-        let response = self.client.fs_list(&path).await.map_err(map_sprite_error)?;
+        self.materialize_workspace().await?;
+        let response = self.client.fs_list(&path).await.map_err(|err| {
+            if let SpriteError::Provider { status, message } = &err {
+                if *status == 400 {
+                    warn!(
+                        sprite_name = %self.client.sprite_name(),
+                        path = %path,
+                        provider_message = %message,
+                        "sprites fs/list rejected"
+                    );
+                }
+            }
+            map_sprite_error(err)
+        })?;
         Ok(response
             .entries
             .into_iter()
             .map(|entry| WorkspaceEntry {
                 name: entry.name,
-                path: entry.path,
+                path: self.absolutize_workspace_path(&entry.path),
                 is_dir: entry.is_dir || entry.r#type.as_deref() == Some("directory"),
             })
             .collect())
@@ -171,6 +258,7 @@ impl AgentComputer for SpriteComputer {
 
     async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
         let path = self.normalize_path(path)?;
+        self.materialize_workspace().await?;
         self.client
             .fs_read(&path)
             .await
@@ -179,6 +267,7 @@ impl AgentComputer for SpriteComputer {
 
     async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
         let path = self.normalize_path(path)?;
+        self.materialize_workspace().await?;
         self.client
             .fs_write(&path, data, true)
             .await

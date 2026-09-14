@@ -13,10 +13,41 @@ fn epoch_secs() -> u64 {
         .unwrap_or(0)
 }
 
+fn runtime_stall_watchdog_enabled() -> bool {
+    match std::env::var("ELSEWHERE_RUNTIME_STALL_WATCHDOG")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+    {
+        Some(value) if matches!(value.as_str(), "0" | "false" | "off" | "no") => false,
+        Some(value) if matches!(value.as_str(), "1" | "true" | "on" | "yes") => true,
+        Some(value) => {
+            eprintln!(
+                "warning: ignoring invalid ELSEWHERE_RUNTIME_STALL_WATCHDOG={value:?}; expected 0/1"
+            );
+            !cfg!(debug_assertions)
+        }
+        // Local `cargo run` uses dev/debug builds; production release keeps the watchdog on.
+        None => !cfg!(debug_assertions),
+    }
+}
+
+fn runtime_stall_threshold_secs() -> u64 {
+    std::env::var("ELSEWHERE_RUNTIME_STALL_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .filter(|secs| *secs >= 5)
+        .unwrap_or(if cfg!(debug_assertions) { 120 } else { 20 })
+}
+
 fn spawn_runtime_watchdog() {
+    if !runtime_stall_watchdog_enabled() {
+        tracing::info!("tokio runtime stall watchdog disabled for this process");
+        return;
+    }
+
+    let stall_secs = runtime_stall_threshold_secs();
     const TICK_SECS: u64 = 1;
     const CHECK_EVERY_SECS: u64 = 3;
-    const STALL_SECS: u64 = 20;
 
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
@@ -34,11 +65,11 @@ fn spawn_runtime_watchdog() {
                 continue;
             }
             let age = epoch_secs().saturating_sub(last);
-            if age > STALL_SECS {
+            if age > stall_secs {
                 eprintln!(
                     "fatal runtime_stall: tokio heartbeat stale for {}s (threshold {}s)",
                     age,
-                    STALL_SECS
+                    stall_secs
                 );
                 std::process::exit(1);
             }
