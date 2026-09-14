@@ -6,6 +6,7 @@ use agent_core::{AgentComputer, FakeAgentComputer};
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 use serde_json::Value;
 
+use crate::assistant_accumulator::CodexAssistantAccumulator;
 use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
@@ -26,7 +27,8 @@ const TURN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Default)]
 struct TurnProbeState {
-    assistant_text: String,
+    assistant: CodexAssistantAccumulator,
+    last_turn_completed: Option<Value>,
     mcp_write_started: bool,
     mcp_write_completed: bool,
     mcp_read_started: bool,
@@ -112,11 +114,12 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
         }
     }
 
+    let mut notifications = client.notifications();
+
     let turn_id = client
         .turn_start(&thread_id, DIRECT_TOOL_PROBE_PROMPT, Duration::from_secs(60))
         .await?;
 
-    let mut notifications = client.notifications();
     let mut state = TurnProbeState::default();
     let deadline = tokio::time::Instant::now() + TURN_TIMEOUT;
 
@@ -157,11 +160,10 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
                 }
             }
             "item/agentMessage/delta" => {
-                if let Some(delta) = params.get("delta").and_then(|v| v.as_str()) {
-                    state.assistant_text.push_str(delta);
-                }
+                state.assistant.on_agent_message_delta(&params);
             }
             "turn/completed" => {
+                state.last_turn_completed = Some(params.clone());
                 let (_, _, status) = parse_turn_completed(&params)?;
                 if status != "completed" {
                     let message = turn_error_message(&params)
@@ -222,24 +224,31 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
     }
 
     if !state
-        .assistant_text
+        .assistant
+        .canonical_success(state.last_turn_completed.as_ref())
         .contains(DIRECT_TOOL_PROBE_EXPECTED_CONTENT)
     {
+        let assistant_text = state
+            .assistant
+            .canonical_success(state.last_turn_completed.as_ref());
         let _ = client.shutdown().await;
         mcp.shutdown().await;
         return Err(CodexProviderError::RunEngine(format!(
             "assistant text missing expected content; got {:?}",
-            state.assistant_text.trim()
+            assistant_text.trim()
         )));
     }
 
+    let assistant_text = state
+        .assistant
+        .canonical_success(state.last_turn_completed.as_ref());
     let result = McpTurnProbeResult {
         codex_version: version,
         auth_type,
         plan_type,
         model: model.to_string(),
         mcp_tools_discovered: tools,
-        assistant_text: state.assistant_text.clone(),
+        assistant_text,
         mcp_write_started: state.mcp_write_started,
         mcp_write_completed: state.mcp_write_completed,
         mcp_read_started: state.mcp_read_started,
@@ -274,6 +283,10 @@ fn handle_probe_item_started(item: &Value, state: &mut TurnProbeState) {
         println!("disallowed host tool started: {item_type}");
         return;
     }
+    if item_type == "agentMessage" {
+        state.assistant.on_item_started(item);
+        return;
+    }
     if item_type != "mcpToolCall" {
         return;
     }
@@ -302,10 +315,7 @@ fn handle_probe_item_completed(item: &Value, state: &mut TurnProbeState) {
         return;
     }
     if item_type == "agentMessage" {
-        if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
-            // Completion carries the full message; deltas may have arrived first.
-            state.assistant_text = text.to_string();
-        }
+        state.assistant.on_agent_message_completed(item);
         return;
     }
     if item_type != "mcpToolCall" {
@@ -375,9 +385,7 @@ async fn drain_late_notifications(
                 }
             }
             "item/agentMessage/delta" => {
-                if let Some(delta) = params.get("delta").and_then(|v| v.as_str()) {
-                    state.assistant_text.push_str(delta);
-                }
+                state.assistant.on_agent_message_delta(&params);
             }
             _ => {}
         }
@@ -399,14 +407,20 @@ mod tests {
     #[test]
     fn agent_message_completion_replaces_delta_accumulation() {
         let mut state = TurnProbeState::default();
-        state.assistant_text = "partial del".to_string();
+        state
+            .assistant
+            .on_agent_message_delta(&json!({ "itemId": "msg-1", "delta": "partial del" }));
 
         let item = json!({
             "type": "agentMessage",
+            "id": "msg-1",
             "text": "direct Elsewhere MCP works"
         });
         handle_probe_item_completed(&item, &mut state);
 
-        assert_eq!(state.assistant_text, "direct Elsewhere MCP works");
+        assert_eq!(
+            state.assistant.canonical_success(None),
+            "direct Elsewhere MCP works"
+        );
     }
 }

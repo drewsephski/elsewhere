@@ -124,7 +124,7 @@ impl RunStore for MemStore {
     }
 }
 
-async fn run_with_fake(mode: FakeServerMode, cancel: Arc<AtomicBool>) -> (Vec<String>, String) {
+async fn run_with_fake(mode: FakeServerMode, cancel: Arc<AtomicBool>) -> (Vec<String>, String, String) {
     let process = spawn_fake_app_server_with_mode(mode)
         .await
         .expect("fake server");
@@ -177,22 +177,24 @@ async fn run_with_fake(mode: FakeServerMode, cancel: Arc<AtomicBool>) -> (Vec<St
         .get("req-1")
         .map(|(s, _)| s.clone())
         .unwrap_or_default();
-    (events.labels(), status)
+    let assistant = store.assistant_body.lock().unwrap().clone();
+    (events.labels(), status, assistant)
 }
 
 #[tokio::test]
 async fn maps_tool_events_and_completes() {
-    let (labels, status) =
+    let (labels, status, assistant) =
         run_with_fake(FakeServerMode::HappyPath, Arc::new(AtomicBool::new(false))).await;
     assert!(labels.iter().any(|l| l == "tool_call"));
     assert!(labels.iter().any(|l| l == "tool_result"));
     assert!(labels.iter().any(|l| l == "completed"));
     assert_eq!(status, "completed");
+    assert_eq!(assistant, "hello world");
 }
 
 #[tokio::test]
 async fn ignores_wrong_thread_notifications() {
-    let (labels, status) =
+    let (labels, status, _) =
         run_with_fake(FakeServerMode::WrongThreadNotifications, Arc::new(AtomicBool::new(false)))
             .await;
     assert!(!labels.iter().any(|l| l == "tool_call"));
@@ -201,7 +203,7 @@ async fn ignores_wrong_thread_notifications() {
 
 #[tokio::test]
 async fn failed_turn_marks_run_failed() {
-    let (labels, status) =
+    let (labels, status, _) =
         run_with_fake(FakeServerMode::TurnFailed, Arc::new(AtomicBool::new(false))).await;
     assert!(labels.iter().any(|l| l == "failed"));
     assert_eq!(status, "failed");

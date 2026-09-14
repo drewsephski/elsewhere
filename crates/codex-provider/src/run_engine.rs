@@ -13,6 +13,7 @@ use agent_core::{
 };
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
+use crate::assistant_accumulator::CodexAssistantAccumulator;
 use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
@@ -391,8 +392,8 @@ impl CodexRunEngine {
         let state = TurnRunState {
             thread_id,
             turn_id,
-            assistant_text: String::new(),
-            finalized_agent_message: false,
+            assistant: CodexAssistantAccumulator::default(),
+            last_turn_completed: None,
             step_count: 0,
             tool_calls_seen: HashSet::new(),
             tool_results_seen: HashSet::new(),
@@ -434,7 +435,7 @@ impl CodexRunEngine {
                         .await;
                 }
                 tokio::time::sleep(self.config.interrupt_grace).await;
-                let partial = state.lock().await.assistant_text.clone();
+                let partial = state.lock().await.assistant.partial_output();
                 finalize_interrupted(&shared, &ctx, &partial, "run_timeout").await?;
                 cleanup_run(client, mcp).await;
                 return Ok(());
@@ -442,21 +443,38 @@ impl CodexRunEngine {
         };
 
         let final_state = state.lock().await;
-        let partial = final_state.assistant_text.clone();
         let step_count = final_state.step_count;
+        let turn_completed = final_state.last_turn_completed.clone();
+        let assistant_result = match &run_outcome {
+            TurnOutcome::Completed => {
+                final_state
+                    .assistant
+                    .canonical_success(turn_completed.as_ref())
+            }
+            _ => final_state.assistant.partial_output(),
+        };
+        drop(final_state);
 
         match run_outcome {
             TurnOutcome::Completed => {
-                finalize_success(&shared, &ctx, &partial, step_count).await?;
+                finalize_success(&shared, &ctx, &assistant_result, step_count).await?;
             }
             TurnOutcome::Failed { code, message } => {
-                fail_run(&shared, &ctx, &code, &message, &partial, step_count).await?;
+                fail_run(
+                    &shared,
+                    &ctx,
+                    &code,
+                    &message,
+                    &assistant_result,
+                    step_count,
+                )
+                .await?;
             }
             TurnOutcome::Cancelled => {
-                finalize_cancelled(&shared, &ctx, &partial).await?;
+                finalize_cancelled(&shared, &ctx, &assistant_result).await?;
             }
             TurnOutcome::Interrupted { code } => {
-                finalize_interrupted(&shared, &ctx, &partial, &code).await?;
+                finalize_interrupted(&shared, &ctx, &assistant_result, &code).await?;
             }
             TurnOutcome::HostToolViolation => {
                 fail_run(
@@ -464,7 +482,7 @@ impl CodexRunEngine {
                     &ctx,
                     "host_tool_violation",
                     "Codex attempted a disallowed host tool during subscription run",
-                    &partial,
+                    &assistant_result,
                     step_count,
                 )
                 .await?;
@@ -475,7 +493,7 @@ impl CodexRunEngine {
                     &ctx,
                     "codex_protocol_error",
                     &message,
-                    &partial,
+                    &assistant_result,
                     step_count,
                 )
                 .await?;
@@ -499,8 +517,8 @@ enum TurnOutcome {
 struct TurnRunState {
     thread_id: String,
     turn_id: String,
-    assistant_text: String,
-    finalized_agent_message: bool,
+    assistant: CodexAssistantAccumulator,
+    last_turn_completed: Option<Value>,
     step_count: i64,
     tool_calls_seen: HashSet<String>,
     tool_results_seen: HashSet<String>,
@@ -618,6 +636,10 @@ async fn consume_turn_notifications(
                 }
                 "turn/completed" => {
                     let _ = interrupt_grace;
+                    {
+                        let mut active = state.lock().await;
+                        active.last_turn_completed = Some(params.clone());
+                    }
                     return parse_turn_outcome(&state, &params, cancel.load(Ordering::Relaxed))
                         .await;
                 }
@@ -651,6 +673,10 @@ async fn handle_item_started(
     let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if is_disallowed_host_item(item_type) {
         state.lock().await.host_tool_violation = true;
+        return Ok(());
+    }
+    if item_type == "agentMessage" {
+        state.lock().await.assistant.on_item_started(item);
         return Ok(());
     }
     if item_type != "mcpToolCall" {
@@ -719,16 +745,7 @@ async fn handle_item_completed(
         return Ok(());
     }
     if item_type == "agentMessage" {
-        let text = item
-            .get("text")
-            .or_else(|| item.get("content"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let mut active = state.lock().await;
-        if !active.finalized_agent_message && !text.is_empty() {
-            active.assistant_text = text.to_string();
-            active.finalized_agent_message = true;
-        }
+        state.lock().await.assistant.on_agent_message_completed(item);
         return Ok(());
     }
     if item_type != "mcpToolCall" {
@@ -792,9 +809,7 @@ async fn handle_agent_delta(
     state: &Arc<Mutex<TurnRunState>>,
     params: &Value,
 ) -> Result<(), RuntimeError> {
-    if let Some(delta) = params.get("delta").and_then(|v| v.as_str()) {
-        state.lock().await.assistant_text.push_str(delta);
-    }
+    state.lock().await.assistant.on_agent_message_delta(params);
     Ok(())
 }
 

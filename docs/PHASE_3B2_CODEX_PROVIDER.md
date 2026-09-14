@@ -127,3 +127,5 @@ Treat multi-tenant credential storage and ToS as product/legal constraints; arch
 ## Deferred (Phase 3C+)
 
 User/dashboard polish, routines, and approvals UI can follow once the subscription provider path is proven.
+
+**Approvals (3C):** Phase 3B.2 uses Codex `approvalPolicy=never` with Elsewhere MCP `default_tools_approval_mode=approve` so Luna can call workspace tools without blocking the E2E gate. Product-facing approval for destructive computer actions (`workspace_write`, `workspace_exec`, etc.) must be enforced by **Elsewhere before `AgentComputer` dispatch**, not by relying on Codex approval UI alone.

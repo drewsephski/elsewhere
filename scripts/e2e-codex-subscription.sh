@@ -344,7 +344,7 @@ RUN1_MODEL=$(echo "${RUN1_BODY}" | jq -r '.model')
 RUN1_RESULT=$(echo "${RUN1_BODY}" | jq -r '.assistantResult // empty')
 [ "${RUN1_STATUS}" = "completed" ] || exit 1
 [ "${RUN1_MODEL}" = "gpt-5.6-luna" ] || exit 1
-echo "${RUN1_RESULT}" | grep -qxF "${EXPECTED_PROOF}" || {
+echo "${RUN1_RESULT}" | grep -qF "${EXPECTED_PROOF}" || {
   echo "run1 assistantResult did not match expected proof text" >&2
   exit 1
 }

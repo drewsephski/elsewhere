@@ -82,6 +82,9 @@ pub fn build_elsewhere_thread_start_params(
         "model": config.model,
         "cwd": config.cwd.to_string_lossy(),
         "sandbox": "read-only",
+        // Phase 3B.2: Codex-side auto-approve so subscription E2E can run unattended.
+        // Phase 3C+ must enforce user-facing approvals in Elsewhere before AgentComputer
+        // dispatch (especially workspace_write / workspace_exec), not via Codex prompts.
         "approvalPolicy": "never",
         "config": {
             "features": features,
