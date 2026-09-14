@@ -121,7 +121,7 @@ pub async fn patch(
         None => None,
     };
     if let Some(computer_id) = body.computer_id.as_deref().filter(|c| !c.is_empty()) {
-        let _ = crate::db::resources::get_computer_for_owner(
+        let computer = crate::db::resources::get_computer_for_owner(
             &state.pool,
             principal.owner_id(),
             computer_id,
@@ -129,6 +129,9 @@ pub async fn patch(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::Validation("computerId not found".into()))?;
+        if computer.state == "archived" {
+            return Err(ApiError::Validation("computer is archived".into()));
+        }
     }
     let row = patch_bot(
         &state.pool,
