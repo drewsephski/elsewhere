@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS codex
+RUN npm install --global @openai/codex@0.154.0
+
+FROM --platform=$BUILDPLATFORM rust:1.94-bookworm AS build
+# Compile natively on Apple Silicon, linking the Linux x86-64 target for Fly.
+RUN rustup target add x86_64-unknown-linux-gnu && \
+    apt-get update && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu libc6-dev-amd64-cross && \
+    rm -rf /var/lib/apt/lists/*
+ENV CARGO_BUILD_JOBS=2 \
+    CARGO_BUILD_TARGET=x86_64-unknown-linux-gnu \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc \
+    CC_x86_64_unknown_linux_gnu=x86_64-linux-gnu-gcc
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY services/cloud-host ./services/cloud-host
+COPY guest-agent ./guest-agent
+COPY src-tauri ./src-tauri
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --locked --release -p cloud-host --bin cloud-host && \
+    cargo build --locked --release -p codex-provider --example schema_probe && \
+    mkdir /out && cp target/x86_64-unknown-linux-gnu/release/cloud-host target/x86_64-unknown-linux-gnu/release/examples/schema_probe /out/
+
+FROM node:22-bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu util-linux && \
+    rm -rf /var/lib/apt/lists/* && useradd --uid 10001 --create-home elsewhere
+COPY --from=codex /usr/local/lib/node_modules/@openai /usr/local/lib/node_modules/@openai
+RUN ln -s /usr/local/lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
+COPY --from=build /out/ /usr/local/bin/
+COPY infra/certs /app/infra/certs
+COPY --chmod=755 infra/fly/runner-entrypoint.sh /usr/local/bin/runner-entrypoint
+COPY infra/fly/check-codex.mjs /app/check-codex.mjs
+ENV CODEX_EXECUTABLE=/usr/local/bin/codex \
+    ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles
+RUN gosu elsewhere /usr/local/bin/schema_probe
+RUN gosu elsewhere node /app/check-codex.mjs
+WORKDIR /app
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/runner-entrypoint"]

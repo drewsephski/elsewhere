@@ -1,0 +1,50 @@
+app = "elsewhere-alpha-runner"
+primary_region = "ord"
+kill_signal = "SIGTERM"
+kill_timeout = 300
+
+[build]
+  dockerfile = "infra/fly/Dockerfile.runner"
+
+[env]
+  ELSEWHERE_AUTH_MODE = "jwt"
+  ELSEWHERE_RUN_ENGINE = "codex"
+  ELSEWHERE_ALLOW_CODEX_LOGIN = "true"
+  ELSEWHERE_CODEX_PROFILES_DIR = "/var/lib/elsewhere/codex-profiles"
+  ELSEWHERE_MAX_CONCURRENT_RUNS = "1"
+  ELSEWHERE_RUN_TIMEOUT_SECS = "900"
+  ELSEWHERE_TOOL_APPROVAL_TIMEOUT_SECS = "300"
+  ELSEWHERE_BIND = "0.0.0.0:8080"
+  ELSEWHERE_JWT_ISSUER = "https://elsewhere-alpha-web.fly.dev"
+  ELSEWHERE_JWT_AUDIENCE = "elsewhere-cloud-host"
+  ELSEWHERE_JWT_JWKS_URL = "https://elsewhere-alpha-web.fly.dev/api/auth/jwks"
+  ELSEWHERE_WEB_ORIGIN = "https://elsewhere-alpha-web.fly.dev"
+  RUST_LOG = "cloud_host=info,codex_provider=info,sprite_computer=info"
+
+[[mounts]]
+  source = "codex_profiles"
+  destination = "/var/lib/elsewhere"
+  snapshot_retention = 7
+  scheduled_snapshots = true
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/ready"
+
+[[restart]]
+  policy = "always"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "2gb"

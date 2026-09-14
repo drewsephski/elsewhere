@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS build
+RUN npm install --global pnpm@9.15.9
+WORKDIR /app
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/www/package.json ./apps/www/package.json
+COPY packages ./packages
+RUN pnpm install --frozen-lockfile --filter @elsewhere/www...
+COPY apps/www ./apps/www
+ARG NEXT_PUBLIC_BETTER_AUTH_URL
+ARG NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL
+ENV NEXT_PUBLIC_BETTER_AUTH_URL=$NEXT_PUBLIC_BETTER_AUTH_URL \
+    NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL=$NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_URL \
+    NEXT_PUBLIC_ELSEWHERE_JWT_AUDIENCE=elsewhere-cloud-host \
+    NEXT_PUBLIC_ELSEWHERE_ALPHA_INVITE_REQUIRED=1 \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=--max-old-space-size=2048
+# Build-time placeholders contain no credentials and never connect to a DB.
+RUN BETTER_AUTH_DATABASE_URL=postgres://build:build@127.0.0.1/build \
+    BETTER_AUTH_SECRET=build-only-placeholder-never-used-at-runtime \
+    pnpm --filter @elsewhere/www build
+
+FROM node:22-bookworm-slim
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
+WORKDIR /app
+COPY --from=build --chown=node:node /app/apps/www/.next/standalone ./
+COPY --from=build --chown=node:node /app/apps/www/.next/static ./apps/www/.next/static
+COPY infra/certs /app/infra/certs
+USER node
+EXPOSE 3000
+CMD ["node", "apps/www/server.js"]

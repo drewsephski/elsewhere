@@ -1,6 +1,6 @@
 # Elsewhere hosted alpha — approval proposal
 
-Status: **Supabase Free approved and provisioned; Fly services not provisioned or deployed**. Revised September 14, 2026 after the user selected Supabase and “drew's projects.” This replaces the earlier $59.33/month Managed Postgres proposal. Fly authentication is restored; read-only inventory shows no apps in the personal organization. The existing Sprite `elsewhere` is an agent-computer test resource, not a deployment host. See [the live database setup and verification record](SUPABASE_ALPHA.md).
+Status: **Supabase Free provisioned; paid Fly testing approved; Linux deployment preflights in progress**. Revised September 14, 2026 after the user selected Supabase and “drew's projects.” This replaces the earlier $59.33/month Managed Postgres proposal. Fly authentication is restored; the two named apps are reserved in the personal organization with separate staged secrets and shared Fly endpoints. The existing Sprite `elsewhere` is an agent-computer test resource, not a deployment host. See [the live database setup and verification record](SUPABASE_ALPHA.md).
 
 ## Recommendation and exact resource request
 
@@ -9,7 +9,7 @@ Use the existing Rust API/dispatcher/worker as **one persistent runner**, a sepa
 | Resource | Requested name | Quantity and configuration | Purpose |
 | --- | --- | --- | --- |
 | Fly runner app | `elsewhere-alpha-runner` | Exactly 1 Machine, shared-cpu-1x, 2 GB RAM, `ord`, always running | Rust API, dispatcher, routines, Codex child processes |
-| Fly web app | `elsewhere-alpha-web` | Exactly 1 Machine, shared-cpu-1x, 512 MB RAM, `ord`, always running | Next.js, Better Auth, web UI and private download proxy |
+| Fly web app | `elsewhere-alpha-web` | Exactly 1 Machine, shared-cpu-1x, 512 MB RAM, `ord`, autostop between visits | Next.js, Better Auth, web UI and private download proxy |
 | Supabase project (created) | `Elsewhere Alpha` / `edbfhcveqxtxnfybhmej` | Free plan, PostgreSQL 17.6, 500 MB database allowance, `us-east-2`, organization “drew's projects” | Durable control plane, accounts, approvals, results |
 | Private profile volume | `codex_profiles` on runner app | Exactly 1 encrypted 3 GB Fly Volume; mount `/var/lib/elsewhere`; daily snapshots retained 7 days | Codex-managed private per-owner profiles |
 | Public endpoints | Each app's `*.fly.dev` hostname | Shared IPv4 and IPv6, managed HTTPS | Browser access without changing production DNS |
@@ -21,7 +21,7 @@ The web app and runner use separate images and secrets. Rebuilding web assets ca
 
 ## Estimated monthly cost
 
-Estimate for 30 days, always-on apps, initially Drew and then 1–5 invited users, one concurrent assignment. These are list-price estimates, not a quote or a hard billing cap; no trial credit, existing plan allowance, or reservation discount is assumed.
+Estimate for 30 days, an always-on runner and up to continuous web usage, initially Drew and then 1–5 invited users, one concurrent assignment. These are list-price estimates, not a quote or a hard billing cap; no trial credit, existing plan allowance, or reservation discount is assumed.
 
 | Item | Monthly estimate |
 | --- | ---: |
@@ -29,9 +29,11 @@ Estimate for 30 days, always-on apps, initially Drew and then 1–5 invited user
 | Web/auth, 1 shared CPU / 512 MB | $3.32 |
 | Supabase Free Postgres | $0.00 |
 | Profile volume, 3 GB × $0.15 | $0.45 |
-| **Fixed baseline** | **$14.88** |
+| **Base with web continuously running** | **$14.88** |
 
-Target **under $20/month for a lightly used alpha**, leaving $5.12 above the fixed baseline for Sprite use, snapshots, and network/build overhead. This is a planning envelope, not a hard cap. Busy Sprite work can exceed it; do not promise an unlimited $20 service. Build images locally initially, check actual billing during acceptance, and pause the test routine afterward. Do not resize or enable paid database upgrades automatically.
+The user approved this scope and asked for a cheaper test method. Fly bills started Machines per second: a 48-hour acceptance window with both Machines running is approximately **$1 base**, plus variable usage and retained storage. The web app can autostop between visits; the runner cannot, because it schedules work without inbound requests. That makes the always-on runner/volume component **$11.56/month**, plus web runtime and stopped rootfs storage. A cold web/JWKS wake-up must be verified. No automatic shutdown timer is implied; pause test routines and explicitly stop Machines after acceptance if ongoing alpha service is not needed. See [the operating commands](../infra/fly/README.md).
+
+Target **under $20/month for a lightly used alpha**, leaving $5.12 above the continuously-running base for Sprite use, snapshots, and network/build overhead. This is a planning envelope, not a hard cap. Busy Sprite work can exceed it; do not promise an unlimited $20 service. Build images locally initially, check actual billing during acceptance, and pause the test routine afterward. Do not resize or enable paid database upgrades automatically.
 
 Supabase Free includes 500 MB database storage and 5 GB egress, has no automatic backups/PITR, and may pause after a week of inactivity. This is a supervised alpha availability tradeoff. Monitor database growth (especially saved artifact bytes and events), back up before inviting users, and surface database unavailability through runner readiness. Normal dispatcher traffic must not be replaced by artificial keep-alive traffic to evade provider policies. Supabase Pro starts at $25/month and would exceed this whole budget. The 512 MB web Machine must pass a production-image memory check; build Next.js outside the runtime Machine. A required larger size triggers a budget review.
 
@@ -95,9 +97,9 @@ Use email/password sign-in initially; Google OAuth is unnecessary for this accep
 
 ## Deployment and operating model
 
-After approval, finish and locally test two immutable Linux images, a secrets-excluding build context, Fly configuration, private-volume startup checks, and initial account admission restriction. Run the existing migrations and pinned Better Auth migration tooling deliberately. The proposal is not a claim that those deployment artifacts already exist or that a Linux Codex image has passed validation.
+With the testing scope approved, finish and locally test two immutable Linux images, a secrets-excluding build context, Fly configuration, private-volume startup checks, and initial account admission restriction. Run the existing migrations and pinned Better Auth migration tooling deliberately. The proposal is not a claim that those deployment artifacts already exist or that a Linux Codex image has passed validation.
 
-Provision the listed resources only after authenticated read-only inventory and price/region checks. Keep `auto_stop_machines="off"`, exactly one runner Machine, restart policy `always`, `kill_signal="SIGTERM"`, and `kill_timeout=300`. Disable Fly's automatic extra Machine creation on initial deployment. Use an in-place/immediate single-runner update with a maintenance window, not a canary that competes for leadership or silently creates a second empty profile volume. Brief API unavailability during runner replacement is acceptable for this alpha.
+Provision the approved resources only after authenticated inventory, price/region checks, and Linux image validation. Keep runner `auto_stop_machines="off"`, exactly one runner Machine, restart policy `always`, `kill_signal="SIGTERM"`, and `kill_timeout=300`. Disable Fly's automatic extra Machine creation on initial deployment. Use an in-place/immediate single-runner update with a maintenance window, not a canary that competes for leadership or silently creates a second empty profile volume. Brief API unavailability during runner replacement is acceptable for this alpha.
 
 Acquire the dedicated database leadership lock before migrations/recovery. A second runner fails before it can mark another runner's work interrupted. The dispatcher claims queued work transactionally and reserves a bot/computer through artifact collection. On SIGTERM/SIGINT, stop new dispatch and routine admission, report unready, and allow up to 240 seconds for active work; continue checking leadership and processing cancellation. Abort/join remaining local executions before releasing leadership. A remotely accepted Sprite command may still finish; never automatically replay it.
 
@@ -136,4 +138,4 @@ The 40-second command is sufficient only if the recorded offline timestamp prece
 
 No hosted ChatGPT pairing, restart persistence, laptop-off work/routine execution, live Sprite persistence, hosted artifact download, or volume recovery has been demonstrated in this phase. Local regressions are separate evidence, documented in `PRODUCT_PROGRESS.md` after verification.
 
-The user approved Supabase Free and selected its organization; that database is now created and application connectivity is verified. The remaining proposal is the two Fly Machines, one 3 GB encrypted volume, shared Fly-provided HTTPS endpoints, and at most one acceptance Sprite, targeting **$14.88/month fixed / under $20 with light usage**. No Fly Machine, volume, new Sprite, paid database plan, or DNS change has been created in this database setup step. Confirm the remaining paid Fly deployment scope before provisioning; then complete image/preflight validation and live acceptance. Capacity or pricing outside this envelope and destructive recovery require another decision.
+The user approved Supabase Free and selected its organization; that database is now created and application connectivity is verified. The remaining proposal is the two Fly Machines, one 3 GB encrypted volume, shared Fly-provided HTTPS endpoints, and at most one acceptance Sprite, targeting **$14.88/month fixed / under $20 with light usage**. The user has now approved the remaining Fly deployment scope, with a preference for cheaper testing. Use web autostop and a short initial acceptance window. Complete image/preflight validation before starting paid compute; then carry out live acceptance. No additional provisioning confirmation is needed within this approved scope. Capacity or pricing outside this envelope and destructive recovery require another decision.

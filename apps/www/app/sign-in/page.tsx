@@ -13,6 +13,8 @@ export default function SignInPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [invitation, setInvitation] = useState("");
+  const invitationRequired = process.env.NEXT_PUBLIC_ELSEWHERE_ALPHA_INVITE_REQUIRED === "1";
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -27,7 +29,7 @@ export default function SignInPage() {
           email,
           password,
           name: name.trim() || (email.split("@")[0] ?? "User"),
-        });
+        }, { headers: invitation ? { "x-elsewhere-invite": invitation } : undefined });
         if (result.error) {
           setError(result.error.message ?? "Sign up failed");
           return;
@@ -105,6 +107,19 @@ export default function SignInPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
+          {mode === "sign-up" && invitationRequired ? (
+            <div className="space-y-2">
+              <Label htmlFor="invitation">Alpha invitation code</Label>
+              <Input
+                id="invitation"
+                type="password"
+                autoComplete="off"
+                required
+                value={invitation}
+                onChange={(e) => setInvitation(e.target.value)}
+              />
+            </div>
+          ) : null}
           {error ? (
             <p className="text-sm text-red-700" role="alert">
               {error}
