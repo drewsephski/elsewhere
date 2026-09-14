@@ -31,7 +31,7 @@ use crate::run_persistence::{
 };
 use agent_core::MessageStatus;
 
-const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for computer operations. Do not attempt to access the host environment.";
+const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for computer operations. Do not attempt to access the host environment. Request approval by invoking the workspace tool: Elsewhere pauses protected operations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals.";
 
 #[derive(Debug, Clone)]
 pub struct CodexRunEngineConfig {
