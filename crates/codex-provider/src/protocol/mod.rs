@@ -9,7 +9,8 @@ pub use account::{
     CodexAccountKind, CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot,
 };
 pub use thread::{
-    build_elsewhere_thread_start_params, parse_list_mcp_status, parse_thread_start_response,
+    build_elsewhere_thread_resume_params, build_elsewhere_thread_start_params,
+    parse_list_mcp_status, parse_thread_resume_response, parse_thread_start_response,
     ElsewhereThreadConfig, MCP_SERVER_NAME,
 };
 pub use turn::{

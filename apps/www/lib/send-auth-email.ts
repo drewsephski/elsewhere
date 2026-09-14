@@ -7,7 +7,11 @@ interface AuthEmailPayload {
   html?: string;
 }
 
-/** Sends transactional auth emails via Resend when configured; logs in development otherwise. */
+function isProductionAuthEmail(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
+/** Sends transactional auth emails via Resend when configured; logs safely in local development only. */
 export async function sendAuthEmail(payload: AuthEmailPayload): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const from =
@@ -15,10 +19,12 @@ export async function sendAuthEmail(payload: AuthEmailPayload): Promise<void> {
     `${siteConfig.productName} <${siteConfig.contactEmail}>`;
 
   if (!apiKey) {
+    if (isProductionAuthEmail()) {
+      throw new Error("Transactional email is not configured for this environment");
+    }
     console.info("[auth email]", {
       to: payload.to,
       subject: payload.subject,
-      text: payload.text,
     });
     return;
   }

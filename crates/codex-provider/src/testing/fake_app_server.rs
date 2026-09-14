@@ -88,6 +88,14 @@ fn handle_fake_request(method: &str, params: serde_json::Value) -> serde_json::V
         "account/login/cancel" => serde_json::json!({}),
         "account/rateLimits/read" => serde_json::json!({ "planType": "pro", "allowed": true }),
         "thread/start" => serde_json::json!({ "threadId": "thread-1" }),
+        "thread/resume" => {
+            let id = params
+                .get("threadId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("thread-1");
+            serde_json::json!({ "threadId": id })
+        }
+        "thread/compact/start" => serde_json::json!({}),
         "mcpServerStatus/list" => serde_json::json!({
             "data": [{
                 "name": "elsewhere",

@@ -352,7 +352,7 @@ pub async fn bootstrap_run(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let (conversation_id, conversation_exists) = if let Some(id) = conversation_id.filter(|c| !c.is_empty()) {
+    let conversation_id = if let Some(id) = conversation_id.filter(|c| !c.is_empty()) {
         let row: Option<(String, String)> =
             sqlx::query_as("SELECT bot_id, owner_id FROM conversations WHERE id = $1")
                 .bind(id)
@@ -368,7 +368,7 @@ pub async fn bootstrap_run(
                     "conversation belongs to a different bot".into(),
                 ));
             }
-            Some(_) => (id.to_string(), true),
+            Some(_) => id.to_string(),
             None => {
                 return Err(ApiError::Validation(
                     "conversationId does not exist".into(),
@@ -376,31 +376,16 @@ pub async fn bootstrap_run(
             }
         }
     } else {
-        (Uuid::new_v4().to_string(), false)
+        crate::conversation::get_or_create_primary_conversation_id_in_tx(&mut tx, owner_id, bot_id)
+            .await?
     };
 
-    if !conversation_exists {
-        sqlx::query(
-            r#"
-            INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $4)
-            "#,
-        )
-        .bind(&conversation_id)
-        .bind(owner_id)
-        .bind(bot_id)
+    sqlx::query("UPDATE conversations SET updated_at = $1 WHERE id = $2")
         .bind(now)
+        .bind(&conversation_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-    } else {
-        sqlx::query("UPDATE conversations SET updated_at = $1 WHERE id = $2")
-            .bind(now)
-            .bind(&conversation_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-    }
 
     let user_sequence = next_message_sequence_tx(&mut tx, &conversation_id)
         .await

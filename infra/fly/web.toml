@@ -13,6 +13,7 @@ kill_timeout = 30
   BETTER_AUTH_URL = "https://elsewhere-alpha-web.fly.dev"
   BETTER_AUTH_DATABASE_SCHEMA = "elsewhere_auth"
   NEXT_PUBLIC_ELSEWHERE_ALPHA_INVITE_REQUIRED = "1"
+  # Server-only BFF upstream (set via `fly secrets set` on web): http://elsewhere-alpha-runner.internal:8080
   NODE_ENV = "production"
   PORT = "3000"
 

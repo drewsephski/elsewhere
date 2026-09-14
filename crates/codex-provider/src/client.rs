@@ -5,8 +5,9 @@ use serde_json::{json, Value};
 use crate::error::CodexProviderError;
 use crate::process::{CodexProcessLaunch, ManagedCodexProcess, DEFAULT_REQUEST_TIMEOUT};
 use crate::protocol::{
-    build_elsewhere_thread_start_params, build_turn_interrupt_params, build_turn_start_params,
-    parse_account_response, parse_list_mcp_status, parse_rate_limits_response,
+    build_elsewhere_thread_resume_params, build_elsewhere_thread_start_params,
+    build_turn_interrupt_params, build_turn_start_params, parse_account_response,
+    parse_list_mcp_status, parse_rate_limits_response, parse_thread_resume_response,
     parse_thread_start_response, parse_turn_start_response, CodexAccountState,
     CodexRateLimitsSnapshot, ElsewhereThreadConfig,
 };
@@ -78,6 +79,30 @@ impl CodexAppServerClient {
             .request("thread/start", params, Duration::from_secs(120))
             .await?;
         parse_thread_start_response(result)
+    }
+
+    pub async fn thread_resume_elsewhere(
+        &self,
+        thread_id: &str,
+        config: &ElsewhereThreadConfig,
+    ) -> Result<String, CodexProviderError> {
+        let params = build_elsewhere_thread_resume_params(thread_id, config)?;
+        let result = self
+            .process
+            .request("thread/resume", params, Duration::from_secs(120))
+            .await?;
+        parse_thread_resume_response(result)
+    }
+
+    pub async fn thread_compact_start(&self, thread_id: &str) -> Result<(), CodexProviderError> {
+        self.process
+            .request(
+                "thread/compact/start",
+                json!({ "threadId": thread_id }),
+                Duration::from_secs(120),
+            )
+            .await?;
+        Ok(())
     }
 
     pub async fn turn_start(

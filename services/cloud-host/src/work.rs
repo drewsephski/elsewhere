@@ -2,7 +2,12 @@
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::{db::queries::BootstrapRunRecords, error::ApiError, runner::RunExecutionInput};
+use crate::{
+    conversation::get_or_create_primary_conversation_id_in_tx,
+    db::queries::BootstrapRunRecords,
+    error::ApiError,
+    runner::RunExecutionInput,
+};
 
 fn db_error(error: sqlx::Error) -> ApiError {
     ApiError::Internal(error.to_string())
@@ -99,15 +104,7 @@ pub async fn enqueue_in_transaction(
         }
         id.to_string()
     } else {
-        let id = Uuid::new_v4().to_string();
-        sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, $2, $3)")
-            .bind(&id)
-            .bind(owner)
-            .bind(bot_id)
-            .execute(&mut **tx)
-            .await
-            .map_err(db_error)?;
-        id
+        get_or_create_primary_conversation_id_in_tx(tx, owner, bot_id).await?
     };
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("conversation-seq:{conversation_id}"))

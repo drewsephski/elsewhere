@@ -15,6 +15,8 @@ pub const REQUIRED_PROTOCOL_METHODS: &[&str] = &[
     "account/login/completed",
     "account/rateLimits/read",
     "thread/start",
+    "thread/resume",
+    "thread/compact/start",
     "mcpServerStatus/list",
     "turn/start",
     "turn/interrupt",

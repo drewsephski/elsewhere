@@ -76,4 +76,31 @@ pub trait RunStore: Send + Sync {
     ) -> Result<(), RuntimeError>;
 
     async fn get_assistant_message_body(&self, message_id: &str) -> Result<String, RuntimeError>;
+
+    /// Codex app-server thread id persisted per Elsewhere conversation (hosted cloud).
+    async fn get_codex_thread_id(
+        &self,
+        _conversation_id: &str,
+    ) -> Result<Option<String>, RuntimeError> {
+        Ok(None)
+    }
+
+    async fn set_codex_thread_id(
+        &self,
+        _conversation_id: &str,
+        _thread_id: &str,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
+    async fn clear_codex_thread_id(&self, _conversation_id: &str) -> Result<(), RuntimeError> {
+        Ok(())
+    }
+
+    async fn count_completed_assistant_turns(
+        &self,
+        _conversation_id: &str,
+    ) -> Result<i64, RuntimeError> {
+        Ok(0)
+    }
 }

@@ -52,7 +52,7 @@ export const auth = betterAuth({
     autoSignIn: true,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      void sendAuthEmail({
+      await sendAuthEmail({
         to: user.email,
         subject: `Reset your ${siteConfig.productName} password`,
         text: `We received a request to reset your password.\n\nOpen this link to choose a new password (expires in one hour):\n${url}\n\nIf you did not request this, you can ignore this email.`,

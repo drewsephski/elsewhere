@@ -179,6 +179,33 @@ async fn archived_or_foreign_computers_cannot_accept_work(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn follow_up_messages_reuse_primary_conversation(pool: PgPool) {
+    let bot = bot(&pool, "alice", None).await;
+    let first = work::enqueue(&pool, "alice", "turn-one", &bot.id, None, "First message")
+        .await
+        .unwrap();
+    let second = work::enqueue(&pool, "alice", "turn-two", &bot.id, None, "Second message")
+        .await
+        .unwrap();
+    assert_eq!(first.conversation_id, second.conversation_id);
+    let conversation_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE bot_id = $1 AND owner_id = $2")
+            .bind(&bot.id)
+            .bind("alice")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(conversation_count, 1);
+    let message_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE conversation_id = $1")
+            .bind(&first.conversation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(message_count, 4);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn only_one_runner_can_recover_and_dispatch_a_database(pool: PgPool) {
     use sqlx::Connection;
     let mut url = reqwest::Url::parse(&std::env::var("DATABASE_URL").unwrap()).unwrap();
