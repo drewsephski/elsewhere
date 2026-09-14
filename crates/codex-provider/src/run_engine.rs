@@ -575,15 +575,20 @@ async fn open_elsewhere_codex_thread(
         {
             Ok(Ok(id)) => return Ok(id),
             Ok(Err(err)) => {
-                tracing::warn!(
-                    conversation_id = %ctx.conversation_id,
-                    error = %err,
-                    "codex thread/resume failed; starting a new thread"
-                );
-                let _ = shared
-                    .store
-                    .clear_codex_thread_id(&ctx.conversation_id)
-                    .await;
+                if is_stale_codex_thread_resume_error(&err) {
+                    tracing::warn!(
+                        conversation_id = %ctx.conversation_id,
+                        error = %err,
+                        "codex thread missing or stale; starting a new thread"
+                    );
+                    let _ = shared
+                        .store
+                        .clear_codex_thread_id(&ctx.conversation_id)
+                        .await;
+                } else {
+                    let _ = map_boot_failure(shared, ctx, err).await;
+                    return Err(());
+                }
             }
             Err(_) => {
                 let _ = fail_run(
@@ -630,25 +635,77 @@ async fn open_elsewhere_codex_thread(
     }
 }
 
+fn codex_compact_milestone_due(
+    completed_turns: i64,
+    compacted_through_turns: i64,
+    interval: i64,
+) -> Option<i64> {
+    if interval <= 0 || completed_turns < interval {
+        return None;
+    }
+    let milestone = (completed_turns / interval) * interval;
+    if milestone > compacted_through_turns {
+        Some(milestone)
+    } else {
+        None
+    }
+}
+
+fn is_stale_codex_thread_resume_error(err: &CodexProviderError) -> bool {
+    let message = match err {
+        CodexProviderError::Protocol(msg) | CodexProviderError::Process(msg) => msg.to_lowercase(),
+        _ => return false,
+    };
+    if !message.contains("thread") {
+        return false;
+    }
+    message.contains("not found")
+        || message.contains("unknown")
+        || message.contains("missing")
+        || message.contains("does not exist")
+        || message.contains("no such")
+        || message.contains("not exist")
+}
+
 async fn maybe_compact_codex_thread(
     client: &CodexAppServerClient,
     shared: &SharedRunDeps,
     ctx: &AgentLoopContext,
     thread_id: &str,
-    threshold: i64,
+    interval: i64,
 ) -> Result<(), ()> {
     let completed = shared
         .store
         .count_completed_assistant_turns(&ctx.conversation_id)
         .await
         .map_err(|_| ())?;
-    if completed < threshold {
+    let compacted_through = shared
+        .store
+        .get_codex_compacted_through_turns(&ctx.conversation_id)
+        .await
+        .map_err(|_| ())?;
+    let milestone = codex_compact_milestone_due(completed, compacted_through, interval);
+    if milestone.is_none() {
         return Ok(());
     }
+    let milestone = milestone.unwrap();
     match tokio::time::timeout(Duration::from_secs(120), client.thread_compact_start(thread_id))
         .await
     {
-        Ok(Ok(())) => Ok(()),
+        Ok(Ok(())) => {
+            if let Err(err) = shared
+                .store
+                .set_codex_compacted_through_turns(&ctx.conversation_id, milestone)
+                .await
+            {
+                tracing::warn!(
+                    conversation_id = %ctx.conversation_id,
+                    error = %err,
+                    "could not record codex compaction milestone"
+                );
+            }
+            Ok(())
+        }
         Ok(Err(err)) => {
             tracing::warn!(
                 conversation_id = %ctx.conversation_id,
@@ -993,5 +1050,30 @@ async fn parse_turn_outcome(
         other => Ok(TurnOutcome::ProtocolError(format!(
             "unknown turn status: {other}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod continuity_tests {
+    use super::*;
+
+    #[test]
+    fn stale_thread_errors_are_detected() {
+        assert!(is_stale_codex_thread_resume_error(
+            &CodexProviderError::Protocol("thread not found".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Config("bad mcp url".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Timeout("thread/resume".into())
+        ));
+    }
+
+    #[test]
+    fn compaction_milestones_are_periodic() {
+        assert_eq!(codex_compact_milestone_due(24, 0, 24), Some(24));
+        assert_eq!(codex_compact_milestone_due(25, 24, 24), None);
+        assert_eq!(codex_compact_milestone_due(48, 24, 24), Some(48));
     }
 }

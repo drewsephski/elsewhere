@@ -343,7 +343,7 @@ async fn run_codex_engine(
     let engine = CodexRunEngine::new(CodexRunEngineConfig {
         executable: config.codex_executable.clone(),
         profile_home,
-        compact_after_completed_turns: crate::conversation::CODEX_COMPACT_COMPLETED_TURN_THRESHOLD,
+        compact_after_completed_turns: crate::conversation::CODEX_COMPACT_COMPLETED_TURN_INTERVAL,
         ..CodexRunEngineConfig::default()
     });
     engine

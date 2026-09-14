@@ -263,6 +263,25 @@ impl RunStore for PostgresRunStore {
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
+
+    async fn get_codex_compacted_through_turns(
+        &self,
+        conversation_id: &str,
+    ) -> Result<i64, RuntimeError> {
+        crate::conversation::get_codex_compacted_through_turns(&self.pool, conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn set_codex_compacted_through_turns(
+        &self,
+        conversation_id: &str,
+        turns: i64,
+    ) -> Result<(), RuntimeError> {
+        crate::conversation::set_codex_compacted_through_turns(&self.pool, conversation_id, turns)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
 }
 
 fn role_to_str(role: MessageRole) -> &'static str {

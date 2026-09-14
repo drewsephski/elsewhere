@@ -103,4 +103,19 @@ pub trait RunStore: Send + Sync {
     ) -> Result<i64, RuntimeError> {
         Ok(0)
     }
+
+    async fn get_codex_compacted_through_turns(
+        &self,
+        _conversation_id: &str,
+    ) -> Result<i64, RuntimeError> {
+        Ok(0)
+    }
+
+    async fn set_codex_compacted_through_turns(
+        &self,
+        _conversation_id: &str,
+        _turns: i64,
+    ) -> Result<(), RuntimeError> {
+        Ok(())
+    }
 }
