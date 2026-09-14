@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /** Slightly above cloud-host status probe budget so the UI gets a response or a clear timeout. */
 const PROVIDER_STATUS_TIMEOUT_MS = 40_000;
+const PROVIDER_RETRY_BASE_MS = 3_000;
+const PROVIDER_RETRY_MAX_MS = 30_000;
 
 export type ProviderStatusLoadPhase = "idle" | "loading" | "ready" | "error";
 
@@ -44,6 +46,7 @@ export function useProviderStatus() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const loadGeneration = useRef(0);
+  const consecutiveFailures = useRef(0);
 
   const load = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -57,6 +60,7 @@ export function useProviderStatus() {
       if (generation !== loadGeneration.current) {
         return;
       }
+      consecutiveFailures.current = 0;
       setStatus(next);
       setPhase("ready");
       if (next.chatgptConnected) {
@@ -66,6 +70,7 @@ export function useProviderStatus() {
       if (generation !== loadGeneration.current) {
         return;
       }
+      consecutiveFailures.current += 1;
       setPhase("error");
       setError(err instanceof Error ? err.message : "Connection check failed");
     }
@@ -74,6 +79,20 @@ export function useProviderStatus() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Runner reachability is independent of whether ChatGPT was paired. Keep the
+  // last known provider state and retry transport/status failures automatically.
+  useEffect(() => {
+    if (phase !== "error" || challenge) {
+      return;
+    }
+    const delay = Math.min(
+      PROVIDER_RETRY_MAX_MS,
+      PROVIDER_RETRY_BASE_MS * 2 ** Math.min(consecutiveFailures.current - 1, 3),
+    );
+    const timer = setTimeout(() => void load(), delay);
+    return () => clearTimeout(timer);
+  }, [challenge, load, phase]);
 
   useEffect(() => {
     if (!challenge) {
