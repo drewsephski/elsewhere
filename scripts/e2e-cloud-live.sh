@@ -168,13 +168,27 @@ SSE_PID=$!
 STATUS1=$(wait_for_run "${RUN1_ID}")
 echo "run1 status=${STATUS1}"
 
-kill "${SSE_PID}" 2>/dev/null || true
-wait "${SSE_PID}" 2>/dev/null || true
-
 [ "${STATUS1}" = "completed" ] || {
   redact_secrets "$(curl -sf -H "${AUTH}" "${BASE}/v1/runs/${RUN1_ID}" | jq -c .)" >&2
+  kill "${SSE_PID}" 2>/dev/null || true
+  wait "${SSE_PID}" 2>/dev/null || true
   exit 1
 }
+
+for _ in $(seq 1 50); do
+  grep -q '^event: terminal$' "${SSE_FILE}" && break
+  sleep 0.1
+done
+
+grep -q '^event: terminal$' "${SSE_FILE}" || {
+  echo "timed out waiting for terminal SSE event" >&2
+  kill "${SSE_PID}" 2>/dev/null || true
+  wait "${SSE_PID}" 2>/dev/null || true
+  exit 1
+}
+
+kill "${SSE_PID}" 2>/dev/null || true
+wait "${SSE_PID}" 2>/dev/null || true
 
 verify_sse_monotonic_ids "${SSE_FILE}"
 verify_sse_event_types "${SSE_FILE}"
