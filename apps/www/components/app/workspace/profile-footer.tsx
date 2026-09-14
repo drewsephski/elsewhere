@@ -11,9 +11,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "cn";
-import { LogOut, MoreHorizontal, Plug, Settings2 } from "@/components/icons/lucide";
+import {
+  LogOut,
+  MoreHorizontal,
+  Plug,
+  Settings2,
+  type AnimatedIconHandle,
+} from "@/components/icons/lucide";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useRef } from "react";
 
 interface ProfileFooterProps {
   email: string;
@@ -23,6 +30,15 @@ interface ProfileFooterProps {
 
 export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterProps) {
   const router = useRouter();
+  const accountMenuIconRef = useRef<AnimatedIconHandle>(null);
+
+  function handleAccountMenuOpenChange(open: boolean) {
+    if (open) {
+      accountMenuIconRef.current?.startAnimation();
+      return;
+    }
+    accountMenuIconRef.current?.stopAnimation();
+  }
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -45,7 +61,7 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
           <p className="truncate text-sm font-medium">Account</p>
           <p className="truncate text-xs text-muted-foreground">{email}</p>
         </div>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={handleAccountMenuOpenChange}>
           <DropdownMenuTrigger
             render={
               <Button
@@ -57,7 +73,12 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
               />
             }
           >
-            <MoreHorizontal className="size-4" aria-hidden />
+            <MoreHorizontal
+              ref={accountMenuIconRef}
+              interaction="manual"
+              className="size-4"
+              aria-hidden
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem render={<Link href={appRoutes.computers} />}>

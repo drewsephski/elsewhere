@@ -22,6 +22,13 @@ type AnimatedIconComponent = ForwardRefExoticComponent<
   ComponentProps<"div"> & { size?: number } & RefAttributes<AnimatedIconHandle>
 >;
 
+export type AnimatedIconInteraction = "hover" | "manual";
+
+type AdaptedAnimatedIconProps = ComponentProps<AnimatedIconComponent> & {
+  /** `hover` (default) animates on parent hover; `manual` uses ref start/stop only. */
+  interaction?: AnimatedIconInteraction;
+};
+
 function setIconRef(
   innerRef: React.RefObject<AnimatedIconHandle | null>,
   node: AnimatedIconHandle | null,
@@ -30,10 +37,8 @@ function setIconRef(
 }
 
 export function adaptAnimatedIcon(Base: AnimatedIconComponent) {
-  const Wrapped = forwardRef<
-    AnimatedIconHandle,
-    ComponentProps<AnimatedIconComponent>
-  >(function AnimatedIcon({ className, size = 16, ...props }, ref) {
+  const Wrapped = forwardRef<AnimatedIconHandle, AdaptedAnimatedIconProps>(
+    function AnimatedIcon({ className, size = 16, interaction = "hover", ...props }, ref) {
     const anchorRef = useRef<HTMLSpanElement>(null);
     const iconRef = useRef<AnimatedIconHandle>(null);
 
@@ -42,7 +47,7 @@ export function adaptAnimatedIcon(Base: AnimatedIconComponent) {
       stopAnimation: () => iconRef.current?.stopAnimation(),
     }));
 
-    useParentHoverAnimation(iconRef, anchorRef);
+    useParentHoverAnimation(iconRef, anchorRef, interaction === "hover");
 
     return (
       <span ref={anchorRef} className="inline-flex shrink-0">

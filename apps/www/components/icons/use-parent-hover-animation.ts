@@ -36,10 +36,15 @@ function findHoverRoot(anchor: HTMLElement | null): HTMLElement | null {
 export function useParentHoverAnimation(
   iconRef: RefObject<AnimatedIconHandle | null>,
   anchorRef: RefObject<HTMLElement | null>,
+  enabled = true,
 ) {
   const hoverRootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const anchor = anchorRef.current;
     if (!anchor) {
       return;
@@ -71,5 +76,5 @@ export function useParentHoverAnimation(
       anchor.removeEventListener("mouseenter", handleEnter);
       anchor.removeEventListener("mouseleave", handleLeave);
     };
-  }, [anchorRef, iconRef]);
+  }, [anchorRef, enabled, iconRef]);
 }
