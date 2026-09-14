@@ -152,6 +152,28 @@ pub async fn enqueue_in_transaction(
     })
 }
 
+pub async fn enqueue_delegated_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    owner: &str,
+    request_id: &str,
+    bot_id: &str,
+    conversation_id: Option<&str>,
+    message: &str,
+    delegation_id: &str,
+) -> Result<BootstrapRunRecords, ApiError> {
+    let records = enqueue_in_transaction(tx, owner, request_id, bot_id, conversation_id, message)
+        .await?;
+    sqlx::query(
+        "UPDATE work_queue SET delegation_id = $2, provenance_kind = 'bot_delegation' WHERE run_id = $1",
+    )
+    .bind(&records.run_id)
+    .bind(delegation_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
+    Ok(records)
+}
+
 /// Atomic claim serializes all dispatchers, and only one work item uses a computer or bot at a time.
 pub async fn claim_next(pool: &PgPool) -> Result<Option<RunExecutionInput>, sqlx::Error> {
     let mut tx = pool.begin().await?;
@@ -183,6 +205,9 @@ pub async fn claim_next(pool: &PgPool) -> Result<Option<RunExecutionInput>, sqlx
             .ok(),
     };
     tx.commit().await?;
+    if let Err(err) = crate::delegation::on_target_run_claimed(pool, &input.records.run_id).await {
+        tracing::warn!(run_id = %input.records.run_id, error = %err, "could not mark delegation running");
+    }
     Ok(Some(input))
 }
 

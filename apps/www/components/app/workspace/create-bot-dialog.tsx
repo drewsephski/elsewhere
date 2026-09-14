@@ -144,7 +144,8 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
               <Label htmlFor="create-bot-instructions">Role and instructions</Label>
               <Textarea
                 id="create-bot-instructions"
-                className="min-h-20 resize-y"
+                rows={5}
+                className="field-sizing-fixed h-[7.5rem] resize-none overflow-y-auto"
                 maxLength={16000}
                 value={instructions}
                 onChange={(event) => setInstructions(event.target.value)}

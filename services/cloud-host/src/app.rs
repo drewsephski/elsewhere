@@ -79,6 +79,14 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/conversations",
             get(api::catalog::list_conversations).post(api::catalog::create_conversation),
         )
+        .route(
+            "/v1/runs/{id}/delegations",
+            get(api::delegations::list_run_delegations),
+        )
+        .route(
+            "/v1/delegations/{id}",
+            get(api::delegations::get_delegation_by_id),
+        )
         .route("/v1/runs/{id}", get(api::runs::get_run))
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
         .route("/v1/runs/{id}/archive", post(api::runs::archive_run))

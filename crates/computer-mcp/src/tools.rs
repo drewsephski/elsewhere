@@ -1,7 +1,17 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use agent_core::{dispatch_tool_with_gate, is_browser_tool, AgentComputer, ToolApprovalGate, ToolRunContext, ToolError};
+use agent_core::{
+    dispatch_agent_tool_with_gate,
+    is_browser_tool,
+    is_collaboration_tool,
+    AgentCollaboration,
+    AgentComputer,
+    CollaborationContext,
+    ToolApprovalGate,
+    ToolError,
+    ToolRunContext,
+};
 use rmcp::{
     ErrorData, ServerHandler,
     model::{
@@ -24,6 +34,8 @@ pub struct ComputerHandler {
     cancel: Arc<AtomicBool>,
     gate: Arc<dyn ToolApprovalGate>,
     run: ToolRunContext,
+    collaboration: Option<Arc<dyn AgentCollaboration>>,
+    source_conversation_id: String,
 }
 
 impl ComputerHandler {
@@ -32,12 +44,16 @@ impl ComputerHandler {
         gate: Arc<dyn ToolApprovalGate>,
         run: ToolRunContext,
         cancel: Arc<AtomicBool>,
+        collaboration: Option<Arc<dyn AgentCollaboration>>,
+        source_conversation_id: String,
     ) -> Self {
         Self {
             computer,
             cancel,
             gate,
             run,
+            collaboration,
+            source_conversation_id,
         }
     }
 }
@@ -51,8 +67,36 @@ fn schema_object(value: serde_json::Value) -> Arc<serde_json::Map<String, serde_
     )
 }
 
-fn tool_definitions() -> Vec<Tool> {
+fn collaboration_tool_definitions() -> Vec<Tool> {
     vec![
+        Tool::new(
+            "bot_list",
+            "List other Bots owned by the same user that you may hand work to asynchronously. Does not wait for them to finish.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "bot_delegate",
+            "Hand work to another Bot asynchronously. This only queues durable work; it does NOT wait for completion.",
+            schema_object(json!({
+                "type": "object",
+                "properties": {
+                    "targetBotId": { "type": "string" },
+                    "instruction": { "type": "string" },
+                    "context": { "type": "string" }
+                },
+                "required": ["targetBotId", "instruction"],
+                "additionalProperties": false
+            })),
+        ),
+    ]
+}
+
+fn tool_definitions() -> Vec<Tool> {
+    let mut tools = vec![
         Tool::new(
             "workspace_list",
             "List files and directories under a workspace path inside the agent computer.",
@@ -171,7 +215,9 @@ fn tool_definitions() -> Vec<Tool> {
                 "additionalProperties": false
             })),
         ),
-    ]
+    ];
+    tools.extend(collaboration_tool_definitions());
+    tools
 }
 
 impl ServerHandler for ComputerHandler {
@@ -196,7 +242,7 @@ impl ServerHandler for ComputerHandler {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
         let args = request
             .arguments
@@ -207,13 +253,32 @@ impl ServerHandler for ComputerHandler {
         }
 
         let args_str = args.to_string();
-        let dispatch = dispatch_tool_with_gate(
+        let invocation_id = format!("mcp:{}", context.id);
+        let tool_run = ToolRunContext {
+            run_id: self.run.run_id.clone(),
+            request_id: self.run.request_id.clone(),
+            owner_id: self.run.owner_id.clone(),
+            bot_id: self.run.bot_id.clone(),
+            computer_id: self.run.computer_id.clone(),
+            tool_invocation_id: Some(invocation_id.clone()),
+        };
+        let collaboration_ctx = CollaborationContext {
+            owner_id: self.run.owner_id.clone(),
+            source_bot_id: self.run.bot_id.clone(),
+            source_run_id: self.run.run_id.clone(),
+            source_conversation_id: self.source_conversation_id.clone(),
+            source_request_id: self.run.request_id.clone(),
+            tool_invocation_id: invocation_id,
+        };
+        let dispatch = dispatch_agent_tool_with_gate(
             self.computer.as_ref(),
+            self.collaboration.as_ref(),
             &request.name,
             &args_str,
             self.cancel.as_ref(),
             self.gate.as_ref(),
-            &self.run,
+            &tool_run,
+            Some(&collaboration_ctx),
         )
         .await;
 
@@ -252,6 +317,9 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
             Ok(())
         }
         name if is_browser_tool(name) => Ok(()),
+        "bot_list" => Ok(()),
+        "bot_delegate" => Ok(()),
+        name if is_collaboration_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
             "unknown tool: {other}"
         ))),

@@ -72,6 +72,26 @@ export interface CreateConversationResponse {
   botId: string;
 }
 
+export interface DelegationSummary {
+  id: string;
+  status: string;
+  instruction: string;
+  context?: string | null;
+  depth: number;
+  sourceBotId: string;
+  sourceBotName: string;
+  targetBotId: string;
+  targetBotName: string;
+  sourceRunId: string;
+  targetRunId?: string | null;
+  targetRunStatus?: string | null;
+  createdAt: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
 export interface Routine {
   id: string;
   botId: string;

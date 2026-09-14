@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { cloudHostEventStream, cloudHostFetch } from "@/lib/cloud-api";
-import type { RunDetail } from "@/lib/api-types";
+import type { DelegationSummary, RunDetail } from "@/lib/api-types";
+import { DelegationCard } from "@/components/app/delegation-card";
 import { ResultsPanel } from "./results-panel";
 import { activityText, workStatus } from "@/lib/work-events";
 import {
@@ -69,6 +70,18 @@ export function WorkDetail({ runId }: { runId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState("Connecting to your work…");
   const [stopping, setStopping] = useState(false);
+  const [delegations, setDelegations] = useState<DelegationSummary[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    cloudHostFetch(`/v1/runs/${runId}/delegations`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        setDelegations(await response.json());
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [runId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -223,6 +236,17 @@ export function WorkDetail({ runId }: { runId: string }) {
             ) : null}
           </div>
         </div>
+
+        {delegations.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Bot handoffs
+            </p>
+            {delegations.map((delegation) => (
+              <DelegationCard key={delegation.id} delegation={delegation} />
+            ))}
+          </div>
+        ) : null}
 
         {detail?.task ? (
           <UserPromptBubble>{detail.task}</UserPromptBubble>

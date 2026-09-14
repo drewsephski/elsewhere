@@ -28,12 +28,15 @@ async fn main() {
         owner_id: "local".into(),
         bot_id: "bot".into(),
         computer_id: "comp".into(),
+        tool_invocation_id: None,
     };
     let mcp = ComputerMcpServer::start(
         computer,
         Arc::new(AllowAllApprovalGate),
         run,
         Arc::new(AtomicBool::new(false)),
+        None,
+        "conv-probe".into(),
     )
         .await
         .expect("start MCP server");

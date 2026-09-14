@@ -348,6 +348,7 @@ mod tests {
             owner_id: "owner".into(),
             bot_id: "bot".into(),
             computer_id: "comp".into(),
+            tool_invocation_id: None,
         }
     }
 

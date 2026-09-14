@@ -109,4 +109,17 @@ The user approved the reduced testing scope. Deployed one 512 MB Fly web Machine
 - Hosted `/ready` returned healthy database/dispatcher state; anonymous API requests returned 401. Actual Machine configuration confirms one runner, the encrypted mount, restart-always, and 300-second SIGTERM grace. After stopping the web Machine, a JWKS request woke it successfully in 8.91 seconds.
 - Verification: 30 Codex-provider Rust tests, 12 frontend tests, both TypeScript/lint commands, Clippy with existing warnings, Linux builds, and Fly config validation passed. GitHub CI has not been run remotely.
 
+### 9 — Durable asynchronous Bot delegation (handoff)
+
+**Supported now**
+
+- One-way asynchronous Bot delegation: a running Bot can `bot_list` teammates and `bot_delegate` durable queued work to another Bot under the same owner without waiting for completion.
+- Durable `bot_delegations` rows, owner-scoped HTTP APIs, run-event mirroring (`bot_delegation_*`), and UI handoff cards with links to the recipient's work.
+
+**Not yet supported**
+
+- Automatically waking the originating Bot when the recipient finishes.
+- Group chat, @mentions, or multi-Bot parallel Codex execution on one host.
+- Automatic cross-computer artifact transfer (bounded text context only in this slice).
+
 The user completed real hosted ChatGPT device pairing. The connection persisted after a hosted runner restart and full browser reload. A real five-tool Luna assignment completed through approved Sprite writes and read-back, and saved an artifact that triggered a browser download. The same Machine/volume survived an image update; a profile snapshot completed. Local web/Postgres are now stopped. A timed assignment and 04:40 Central routine are prepared for the user to close the laptop. Actual laptop-off completion, fresh-session retrieval, and backup restore remain open gates. These deployment checks do not establish the laptop-off promise.

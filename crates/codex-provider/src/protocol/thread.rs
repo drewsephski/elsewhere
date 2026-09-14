@@ -1,13 +1,13 @@
 use std::path::PathBuf;
 
-use agent_core::ALL_COMPUTER_TOOL_NAMES;
+use agent_core::ALL_AGENT_TOOL_NAMES;
 use serde_json::{json, Value};
 
 use crate::error::CodexProviderError;
 
 pub const MCP_SERVER_NAME: &str = "elsewhere";
 
-pub const ELSEWHERE_ENABLED_MCP_TOOLS: &[&str] = ALL_COMPUTER_TOOL_NAMES;
+pub const ELSEWHERE_ENABLED_MCP_TOOLS: &[&str] = ALL_AGENT_TOOL_NAMES;
 
 pub const ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES: &[&str] = &["deferred", "code_mode"];
 
@@ -75,7 +75,9 @@ pub fn build_elsewhere_thread_start_params(
                 "browser_click": { "approval_mode": "approve" },
                 "browser_type": { "approval_mode": "approve" },
                 "browser_screenshot": { "approval_mode": "approve" },
-                "browser_download": { "approval_mode": "approve" }
+                "browser_download": { "approval_mode": "approve" },
+                "bot_list": { "approval_mode": "approve" },
+                "bot_delegate": { "approval_mode": "approve" }
             }
         }
     });

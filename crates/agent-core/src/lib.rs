@@ -14,6 +14,8 @@ mod runtime;
 mod readiness_cache;
 mod runtime_identity;
 mod run_store;
+mod collaboration;
+mod collaboration_tools;
 mod tool_catalog;
 mod tools;
 mod workspace_entries;
@@ -49,6 +51,16 @@ pub use run_store::{
     CreateRunParams, PersistedMessage, RunEventReceipt, RunStore, StructuredMessageInput,
 };
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};
+pub use collaboration::{
+    AgentCollaboration, BotTeammateSummary, CollaborationContext, CollaborationError,
+    DelegationEnqueueResult, MAX_CHILD_DELEGATIONS_PER_ROOT, MAX_DELEGATION_CONTEXT_CHARS,
+    MAX_DELEGATION_DEPTH, MAX_DELEGATION_INSTRUCTION_CHARS,
+};
+pub use collaboration_tools::{
+    all_openai_tool_definitions, collaboration_openai_tool_definitions,
+    dispatch_agent_tool_with_gate,
+};
 pub use tool_catalog::{
-    ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, WORKSPACE_TOOL_NAMES, is_browser_tool,
+    ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
+    WORKSPACE_TOOL_NAMES, is_browser_tool, is_collaboration_tool,
 };

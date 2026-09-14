@@ -13,6 +13,7 @@ fn test_run() -> ToolRunContext {
         owner_id: "local".into(),
         bot_id: "bot".into(),
         computer_id: "comp".into(),
+        tool_invocation_id: None,
     }
 }
 
@@ -23,6 +24,8 @@ async fn mcp_tools_require_bearer_token() {
         Arc::new(AllowAllApprovalGate),
         test_run(),
         Arc::new(AtomicBool::new(false)),
+        None,
+        "conv-test".into(),
     )
         .await
         .expect("start");
@@ -65,6 +68,8 @@ async fn fake_computer_rejects_outside_workspace_via_mcp_session() {
         Arc::new(AllowAllApprovalGate),
         test_run(),
         Arc::new(AtomicBool::new(false)),
+        None,
+        "conv-test".into(),
     )
         .await
         .expect("start");
@@ -79,6 +84,8 @@ async fn dropping_run_revokes_its_computer_endpoint() {
         Arc::new(AllowAllApprovalGate),
         test_run(),
         Arc::new(AtomicBool::new(false)),
+        None,
+        "conv-test".into(),
     )
     .await
     .unwrap();

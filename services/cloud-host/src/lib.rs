@@ -37,3 +37,5 @@ pub mod computer_registry;
 pub use computer_registry::ComputerRegistry;
 pub mod computer_session;
 pub mod results;
+pub mod delegation;
+pub mod collaboration;

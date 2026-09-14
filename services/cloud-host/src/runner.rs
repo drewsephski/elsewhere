@@ -332,7 +332,13 @@ save the final deliverable under {} using your computer tools.\n\
 For screenshots: navigate if needed, call browser_screenshot, and save the PNG in that results directory, then report the saved filename.\n\
 Do not claim a file exists until its tool result reports success; if a tool fails, say so with the reason from the tool result.\n\
 This results directory belongs to this assignment. Downloads support up to 20 top-level files, 1 MB each, 5 MB total. \
-Include a clear final summary. File creation, shell commands, and browser mutations still require approval.",
+Include a clear final summary. File creation, shell commands, and browser mutations still require approval.\n\n\
+Bot collaboration:\n\
+- Use bot_list to discover other Bots owned by the same user.\n\
+- Use bot_delegate to hand durable work to a specialist asynchronously; it only queues work and returns immediately.\n\
+- Do not delegate trivial work or repeat the same handoff unnecessarily.\n\
+- Do not claim another Bot finished work just because delegation was accepted.\n\
+- Cross-computer file paths are not shared; pass bounded text context only unless both Bots share a computer.",
         crate::results::output_directory(&input.records.run_id)
     ));
     let shared = SharedRunDeps {
@@ -344,6 +350,7 @@ Include a clear final summary. File creation, shell commands, and browser mutati
         run_id: input.records.run_id.clone(),
         owner_id,
         computer_id: input.records.computer_id.clone(),
+        collaboration: Some(crate::collaboration::PostgresAgentCollaboration::new(pool.clone())),
     };
 
     let result = match selected {

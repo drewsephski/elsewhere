@@ -64,12 +64,15 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
         owner_id: "local".into(),
         bot_id: "bot".into(),
         computer_id: "comp".into(),
+        tool_invocation_id: None,
     };
     let mcp = ComputerMcpServer::start(
         computer.clone(),
         std::sync::Arc::new(AllowAllApprovalGate),
         run,
         std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        None,
+        "conv-probe".into(),
     )
         .await
         .map_err(|e| CodexProviderError::RunEngine(e.to_string()))?;

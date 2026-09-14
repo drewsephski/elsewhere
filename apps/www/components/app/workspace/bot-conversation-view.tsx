@@ -2,7 +2,15 @@
 
 import { ApprovalCard } from "@/components/app/approval-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import type { BotSummary, ConversationSummary, CreateConversationResponse, CreateRunResponse, RunSummary } from "@/lib/api-types";
+import type {
+  BotSummary,
+  ConversationSummary,
+  CreateConversationResponse,
+  CreateRunResponse,
+  DelegationSummary,
+  RunSummary,
+} from "@/lib/api-types";
+import { DelegationCard } from "@/components/app/delegation-card";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
@@ -48,6 +56,7 @@ export function BotConversationView({
     null,
   );
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
+  const [liveDelegations, setLiveDelegations] = useState<DelegationSummary[]>([]);
   const requestRef = useRef<{ message: string; key: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +80,21 @@ export function BotConversationView({
 
   const { detail: liveDetail, timeline, assistantStream, error: streamError, connection } =
     useActiveRun();
+
+  useEffect(() => {
+    if (!streamRunId) {
+      setLiveDelegations([]);
+      return;
+    }
+    const controller = new AbortController();
+    cloudHostFetch(`/v1/runs/${streamRunId}/delegations`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        setLiveDelegations(await response.json());
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [streamRunId, timeline.length]);
 
   useLayoutEffect(() => {
     onStreamRunIdChange?.(streamRunId);
@@ -375,6 +399,14 @@ export function BotConversationView({
                 <UserPromptBubble sentAt={run.createdAt}>
                   {showOptimisticUser ? pendingTurn.message : run.task}
                 </UserPromptBubble>
+
+                {isLive && liveDelegations.length > 0 ? (
+                  <div className="space-y-2">
+                    {liveDelegations.map((delegation) => (
+                      <DelegationCard key={delegation.id} delegation={delegation} />
+                    ))}
+                  </div>
+                ) : null}
 
                 {(isLive ? timeline : []).map((item) =>
                   item.kind === "approval" ? (

@@ -39,9 +39,7 @@ export function BotAvatarPicker({
         <div
           className={cn(
             "grid grid-cols-4 sm:grid-cols-6",
-            compact
-              ? "max-h-[8rem] gap-1.5 overflow-y-auto overscroll-contain p-1.5 [-ms-overflow-style:none] [scrollbar-width:thin]"
-              : "gap-2.5 p-1",
+            compact ? "gap-1.5 p-1.5" : "gap-2.5 p-1",
           )}
           role="radiogroup"
           aria-label="Choose bot avatar"

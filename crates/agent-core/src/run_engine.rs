@@ -12,6 +12,7 @@ use crate::computer::AgentComputer;
 use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
+use crate::collaboration::AgentCollaboration;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 
 /// How the host executes an agent run.
@@ -46,6 +47,7 @@ pub struct SharedRunDeps {
     pub run_id: String,
     pub owner_id: String,
     pub computer_id: String,
+    pub collaboration: Option<Arc<dyn AgentCollaboration>>,
 }
 
 impl SharedRunDeps {
@@ -67,6 +69,7 @@ impl SharedRunDeps {
             run_id,
             owner_id,
             computer_id,
+            collaboration: None,
         }
     }
 }
@@ -114,6 +117,7 @@ pub fn responses_loop_deps(
         run_id: shared.run_id.clone(),
         owner_id: shared.owner_id.clone(),
         computer_id: shared.computer_id.clone(),
+        collaboration: shared.collaboration.clone(),
     }
 }
 

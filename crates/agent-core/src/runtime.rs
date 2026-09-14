@@ -11,7 +11,9 @@ use crate::model::{
 };
 use crate::run_store::{RunStore, StructuredMessageInput};
 use crate::approval::ToolRunContext;
-use crate::tools::{dispatch_tool_with_gate, openai_tool_definitions, ToolError, MAX_AGENT_TOOL_STEPS};
+use crate::collaboration::CollaborationContext;
+use crate::collaboration_tools::{all_openai_tool_definitions, dispatch_agent_tool_with_gate};
+use crate::tools::{ToolError, MAX_AGENT_TOOL_STEPS};
 
 pub struct AgentLoopContext {
     pub request_id: String,
@@ -32,6 +34,7 @@ pub struct AgentLoopDeps {
     pub run_id: String,
     pub owner_id: String,
     pub computer_id: String,
+    pub collaboration: Option<Arc<dyn crate::collaboration::AgentCollaboration>>,
 }
 
 pub async fn run_agent_loop(
@@ -46,7 +49,7 @@ pub async fn run_agent_loop(
         )));
     }
 
-    let tools = Value::Array(openai_tool_definitions());
+    let tools = Value::Array(all_openai_tool_definitions());
     let mut step_count: i64 = 0;
 
     let started_payload = serde_json::json!({ "requestId": ctx.request_id });
@@ -163,14 +166,25 @@ pub async fn run_agent_loop(
                 owner_id: deps.owner_id.clone(),
                 bot_id: ctx.bot_id.clone(),
                 computer_id: deps.computer_id.clone(),
+                tool_invocation_id: Some(call_id.clone()),
             };
-            let tool_result = match dispatch_tool_with_gate(
+            let collaboration_ctx = CollaborationContext {
+                owner_id: deps.owner_id.clone(),
+                source_bot_id: ctx.bot_id.clone(),
+                source_run_id: deps.run_id.clone(),
+                source_conversation_id: ctx.conversation_id.clone(),
+                source_request_id: ctx.request_id.clone(),
+                tool_invocation_id: call_id.clone(),
+            };
+            let tool_result = match dispatch_agent_tool_with_gate(
                 deps.computer.as_ref(),
+                deps.collaboration.as_ref(),
                 &name,
                 &arguments,
                 &deps.cancel,
                 deps.approval_gate.as_ref(),
                 &tool_run,
+                Some(&collaboration_ctx),
             )
             .await
             {
@@ -683,6 +697,7 @@ mod tests {
             run_id: "run-1".into(),
             owner_id: "owner".into(),
             computer_id: "comp".into(),
+            collaboration: None,
         };
 
         let ctx = AgentLoopContext {

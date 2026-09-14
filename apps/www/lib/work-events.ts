@@ -14,6 +14,8 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     browser_type: "Typing on the page",
     browser_screenshot: "Capturing a screenshot",
     browser_download: "Downloading a file",
+    bot_list: "Checking available Bots",
+    bot_delegate: "Handing work to another Bot",
   };
   const base = tools[tool];
   if (!base) {
@@ -35,6 +37,19 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
 }
 
 export function activityText(event: string, payload: Record<string, unknown>): string | null {
+  if (event === "bot_delegation_queued") {
+    const name = typeof payload.targetBotName === "string" ? payload.targetBotName : "another Bot";
+    return `Handed work to ${name} (queued)`;
+  }
+  if (event === "bot_delegation_running") {
+    return "Recipient Bot started working";
+  }
+  if (event === "bot_delegation_completed") {
+    return "Delegated work finished";
+  }
+  if (event === "bot_delegation_failed") {
+    return "Delegated work failed";
+  }
   if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
   if (event === "queued") return "Work saved. Waiting for an available computer.";
   if (event === "host_restart") return "Work was interrupted when the runner restarted. Completed actions have not been repeated.";

@@ -189,6 +189,23 @@ impl RunStore for PostgresRunStore {
         .execute(&self.pool)
         .await
         .map_err(|e| RuntimeError::Store(e.to_string()))?;
+
+        if finished {
+            if let Err(err) = crate::delegation::sync_target_run_terminal(
+                &self.pool,
+                request_id,
+                status,
+                error_code,
+            )
+            .await
+            {
+                tracing::warn!(
+                    request_id = %request_id,
+                    error = %err,
+                    "could not sync delegation lifecycle"
+                );
+            }
+        }
         Ok(())
     }
 
