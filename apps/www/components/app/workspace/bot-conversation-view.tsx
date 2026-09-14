@@ -24,7 +24,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
-import { BrowserPreviewView } from "./browser-preview-view";
+import { FloatingBrowserPreview } from "./floating-browser-preview";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -52,9 +52,11 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [pendingTurn, setPendingTurn] = useState<{ idempotencyKey: string; message: string } | null>(
-    null,
-  );
+  const [pendingTurn, setPendingTurn] = useState<{
+    idempotencyKey: string;
+    message: string;
+    runId?: string;
+  } | null>(null);
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
   const [liveDelegations, setLiveDelegations] = useState<DelegationSummary[]>([]);
   const requestRef = useRef<{ message: string; key: string } | null>(null);
@@ -70,7 +72,11 @@ export function BotConversationView({
   const streamRunId = useMemo(() => {
     if (liveRunId) {
       const tracked = runs.find((run) => run.runId === liveRunId);
-      if (!tracked || runIsActive(tracked.status)) {
+      if (!tracked) {
+        // Run was just created; history fetch may lag behind POST.
+        return liveRunId;
+      }
+      if (runIsActive(tracked.status)) {
         return liveRunId;
       }
     }
@@ -132,9 +138,31 @@ export function BotConversationView({
     browserPreview?.pipOpen,
   ]);
 
+  const syncLiveRunId = useCallback((rows: RunSummary[]) => {
+    setLiveRunId((current) => {
+      const active = rows.find((run) => runIsActive(run.status));
+      if (active) {
+        return active.runId;
+      }
+      if (!current) {
+        return null;
+      }
+      const tracked = rows.find((run) => run.runId === current);
+      if (!tracked) {
+        // Keep tracking until the history endpoint catches up with a new run.
+        return current;
+      }
+      if (runIsActive(tracked.status)) {
+        return current;
+      }
+      return null;
+    });
+  }, []);
+
   const loadRuns = useCallback(async (activeConversationId: string | null) => {
     if (!activeConversationId) {
       setRuns([]);
+      setLiveRunId(null);
       return;
     }
     const response = await cloudHostFetch(
@@ -145,13 +173,9 @@ export function BotConversationView({
     }
     const rows: RunSummary[] = await response.json();
     setRuns(rows);
-    const active = rows.find((run) => runIsActive(run.status));
-    if (active) {
-      setLiveRunId(active.runId);
-    } else {
-      setLiveRunId(null);
-    }
-  }, [botId]);
+    syncLiveRunId(rows);
+    return rows;
+  }, [botId, syncLiveRunId]);
 
   const resolveConversationId = useCallback(async () => {
     const response = await cloudHostFetch(
@@ -185,11 +209,10 @@ export function BotConversationView({
 
   useEffect(() => {
     let cancelled = false;
-    setConversationId(null);
-    setRuns([]);
-    setLiveRunId(null);
     setMessage("");
     setError(null);
+    setPendingTurn(null);
+    setLiveRunId(null);
     void (async () => {
       try {
         const id = await resolveConversationId();
@@ -197,6 +220,10 @@ export function BotConversationView({
           return;
         }
         setConversationId(id);
+        if (!id) {
+          setRuns([]);
+          return;
+        }
         await loadRuns(id);
       } catch (err) {
         if (!cancelled) {
@@ -225,6 +252,15 @@ export function BotConversationView({
     void poll();
     return () => clearTimeout(timer);
   }, [conversationId, loadRuns]);
+
+  useEffect(() => {
+    if (!pendingTurn?.runId) {
+      return;
+    }
+    if (runs.some((run) => run.runId === pendingTurn.runId)) {
+      setPendingTurn(null);
+    }
+  }, [pendingTurn, runs]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -293,9 +329,19 @@ export function BotConversationView({
       const created = body as CreateRunResponse;
       setConversationId(created.conversationId);
       setLiveRunId(created.runId);
+      setPendingTurn((previous) =>
+        previous
+          ? { ...previous, runId: created.runId }
+          : { idempotencyKey, message: trimmed, runId: created.runId },
+      );
       requestRef.current = null;
-      setPendingTurn(null);
-      await loadRuns(created.conversationId);
+      const rows = await loadRuns(created.conversationId);
+      const runVisible =
+        rows?.some((run) => run.runId === created.runId) ??
+        false;
+      if (runVisible) {
+        setPendingTurn(null);
+      }
     } catch (err) {
       setMessage(trimmed);
       setPendingTurn(null);
@@ -431,7 +477,16 @@ export function BotConversationView({
                       <p className="text-xs font-medium text-muted-foreground">
                         {workStatus(run.status)}
                       </p>
-                      <RunAssistantSnippet runId={run.runId} />
+                      <RunAssistantSnippet
+                        runId={run.runId}
+                        fallbackText={
+                          run.runId === liveRunId
+                            ? assistantStream.answerText ||
+                              liveDetail?.assistantResult ||
+                              undefined
+                            : undefined
+                        }
+                      />
                       <Link
                         href={`/app/work/${run.runId}`}
                         className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
@@ -488,7 +543,9 @@ export function BotConversationView({
 
           {pendingTurn &&
           !chronologicalRuns.some(
-            (run) => runIsActive(run.status) && run.task?.trim() === pendingTurn.message,
+            (run) =>
+              (pendingTurn.runId && run.runId === pendingTurn.runId) ||
+              (runIsActive(run.status) && run.task?.trim() === pendingTurn.message),
           ) ? (
             <div className="space-y-3">
               <UserPromptBubble sentAt={new Date().toISOString()}>
@@ -510,14 +567,7 @@ export function BotConversationView({
         </div>
       </div>
 
-      {browserPreview?.pipOpen ? (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-[5.75rem] z-20 flex justify-end px-3 sm:bottom-[6rem] sm:px-5"
-          aria-hidden={false}
-        >
-          <BrowserPreviewView variant="pip" />
-        </div>
-      ) : null}
+      <FloatingBrowserPreview />
 
       <footer className="shrink-0 border-t border-border/70 bg-white/90 px-4 py-3 backdrop-blur-md">
         <form

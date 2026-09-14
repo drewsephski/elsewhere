@@ -142,6 +142,10 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     } as RunSummary;
   }, [selectedBotId, workspace]);
 
+  const handleStreamRunIdChange = useCallback((runId: string | null) => {
+    setStreamRunId((current) => (current === runId ? current : runId));
+  }, []);
+
   const handleBotLoaded = useCallback((loaded: BotSummary) => {
     setBot(loaded);
   }, []);
@@ -211,7 +215,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           onOpenContext={() => setContextSheetOpen(true)}
           onBotLoaded={handleBotLoaded}
           onRenameBot={handleRenameBot}
-          onStreamRunIdChange={setStreamRunId}
+          onStreamRunIdChange={handleStreamRunIdChange}
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">

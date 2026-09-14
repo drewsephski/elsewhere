@@ -15,6 +15,11 @@ import {
   type ReactNode,
 } from "react";
 
+export interface BrowserPreviewPipPosition {
+  x: number;
+  y: number;
+}
+
 interface BrowserPreviewContextValue {
   computerId: string | null;
   enabled: boolean;
@@ -22,12 +27,17 @@ interface BrowserPreviewContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  navigateBrowser: (url: string) => Promise<void>;
+  resetBrowserSession: () => Promise<void>;
   pipOpen: boolean;
   openPip: () => void;
   closePip: () => void;
   pipDismissed: boolean;
   dismissPipForSession: () => void;
   resetPipDismissal: () => void;
+  pipPosition: BrowserPreviewPipPosition | null;
+  setPipPosition: (position: BrowserPreviewPipPosition | null) => void;
+  dockPip: () => void;
 }
 
 const BrowserPreviewContext = createContext<BrowserPreviewContextValue | null>(null);
@@ -47,13 +57,11 @@ export function BrowserPreviewProvider({
   refreshGeneration?: number;
   children: ReactNode;
 }) {
-  const { frame, loading, error, refresh } = useBrowserPreview(
-    computerId,
-    enabled,
-    refreshGeneration,
-  );
+  const { frame, loading, error, refresh, navigateBrowser, resetBrowserSession } =
+    useBrowserPreview(computerId, enabled, refreshGeneration);
   const [pipOpen, setPipOpen] = useState(false);
   const [pipDismissed, setPipDismissed] = useState(false);
+  const [pipPosition, setPipPosition] = useState<BrowserPreviewPipPosition | null>(null);
   const lastSessionKey = useRef<string | null | undefined>(sessionKey);
 
   useEffect(() => {
@@ -61,6 +69,7 @@ export function BrowserPreviewProvider({
       lastSessionKey.current = sessionKey;
       setPipDismissed(false);
       setPipOpen(false);
+      setPipPosition(null);
     }
   }, [sessionKey]);
 
@@ -88,6 +97,11 @@ export function BrowserPreviewProvider({
     setPipDismissed(false);
   }, []);
 
+  const dockPip = useCallback(() => {
+    setPipOpen(false);
+    setPipPosition(null);
+  }, []);
+
   const value = useMemo(
     () => ({
       computerId,
@@ -96,12 +110,17 @@ export function BrowserPreviewProvider({
       loading,
       error,
       refresh,
+      navigateBrowser,
+      resetBrowserSession,
       pipOpen,
       openPip,
       closePip,
       pipDismissed,
       dismissPipForSession,
       resetPipDismissal,
+      pipPosition,
+      setPipPosition,
+      dockPip,
     }),
     [
       computerId,
@@ -110,12 +129,16 @@ export function BrowserPreviewProvider({
       loading,
       error,
       refresh,
+      navigateBrowser,
+      resetBrowserSession,
       pipOpen,
       openPip,
       closePip,
       pipDismissed,
       dismissPipForSession,
       resetPipDismissal,
+      pipPosition,
+      dockPip,
     ],
   );
 

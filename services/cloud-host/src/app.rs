@@ -47,6 +47,14 @@ pub fn build_router(state: AppState) -> Router {
             get(api::computers::browser_preview),
         )
         .route(
+            "/v1/computers/{id}/browser/navigate",
+            post(api::computers::browser_navigate),
+        )
+        .route(
+            "/v1/computers/{id}/browser/reset",
+            post(api::computers::browser_reset),
+        )
+        .route(
             "/v1/computers/{id}/workspace",
             get(api::computers::workspace_list),
         )

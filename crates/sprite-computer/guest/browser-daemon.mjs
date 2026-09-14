@@ -195,6 +195,22 @@ async function handleRequest(req) {
       fs.writeFileSync(outPath, body);
       return { ok: true, path: outPath, bytes: body.length };
     }
+    case "reset": {
+      await resetContext();
+      try {
+        persistPreviewCache(
+          {
+            available: false,
+            url: null,
+            title: null,
+          },
+          null,
+        );
+      } catch {
+        // best-effort cache clear
+      }
+      return { ok: true };
+    }
     default:
       throw new Error(`unknown browser action: ${action}`);
   }

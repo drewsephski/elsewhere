@@ -1,4 +1,5 @@
-use agent_core::{filter_workspace_listing, ComputerError};
+use agent_core::{filter_workspace_listing, AgentComputer, ComputerError};
+use serde_json::json;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -107,6 +108,60 @@ fn preview_etag(version: u64, frame_etag: Option<&str>) -> String {
         return format!("\"{etag}\"");
     }
     format!("\"preview-v{version}\"")
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BrowserNavigateRequest {
+    pub url: String,
+}
+
+pub async fn browser_navigate(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<BrowserNavigateRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let url = body.url.trim();
+    if url.is_empty() {
+        return Err(ApiError::Validation("url is required".into()));
+    }
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke("navigate", &json!({ "url": url }))
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
+pub async fn browser_reset(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke("reset", &json!({}))
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
 }
 
 pub async fn browser_preview(

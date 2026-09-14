@@ -1,6 +1,10 @@
 "use client";
 
 import { cloudHostFetch } from "@/lib/cloud-api";
+import {
+  navigateComputerBrowser,
+  resetComputerBrowserSession,
+} from "@/lib/browser-control";
 import { BrowserPreviewFetchScheduler } from "@/lib/browser-preview-fetch-scheduler";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -138,6 +142,45 @@ export function useBrowserPreview(
     return schedulerRef.current.runCoalesced(executeFetch);
   }, [executeFetch]);
 
+  const invalidateLocalPreview = useCallback(() => {
+    hasFrame.current = false;
+    etagRef.current = null;
+    setFrame(null);
+  }, []);
+
+  const navigateBrowser = useCallback(
+    async (url: string) => {
+      const activeComputerId = computerIdRef.current;
+      if (!activeComputerId || !enabledRef.current) {
+        return;
+      }
+      setLoading(true);
+      try {
+        await navigateComputerBrowser(activeComputerId, url);
+        invalidateLocalPreview();
+        await requestRefresh();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [invalidateLocalPreview, requestRefresh],
+  );
+
+  const resetBrowserSession = useCallback(async () => {
+    const activeComputerId = computerIdRef.current;
+    if (!activeComputerId || !enabledRef.current) {
+      return;
+    }
+    setLoading(true);
+    try {
+      await resetComputerBrowserSession(activeComputerId);
+      invalidateLocalPreview();
+      await requestRefresh();
+    } finally {
+      setLoading(false);
+    }
+  }, [invalidateLocalPreview, requestRefresh]);
+
   useEffect(() => {
     computerIdRef.current = computerId;
     enabledRef.current = enabled;
@@ -192,5 +235,12 @@ export function useBrowserPreview(
     return () => window.clearInterval(timer);
   }, [computerId, enabled, requestRefresh, frame?.imageDataUrl]);
 
-  return { frame, loading, error, refresh: requestRefresh };
+  return {
+    frame,
+    loading,
+    error,
+    refresh: requestRefresh,
+    navigateBrowser,
+    resetBrowserSession,
+  };
 }

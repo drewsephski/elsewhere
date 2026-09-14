@@ -3,8 +3,22 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { useEffect, useState } from "react";
 
-export function RunAssistantSnippet({ runId }: { runId: string }) {
-  const [text, setText] = useState<string | null>(null);
+export function RunAssistantSnippet({
+  runId,
+  fallbackText,
+}: {
+  runId: string;
+  fallbackText?: string | null;
+}) {
+  const [text, setText] = useState<string | null>(
+    fallbackText?.trim() ? fallbackText.trim() : null,
+  );
+
+  useEffect(() => {
+    if (fallbackText?.trim()) {
+      setText(fallbackText.trim());
+    }
+  }, [fallbackText]);
 
   useEffect(() => {
     const controller = new AbortController();
