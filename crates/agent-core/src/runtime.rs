@@ -47,11 +47,11 @@ pub async fn run_agent_loop(
     deps.events.emit(AgentEvent::RunStarted {
         request_id: ctx.request_id.clone(),
     })?;
-    emit_status(&deps, &ctx, "running", None)?;
+    emit_status(&deps, &ctx, "running", None).await?;
 
     loop {
         if deps.cancel.load(Ordering::Relaxed) {
-            finalize_cancelled(&deps, &ctx)?;
+            finalize_cancelled(&deps, &ctx).await?;
             return Ok(());
         }
 
@@ -62,25 +62,30 @@ pub async fn run_agent_loop(
                 "max_tool_steps_exceeded",
                 "Maximum tool steps exceeded",
                 step_count,
-            )?;
+            )
+            .await?;
             return Ok(());
         }
 
-        let response = match deps.model.create_response(CreateResponseRequest {
-            model: ctx.model.clone(),
-            instructions: if ctx.instructions.trim().is_empty() {
-                None
-            } else {
-                Some(ctx.instructions.clone())
-            },
-            input: Value::Array(input.clone()),
-            tools: tools.clone(),
-            tool_choice: Some("auto".into()),
-        }).await {
+        let response = match deps
+            .model
+            .create_response(CreateResponseRequest {
+                model: ctx.model.clone(),
+                instructions: if ctx.instructions.trim().is_empty() {
+                    None
+                } else {
+                    Some(ctx.instructions.clone())
+                },
+                input: Value::Array(input.clone()),
+                tools: tools.clone(),
+                tool_choice: Some("auto".into()),
+            })
+            .await
+        {
             Ok(response) => response,
             Err(err) => {
                 if matches!(err, ModelError::Cancelled) {
-                    finalize_cancelled(&deps, &ctx)?;
+                    finalize_cancelled(&deps, &ctx).await?;
                     return Ok(());
                 }
                 let code = match &err {
@@ -88,7 +93,7 @@ pub async fn run_agent_loop(
                     ModelError::RateLimited(_) => "responses_api_failure",
                     _ => "responses_api_failure",
                 };
-                fail_run(&deps, &ctx, code, &err.to_string(), step_count)?;
+                fail_run(&deps, &ctx, code, &err.to_string(), step_count).await?;
                 return Ok(());
             }
         };
@@ -98,18 +103,20 @@ pub async fn run_agent_loop(
         let function_calls = extract_function_calls(&response.output);
         if function_calls.is_empty() {
             let text = extract_assistant_text(&response.output, response.output_text.as_deref());
-            finalize_success(&deps, &ctx, &text, step_count)?;
+            finalize_success(&deps, &ctx, &text, step_count).await?;
             return Ok(());
         }
 
         for (name, call_id, arguments) in function_calls {
             if deps.cancel.load(Ordering::Relaxed) {
-                finalize_cancelled(&deps, &ctx)?;
+                finalize_cancelled(&deps, &ctx).await?;
                 return Ok(());
             }
 
             step_count += 1;
-            deps.store.update_run(&ctx.request_id, "running", None, step_count)?;
+            deps.store
+                .update_run(&ctx.request_id, "running", None, step_count)
+                .await?;
 
             let call_body = json!({
                 "tool": name,
@@ -125,7 +132,8 @@ pub async fn run_agent_loop(
                 MessageStatus::Complete,
                 Some("tool_call"),
                 &call_body,
-            )?;
+            )
+            .await?;
 
             deps.events.emit(AgentEvent::ToolCall {
                 tool: name.clone(),
@@ -134,10 +142,17 @@ pub async fn run_agent_loop(
                 message: Some(call_message),
             })?;
 
-            let tool_result = match dispatch_tool(deps.computer.as_ref(), &name, &arguments, &deps.cancel).await {
+            let tool_result = match dispatch_tool(
+                deps.computer.as_ref(),
+                &name,
+                &arguments,
+                &deps.cancel,
+            )
+            .await
+            {
                 Ok(value) => value,
                 Err(err) if err == ToolError::Cancelled => {
-                    finalize_cancelled(&deps, &ctx)?;
+                    finalize_cancelled(&deps, &ctx).await?;
                     return Ok(());
                 }
                 Err(err) if is_computer_fatal(&err) => {
@@ -156,8 +171,9 @@ pub async fn run_agent_loop(
                         MessageStatus::Error,
                         Some("tool_result"),
                         &result_body,
-                    );
-                    fail_run(&deps, &ctx, err.code(), &err.message(), step_count)?;
+                    )
+                    .await;
+                    fail_run(&deps, &ctx, err.code(), &err.message(), step_count).await?;
                     return Ok(());
                 }
                 Err(err) => {
@@ -183,7 +199,8 @@ pub async fn run_agent_loop(
                         MessageStatus::Complete,
                         Some("tool_result"),
                         &result_body,
-                    )?;
+                    )
+                    .await?;
                     deps.events.emit(AgentEvent::ToolResult {
                         tool: name.clone(),
                         call_id: call_id.clone(),
@@ -214,7 +231,8 @@ pub async fn run_agent_loop(
                 MessageStatus::Complete,
                 Some("tool_result"),
                 &result_body,
-            )?;
+            )
+            .await?;
 
             deps.events.emit(AgentEvent::ToolResult {
                 tool: name.clone(),
@@ -240,7 +258,7 @@ fn is_computer_fatal(err: &ToolError) -> bool {
     }
 }
 
-fn persist_event(
+async fn persist_event(
     deps: &AgentLoopDeps,
     ctx: &AgentLoopContext,
     kind: &str,
@@ -250,19 +268,23 @@ fn persist_event(
     payload: &Value,
 ) -> Result<crate::run_store::PersistedMessage, RuntimeError> {
     if let Some(event_type) = run_event_type {
-        deps.store.append_run_event(&ctx.request_id, event_type, payload)?;
+        deps.store
+            .append_run_event(&ctx.request_id, event_type, payload)
+            .await?;
     }
-    deps.store.persist_structured_message(StructuredMessageInput {
-        conversation_id: ctx.conversation_id.clone(),
-        role: MessageRole::Assistant,
-        kind: kind.to_string(),
-        body: body.to_string(),
-        status,
-        model: Some(ctx.model.clone()),
-    })
+    deps.store
+        .persist_structured_message(StructuredMessageInput {
+            conversation_id: ctx.conversation_id.clone(),
+            role: MessageRole::Assistant,
+            kind: kind.to_string(),
+            body: body.to_string(),
+            status,
+            model: Some(ctx.model.clone()),
+        })
+        .await
 }
 
-fn emit_status(
+async fn emit_status(
     deps: &AgentLoopDeps,
     ctx: &AgentLoopContext,
     status: &str,
@@ -278,7 +300,8 @@ fn emit_status(
         MessageStatus::Complete,
         Some("status"),
         &payload,
-    )?;
+    )
+    .await?;
     deps.events.emit(AgentEvent::StatusChanged {
         status: status.to_string(),
         detail,
@@ -287,21 +310,27 @@ fn emit_status(
     Ok(())
 }
 
-fn finalize_success(
+async fn finalize_success(
     deps: &AgentLoopDeps,
     ctx: &AgentLoopContext,
     text: &str,
     step_count: i64,
 ) -> Result<(), RuntimeError> {
-    deps.store.update_assistant_message(
-        &ctx.assistant_message_id,
-        text,
-        MessageStatus::Complete,
-        None,
-    )?;
-    deps.store.touch_conversation_and_bot(&ctx.conversation_id, &ctx.bot_id)?;
-    deps.store.update_run(&ctx.request_id, "completed", None, step_count)?;
-    emit_status(deps, ctx, "completed", None)?;
+    deps.store
+        .update_assistant_message(
+            &ctx.assistant_message_id,
+            text,
+            MessageStatus::Complete,
+            None,
+        )
+        .await?;
+    deps.store
+        .touch_conversation_and_bot(&ctx.conversation_id, &ctx.bot_id)
+        .await?;
+    deps.store
+        .update_run(&ctx.request_id, "completed", None, step_count)
+        .await?;
+    emit_status(deps, ctx, "completed", None).await?;
     deps.events.emit(AgentEvent::AssistantMessage {
         content: text.to_string(),
     })?;
@@ -314,15 +343,22 @@ fn finalize_success(
     Ok(())
 }
 
-fn finalize_cancelled(deps: &AgentLoopDeps, ctx: &AgentLoopContext) -> Result<(), RuntimeError> {
-    let partial = deps.store.get_assistant_message_body(&ctx.assistant_message_id)?;
-    deps.store.update_assistant_message(
-        &ctx.assistant_message_id,
-        &partial,
-        MessageStatus::Cancelled,
-        None,
-    )?;
-    deps.store.update_run(&ctx.request_id, "cancelled", Some("cancelled"), 0)?;
+async fn finalize_cancelled(deps: &AgentLoopDeps, ctx: &AgentLoopContext) -> Result<(), RuntimeError> {
+    let partial = deps
+        .store
+        .get_assistant_message_body(&ctx.assistant_message_id)
+        .await?;
+    deps.store
+        .update_assistant_message(
+            &ctx.assistant_message_id,
+            &partial,
+            MessageStatus::Cancelled,
+            None,
+        )
+        .await?;
+    deps.store
+        .update_run(&ctx.request_id, "cancelled", Some("cancelled"), 0)
+        .await?;
     deps.events.emit(AgentEvent::RunCancelled)?;
     deps.events.emit(AgentEvent::Terminal {
         event_type: "cancelled".into(),
@@ -332,21 +368,25 @@ fn finalize_cancelled(deps: &AgentLoopDeps, ctx: &AgentLoopContext) -> Result<()
     Ok(())
 }
 
-fn fail_run(
+async fn fail_run(
     deps: &AgentLoopDeps,
     ctx: &AgentLoopContext,
     code: &str,
     message: &str,
     step_count: i64,
 ) -> Result<(), RuntimeError> {
-    deps.store.update_assistant_message(
-        &ctx.assistant_message_id,
-        "",
-        MessageStatus::Error,
-        Some(message),
-    )?;
-    deps.store.update_run(&ctx.request_id, "failed", Some(code), step_count)?;
-    emit_status(deps, ctx, "failed", Some(message.to_string()))?;
+    deps.store
+        .update_assistant_message(
+            &ctx.assistant_message_id,
+            "",
+            MessageStatus::Error,
+            Some(message),
+        )
+        .await?;
+    deps.store
+        .update_run(&ctx.request_id, "failed", Some(code), step_count)
+        .await?;
+    emit_status(deps, ctx, "failed", Some(message.to_string())).await?;
     deps.events.emit(AgentEvent::RunFailed {
         code: code.to_string(),
         message: message.to_string(),
@@ -393,8 +433,9 @@ mod tests {
         runs: Mutex<HashMap<String, String>>,
     }
 
+    #[async_trait]
     impl RunStore for MemStore {
-        fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError> {
+        async fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError> {
             self.runs
                 .lock()
                 .unwrap()
@@ -402,7 +443,7 @@ mod tests {
             Ok("run-1".into())
         }
 
-        fn append_run_event(
+        async fn append_run_event(
             &self,
             _request_id: &str,
             _event_type: &str,
@@ -411,7 +452,7 @@ mod tests {
             Ok(())
         }
 
-        fn persist_structured_message(
+        async fn persist_structured_message(
             &self,
             input: StructuredMessageInput,
         ) -> Result<PersistedMessage, RuntimeError> {
@@ -423,7 +464,7 @@ mod tests {
             })
         }
 
-        fn update_assistant_message(
+        async fn update_assistant_message(
             &self,
             _message_id: &str,
             _body: &str,
@@ -433,7 +474,7 @@ mod tests {
             Ok(())
         }
 
-        fn update_run(
+        async fn update_run(
             &self,
             _request_id: &str,
             _status: &str,
@@ -443,7 +484,7 @@ mod tests {
             Ok(())
         }
 
-        fn touch_conversation_and_bot(
+        async fn touch_conversation_and_bot(
             &self,
             _conversation_id: &str,
             _bot_id: &str,
@@ -451,7 +492,7 @@ mod tests {
             Ok(())
         }
 
-        fn get_assistant_message_body(&self, _message_id: &str) -> Result<String, RuntimeError> {
+        async fn get_assistant_message_body(&self, _message_id: &str) -> Result<String, RuntimeError> {
             Ok(String::new())
         }
     }

@@ -102,6 +102,7 @@ pub async fn start_agent_chat(
             model: model.clone(),
             computer_id: Some("local-mac".into()),
         })
+        .await
         .map_err(|e| AppError::Other(e.to_string()))?;
 
     info!(

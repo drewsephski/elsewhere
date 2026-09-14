@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prove GPT Bot can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
+Prove **Elsewhere** can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
 
 ## Approaches considered
 
@@ -104,7 +104,7 @@ On guest wait failure, Rust/Swift append **`console.log` tail** to the error.
 
 Script: `scripts/vm-acceptance-test.sh` → `cargo run --example vm_acceptance`.
 
-Proof file: `/workspace/proof.txt` with contents `hello from the persistent GPT Bot computer`.
+Proof file: `/workspace/proof.txt` with contents `hello from the persistent Elsewhere computer`.
 
 ### Results (2026-09-14, this workspace)
 

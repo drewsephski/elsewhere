@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -31,22 +32,23 @@ pub struct CreateRunParams {
     pub computer_id: Option<String>,
 }
 
+#[async_trait]
 pub trait RunStore: Send + Sync {
-    fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError>;
+    async fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError>;
 
-    fn append_run_event(
+    async fn append_run_event(
         &self,
         request_id: &str,
         event_type: &str,
         payload: &Value,
     ) -> Result<(), RuntimeError>;
 
-    fn persist_structured_message(
+    async fn persist_structured_message(
         &self,
         input: StructuredMessageInput,
     ) -> Result<PersistedMessage, RuntimeError>;
 
-    fn update_assistant_message(
+    async fn update_assistant_message(
         &self,
         message_id: &str,
         body: &str,
@@ -54,7 +56,7 @@ pub trait RunStore: Send + Sync {
         error_message: Option<&str>,
     ) -> Result<(), RuntimeError>;
 
-    fn update_run(
+    async fn update_run(
         &self,
         request_id: &str,
         status: &str,
@@ -62,11 +64,11 @@ pub trait RunStore: Send + Sync {
         step_count: i64,
     ) -> Result<(), RuntimeError>;
 
-    fn touch_conversation_and_bot(
+    async fn touch_conversation_and_bot(
         &self,
         conversation_id: &str,
         bot_id: &str,
     ) -> Result<(), RuntimeError>;
 
-    fn get_assistant_message_body(&self, message_id: &str) -> Result<String, RuntimeError>;
+    async fn get_assistant_message_body(&self, message_id: &str) -> Result<String, RuntimeError>;
 }

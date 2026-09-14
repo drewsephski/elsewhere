@@ -24,7 +24,9 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    if std::env::var("SPRITES_TOKEN").is_ok() && std::env::var("ELSEWHERE_TEST_SPRITE").is_ok() {
+    if (std::env::var("SPRITE_TOKEN").is_ok() || std::env::var("SPRITES_TOKEN").is_ok())
+        && std::env::var("ELSEWHERE_TEST_SPRITE").is_ok()
+    {
         run_live().await?;
     } else {
         run_mock().await?;
@@ -43,7 +45,8 @@ async fn run_live() -> Result<(), Box<dyn std::error::Error>> {
     let config = SpriteComputerConfig {
         base_url: std::env::var("SPRITES_API_BASE")
             .unwrap_or_else(|_| sprite_computer::DEFAULT_API_BASE.into()),
-        token: std::env::var("SPRITES_TOKEN")?,
+        token: std::env::var("SPRITE_TOKEN")
+            .or_else(|_| std::env::var("SPRITES_TOKEN"))?,
         sprite_name: std::env::var("ELSEWHERE_TEST_SPRITE")?,
         workspace_root: "/workspace".into(),
         request_timeout: Duration::from_secs(120),
@@ -162,8 +165,9 @@ struct MemStore {
     runs: Mutex<HashMap<String, String>>,
 }
 
+#[async_trait]
 impl RunStore for MemStore {
-    fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError> {
+    async fn create_run(&self, params: CreateRunParams) -> Result<String, RuntimeError> {
         self.runs
             .lock()
             .unwrap()
@@ -171,7 +175,7 @@ impl RunStore for MemStore {
         Ok("run-1".into())
     }
 
-    fn append_run_event(
+    async fn append_run_event(
         &self,
         _request_id: &str,
         _event_type: &str,
@@ -180,7 +184,7 @@ impl RunStore for MemStore {
         Ok(())
     }
 
-    fn persist_structured_message(
+    async fn persist_structured_message(
         &self,
         input: StructuredMessageInput,
     ) -> Result<PersistedMessage, RuntimeError> {
@@ -192,7 +196,7 @@ impl RunStore for MemStore {
         })
     }
 
-    fn update_assistant_message(
+    async fn update_assistant_message(
         &self,
         _message_id: &str,
         _body: &str,
@@ -202,7 +206,7 @@ impl RunStore for MemStore {
         Ok(())
     }
 
-    fn update_run(
+    async fn update_run(
         &self,
         _request_id: &str,
         _status: &str,
@@ -212,7 +216,7 @@ impl RunStore for MemStore {
         Ok(())
     }
 
-    fn touch_conversation_and_bot(
+    async fn touch_conversation_and_bot(
         &self,
         _conversation_id: &str,
         _bot_id: &str,
@@ -220,7 +224,7 @@ impl RunStore for MemStore {
         Ok(())
     }
 
-    fn get_assistant_message_body(&self, _message_id: &str) -> Result<String, RuntimeError> {
+    async fn get_assistant_message_body(&self, _message_id: &str) -> Result<String, RuntimeError> {
         Ok(String::new())
     }
 }

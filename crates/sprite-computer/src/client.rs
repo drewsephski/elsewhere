@@ -24,8 +24,13 @@ pub struct SpriteClientConfig {
 
 impl SpriteClientConfig {
     pub fn from_env_sprite_name(sprite_name: impl Into<String>) -> Result<Self, SpriteError> {
-        let token = std::env::var("SPRITES_TOKEN")
-            .map_err(|_| SpriteError::Config("SPRITES_TOKEN is not set".into()))?;
+        let token = std::env::var("SPRITE_TOKEN")
+            .or_else(|_| std::env::var("SPRITES_TOKEN"))
+            .map_err(|_| {
+                SpriteError::Config(
+                    "SPRITE_TOKEN (or deprecated SPRITES_TOKEN) is not set".into(),
+                )
+            })?;
         Ok(Self {
             base_url: std::env::var("SPRITES_API_BASE").unwrap_or_else(|_| DEFAULT_API_BASE.into()),
             token,
@@ -167,7 +172,7 @@ impl SpriteClient {
         timeout: Duration,
     ) -> Result<(String, String, i32), SpriteError> {
         let path = format!(
-            "/sprites/{}/exec?cmd=bash&cmd=-lc&cmd={}&dir={}&tty=false",
+            "/sprites/{}/exec?cmd=bash&cmd=-lc&cmd={}&dir={}",
             urlencoding(&self.config.sprite_name),
             urlencoding(command),
             urlencoding(dir),

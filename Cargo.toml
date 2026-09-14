@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "crates/agent-core",
     "crates/sprite-computer",
+    "crates/openai-responses",
+    "services/cloud-host",
     "src-tauri",
     "guest-agent",
 ]
