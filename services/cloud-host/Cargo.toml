@@ -24,7 +24,7 @@ async-stream = "0.3"
 futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json", "chrono", "migrate"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "json", "chrono", "migrate", "uuid"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }

@@ -25,16 +25,7 @@ pub use compat::{
     REQUIRED_PROTOCOL_METHODS,
 };
 pub use error::CodexProviderError;
-pub use process::{codex_version, which_codex_executable, CodexProcessLaunch, ManagedCodexProcess};
-pub use protocol::{
-    build_elsewhere_thread_start_params, parse_account_response, CodexAccountKind,
-    CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot, ElsewhereThreadConfig,
-    MCP_SERVER_NAME,
-};
-pub use protocol::thread::{
-    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled,
-    ELSEWHERE_ENABLED_MCP_TOOLS, ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES,
-};
+pub use login::CodexDeviceLoginHandle;
 pub use mcp_turn_probe::{
     run_mcp_turn_probe, McpTurnProbeResult, DIRECT_TOOL_PROBE_EXPECTED_CONTENT,
     DIRECT_TOOL_PROBE_PROMPT,
@@ -43,9 +34,20 @@ pub use probe::{
     parse_login_status, prefers_chatgpt_subscription, probe_codex, CodexAuthMethod,
     CodexInstallProbe, CodexProbeError,
 };
-pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};
-pub use subscription_availability::{
-    probe_codex_subscription_availability, CodexSubscriptionAvailability,
+pub use process::{codex_version, which_codex_executable, CodexProcessLaunch, ManagedCodexProcess};
+pub use protocol::thread::{
+    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled, ELSEWHERE_ENABLED_MCP_TOOLS,
+    ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES,
 };
+pub use protocol::{
+    build_elsewhere_thread_start_params, parse_account_response, CodexAccountKind,
+    CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot, ElsewhereThreadConfig,
+    MCP_SERVER_NAME,
+};
+pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};
 #[cfg(any(test, feature = "test-utils"))]
 pub use subscription_availability::probe_codex_subscription_availability_on_client;
+pub use subscription_availability::{
+    probe_codex_subscription_availability, probe_codex_subscription_availability_with_profile,
+    CodexSubscriptionAvailability,
+};

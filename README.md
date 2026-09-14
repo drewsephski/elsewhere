@@ -1,6 +1,8 @@
 # Elsewhere
 
-**Run your agents elsewhere.** Native macOS desktop app for persistent AI bots with their own computer—OpenAI-backed chat, local SQLite storage, isolated guest VMs, and streaming responses.
+**Create AI workers. Give them computers.** Elsewhere combines persistent bots, ChatGPT/Codex subscription execution, durable work history, private computers, and human approvals.
+
+The web product is in `apps/www`; its Rust control plane is `services/cloud-host`. The native macOS client remains available for local development. Start with [the authenticated cloud setup](docs/PHASE_3C1.md) and [current product progress](docs/PRODUCT_PROGRESS.md). The desktop setup below describes the legacy local API-key path.
 
 ## Prerequisites
 

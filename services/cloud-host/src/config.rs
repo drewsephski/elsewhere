@@ -30,6 +30,7 @@ pub struct Config {
     pub bind_addr: String,
     pub run_engine: RunEngineMode,
     pub codex_executable: Option<PathBuf>,
+    pub codex_profiles_dir: Option<PathBuf>,
     pub tool_approval_timeout_secs: u64,
     pub enforce_tool_approvals_internal: bool,
 }
@@ -53,10 +54,15 @@ impl Config {
                 .unwrap_or_else(|_| "hybrid".into())
                 .as_str(),
         )?;
-        let jwt_issuer = env::var("ELSEWHERE_JWT_ISSUER").ok().filter(|v| !v.is_empty());
-        let jwt_audience =
-            env::var("ELSEWHERE_JWT_AUDIENCE").ok().filter(|v| !v.is_empty());
-        let jwt_jwks_url = env::var("ELSEWHERE_JWT_JWKS_URL").ok().filter(|v| !v.is_empty());
+        let jwt_issuer = env::var("ELSEWHERE_JWT_ISSUER")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let jwt_audience = env::var("ELSEWHERE_JWT_AUDIENCE")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let jwt_jwks_url = env::var("ELSEWHERE_JWT_JWKS_URL")
+            .ok()
+            .filter(|v| !v.is_empty());
         if auth_mode == AuthMode::Jwt {
             if jwt_jwks_url.is_none() || jwt_issuer.is_none() || jwt_audience.is_none() {
                 return Err(
@@ -64,8 +70,9 @@ impl Config {
                 );
             }
         }
-        let cors_web_origin =
-            env::var("ELSEWHERE_WEB_ORIGIN").ok().filter(|v| !v.is_empty());
+        let cors_web_origin = env::var("ELSEWHERE_WEB_ORIGIN")
+            .ok()
+            .filter(|v| !v.is_empty());
         let allow_codex_login = env::var("ELSEWHERE_ALLOW_CODEX_LOGIN")
             .ok()
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -111,6 +118,9 @@ impl Config {
             bind_addr: env::var("ELSEWHERE_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into()),
             run_engine,
             codex_executable,
+            codex_profiles_dir: env::var("ELSEWHERE_CODEX_PROFILES_DIR")
+                .ok()
+                .map(PathBuf::from),
             tool_approval_timeout_secs,
             enforce_tool_approvals_internal,
         })

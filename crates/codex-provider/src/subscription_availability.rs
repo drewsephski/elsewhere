@@ -10,9 +10,7 @@ const PROBE_STARTUP_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CodexSubscriptionAvailability {
-    Available {
-        plan_type: Option<String>,
-    },
+    Available { plan_type: Option<String> },
     NotInstalled,
     NotAuthenticated,
     NotChatGpt,
@@ -23,27 +21,38 @@ pub enum CodexSubscriptionAvailability {
 pub async fn probe_codex_subscription_availability(
     executable: Option<PathBuf>,
 ) -> CodexSubscriptionAvailability {
+    probe_codex_subscription_availability_with_profile(executable, None).await
+}
+
+pub async fn probe_codex_subscription_availability_with_profile(
+    executable: Option<PathBuf>,
+    profile: Option<PathBuf>,
+) -> CodexSubscriptionAvailability {
     let executable = match executable.or_else(|| which_codex_executable().ok()) {
         Some(path) => path,
         None => return CodexSubscriptionAvailability::NotInstalled,
     };
 
-    let launch = CodexProcessLaunch::from_path(executable).subscription_child();
+    let mut launch = CodexProcessLaunch::from_path(executable).subscription_child();
+    if let Some(profile) = profile {
+        launch = launch.with_profile(&profile);
+    }
 
-    let client = match tokio::time::timeout(PROBE_STARTUP_TIMEOUT, CodexAppServerClient::launch(launch))
-        .await
-    {
-        Ok(Ok(client)) => client,
-        Ok(Err(CodexProviderError::CodexNotInstalled)) => {
-            return CodexSubscriptionAvailability::NotInstalled;
-        }
-        Ok(Err(err)) => return CodexSubscriptionAvailability::Unavailable(err.to_string()),
-        Err(_) => {
-            return CodexSubscriptionAvailability::Unavailable(
-                "Codex app-server startup timed out during availability probe".into(),
-            );
-        }
-    };
+    let client =
+        match tokio::time::timeout(PROBE_STARTUP_TIMEOUT, CodexAppServerClient::launch(launch))
+            .await
+        {
+            Ok(Ok(client)) => client,
+            Ok(Err(CodexProviderError::CodexNotInstalled)) => {
+                return CodexSubscriptionAvailability::NotInstalled;
+            }
+            Ok(Err(err)) => return CodexSubscriptionAvailability::Unavailable(err.to_string()),
+            Err(_) => {
+                return CodexSubscriptionAvailability::Unavailable(
+                    "Codex app-server startup timed out during availability probe".into(),
+                );
+            }
+        };
 
     let account = match client.account().await {
         Ok(state) => state,
@@ -102,8 +111,8 @@ pub async fn probe_codex_subscription_availability_on_client(
         CodexAccountKind::ChatGpt { plan_type, .. } => CodexSubscriptionAvailability::Available {
             plan_type: Some(plan_type.clone()),
         },
-        CodexAccountKind::Other(kind) => CodexSubscriptionAvailability::Unavailable(format!(
-            "codex_unsupported_account:{kind}"
-        )),
+        CodexAccountKind::Other(kind) => {
+            CodexSubscriptionAvailability::Unavailable(format!("codex_unsupported_account:{kind}"))
+        }
     }
 }

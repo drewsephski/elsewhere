@@ -57,3 +57,11 @@ cargo test -p cloud-host --features test-utils
 cargo test -p agent-core -p computer-mcp
 pnpm --filter @elsewhere/www lint
 ```
+
+## Product pairing update (September 2026)
+
+Product accounts no longer share the operator's Codex login. Configure `ELSEWHERE_CODEX_PROFILES_DIR` to an absolute, private directory on a persistent **trusted host** volume and enable `ELSEWHERE_ALLOW_CODEX_LOGIN=1`. Migration 005 gives each Elsewhere owner a stable UUID profile. Status checks, device login, and work all launch Codex with that same profile; Codex itself manages credentials with file storage. Never mount this volume into an AgentComputer, serve it over HTTP, or check it into Git.
+
+The web flow uses supported `account/login/start` with `type=chatgptDeviceCode`, so sign-in works from a different computer without loopback OAuth forwarding. The installed Codex version must support this protocol. Users may need to enable device sign-in in ChatGPT security settings. A pending login is scoped to its owner and expires after ten minutes. The current host bounds pending sign-ins to one at a time; another user's attempt receives a retryable conflict.
+
+With no profile directory configured, product accounts see disconnected status and execution fails closed. Only the explicitly trusted internal-token development principal retains the legacy ambient Codex path. `auto` requires a ChatGPT subscription; it never falls back to a paid API key. Use explicit `responses` only when API billing is intended.

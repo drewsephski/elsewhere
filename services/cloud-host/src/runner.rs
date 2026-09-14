@@ -23,10 +23,10 @@ use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
 use crate::finalizer::{sanitize_host_error, HostFinalizer};
-use codex_provider::probe_codex_subscription_availability;
+use codex_provider::probe_codex_subscription_availability_with_profile;
 
 use crate::run_engine_select::{
-    resolve_run_engine, ResolveRunEngineError, SelectedRunEngine, RunEngineMode,
+    resolve_run_engine, ResolveRunEngineError, RunEngineMode, SelectedRunEngine,
 };
 
 #[derive(Clone)]
@@ -43,11 +43,7 @@ pub struct TestRunOverrides {
     pub model: Arc<dyn ResponsesModel>,
 }
 
-pub fn spawn_agent_run(
-    state: AppState,
-    input: RunExecutionInput,
-    permit: OwnedSemaphorePermit,
-) {
+pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedSemaphorePermit) {
     tokio::spawn(async move {
         let cancel = Arc::new(AtomicBool::new(false));
         let (events, _rx) = CloudEventSink::new();
@@ -56,17 +52,22 @@ pub fn spawn_agent_run(
         let pool = state.pool.clone();
         let store: Arc<dyn RunStore> = Arc::new(PostgresRunStore::new(pool.clone()));
 
-        let owner_id: String = sqlx::query_as("SELECT owner_id FROM agent_runs WHERE id = $1")
-            .bind(&input.records.run_id)
-            .fetch_optional(&pool)
-            .await
-            .ok()
-            .flatten()
-            .map(|(id,): (String,)| id)
-            .unwrap_or_else(|| LEGACY_LOCAL_OWNER.to_string());
+        let owner_id: String = match sqlx::query_scalar(
+            "SELECT owner_id FROM agent_runs WHERE id = $1",
+        )
+        .bind(&input.records.run_id)
+        .fetch_one(&pool)
+        .await
+        {
+            Ok(owner_id) => owner_id,
+            Err(err) => {
+                tracing::error!(run_id = %input.records.run_id, error = %err, "cannot resolve run owner; refusing execution");
+                return;
+            }
+        };
 
-        let enforce_approvals = owner_id != LEGACY_LOCAL_OWNER
-            || state.config.enforce_tool_approvals_internal;
+        let enforce_approvals =
+            owner_id != LEGACY_LOCAL_OWNER || state.config.enforce_tool_approvals_internal;
 
         let finalizer = HostFinalizer::new(
             store.clone(),
@@ -145,13 +146,6 @@ async fn execute_run(
     owner_id: String,
     enforce_approvals: bool,
 ) -> Result<(), String> {
-    let computer = build_computer(&config, &pool, &input).await?;
-
-    computer
-        .ensure_ready()
-        .await
-        .map_err(|e| format!("ensure_ready: {e}"))?;
-
     let ctx = AgentLoopContext {
         request_id: input.records.request_id.clone(),
         conversation_id: input.records.conversation_id.clone(),
@@ -164,10 +158,21 @@ async fn execute_run(
     let input_messages = vec![json!({"role":"user","content": input.user_message})];
 
     let engine_mode = effective_engine_mode(&pool, &input.bot_id, config.run_engine).await;
+    let profile_home = if engine_mode == RunEngineMode::Responses {
+        None
+    } else {
+        crate::provider_profile::profile_for_owner(&pool, &config, &owner_id)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     let codex_availability = if engine_mode == RunEngineMode::Responses {
         codex_provider::CodexSubscriptionAvailability::NotInstalled
     } else {
-        probe_codex_subscription_availability(config.codex_executable.clone()).await
+        probe_codex_subscription_availability_with_profile(
+            config.codex_executable.clone(),
+            profile_home.clone(),
+        )
+        .await
     };
     let selected = match resolve_run_engine(
         engine_mode,
@@ -177,6 +182,13 @@ async fn execute_run(
         Ok(engine) => engine,
         Err(err) => return Err(resolve_error_to_host(err)),
     };
+
+    let computer = build_computer(&config, &pool, &input).await?;
+
+    computer
+        .ensure_ready()
+        .await
+        .map_err(|e| format!("ensure_ready: {e}"))?;
 
     let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
         Arc::new(RunScopedApprovalGate::new(
@@ -202,17 +214,13 @@ async fn execute_run(
 
     match selected {
         SelectedRunEngine::CodexSubscription => {
-            tracing::info!(engine = "codex_subscription", "cloud-host selected Codex engine");
-            run_codex_engine(&config, ctx, shared, input_messages).await
+            tracing::info!(
+                engine = "codex_subscription",
+                "cloud-host selected Codex engine"
+            );
+            run_codex_engine(&config, profile_home, ctx, shared, input_messages).await
         }
         SelectedRunEngine::ResponsesApi => {
-            if engine_mode == RunEngineMode::Auto {
-                tracing::warn!(
-                    engine = "auto",
-                    codex = ?codex_availability,
-                    "falling back to Responses API engine"
-                );
-            }
             run_responses_engine(&config, ctx, shared, input_messages).await
         }
     }
@@ -229,12 +237,14 @@ fn resolve_error_to_host(err: ResolveRunEngineError) -> String {
 
 async fn run_codex_engine(
     config: &Config,
+    profile_home: Option<std::path::PathBuf>,
     ctx: AgentLoopContext,
     shared: SharedRunDeps,
     input: Vec<serde_json::Value>,
 ) -> Result<(), String> {
     let engine = CodexRunEngine::new(CodexRunEngineConfig {
         executable: config.codex_executable.clone(),
+        profile_home,
         ..CodexRunEngineConfig::default()
     });
     engine
@@ -269,7 +279,10 @@ async fn run_responses_engine(
         Arc::new(OpenAiResponsesModel::new(api_key, shared.cancel.clone()))
     };
 
-    tracing::info!(engine = "responses_api", "cloud-host selected Responses engine");
+    tracing::info!(
+        engine = "responses_api",
+        "cloud-host selected Responses engine"
+    );
     let engine = ResponsesRunEngine::new(model);
     engine
         .run(ctx, shared, input)
@@ -282,13 +295,12 @@ async fn effective_engine_mode(
     bot_id: &str,
     host_default: RunEngineMode,
 ) -> RunEngineMode {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT engine_preference FROM bots WHERE id = $1")
-            .bind(bot_id)
-            .fetch_optional(pool)
-            .await
-            .ok()
-            .flatten();
+    let row: Option<(String,)> = sqlx::query_as("SELECT engine_preference FROM bots WHERE id = $1")
+        .bind(bot_id)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
     let Some((pref,)) = row else {
         return host_default;
     };
@@ -325,13 +337,12 @@ async fn sprite_resource_for_computer(
     pool: &sqlx::PgPool,
     computer_id: &str,
 ) -> Result<String, String> {
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT provider_resource_id FROM sandboxes WHERE id = $1",
-    )
-    .bind(computer_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let row: Option<(String,)> =
+        sqlx::query_as("SELECT provider_resource_id FROM sandboxes WHERE id = $1")
+            .bind(computer_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| e.to_string())?;
     if let Some((name,)) = row {
         if !name.is_empty() {
             return Ok(name);

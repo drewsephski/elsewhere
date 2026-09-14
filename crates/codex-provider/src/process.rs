@@ -10,8 +10,8 @@ use tokio::task::JoinHandle;
 
 use crate::error::CodexProviderError;
 use crate::protocol::rpc::{
-    error_envelope, notification_envelope, parse_incoming_line, request_envelope, response_envelope,
-    IncomingMessage, RequestId,
+    error_envelope, notification_envelope, parse_incoming_line, request_envelope,
+    response_envelope, IncomingMessage, RequestId,
 };
 
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -44,6 +44,15 @@ impl CodexProcessLaunch {
         self.env.insert(key.into(), value.into());
         self
     }
+
+    /// Keep account state in a host-owned profile, never in the agent computer.
+    pub fn with_profile(mut self, home: &Path) -> Self {
+        self.env
+            .insert("CODEX_HOME".into(), home.to_string_lossy().into_owned());
+        self.config_overrides
+            .push("cli_auth_credentials_store=\"file\"".into());
+        self
+    }
 }
 
 pub struct ManagedCodexProcess {
@@ -56,7 +65,8 @@ pub struct ManagedCodexProcess {
     next_id: Mutex<i64>,
 }
 
-type PendingMap = HashMap<RequestId, oneshot::Sender<Result<serde_json::Value, CodexProviderError>>>;
+type PendingMap =
+    HashMap<RequestId, oneshot::Sender<Result<serde_json::Value, CodexProviderError>>>;
 type ArcPending = std::sync::Arc<Mutex<PendingMap>>;
 
 impl ManagedCodexProcess {
@@ -68,6 +78,7 @@ impl ManagedCodexProcess {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        command.kill_on_drop(true);
         for override_arg in &launch.config_overrides {
             command.arg("-c").arg(override_arg);
         }
@@ -82,15 +93,18 @@ impl ManagedCodexProcess {
             .spawn()
             .map_err(|e| CodexProviderError::Process(format!("spawn codex app-server: {e}")))?;
 
-        let stdin = child.stdin.take().ok_or_else(|| {
-            CodexProviderError::Process("app-server missing stdin".into())
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            CodexProviderError::Process("app-server missing stdout".into())
-        })?;
-        let stderr = child.stderr.take().ok_or_else(|| {
-            CodexProviderError::Process("app-server missing stderr".into())
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| CodexProviderError::Process("app-server missing stdin".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| CodexProviderError::Process("app-server missing stdout".into()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| CodexProviderError::Process("app-server missing stderr".into()))?;
 
         let mut process = Self::from_async_io(stdin, stdout, stderr).await?;
         process.child = Some(child);
@@ -263,12 +277,9 @@ async fn route_incoming(
                 let payload = response_envelope(&id, result).to_string();
                 let _ = writer.send(payload).await;
             } else {
-                let payload = error_envelope(
-                    &id,
-                    -32601,
-                    "method not supported by Elsewhere client",
-                )
-                .to_string();
+                let payload =
+                    error_envelope(&id, -32601, "method not supported by Elsewhere client")
+                        .to_string();
                 let _ = writer.send(payload).await;
             }
         }
@@ -305,9 +316,7 @@ pub fn codex_version(executable: &Path) -> Result<String, CodexProviderError> {
         .output()
         .map_err(|e| CodexProviderError::Process(e.to_string()))?;
     if !output.status.success() {
-        return Err(CodexProviderError::Process(
-            "codex --version failed".into(),
-        ));
+        return Err(CodexProviderError::Process("codex --version failed".into()));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }

@@ -111,6 +111,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         bind_addr: "127.0.0.1:0".into(),
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
+        codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
     };
@@ -167,7 +168,9 @@ async fn read_tools_auto_allowed_without_approval_row() {
 
     let owner = format!("user-a-read-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
-    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c")
+        .await
+        .unwrap();
     let bot = insert_bot(
         &pool,
         &owner,
@@ -249,7 +252,9 @@ async fn write_waits_for_approval_before_computer_call() {
 
     let owner = format!("user-a-write-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
-    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c")
+        .await
+        .unwrap();
     let bot = insert_bot(
         &pool,
         &owner,
@@ -307,7 +312,9 @@ async fn user_b_cannot_resolve_user_a_approval() {
     };
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, "user-a", "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, "user-a", "c")
+        .await
+        .unwrap();
     let bot = insert_bot(
         &pool,
         "user-a",

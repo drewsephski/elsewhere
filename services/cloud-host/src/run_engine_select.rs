@@ -83,8 +83,6 @@ pub fn resolve_run_engine(
         RunEngineMode::Auto => {
             if codex_availability_is_usable(codex) {
                 Ok(SelectedRunEngine::CodexSubscription)
-            } else if has_api_key {
-                Ok(SelectedRunEngine::ResponsesApi)
             } else {
                 Err(ResolveRunEngineError::NoModelProviderAvailable)
             }
@@ -153,29 +151,18 @@ mod tests {
     }
 
     #[test]
-    fn auto_falls_back_to_responses_without_codex() {
-        assert_eq!(
-            resolve_run_engine(
-                RunEngineMode::Auto,
-                Some("sk-test"),
-                &CodexSubscriptionAvailability::NotInstalled
-            )
-            .unwrap(),
-            SelectedRunEngine::ResponsesApi
-        );
-    }
-
-    #[test]
-    fn auto_falls_back_when_codex_not_chatgpt() {
-        assert_eq!(
-            resolve_run_engine(
-                RunEngineMode::Auto,
-                Some("sk-test"),
-                &CodexSubscriptionAvailability::NotChatGpt
-            )
-            .unwrap(),
-            SelectedRunEngine::ResponsesApi
-        );
+    fn auto_never_falls_back_to_paid_api() {
+        for unavailable in [
+            CodexSubscriptionAvailability::NotInstalled,
+            CodexSubscriptionAvailability::NotChatGpt,
+            CodexSubscriptionAvailability::NotAuthenticated,
+            CodexSubscriptionAvailability::Unavailable("offline".into()),
+        ] {
+            assert_eq!(
+                resolve_run_engine(RunEngineMode::Auto, Some("test-key"), &unavailable),
+                Err(ResolveRunEngineError::NoModelProviderAvailable)
+            );
+        }
     }
 
     #[test]

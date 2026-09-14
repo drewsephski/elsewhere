@@ -45,23 +45,25 @@ fn jwt_test_config() -> Config {
         bind_addr: "127.0.0.1:0".into(),
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
+        codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
     }
 }
 
 fn test_verifier() -> std::sync::Arc<JwtVerifier> {
-    JwtVerifier::from_test_decoding_key(
-        TEST_KID,
-        test_signing::verifier(),
-        jwt_config(),
-    )
+    JwtVerifier::from_test_decoding_key(TEST_KID, test_signing::verifier(), jwt_config())
 }
 
 #[tokio::test]
 async fn jwt_verifier_accepts_valid_token() {
     let verifier = test_verifier();
-    let token = test_signing::user_token("user-a", "http://localhost:3000", "elsewhere-cloud-host", 300);
+    let token = test_signing::user_token(
+        "user-a",
+        "http://localhost:3000",
+        "elsewhere-cloud-host",
+        300,
+    );
     let sub = verifier.verify_bearer_token(&token).await.unwrap();
     assert_eq!(sub, "user-a");
 }
@@ -69,9 +71,15 @@ async fn jwt_verifier_accepts_valid_token() {
 #[tokio::test]
 async fn jwt_verifier_rejects_expired_and_bad_audience() {
     let verifier = test_verifier();
-    let expired = test_signing::user_token("user-a", "http://localhost:3000", "elsewhere-cloud-host", -3600);
+    let expired = test_signing::user_token(
+        "user-a",
+        "http://localhost:3000",
+        "elsewhere-cloud-host",
+        -3600,
+    );
     assert!(verifier.verify_bearer_token(&expired).await.is_err());
-    let bad_aud = test_signing::user_token("user-a", "http://localhost:3000", "wrong-audience", 300);
+    let bad_aud =
+        test_signing::user_token("user-a", "http://localhost:3000", "wrong-audience", 300);
     assert!(verifier.verify_bearer_token(&bad_aud).await.is_err());
 }
 
@@ -97,7 +105,12 @@ async fn jwt_auth_protects_bot_listing() {
         .unwrap();
     assert_eq!(unauthorized.status(), http::StatusCode::UNAUTHORIZED);
 
-    let token = test_signing::user_token("user-a", "http://localhost:3000", "elsewhere-cloud-host", 300);
+    let token = test_signing::user_token(
+        "user-a",
+        "http://localhost:3000",
+        "elsewhere-cloud-host",
+        300,
+    );
     let ok = app
         .oneshot(
             http::Request::builder()

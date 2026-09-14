@@ -5,12 +5,56 @@ use serde_json::json;
 use crate::client::CodexAppServerClient;
 use crate::error::CodexProviderError;
 use crate::process::DEFAULT_REQUEST_TIMEOUT;
+use crate::protocol::rpc::IncomingMessage;
 use crate::protocol::{
     parse_login_completed_notification, parse_login_start_response, CodexLoginHandle,
 };
-use crate::protocol::rpc::IncomingMessage;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexDeviceLoginHandle {
+    pub login_id: String,
+    pub verification_url: String,
+    pub user_code: String,
+}
+
+pub fn parse_device_login(
+    value: serde_json::Value,
+) -> Result<CodexDeviceLoginHandle, CodexProviderError> {
+    if value.get("type").and_then(|v| v.as_str()) != Some("chatgptDeviceCode") {
+        return Err(CodexProviderError::Login(
+            "Device sign-in requires a supported Codex version".into(),
+        ));
+    }
+    let handle: CodexDeviceLoginHandle = serde_json::from_value(value)?;
+    if handle.login_id.is_empty()
+        || handle.user_code.is_empty()
+        || !handle
+            .verification_url
+            .starts_with("https://auth.openai.com/")
+    {
+        return Err(CodexProviderError::Login(
+            "Invalid device sign-in response".into(),
+        ));
+    }
+    Ok(handle)
+}
 
 impl CodexAppServerClient {
+    /// Supported device authorization works with a remote always-on runner.
+    pub async fn start_chatgpt_device_login(
+        &self,
+    ) -> Result<CodexDeviceLoginHandle, CodexProviderError> {
+        let result = self
+            .process()
+            .request(
+                "account/login/start",
+                json!({ "type": "chatgptDeviceCode" }),
+                DEFAULT_REQUEST_TIMEOUT,
+            )
+            .await?;
+        parse_device_login(result)
+    }
     pub async fn start_chatgpt_login(&self) -> Result<CodexLoginHandle, CodexProviderError> {
         let result = self
             .process()
@@ -53,8 +97,7 @@ impl CodexAppServerClient {
                     if method != "account/login/completed" {
                         continue;
                     }
-                    let (notified_id, success, error) =
-                        parse_login_completed_notification(params)?;
+                    let (notified_id, success, error) = parse_login_completed_notification(params)?;
                     if notified_id.as_deref() != Some(login_id) {
                         continue;
                     }
@@ -91,5 +134,22 @@ impl CodexAppServerClient {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn validates_device_authorization_challenge() {
+        let challenge = json!({"type":"chatgptDeviceCode", "loginId":"login", "userCode":"ABCD", "verificationUrl":"https://auth.openai.com/codex/device"});
+        assert_eq!(
+            parse_device_login(challenge.clone()).unwrap().user_code,
+            "ABCD"
+        );
+        let mut invalid = challenge;
+        invalid["verificationUrl"] = json!("https://auth.openai.com.evil.test/device");
+        assert!(parse_device_login(invalid).is_err());
+        assert!(parse_device_login(json!({"type":"chatgpt"})).is_err());
     }
 }

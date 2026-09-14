@@ -19,11 +19,11 @@ use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
 use crate::process::{which_codex_executable, CodexProcessLaunch};
+use crate::protocol::rpc::IncomingMessage as RpcMessage;
 use crate::protocol::{
     account_auth_metadata, item_from_notification, notification_thread_turn, parse_turn_completed,
     require_chatgpt_account, turn_error_message, ElsewhereThreadConfig, MCP_SERVER_NAME,
 };
-use crate::protocol::rpc::IncomingMessage as RpcMessage;
 use crate::run_input::user_text_from_run_input;
 use crate::run_persistence::{
     emit_run_started, fail_run, finalize_cancelled, finalize_interrupted, finalize_success,
@@ -36,6 +36,7 @@ const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use w
 #[derive(Debug, Clone)]
 pub struct CodexRunEngineConfig {
     pub executable: Option<PathBuf>,
+    pub profile_home: Option<PathBuf>,
     pub startup_timeout: Duration,
     pub thread_start_timeout: Duration,
     pub turn_start_timeout: Duration,
@@ -50,6 +51,7 @@ impl Default for CodexRunEngineConfig {
     fn default() -> Self {
         Self {
             executable: None,
+            profile_home: None,
             startup_timeout: Duration::from_secs(120),
             thread_start_timeout: Duration::from_secs(120),
             turn_start_timeout: Duration::from_secs(60),
@@ -124,15 +126,7 @@ impl CodexRunEngine {
 
         if let Err(err) = shared.computer.ensure_ready().await {
             let message = err.to_string();
-            fail_run(
-                &shared,
-                &ctx,
-                "computer_not_ready",
-                &message,
-                "",
-                0,
-            )
-            .await?;
+            fail_run(&shared, &ctx, "computer_not_ready", &message, "", 0).await?;
             return Ok(());
         }
 
@@ -170,30 +164,15 @@ impl CodexRunEngine {
             Some(root) => {
                 if let Err(err) = std::fs::create_dir_all(root) {
                     mcp.shutdown().await;
-                    fail_run(
-                        &shared,
-                        &ctx,
-                        "codex_cwd_failed",
-                        &err.to_string(),
-                        "",
-                        0,
-                    )
-                    .await?;
+                    fail_run(&shared, &ctx, "codex_cwd_failed", &err.to_string(), "", 0).await?;
                     return Ok(());
                 }
                 match tempfile::tempdir_in(root) {
                     Ok(dir) => dir,
                     Err(err) => {
                         mcp.shutdown().await;
-                        fail_run(
-                            &shared,
-                            &ctx,
-                            "codex_cwd_failed",
-                            &err.to_string(),
-                            "",
-                            0,
-                        )
-                        .await?;
+                        fail_run(&shared, &ctx, "codex_cwd_failed", &err.to_string(), "", 0)
+                            .await?;
                         return Ok(());
                     }
                 }
@@ -202,20 +181,15 @@ impl CodexRunEngine {
                 Ok(dir) => dir,
                 Err(err) => {
                     mcp.shutdown().await;
-                    fail_run(
-                        &shared,
-                        &ctx,
-                        "codex_cwd_failed",
-                        &err.to_string(),
-                        "",
-                        0,
-                    )
-                    .await?;
+                    fail_run(&shared, &ctx, "codex_cwd_failed", &err.to_string(), "", 0).await?;
                     return Ok(());
                 }
             },
         };
-        let cwd = cwd_dir.path().canonicalize().unwrap_or_else(|_| cwd_dir.path().to_path_buf());
+        let cwd = cwd_dir
+            .path()
+            .canonicalize()
+            .unwrap_or_else(|_| cwd_dir.path().to_path_buf());
 
         let using_real_codex = injected_process.is_none();
         let client = if let Some(process) = injected_process {
@@ -233,9 +207,12 @@ impl CodexRunEngine {
                 .clone()
                 .or_else(|| which_codex_executable().ok())
                 .ok_or_else(|| RuntimeError::Model("codex executable not found".into()))?;
-            let launch = CodexProcessLaunch::from_path(executable)
+            let mut launch = CodexProcessLaunch::from_path(executable)
                 .subscription_child()
                 .with_env(MCP_BEARER_ENV_VAR, mcp.bearer_token());
+            if let Some(profile) = &self.config.profile_home {
+                launch = launch.with_profile(profile);
+            }
 
             match tokio::time::timeout(
                 self.config.startup_timeout,
@@ -257,7 +234,7 @@ impl CodexRunEngine {
                         "Codex app-server startup timed out",
                         "",
                         0,
-                )
+                    )
                     .await?;
                     return Ok(());
                 }
@@ -461,11 +438,9 @@ impl CodexRunEngine {
         let step_count = final_state.step_count;
         let turn_completed = final_state.last_turn_completed.clone();
         let assistant_result = match &run_outcome {
-            TurnOutcome::Completed => {
-                final_state
-                    .assistant
-                    .canonical_success(turn_completed.as_ref())
-            }
+            TurnOutcome::Completed => final_state
+                .assistant
+                .canonical_success(turn_completed.as_ref()),
             _ => final_state.assistant.partial_output(),
         };
         drop(final_state);
@@ -760,7 +735,11 @@ async fn handle_item_completed(
         return Ok(());
     }
     if item_type == "agentMessage" {
-        state.lock().await.assistant.on_agent_message_completed(item);
+        state
+            .lock()
+            .await
+            .assistant
+            .on_agent_message_completed(item);
         return Ok(());
     }
     if item_type != "mcpToolCall" {
@@ -854,9 +833,8 @@ async fn parse_turn_outcome(
     if active.host_tool_violation {
         return Ok(TurnOutcome::HostToolViolation);
     }
-    let (_, _, status) = parse_turn_completed(params).map_err(|e| {
-        RuntimeError::Model(format!("turn/completed parse error: {e}"))
-    })?;
+    let (_, _, status) = parse_turn_completed(params)
+        .map_err(|e| RuntimeError::Model(format!("turn/completed parse error: {e}")))?;
     match status.as_str() {
         "completed" => Ok(TurnOutcome::Completed),
         "failed" => {

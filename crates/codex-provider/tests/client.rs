@@ -27,3 +27,19 @@ async fn client_lists_mcp_tools_from_fake_server() {
     assert!(tools.contains(&"workspace_exec".to_string()));
     client.shutdown().await.expect("shutdown");
 }
+
+#[test]
+fn subscription_profile_launch_is_explicit_and_strips_api_key() {
+    let launch = codex_provider::CodexProcessLaunch::from_path("/usr/bin/codex".into())
+        .subscription_child()
+        .with_profile(std::path::Path::new("/private/elsewhere/profile"));
+    assert!(launch.strip_openai_api_key);
+    assert_eq!(
+        launch.env.get("CODEX_HOME").unwrap(),
+        "/private/elsewhere/profile"
+    );
+    assert!(launch
+        .config_overrides
+        .iter()
+        .any(|value| value == "cli_auth_credentials_store=\"file\""));
+}

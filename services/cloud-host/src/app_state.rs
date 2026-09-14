@@ -10,6 +10,15 @@ use crate::auth::JwtVerifier;
 use crate::config::Config;
 use crate::events::registry::RunRegistry;
 
+pub struct PendingCodexLogin {
+    pub owner_id: String,
+    pub login_id: String,
+    pub auth_url: String,
+    pub user_code: String,
+    pub expires_at: std::time::Instant,
+    pub client: Arc<CodexAppServerClient>,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: PgPool,
@@ -17,7 +26,7 @@ pub struct AppState {
     pub registry: Arc<RunRegistry>,
     pub run_semaphore: Arc<Semaphore>,
     pub jwt_verifier: Option<Arc<JwtVerifier>>,
-    pub codex_login_client: Arc<Mutex<Option<Arc<CodexAppServerClient>>>>,
+    pub codex_login_client: Arc<Mutex<Option<PendingCodexLogin>>>,
     pub approvals: ApprovalService,
 }
 
@@ -29,13 +38,13 @@ impl AppState {
             config.jwt_issuer.as_ref(),
             config.jwt_audience.as_ref(),
         ) {
-            (Some(jwks), Some(iss), Some(aud)) => Some(Arc::new(JwtVerifier::new(
-                crate::auth::JwtVerifierConfig {
+            (Some(jwks), Some(iss), Some(aud)) => {
+                Some(Arc::new(JwtVerifier::new(crate::auth::JwtVerifierConfig {
                     jwks_url: jwks.clone(),
                     issuer: iss.clone(),
                     audience: aud.clone(),
-                },
-            ))),
+                })))
+            }
             _ => None,
         };
         let approvals = ApprovalService {

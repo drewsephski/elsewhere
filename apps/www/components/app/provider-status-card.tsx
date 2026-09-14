@@ -4,154 +4,119 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ProviderStatus } from "@/lib/api-types";
 import { useCallback, useEffect, useState } from "react";
 
+type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
+
+async function readResponse<T>(response: Response): Promise<T> {
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error ?? "Could not connect to Elsewhere");
+  return body as T;
+}
+
 export function ProviderStatusCard() {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
+  const [challenge, setChallenge] = useState<LoginChallenge | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
     try {
-      const response = await cloudHostFetch("/v1/providers/status");
-      if (!response.ok) {
-        throw new Error(`Provider status failed (${response.status})`);
-      }
-      setStatus((await response.json()) as ProviderStatus);
+      const next = await readResponse<ProviderStatus>(await cloudHostFetch("/v1/providers/status"));
+      setStatus(next);
+      setError(null);
+      if (next.chatgptConnected) setChallenge(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load provider status");
+      setError(err instanceof Error ? err.message : "Connection check failed");
     }
   }, []);
 
+  useEffect(() => { void load(); }, [load]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!challenge) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const expires = Date.now() + 10 * 60_000;
+    async function check() {
+      try {
+        const result = await readResponse<{ connected: boolean }>(
+          await cloudHostFetch("/v1/providers/codex/login/status"),
+        );
+        if (stopped) return;
+        if (result.connected) { setChallenge(null); await load(); return; }
+        if (Date.now() >= expires) {
+          setChallenge(null);
+          setError("Sign-in expired. Connect ChatGPT again to get a new code.");
+          return;
+        }
+      } catch (err) {
+        if (!stopped) setError(err instanceof Error ? err.message : "Connection check failed");
+      }
+      if (!stopped) timer = setTimeout(() => void check(), 5000);
+    }
+    timer = setTimeout(() => void check(), 3000);
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [challenge, load]);
 
-  return (
-    <section className="surface-card">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Runner provider</h2>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="text-xs text-brand-dark/60 underline-offset-4 hover:underline"
-        >
-          Refresh
-        </button>
-      </div>
-      <p className="mt-2 text-xs text-brand-dark/60">
-        ChatGPT connection is runner-local (Codex app-server). Elsewhere does not store Codex OAuth
-        tokens.
-      </p>
-      {error ? (
-        <p className="mt-4 text-sm text-red-700" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {status ? (
-        <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-brand-dark/50">Codex installed</dt>
-            <dd>{status.codexInstalled ? "Yes" : "No"}</dd>
-          </div>
-          <div>
-            <dt className="text-brand-dark/50">ChatGPT connected</dt>
-            <dd>{status.chatgptConnected ? "Yes" : "No"}</dd>
-          </div>
-          <div>
-            <dt className="text-brand-dark/50">Plan</dt>
-            <dd>{status.chatgptPlanType ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-brand-dark/50">Host engine default</dt>
-            <dd>{status.preferredEngine}</dd>
-          </div>
-          <div>
-            <dt className="text-brand-dark/50">API fallback configured</dt>
-            <dd>{status.apiFallbackConfigured ? "Yes" : "No"}</dd>
-          </div>
-          <div>
-            <dt className="text-brand-dark/50">Default model</dt>
-            <dd>{status.defaultModel}</dd>
-          </div>
-        </dl>
-      ) : (
-        !error && <p className="mt-4 text-sm text-brand-dark/50">Loading…</p>
-      )}
-      {status?.codexLoginAllowed ? (
-        <CodexLoginPanel onUpdated={load} connected={status.chatgptConnected} />
-      ) : null}
-    </section>
-  );
-}
-
-function CodexLoginPanel({
-  connected,
-  onUpdated,
-}: {
-  connected: boolean;
-  onUpdated: () => void;
-}) {
-  const [loginId, setLoginId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleStartLogin() {
+  async function start() {
+    setBusy(true);
     setError(null);
     try {
-      const response = await cloudHostFetch("/v1/providers/codex/login/start", {
-        method: "POST",
-      });
-      if (!response.ok) {
-        throw new Error(`Login start failed (${response.status})`);
-      }
-      const body = (await response.json()) as { loginId: string; authUrl: string };
-      setLoginId(body.loginId);
-      window.open(body.authUrl, "_blank", "noopener,noreferrer");
+      setChallenge(await readResponse<LoginChallenge>(
+        await cloudHostFetch("/v1/providers/codex/login/start", { method: "POST" }),
+      ));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    }
+      setError(err instanceof Error ? err.message : "Could not start sign-in");
+    } finally { setBusy(false); }
   }
 
-  useEffect(() => {
-    if (!loginId) {
-      return;
-    }
-    const timer = setInterval(() => {
-      void cloudHostFetch("/v1/providers/codex/login/status")
-        .then(async (response) => {
-          if (!response.ok) {
-            return;
-          }
-          const body = (await response.json()) as { connected: boolean };
-          if (body.connected) {
-            setLoginId(null);
-            onUpdated();
-          }
-        })
-        .catch(() => undefined);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [loginId, onUpdated]);
+  async function cancel() {
+    if (!challenge) return;
+    setBusy(true);
+    try {
+      const response = await cloudHostFetch("/v1/providers/codex/login/cancel", {
+        method: "POST", body: JSON.stringify({ loginId: challenge.loginId }),
+      });
+      if (!response.ok && response.status !== 404) throw new Error("Could not cancel sign-in. Try again.");
+      setChallenge(null);
+      setError(null);
+    } catch (err) { setError(err instanceof Error ? err.message : "Cancellation failed"); }
+    finally { setBusy(false); }
+  }
 
   return (
-    <div className="mt-4 border-t border-brand-dark/10 pt-4">
-      <p className="text-xs text-brand-dark/60">
-        {connected
-          ? "Runner reports an active ChatGPT subscription session."
-          : "Connect ChatGPT on this runner (opens Codex OAuth in a new tab)."}
+    <section className="surface-card" aria-labelledby="chatgpt-heading">
+      <div className="flex items-center justify-between gap-4">
+        <h2 id="chatgpt-heading" className="text-lg font-medium">Your ChatGPT connection</h2>
+        <button type="button" onClick={() => void load()} className="text-sm underline underline-offset-4">Check connection</button>
+      </div>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Power your bots with your ChatGPT plan. Your connection stays on the computer running Elsewhere, so you can come back to your work later.
       </p>
-      {!connected ? (
-        <button
-          type="button"
-          onClick={() => void handleStartLogin()}
-          className="mt-3 rounded-lg border border-border bg-card px-3 py-1.5 text-sm shadow-sm transition-colors hover:bg-accent"
-        >
-          Connect ChatGPT on runner
+      <div className="mt-5 flex items-center gap-2 text-sm" role="status">
+        <span className={`size-2 rounded-full ${status?.chatgptConnected ? "bg-emerald-600" : "bg-amber-500"}`} />
+        {status ? (status.chatgptConnected ? `Connected${status.chatgptPlanType ? ` · ${status.chatgptPlanType}` : ""}` : "Connect ChatGPT to get started") : "Checking connection…"}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Uses your Codex allowance. Elsewhere never switches to paid API usage automatically.</p>
+      {!status?.chatgptConnected && status?.codexLoginAllowed && !challenge ? (
+        <button type="button" disabled={busy} onClick={() => void start()} className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50">
+          {busy ? "Preparing sign-in…" : "Connect ChatGPT"}
         </button>
       ) : null}
-      {error ? (
-        <p className="mt-2 text-sm text-red-700" role="alert">
-          {error}
-        </p>
+      {status && !status.chatgptConnected && !status.codexLoginAllowed ? (
+        <p className="mt-4 text-sm text-muted-foreground">ChatGPT sign-in needs to be enabled by the person hosting Elsewhere.</p>
       ) : null}
-    </div>
+      {challenge ? (
+        <div className="mt-5 rounded-xl border border-border bg-background p-4">
+          <p className="text-sm">Open ChatGPT sign-in and enter this one-time code.</p>
+          <p className="my-3 select-all font-mono text-2xl tracking-widest">{challenge.userCode}</p>
+          <div className="flex items-center gap-4">
+            <a href={challenge.authUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground">Continue to ChatGPT</a>
+            <button type="button" disabled={busy} onClick={() => void cancel()} className="text-sm underline">Cancel</button>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">Waiting for you to finish sign-in. You may need to enable device code sign-in in your ChatGPT security settings.</p>
+        </div>
+      ) : null}
+      {error ? <p className="mt-4 text-sm text-red-700" role="alert">{error}</p> : null}
+    </section>
   );
 }

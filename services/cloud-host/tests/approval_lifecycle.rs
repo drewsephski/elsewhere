@@ -112,6 +112,7 @@ fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
         bind_addr: "127.0.0.1:0".into(),
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
+        codex_profiles_dir: None,
         tool_approval_timeout_secs: approval_timeout_secs,
         enforce_tool_approvals_internal: false,
     };
@@ -358,9 +359,7 @@ async fn fast_immediate_approval_does_not_lose_wakeup() {
         }
     }
     set_test_run_overrides(None);
-    panic!(
-        "write never executed after immediate approve (approval_id={approval_id})"
-    );
+    panic!("write never executed after immediate approve (approval_id={approval_id})");
 }
 
 #[tokio::test]
@@ -523,13 +522,12 @@ async fn cancel_while_pending_executes_zero_writes() {
     .await;
 
     let approval_id = wait_pending_approval_id(&pool, &owner).await;
-    let run_id: (String,) = sqlx::query_as(
-        "SELECT run_id FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let run_id: (String,) =
+        sqlx::query_as("SELECT run_id FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let cancel = app
         .clone()
@@ -680,13 +678,12 @@ async fn approve_vs_deny_race_has_single_terminal_status() {
     });
 
     let _ = tokio::join!(t1, t2);
-    let status: (String,) = sqlx::query_as(
-        "SELECT status FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: (String,) =
+        sqlx::query_as("SELECT status FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(status.0 == "approved" || status.0 == "denied");
     assert!(computer.writes.load(Ordering::SeqCst) <= 1);
     set_test_run_overrides(None);
@@ -700,7 +697,9 @@ async fn late_approve_after_expiry_does_not_execute() {
     let owner = "user-a";
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, owner, "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, owner, "c")
+        .await
+        .unwrap();
     let bot = insert_bot(
         &pool,
         owner,
@@ -758,13 +757,12 @@ async fn late_approve_after_expiry_does_not_execute() {
         .await
         .unwrap();
     assert!(!ok);
-    let status: (String,) = sqlx::query_as(
-        "SELECT status FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: (String,) =
+        sqlx::query_as("SELECT status FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status.0, "expired");
 }
 
@@ -777,7 +775,9 @@ async fn host_restart_cancels_stale_pending() {
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
     let request_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c")
+        .await
+        .unwrap();
     let bot = insert_bot(
         &pool,
         &owner,
@@ -828,7 +828,11 @@ async fn host_restart_cancels_stale_pending() {
     .unwrap();
 
     let state = jwt_state(pool.clone(), 300);
-    let _ = state.approvals.cancel_all_pending_on_host_restart().await.unwrap();
+    let _ = state
+        .approvals
+        .cancel_all_pending_on_host_restart()
+        .await
+        .unwrap();
 
     let row: (String, Option<String>) = sqlx::query_as(
         "SELECT status, resolution_reason FROM tool_approval_requests WHERE id = $1",
@@ -882,13 +886,12 @@ async fn approval_sse_events_ordered_and_replay_once() {
     .await;
 
     let approval_id = wait_pending_approval_id(&pool, &owner).await;
-    let run_id: (String,) = sqlx::query_as(
-        "SELECT run_id FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let run_id: (String,) =
+        sqlx::query_as("SELECT run_id FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let _ = app
         .clone()
@@ -919,8 +922,14 @@ async fn approval_sse_events_ordered_and_replay_once() {
     .unwrap();
 
     let types = events.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>();
-    let req_pos = types.iter().position(|t| *t == "approval_requested").unwrap();
-    let res_pos = types.iter().position(|t| *t == "approval_resolved").unwrap();
+    let req_pos = types
+        .iter()
+        .position(|t| *t == "approval_requested")
+        .unwrap();
+    let res_pos = types
+        .iter()
+        .position(|t| *t == "approval_resolved")
+        .unwrap();
     assert!(req_pos < res_pos);
     assert_eq!(
         types.iter().filter(|t| **t == "approval_requested").count(),

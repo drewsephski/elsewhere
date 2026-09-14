@@ -72,6 +72,9 @@ async fn authenticate_jwt(state: &AppState, token: &str) -> Result<Principal, Ap
         .as_ref()
         .ok_or(ApiError::Internal("jwt auth not configured".into()))?;
     let sub = verifier.verify_bearer_token(token).await?;
+    if sub == LEGACY_LOCAL_OWNER || sub.trim().is_empty() {
+        return Err(ApiError::Unauthorized);
+    }
     Ok(Principal {
         subject: sub,
         auth_kind: AuthKind::Jwt,

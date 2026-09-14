@@ -118,6 +118,7 @@ fn test_config() -> Config {
         bind_addr: "127.0.0.1:0".into(),
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
+        codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
     }
@@ -285,12 +286,36 @@ async fn concurrency_cap_returns_429_when_saturated() {
     }));
 
     let suffix = Uuid::new_v4();
-    let r1 = post_run(&app, &format!("c1-{suffix}"), "bot_c1", "comp_c1", "one", None).await;
-    let r2 = post_run(&app, &format!("c2-{suffix}"), "bot_c2", "comp_c2", "two", None).await;
+    let r1 = post_run(
+        &app,
+        &format!("c1-{suffix}"),
+        "bot_c1",
+        "comp_c1",
+        "one",
+        None,
+    )
+    .await;
+    let r2 = post_run(
+        &app,
+        &format!("c2-{suffix}"),
+        "bot_c2",
+        "comp_c2",
+        "two",
+        None,
+    )
+    .await;
     assert_eq!(r1.status(), http::StatusCode::ACCEPTED);
     assert_eq!(r2.status(), http::StatusCode::ACCEPTED);
 
-    let r3 = post_run(&app, &format!("c3-{suffix}"), "bot_c3", "comp_c3", "three", None).await;
+    let r3 = post_run(
+        &app,
+        &format!("c3-{suffix}"),
+        "bot_c3",
+        "comp_c3",
+        "three",
+        None,
+    )
+    .await;
     assert_eq!(r3.status(), http::StatusCode::TOO_MANY_REQUESTS);
 
     set_test_run_overrides(None);
@@ -316,8 +341,12 @@ async fn concurrent_idempotency_creates_single_run() {
     assert_eq!(a.status(), http::StatusCode::ACCEPTED);
     assert_eq!(b.status(), http::StatusCode::ACCEPTED);
 
-    let body_a = axum::body::to_bytes(a.into_body(), usize::MAX).await.unwrap();
-    let body_b = axum::body::to_bytes(b.into_body(), usize::MAX).await.unwrap();
+    let body_a = axum::body::to_bytes(a.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body_b = axum::body::to_bytes(b.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json_a: serde_json::Value = serde_json::from_slice(&body_a).unwrap();
     let json_b: serde_json::Value = serde_json::from_slice(&body_b).unwrap();
     assert_eq!(json_a["runId"], json_b["runId"]);
@@ -334,12 +363,11 @@ async fn concurrent_idempotency_creates_single_run() {
     .unwrap();
     assert_eq!(messages.0, 2);
 
-    let runs: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM agent_runs WHERE request_id = $1")
-            .bind(&key)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let runs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM agent_runs WHERE request_id = $1")
+        .bind(&key)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(runs.0, 1);
 
     set_test_run_overrides(None);
@@ -478,19 +506,20 @@ async fn sse_reconnect_uses_monotonic_durable_ids() {
     let bot = format!("bot_sse_{}", Uuid::new_v4());
     let create = post_run(&app, &key, &bot, "comp_sse", "hello", None).await;
     assert_eq!(create.status(), http::StatusCode::ACCEPTED);
-    let body = axum::body::to_bytes(create.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(create.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let run_id = json["runId"].as_str().unwrap();
 
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    let events: Vec<(i64,)> = sqlx::query_as(
-        "SELECT id FROM run_events WHERE request_id = $1 ORDER BY id ASC",
-    )
-    .bind(&key)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let events: Vec<(i64,)> =
+        sqlx::query_as("SELECT id FROM run_events WHERE request_id = $1 ORDER BY id ASC")
+            .bind(&key)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     assert!(events.len() >= 2);
 
     let last_id = events[events.len() / 2].0;
