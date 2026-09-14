@@ -1,9 +1,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use agent_core::{
-    dispatch_tool_with_gate, AgentComputer, AllowAllApprovalGate, ToolError,
-};
+use agent_core::{dispatch_tool_with_gate, AgentComputer, ToolApprovalGate, ToolRunContext, ToolError};
 use rmcp::{
     ErrorData, ServerHandler,
     model::{
@@ -24,13 +22,22 @@ const MAX_TOOL_JSON_BYTES: usize = 512 * 1024;
 pub struct ComputerHandler {
     pub computer: Arc<dyn AgentComputer>,
     cancel: Arc<AtomicBool>,
+    gate: Arc<dyn ToolApprovalGate>,
+    run: ToolRunContext,
 }
 
 impl ComputerHandler {
-    pub fn new(computer: Arc<dyn AgentComputer>) -> Self {
+    pub fn new(
+        computer: Arc<dyn AgentComputer>,
+        gate: Arc<dyn ToolApprovalGate>,
+        run: ToolRunContext,
+        cancel: Arc<AtomicBool>,
+    ) -> Self {
         Self {
             computer,
-            cancel: Arc::new(AtomicBool::new(false)),
+            cancel,
+            gate,
+            run,
         }
     }
 }
@@ -136,7 +143,8 @@ impl ServerHandler for ComputerHandler {
             &request.name,
             &args_str,
             self.cancel.as_ref(),
-            &AllowAllApprovalGate,
+            self.gate.as_ref(),
+            &self.run,
         )
         .await;
 
@@ -176,6 +184,7 @@ fn map_tool_error(err: ToolError) -> ComputerMcpError {
     match err {
         ToolError::ComputerNotReady(e) => ComputerMcpError::from_computer(e),
         ToolError::MalformedArguments(d) => ComputerMcpError::MalformedArguments(d),
+        ToolError::Denied(d) => ComputerMcpError::MalformedArguments(d),
         ToolError::Cancelled => ComputerMcpError::Cancelled,
     }
 }

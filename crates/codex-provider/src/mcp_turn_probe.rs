@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use agent_core::{AgentComputer, FakeAgentComputer};
+use agent_core::{AgentComputer, AllowAllApprovalGate, FakeAgentComputer, ToolRunContext};
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 use serde_json::Value;
 
@@ -58,7 +58,19 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
     let version = codex_version(&executable)?;
 
     let computer = std::sync::Arc::new(FakeAgentComputer::new());
-    let mcp = ComputerMcpServer::start(computer.clone())
+    let run = ToolRunContext {
+        run_id: "probe".into(),
+        request_id: "req".into(),
+        owner_id: "local".into(),
+        bot_id: "bot".into(),
+        computer_id: "comp".into(),
+    };
+    let mcp = ComputerMcpServer::start(
+        computer.clone(),
+        std::sync::Arc::new(AllowAllApprovalGate),
+        run,
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    )
         .await
         .map_err(|e| CodexProviderError::RunEngine(e.to_string()))?;
 

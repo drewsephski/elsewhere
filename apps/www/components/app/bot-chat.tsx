@@ -3,6 +3,7 @@
 import { cloudHostEventStream, cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, CreateRunResponse, RunDetail } from "@/lib/api-types";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApprovalCard, type ApprovalRequestedPayload } from "@/components/app/approval-card";
 import { Button } from "@/components/ui/button";
 
 interface BotChatProps {
@@ -14,6 +15,14 @@ interface ActivityLine {
   text: string;
 }
 
+interface TimelineItem {
+  id: string;
+  kind: "activity" | "approval";
+  text?: string;
+  approval?: ApprovalRequestedPayload;
+  resolved?: boolean;
+}
+
 export function BotChat({ botId }: BotChatProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [message, setMessage] = useState("");
@@ -21,7 +30,7 @@ export function BotChat({ botId }: BotChatProps) {
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [assistantResult, setAssistantResult] = useState<string | null>(null);
-  const [activity, setActivity] = useState<ActivityLine[]>([]);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -62,7 +71,7 @@ export function BotChat({ botId }: BotChatProps) {
     }
     setError(null);
     setPending(true);
-    setActivity([]);
+    setTimeline([]);
     setAssistantResult(null);
     abortRef.current?.abort();
     lastEventIdRef.current = undefined;
@@ -98,10 +107,40 @@ export function BotChat({ botId }: BotChatProps) {
           if (event.id) {
             lastEventIdRef.current = event.id;
           }
-          setActivity((prev) => [
+          const id = event.id ?? `${Date.now()}-${event.event}`;
+          if (event.event === "approval_requested") {
+            try {
+              const payload = JSON.parse(event.data) as ApprovalRequestedPayload;
+              setTimeline((prev) => [
+                ...prev,
+                { id, kind: "approval", approval: payload },
+              ]);
+              return;
+            } catch {
+              // fall through to activity line
+            }
+          }
+          if (event.event === "approval_resolved") {
+            try {
+              const body = JSON.parse(event.data) as { approvalId?: string };
+              if (body.approvalId) {
+                setTimeline((prev) =>
+                  prev.map((item) =>
+                    item.kind === "approval" && item.approval?.approvalId === body.approvalId
+                      ? { ...item, resolved: true }
+                      : item,
+                  ),
+                );
+              }
+            } catch {
+              // ignore
+            }
+          }
+          setTimeline((prev) => [
             ...prev,
             {
-              id: event.id ?? `${Date.now()}-${prev.length}`,
+              id,
+              kind: "activity",
               text: `${event.event}: ${event.data.slice(0, 240)}`,
             },
           ]);
@@ -152,11 +191,15 @@ export function BotChat({ botId }: BotChatProps) {
           Run {runId.slice(0, 8)}… · {status ?? "unknown"}
         </p>
       ) : null}
-      {activity.length > 0 ? (
-        <div className="mt-4 max-h-48 overflow-y-auto border border-brand-dark/10 bg-brand-cream/40 p-3 font-mono text-[11px] leading-relaxed">
-          {activity.map((line) => (
-            <div key={line.id}>{line.text}</div>
-          ))}
+      {timeline.length > 0 ? (
+        <div className="mt-4 max-h-64 overflow-y-auto border border-brand-dark/10 bg-brand-cream/40 p-3 text-[11px] leading-relaxed">
+          {timeline.map((item) =>
+            item.kind === "approval" && item.approval ? (
+              <ApprovalCard key={item.id} payload={item.approval} />
+            ) : (
+              <div key={item.id} className="font-mono">{item.text}</div>
+            ),
+          )}
         </div>
       ) : null}
       {assistantResult ? (

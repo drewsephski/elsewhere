@@ -42,6 +42,16 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/runs/{id}", get(api::runs::get_run))
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
         .route("/v1/runs/{id}/events", get(api::runs::run_events_sse))
+        .route("/v1/approvals", get(crate::approval::api::list_approvals))
+        .route("/v1/approvals/{id}", get(crate::approval::api::get_approval))
+        .route(
+            "/v1/approvals/{id}/approve",
+            post(crate::approval::api::approve_approval),
+        )
+        .route(
+            "/v1/approvals/{id}/deny",
+            post(crate::approval::api::deny_approval),
+        )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_authenticated,

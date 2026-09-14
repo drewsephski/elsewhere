@@ -8,6 +8,7 @@ const links = [
   { href: "/app", label: "Overview" },
   { href: "/app/bots", label: "Bots" },
   { href: "/app/computers", label: "Computers" },
+  { href: "/app/approvals", label: "Approvals" },
 ] as const;
 
 export function AppShellNav() {

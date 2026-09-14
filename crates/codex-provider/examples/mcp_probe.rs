@@ -1,6 +1,7 @@
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use agent_core::FakeAgentComputer;
+use agent_core::{AllowAllApprovalGate, FakeAgentComputer, ToolRunContext};
 use codex_provider::{
     assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled, build_elsewhere_thread_start_params,
     ensure_codex_mcp_tool_exposure_supported, which_codex_executable,
@@ -21,7 +22,19 @@ async fn main() {
         ),
     );
 
-    let mcp = ComputerMcpServer::start(computer)
+    let run = ToolRunContext {
+        run_id: "probe".into(),
+        request_id: "req".into(),
+        owner_id: "local".into(),
+        bot_id: "bot".into(),
+        computer_id: "comp".into(),
+    };
+    let mcp = ComputerMcpServer::start(
+        computer,
+        Arc::new(AllowAllApprovalGate),
+        run,
+        Arc::new(AtomicBool::new(false)),
+    )
         .await
         .expect("start MCP server");
     println!("MCP URL: {}", mcp.url());

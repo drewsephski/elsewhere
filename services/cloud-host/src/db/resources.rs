@@ -209,13 +209,14 @@ pub async fn insert_computer_placeholder(
     display_name: &str,
 ) -> Result<SandboxRow, ApiError> {
     let id = Uuid::new_v4().to_string();
+    let provider_resource_id = sprite_computer::sprite_name_for_sandbox(&id);
     let now = Utc::now();
     sqlx::query_as(
         r#"
         INSERT INTO sandboxes (
             id, owner_id, display_name, provider, provider_resource_id, state,
             created_at, updated_at
-        ) VALUES ($1, $2, $3, 'fly_sprite', '', 'pending', $4, $4)
+        ) VALUES ($1, $2, $3, 'fly_sprite', $5, 'pending', $4, $4)
         RETURNING id, owner_id, display_name, provider, provider_resource_id, state,
                   created_at, updated_at, last_used_at
         "#,
@@ -224,6 +225,7 @@ pub async fn insert_computer_placeholder(
     .bind(owner_id)
     .bind(display_name)
     .bind(now)
+    .bind(&provider_resource_id)
     .fetch_one(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))

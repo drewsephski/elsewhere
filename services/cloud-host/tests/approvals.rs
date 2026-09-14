@@ -1,0 +1,370 @@
+//! Phase 3C.2 approval enforcement tests (requires Postgres).
+
+use agent_core::{
+    AgentComputer, ComputerError, ComputerInfo, CreateResponseResult, ExecResult, ModelError,
+    ResponsesModel, WorkspaceEntry,
+};
+use async_trait::async_trait;
+use cloud_host::auth::jwt_test::test_signing::{self, TEST_KID};
+use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
+use cloud_host::config::{AuthMode, Config};
+use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
+use cloud_host::{build_router, set_test_run_overrides, AppState, TestRunOverrides};
+use serde_json::json;
+use sqlx::PgPool;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use tower::ServiceExt;
+use uuid::Uuid;
+
+struct CountingComputer {
+    writes: AtomicUsize,
+    execs: AtomicUsize,
+}
+
+#[async_trait]
+impl AgentComputer for CountingComputer {
+    async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
+        Ok(ComputerInfo {
+            ready: true,
+            protocol_version: 1,
+            detail: None,
+        })
+    }
+
+    async fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
+        Ok(vec![])
+    }
+
+    async fn read_file(&self, _path: &str) -> Result<Vec<u8>, ComputerError> {
+        Ok(b"ok".to_vec())
+    }
+
+    async fn write_file(&self, _path: &str, _data: &[u8]) -> Result<(), ComputerError> {
+        self.writes.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
+        self.execs.fetch_add(1, Ordering::SeqCst);
+        Ok(ExecResult {
+            ok: true,
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 0,
+        })
+    }
+}
+
+struct ScriptedModel {
+    steps: Mutex<Vec<CreateResponseResult>>,
+}
+
+#[async_trait]
+impl ResponsesModel for ScriptedModel {
+    async fn create_response(
+        &self,
+        _request: agent_core::CreateResponseRequest,
+    ) -> Result<CreateResponseResult, ModelError> {
+        let mut steps = self.steps.lock().unwrap();
+        if steps.is_empty() {
+            return Ok(CreateResponseResult {
+                output: vec![json!({
+                    "type": "message",
+                    "content": [{"type":"output_text","text":"done"}]
+                })],
+                output_text: Some("done".into()),
+            });
+        }
+        Ok(steps.remove(0))
+    }
+}
+
+async fn try_test_pool() -> Option<PgPool> {
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
+    let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
+        .await
+        .ok()?
+        .ok()?;
+    sqlx::migrate!("./migrations").run(&pool).await.ok()?;
+    Some(pool)
+}
+
+fn jwt_state(pool: PgPool) -> AppState {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
+    let config = Config {
+        database_url,
+        openai_api_key: Some("test-key".into()),
+        sprite_token: "test-sprite".into(),
+        api_token: "test-token".into(),
+        auth_mode: AuthMode::Jwt,
+        jwt_issuer: Some("http://localhost:3000".into()),
+        jwt_audience: Some("elsewhere-cloud-host".into()),
+        jwt_jwks_url: Some("http://127.0.0.1:9/jwks".into()),
+        cors_web_origin: None,
+        allow_codex_login: false,
+        sprites_api_base: "http://127.0.0.1:9".into(),
+        max_concurrent_runs: 4,
+        run_timeout_secs: 120,
+        bind_addr: "127.0.0.1:0".into(),
+        run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
+        codex_executable: None,
+        tool_approval_timeout_secs: 300,
+        enforce_tool_approvals_internal: false,
+    };
+    let mut state = AppState::new(pool, config);
+    state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
+        TEST_KID,
+        test_signing::verifier(),
+        JwtVerifierConfig {
+            jwks_url: "http://127.0.0.1:9/jwks".into(),
+            issuer: "http://localhost:3000".into(),
+            audience: "elsewhere-cloud-host".into(),
+        },
+    ));
+    state
+}
+
+fn token(sub: &str) -> String {
+    test_signing::user_token(sub, "http://localhost:3000", "elsewhere-cloud-host", 300)
+}
+
+#[tokio::test]
+async fn read_tools_auto_allowed_without_approval_row() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let computer = Arc::new(CountingComputer {
+        writes: AtomicUsize::new(0),
+        execs: AtomicUsize::new(0),
+    });
+    let model = Arc::new(ScriptedModel {
+        steps: Mutex::new(vec![
+            CreateResponseResult {
+                output: vec![json!({
+                    "type": "function_call",
+                    "name": "workspace_read",
+                    "call_id": "c1",
+                    "arguments": "{\"path\":\"/workspace/a\"}"
+                })],
+                output_text: None,
+            },
+            CreateResponseResult {
+                output: vec![json!({
+                    "type": "message",
+                    "content": [{"type":"output_text","text":"ok"}]
+                })],
+                output_text: Some("ok".into()),
+            },
+        ]),
+    });
+    set_test_run_overrides(Some(TestRunOverrides {
+        computer: computer.clone(),
+        model,
+    }));
+
+    let owner = format!("user-a-read-{}", Uuid::new_v4());
+    let state = jwt_state(pool.clone());
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
+    let bot = insert_bot(
+        &pool,
+        &owner,
+        "b",
+        "i",
+        "gpt-5.6-luna",
+        Some(computer_row.id.as_str()),
+        "responses",
+    )
+    .await
+    .unwrap();
+
+    let app = build_router(state);
+    let body = json!({
+        "botId": bot.id,
+        "message": "read"
+    });
+    let resp = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", Uuid::new_v4().to_string())
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::ACCEPTED);
+
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    let pending: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
+    )
+    .bind(&owner)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(pending.0, 0);
+    set_test_run_overrides(None);
+}
+
+#[tokio::test]
+async fn write_waits_for_approval_before_computer_call() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let computer = Arc::new(CountingComputer {
+        writes: AtomicUsize::new(0),
+        execs: AtomicUsize::new(0),
+    });
+    let model = Arc::new(ScriptedModel {
+        steps: Mutex::new(vec![
+            CreateResponseResult {
+                output: vec![json!({
+                    "type": "function_call",
+                    "name": "workspace_write",
+                    "call_id": "c1",
+                    "arguments": "{\"path\":\"/workspace/a.txt\",\"content\":\"hi\"}"
+                })],
+                output_text: None,
+            },
+            CreateResponseResult {
+                output: vec![json!({
+                    "type": "message",
+                    "content": [{"type":"output_text","text":"done"}]
+                })],
+                output_text: Some("done".into()),
+            },
+        ]),
+    });
+    set_test_run_overrides(Some(TestRunOverrides {
+        computer: computer.clone(),
+        model,
+    }));
+
+    let owner = format!("user-a-write-{}", Uuid::new_v4());
+    let state = jwt_state(pool.clone());
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c").await.unwrap();
+    let bot = insert_bot(
+        &pool,
+        &owner,
+        "b",
+        "i",
+        "gpt-5.6-luna",
+        Some(computer_row.id.as_str()),
+        "responses",
+    )
+    .await
+    .unwrap();
+
+    let app = build_router(state);
+    let body = json!({ "botId": bot.id, "message": "write" });
+    let _ = app
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", Uuid::new_v4().to_string())
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    for _ in 0..40 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        if computer.writes.load(Ordering::SeqCst) == 0 {
+            let pending: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
+            )
+            .bind(&owner)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            if pending.0 >= 1 {
+                assert_eq!(computer.writes.load(Ordering::SeqCst), 0);
+                set_test_run_overrides(None);
+                return;
+            }
+        }
+    }
+    set_test_run_overrides(None);
+    panic!("expected pending approval without write");
+}
+
+#[tokio::test]
+async fn user_b_cannot_resolve_user_a_approval() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let approval_id = Uuid::new_v4().to_string();
+    let run_id = Uuid::new_v4().to_string();
+    let computer_row = insert_computer_placeholder(&pool, "user-a", "c").await.unwrap();
+    let bot = insert_bot(
+        &pool,
+        "user-a",
+        "b",
+        "i",
+        "gpt-5.6-luna",
+        Some(computer_row.id.as_str()),
+        "responses",
+    )
+    .await
+    .unwrap();
+    let conv_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at) VALUES ($1, 'user-a', $2, NOW(), NOW())",
+    )
+    .bind(&conv_id)
+    .bind(&bot.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO agent_runs (id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status, step_count, created_at, updated_at)
+        VALUES ($1, 'user-a', $2, $3, $4, $5, 'gpt-5.6-luna', 'running', 0, NOW(), NOW())
+        "#,
+    )
+    .bind(&run_id)
+    .bind(Uuid::new_v4().to_string())
+    .bind(&bot.id)
+    .bind(&conv_id)
+    .bind(&computer_row.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO tool_approval_requests (id, run_id, owner_id, tool_name, tool_kind, arguments_json, status)
+        VALUES ($1, $2, 'user-a', 'workspace_write', 'mutation', '{}', 'pending')
+        "#,
+    )
+    .bind(&approval_id)
+    .bind(&run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let app = build_router(jwt_state(pool));
+    let resp = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri(format!("/v1/approvals/{approval_id}/approve"))
+                .header("Authorization", format!("Bearer {}", token("user-b")))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::NOT_FOUND);
+}

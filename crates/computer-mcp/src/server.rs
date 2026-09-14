@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use axum::{
@@ -16,7 +17,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use agent_core::AgentComputer;
+use agent_core::{AgentComputer, ToolApprovalGate, ToolRunContext};
 
 use crate::error::ComputerMcpError;
 use crate::tools::ComputerHandler;
@@ -32,7 +33,12 @@ pub struct ComputerMcpServer {
 }
 
 impl ComputerMcpServer {
-    pub async fn start(computer: Arc<dyn AgentComputer>) -> Result<Self, ComputerMcpError> {
+    pub async fn start(
+        computer: Arc<dyn AgentComputer>,
+        gate: Arc<dyn ToolApprovalGate>,
+        run: ToolRunContext,
+        run_cancel: Arc<AtomicBool>,
+    ) -> Result<Self, ComputerMcpError> {
         let bearer_token = generate_bearer_token();
         let cancel = CancellationToken::new();
 
@@ -49,7 +55,7 @@ impl ComputerMcpServer {
         config.json_response = true;
         config.legacy_session_mode = false;
 
-        let handler = ComputerHandler::new(computer);
+        let handler = ComputerHandler::new(computer, gate, run, run_cancel);
         let service: StreamableHttpService<ComputerHandler, LocalSessionManager> =
             StreamableHttpService::new(move || Ok(handler.clone()), Default::default(), config);
 

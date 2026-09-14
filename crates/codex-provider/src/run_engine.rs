@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use tokio::sync::Mutex;
 
 use agent_core::{
-    AgentLoopContext, RunEngine, RunEngineKind, RuntimeError, SharedRunDeps, DEFAULT_MODEL,
+    AgentLoopContext, RunEngine, RunEngineKind, RuntimeError, SharedRunDeps, ToolRunContext,
+    DEFAULT_MODEL,
 };
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
@@ -135,7 +136,21 @@ impl CodexRunEngine {
             return Ok(());
         }
 
-        let mcp = match ComputerMcpServer::start(shared.computer.clone()).await {
+        let tool_run = ToolRunContext {
+            run_id: shared.run_id.clone(),
+            request_id: ctx.request_id.clone(),
+            owner_id: shared.owner_id.clone(),
+            bot_id: ctx.bot_id.clone(),
+            computer_id: shared.computer_id.clone(),
+        };
+        let mcp = match ComputerMcpServer::start(
+            shared.computer.clone(),
+            shared.approval_gate.clone(),
+            tool_run,
+            shared.cancel.clone(),
+        )
+        .await
+        {
             Ok(server) => server,
             Err(err) => {
                 fail_run(

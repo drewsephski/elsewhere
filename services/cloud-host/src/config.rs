@@ -30,6 +30,8 @@ pub struct Config {
     pub bind_addr: String,
     pub run_engine: RunEngineMode,
     pub codex_executable: Option<PathBuf>,
+    pub tool_approval_timeout_secs: u64,
+    pub enforce_tool_approvals_internal: bool,
 }
 
 impl Config {
@@ -77,6 +79,14 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(15 * 60);
+        let tool_approval_timeout_secs = env::var("ELSEWHERE_TOOL_APPROVAL_TIMEOUT_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5 * 60);
+        let enforce_tool_approvals_internal = env::var("ELSEWHERE_ENFORCE_TOOL_APPROVALS")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
         let codex_executable = env::var("CODEX_EXECUTABLE")
             .ok()
@@ -101,6 +111,8 @@ impl Config {
             bind_addr: env::var("ELSEWHERE_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into()),
             run_engine,
             codex_executable,
+            tool_approval_timeout_secs,
+            enforce_tool_approvals_internal,
         })
     }
 

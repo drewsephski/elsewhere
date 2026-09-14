@@ -154,12 +154,15 @@ async fn run_with_fake(mode: FakeServerMode, cancel: Arc<AtomicBool>) -> (Vec<St
         instructions: "test".into(),
     };
 
-    let deps = agent_core::SharedRunDeps {
+    let deps = agent_core::SharedRunDeps::allow_all_approval(
         computer,
-        store: store.clone(),
-        events: events.clone(),
+        store.clone(),
+        events.clone(),
         cancel,
-    };
+        "run-1".into(),
+        "owner".into(),
+        "comp-1".into(),
+    );
 
     let _ = engine
         .run_with_managed_process(

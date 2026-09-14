@@ -13,8 +13,9 @@ mod run_store;
 mod tools;
 
 pub use approval::{
-    operation_kind_for_tool, AllowAllApprovalGate, ApprovalDecision, ToolApprovalContext,
-    ToolApprovalGate, ToolOperationKind,
+    approval_action_summary, operation_kind_for_tool, sanitize_tool_arguments,
+    AllowAllApprovalGate, ApprovalDecision, ApprovalError, ToolApprovalContext, ToolRunContext,
+    ToolApprovalGate, ToolOperationKind, MAX_EXEC_COMMAND_CHARS,
 };
 pub use computer::{
     AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,

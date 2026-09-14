@@ -294,6 +294,10 @@ pub async fn cancel_run(
 
     if run.status == "running" {
         state.registry.cancel(&run_id);
+        let _ = state
+            .approvals
+            .cancel_pending_for_run(&run_id, "run_cancelled")
+            .await;
     }
 
     let updated = get_run(State(state), Extension(principal), Path(run_id)).await?;

@@ -1,4 +1,8 @@
-use serde_json::Value;
+use async_trait::async_trait;
+use serde_json::{json, Value};
+
+pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
+pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -7,10 +11,39 @@ pub enum ToolOperationKind {
 }
 
 #[derive(Debug, Clone)]
+pub struct ToolRunContext {
+    pub run_id: String,
+    pub request_id: String,
+    pub owner_id: String,
+    pub bot_id: String,
+    pub computer_id: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct ToolApprovalContext {
+    pub run_id: String,
+    pub request_id: String,
+    pub owner_id: String,
+    pub bot_id: String,
+    pub computer_id: String,
     pub tool_name: String,
     pub operation_kind: ToolOperationKind,
     pub arguments: Value,
+}
+
+impl ToolApprovalContext {
+    pub fn for_tool(run: &ToolRunContext, tool_name: &str, arguments: Value) -> Self {
+        Self {
+            run_id: run.run_id.clone(),
+            request_id: run.request_id.clone(),
+            owner_id: run.owner_id.clone(),
+            bot_id: run.bot_id.clone(),
+            computer_id: run.computer_id.clone(),
+            tool_name: tool_name.to_string(),
+            operation_kind: operation_kind_for_tool(tool_name),
+            arguments: sanitize_tool_arguments(tool_name, &arguments),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,15 +52,31 @@ pub enum ApprovalDecision {
     Deny { reason: String },
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApprovalError {
+    Cancelled,
+    Denied { reason: String },
+    TimedOut,
+    Internal(String),
+}
+
+#[async_trait]
 pub trait ToolApprovalGate: Send + Sync {
-    fn authorize(&self, context: &ToolApprovalContext) -> ApprovalDecision;
+    async fn authorize(
+        &self,
+        context: &ToolApprovalContext,
+    ) -> Result<ApprovalDecision, ApprovalError>;
 }
 
 pub struct AllowAllApprovalGate;
 
+#[async_trait]
 impl ToolApprovalGate for AllowAllApprovalGate {
-    fn authorize(&self, _context: &ToolApprovalContext) -> ApprovalDecision {
-        ApprovalDecision::Allow
+    async fn authorize(
+        &self,
+        _context: &ToolApprovalContext,
+    ) -> Result<ApprovalDecision, ApprovalError> {
+        Ok(ApprovalDecision::Allow)
     }
 }
 
@@ -36,6 +85,61 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
         _ => ToolOperationKind::Mutation,
+    }
+}
+
+/// Persist-safe tool argument snapshot for approval audit rows.
+pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
+    match tool_name {
+        "workspace_write" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            let preview = if content.is_empty() {
+                None
+            } else if content.len() > MAX_WRITE_CONTENT_PREVIEW_CHARS {
+                Some(content[..MAX_WRITE_CONTENT_PREVIEW_CHARS].to_string())
+            } else {
+                Some(content.to_string())
+            };
+            json!({
+                "path": path,
+                "contentLength": content.len(),
+                "contentPreview": preview
+            })
+        }
+        "workspace_exec" => {
+            let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+            let command = if command.len() > MAX_EXEC_COMMAND_CHARS {
+                command[..MAX_EXEC_COMMAND_CHARS].to_string()
+            } else {
+                command.to_string()
+            };
+            json!({ "command": command })
+        }
+        "workspace_list" | "workspace_read" => json!({
+            "path": args.get("path").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        _ => json!({}),
+    }
+}
+
+pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
+    match tool_name {
+        "workspace_write" => {
+            let path = sanitized
+                .get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("/workspace");
+            format!("Write {path}")
+        }
+        "workspace_exec" => {
+            let command = sanitized
+                .get("command")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            format!("Run: {command}")
+        }
+        other => format!("Approve {other}"),
     }
 }
 
@@ -62,16 +166,41 @@ mod tests {
             operation_kind_for_tool("workspace_write"),
             ToolOperationKind::Mutation
         );
+        assert_eq!(
+            operation_kind_for_tool("unknown_tool"),
+            ToolOperationKind::Mutation
+        );
+    }
+
+    #[tokio::test]
+    async fn allow_all_gate_permits() {
+        let gate = AllowAllApprovalGate;
+        let decision = gate
+            .authorize(&ToolApprovalContext {
+                run_id: "run".into(),
+                request_id: "req".into(),
+                owner_id: "owner".into(),
+                bot_id: "bot".into(),
+                computer_id: "comp".into(),
+                tool_name: "workspace_exec".into(),
+                operation_kind: ToolOperationKind::Mutation,
+                arguments: json!({"command":"echo hi"}),
+            })
+            .await
+            .expect("authorize");
+        assert_eq!(decision, ApprovalDecision::Allow);
     }
 
     #[test]
-    fn allow_all_gate_permits() {
-        let gate = AllowAllApprovalGate;
-        let decision = gate.authorize(&ToolApprovalContext {
-            tool_name: "workspace_exec".into(),
-            operation_kind: ToolOperationKind::Mutation,
-            arguments: json!({"command":"echo hi"}),
-        });
-        assert_eq!(decision, ApprovalDecision::Allow);
+    fn sanitize_write_strips_content() {
+        let sanitized = sanitize_tool_arguments(
+            "workspace_write",
+            &json!({"path":"/workspace/a.txt","content":"hello"}),
+        );
+        assert_eq!(sanitized.get("contentLength"), Some(&json!(5)));
+        assert_eq!(
+            sanitized.get("contentPreview"),
+            Some(&json!("hello"))
+        );
     }
 }

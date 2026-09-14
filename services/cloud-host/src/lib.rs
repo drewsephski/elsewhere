@@ -1,6 +1,7 @@
 pub mod api;
 pub mod app;
 pub mod app_state;
+pub mod approval;
 pub mod auth;
 pub mod config;
 pub mod db;

@@ -1,9 +1,11 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use codex_provider::CodexAppServerClient;
 use sqlx::PgPool;
 use tokio::sync::{Mutex, Semaphore};
 
+use crate::approval::ApprovalService;
 use crate::auth::JwtVerifier;
 use crate::config::Config;
 use crate::events::registry::RunRegistry;
@@ -16,6 +18,7 @@ pub struct AppState {
     pub run_semaphore: Arc<Semaphore>,
     pub jwt_verifier: Option<Arc<JwtVerifier>>,
     pub codex_login_client: Arc<Mutex<Option<Arc<CodexAppServerClient>>>>,
+    pub approvals: ApprovalService,
 }
 
 impl AppState {
@@ -35,6 +38,11 @@ impl AppState {
             ))),
             _ => None,
         };
+        let approvals = ApprovalService {
+            pool: pool.clone(),
+            registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
+            timeout: Duration::from_secs(config.tool_approval_timeout_secs),
+        };
         Self {
             pool,
             config: Arc::new(config),
@@ -42,6 +50,7 @@ impl AppState {
             run_semaphore: Arc::new(Semaphore::new(permits)),
             jwt_verifier,
             codex_login_client: Arc::new(Mutex::new(None)),
+            approvals,
         }
     }
 }

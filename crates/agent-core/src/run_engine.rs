@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use crate::approval::{AllowAllApprovalGate, ToolApprovalGate};
 use crate::computer::AgentComputer;
 use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
@@ -41,6 +42,33 @@ pub struct SharedRunDeps {
     pub store: Arc<dyn RunStore>,
     pub events: Arc<dyn EventSink>,
     pub cancel: Arc<AtomicBool>,
+    pub approval_gate: Arc<dyn ToolApprovalGate>,
+    pub run_id: String,
+    pub owner_id: String,
+    pub computer_id: String,
+}
+
+impl SharedRunDeps {
+    pub fn allow_all_approval(
+        computer: Arc<dyn AgentComputer>,
+        store: Arc<dyn RunStore>,
+        events: Arc<dyn EventSink>,
+        cancel: Arc<AtomicBool>,
+        run_id: String,
+        owner_id: String,
+        computer_id: String,
+    ) -> Self {
+        Self {
+            computer,
+            store,
+            events,
+            cancel,
+            approval_gate: Arc::new(AllowAllApprovalGate),
+            run_id,
+            owner_id,
+            computer_id,
+        }
+    }
 }
 
 /// OpenAI API key path — existing Luna / Responses tool loop.
@@ -82,5 +110,9 @@ pub fn responses_loop_deps(
         events: shared.events,
         model,
         cancel: shared.cancel,
+        approval_gate: shared.approval_gate.clone(),
+        run_id: shared.run_id.clone(),
+        owner_id: shared.owner_id.clone(),
+        computer_id: shared.computer_id.clone(),
     }
 }

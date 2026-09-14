@@ -10,7 +10,8 @@ use crate::model::{
     model_supports_responses_tools, CreateResponseRequest, ModelError, ResponsesModel,
 };
 use crate::run_store::{RunStore, StructuredMessageInput};
-use crate::tools::{dispatch_tool, openai_tool_definitions, ToolError, MAX_AGENT_TOOL_STEPS};
+use crate::approval::ToolRunContext;
+use crate::tools::{dispatch_tool_with_gate, openai_tool_definitions, ToolError, MAX_AGENT_TOOL_STEPS};
 
 pub struct AgentLoopContext {
     pub request_id: String,
@@ -27,6 +28,10 @@ pub struct AgentLoopDeps {
     pub events: Arc<dyn EventSink>,
     pub model: Arc<dyn ResponsesModel>,
     pub cancel: Arc<AtomicBool>,
+    pub approval_gate: Arc<dyn crate::approval::ToolApprovalGate>,
+    pub run_id: String,
+    pub owner_id: String,
+    pub computer_id: String,
 }
 
 pub async fn run_agent_loop(
@@ -152,11 +157,20 @@ pub async fn run_agent_loop(
                 message: Some(call_message),
             })?;
 
-            let tool_result = match dispatch_tool(
+            let tool_run = ToolRunContext {
+                run_id: deps.run_id.clone(),
+                request_id: ctx.request_id.clone(),
+                owner_id: deps.owner_id.clone(),
+                bot_id: ctx.bot_id.clone(),
+                computer_id: deps.computer_id.clone(),
+            };
+            let tool_result = match dispatch_tool_with_gate(
                 deps.computer.as_ref(),
                 &name,
                 &arguments,
                 &deps.cancel,
+                deps.approval_gate.as_ref(),
+                &tool_run,
             )
             .await
             {
@@ -164,6 +178,33 @@ pub async fn run_agent_loop(
                 Err(err) if err == ToolError::Cancelled => {
                     finalize_cancelled(&deps, &ctx).await?;
                     return Ok(());
+                }
+                Err(err) if matches!(err, ToolError::Denied(_)) => {
+                    let result_body = json!({
+                        "tool": name,
+                        "callId": call_id,
+                        "ok": false,
+                        "errorCode": err.code(),
+                        "error": err.message()
+                    });
+                    let _ = persist_event(
+                        &deps,
+                        &ctx,
+                        "tool_result",
+                        &result_body.to_string(),
+                        MessageStatus::Error,
+                        Some("tool_result"),
+                        &result_body,
+                    )
+                    .await;
+                    let output_string = json!({
+                        "ok": false,
+                        "errorCode": err.code(),
+                        "error": err.message()
+                    })
+                    .to_string();
+                    input.push(function_call_output_item(&call_id, &output_string));
+                    continue;
                 }
                 Err(err) if is_computer_fatal(&err) => {
                     let result_body = json!({
@@ -638,6 +679,10 @@ mod tests {
             events: events.clone(),
             model: Arc::new(model),
             cancel: Arc::new(AtomicBool::new(false)),
+            approval_gate: Arc::new(crate::approval::AllowAllApprovalGate),
+            run_id: "run-1".into(),
+            owner_id: "owner".into(),
+            computer_id: "comp".into(),
         };
 
         let ctx = AgentLoopContext {

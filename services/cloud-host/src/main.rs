@@ -23,7 +23,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tracing::warn!(count = interrupted, "marked orphan runs interrupted after host restart");
     }
 
-    let state = AppState::new(pool, config.clone());
+    let state = AppState::new(pool.clone(), config.clone());
+    let cancelled_approvals = state.approvals.cancel_all_pending_on_host_restart().await?;
+    if cancelled_approvals > 0 {
+        tracing::warn!(
+            count = cancelled_approvals,
+            "cancelled stale tool approvals after host restart"
+        );
+    }
     let app = build_router(state);
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;

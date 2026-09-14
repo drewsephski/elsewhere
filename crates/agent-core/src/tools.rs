@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use crate::approval::{
-    operation_kind_for_tool, AllowAllApprovalGate, ApprovalDecision, ToolApprovalContext,
-    ToolApprovalGate,
+    AllowAllApprovalGate, ApprovalDecision, ApprovalError, ToolApprovalContext, ToolApprovalGate,
+    ToolRunContext, MAX_EXEC_COMMAND_CHARS,
 };
 use crate::computer::{AgentComputer, ComputerError};
 
@@ -14,6 +14,7 @@ pub const MAX_AGENT_TOOL_STEPS: usize = 25;
 pub enum ToolError {
     ComputerNotReady(ComputerError),
     MalformedArguments(String),
+    Denied(String),
     Cancelled,
 }
 
@@ -22,6 +23,7 @@ impl ToolError {
         match self {
             ToolError::ComputerNotReady(err) => err.code(),
             ToolError::MalformedArguments(_) => "malformed_tool_arguments",
+            ToolError::Denied(_) => "tool_denied",
             ToolError::Cancelled => "cancelled",
         }
     }
@@ -30,6 +32,7 @@ impl ToolError {
         match self {
             ToolError::ComputerNotReady(err) => err.to_string(),
             ToolError::MalformedArguments(d) => d.clone(),
+            ToolError::Denied(d) => d.clone(),
             ToolError::Cancelled => "Agent run cancelled".into(),
         }
     }
@@ -109,6 +112,7 @@ pub async fn dispatch_tool(
     name: &str,
     arguments: &str,
     cancel: &AtomicBool,
+    run: &ToolRunContext,
 ) -> Result<Value, ToolError> {
     dispatch_tool_with_gate(
         computer,
@@ -116,6 +120,7 @@ pub async fn dispatch_tool(
         arguments,
         cancel,
         &AllowAllApprovalGate,
+        run,
     )
     .await
 }
@@ -126,6 +131,7 @@ pub async fn dispatch_tool_with_gate(
     arguments: &str,
     cancel: &AtomicBool,
     gate: &dyn ToolApprovalGate,
+    run: &ToolRunContext,
 ) -> Result<Value, ToolError> {
     if cancel.load(Ordering::Relaxed) {
         return Err(ToolError::Cancelled);
@@ -135,13 +141,12 @@ pub async fn dispatch_tool_with_gate(
         ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
     })?;
 
-    let approval = gate.authorize(&ToolApprovalContext {
-        tool_name: name.to_string(),
-        operation_kind: operation_kind_for_tool(name),
-        arguments: args.clone(),
-    });
+    validate_tool_argument_limits(name, &args)?;
+
+    let approval_ctx = ToolApprovalContext::for_tool(run, name, args.clone());
+    let approval = gate.authorize(&approval_ctx).await.map_err(map_approval_error)?;
     if let ApprovalDecision::Deny { reason } = approval {
-        return Err(ToolError::MalformedArguments(reason));
+        return Err(ToolError::Denied(reason));
     }
 
     computer
@@ -225,6 +230,30 @@ async fn workspace_exec(computer: &dyn AgentComputer, args: &Value) -> Result<Va
     }))
 }
 
+fn map_approval_error(err: ApprovalError) -> ToolError {
+    match err {
+        ApprovalError::Cancelled => ToolError::Cancelled,
+        ApprovalError::Denied { reason } => ToolError::Denied(reason),
+        ApprovalError::TimedOut => ToolError::Denied("approval timed out".into()),
+        ApprovalError::Internal(detail) => ToolError::MalformedArguments(detail),
+    }
+}
+
+fn validate_tool_argument_limits(name: &str, args: &Value) -> Result<(), ToolError> {
+    if name == "workspace_exec" {
+        let command = args
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if command.len() > MAX_EXEC_COMMAND_CHARS {
+            return Err(ToolError::MalformedArguments(format!(
+                "command exceeds {MAX_EXEC_COMMAND_CHARS} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
     args.get(key)
         .and_then(|v| v.as_str())
@@ -294,6 +323,16 @@ mod tests {
         }
     }
 
+    fn test_run() -> ToolRunContext {
+        ToolRunContext {
+            run_id: "run-1".into(),
+            request_id: "req-1".into(),
+            owner_id: "owner".into(),
+            bot_id: "bot".into(),
+            computer_id: "comp".into(),
+        }
+    }
+
     #[tokio::test]
     async fn dispatch_write_does_not_require_vm() {
         let computer = FakeComputer::new();
@@ -303,6 +342,7 @@ mod tests {
             "workspace_write",
             r#"{"path":"/workspace/a.txt","content":"hi"}"#,
             &cancel,
+            &test_run(),
         )
         .await
         .expect("write");
@@ -322,6 +362,7 @@ mod tests {
             "workspace_read",
             r#"{"path":"/workspace/x"}"#,
             &cancel,
+            &test_run(),
         )
         .await
         .unwrap_err();

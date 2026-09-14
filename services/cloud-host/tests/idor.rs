@@ -38,6 +38,8 @@ fn jwt_state(pool: PgPool) -> AppState {
         bind_addr: "127.0.0.1:0".into(),
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
+        tool_approval_timeout_secs: 300,
+        enforce_tool_approvals_internal: false,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(

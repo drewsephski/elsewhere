@@ -3,9 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    AgentComputer, AgentLoopContext, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore,
-    SharedRunDeps,
+    AgentComputer, AgentLoopContext, AllowAllApprovalGate, ResponsesModel, ResponsesRunEngine,
+    RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
 };
+
+use crate::approval::RunScopedApprovalGate;
+use crate::auth::LEGACY_LOCAL_OWNER;
 use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
@@ -53,6 +56,18 @@ pub fn spawn_agent_run(
         let pool = state.pool.clone();
         let store: Arc<dyn RunStore> = Arc::new(PostgresRunStore::new(pool.clone()));
 
+        let owner_id: String = sqlx::query_as("SELECT owner_id FROM agent_runs WHERE id = $1")
+            .bind(&input.records.run_id)
+            .fetch_optional(&pool)
+            .await
+            .ok()
+            .flatten()
+            .map(|(id,): (String,)| id)
+            .unwrap_or_else(|| LEGACY_LOCAL_OWNER.to_string());
+
+        let enforce_approvals = owner_id != LEGACY_LOCAL_OWNER
+            || state.config.enforce_tool_approvals_internal;
+
         let finalizer = HostFinalizer::new(
             store.clone(),
             events.clone(),
@@ -80,7 +95,17 @@ pub fn spawn_agent_run(
 
         let result = timeout(
             Duration::from_secs(timeout_secs),
-            execute_run(config, pool.clone(), store.clone(), input, cancel.clone(), events.clone()),
+            execute_run(
+                config,
+                pool.clone(),
+                store.clone(),
+                state.approvals.clone(),
+                input,
+                cancel.clone(),
+                events.clone(),
+                owner_id,
+                enforce_approvals,
+            ),
         )
         .await;
 
@@ -113,9 +138,12 @@ async fn execute_run(
     config: Arc<Config>,
     pool: sqlx::PgPool,
     store: Arc<dyn RunStore>,
+    approvals: crate::approval::ApprovalService,
     input: RunExecutionInput,
     cancel: Arc<AtomicBool>,
     events: Arc<CloudEventSink>,
+    owner_id: String,
+    enforce_approvals: bool,
 ) -> Result<(), String> {
     let computer = build_computer(&config, &pool, &input).await?;
 
@@ -150,11 +178,26 @@ async fn execute_run(
         Err(err) => return Err(resolve_error_to_host(err)),
     };
 
+    let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
+        Arc::new(RunScopedApprovalGate::new(
+            approvals,
+            events.clone(),
+            store.clone(),
+            cancel.clone(),
+        ))
+    } else {
+        Arc::new(AllowAllApprovalGate)
+    };
+
     let shared = SharedRunDeps {
         computer,
         store,
         events: events as Arc<dyn agent_core::EventSink>,
         cancel,
+        approval_gate,
+        run_id: input.records.run_id.clone(),
+        owner_id,
+        computer_id: input.records.computer_id.clone(),
     };
 
     match selected {
