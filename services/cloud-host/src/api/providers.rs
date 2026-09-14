@@ -22,6 +22,10 @@ const PROVIDER_STATUS_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 pub struct ProviderStatusResponse {
     pub codex_installed: bool,
     pub chatgpt_connected: bool,
+    /// connected | not_connected | unavailable
+    pub chatgpt_connection_state: &'static str,
+    /// Stable non-secret reason code for UI/diagnostics.
+    pub connection_detail: Option<&'static str>,
     pub chatgpt_plan_type: Option<String>,
     pub preferred_engine: String,
     pub api_fallback_configured: bool,
@@ -29,17 +33,28 @@ pub struct ProviderStatusResponse {
     pub codex_login_allowed: bool,
 }
 
+#[derive(Debug)]
+struct AvailabilityView {
+    codex_installed: bool,
+    connected: bool,
+    plan_type: Option<String>,
+    connection_state: &'static str,
+    detail: Option<&'static str>,
+}
+
 pub async fn status(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<ProviderStatusResponse>, ApiError> {
     let availability = owner_availability_for_status(&state, principal.owner_id()).await?;
-    let (codex_installed, chatgpt_connected, plan_type) = map_availability(availability);
+    let view = map_availability(availability);
 
     Ok(Json(ProviderStatusResponse {
-        codex_installed,
-        chatgpt_connected,
-        chatgpt_plan_type: plan_type,
+        codex_installed: view.codex_installed,
+        chatgpt_connected: view.connected,
+        chatgpt_connection_state: view.connection_state,
+        connection_detail: view.detail,
+        chatgpt_plan_type: view.plan_type,
         preferred_engine: format!("{:?}", state.config.run_engine).to_ascii_lowercase(),
         api_fallback_configured: state.config.openai_api_key.is_some(),
         default_model: agent_core::DEFAULT_MODEL.to_string(),
@@ -49,13 +64,43 @@ pub async fn status(
     }))
 }
 
-fn map_availability(availability: CodexSubscriptionAvailability) -> (bool, bool, Option<String>) {
+fn map_availability(availability: CodexSubscriptionAvailability) -> AvailabilityView {
     match availability {
-        CodexSubscriptionAvailability::Available { plan_type } => (true, true, plan_type),
-        CodexSubscriptionAvailability::NotInstalled => (false, false, None),
-        CodexSubscriptionAvailability::NotAuthenticated => (true, false, None),
-        CodexSubscriptionAvailability::NotChatGpt => (true, false, None),
-        CodexSubscriptionAvailability::Unavailable(_) => (true, false, None),
+        CodexSubscriptionAvailability::Available { plan_type } => AvailabilityView {
+            codex_installed: true,
+            connected: true,
+            plan_type,
+            connection_state: "connected",
+            detail: None,
+        },
+        CodexSubscriptionAvailability::NotInstalled => AvailabilityView {
+            codex_installed: false,
+            connected: false,
+            plan_type: None,
+            connection_state: "unavailable",
+            detail: Some("codex_not_installed"),
+        },
+        CodexSubscriptionAvailability::NotAuthenticated => AvailabilityView {
+            codex_installed: true,
+            connected: false,
+            plan_type: None,
+            connection_state: "not_connected",
+            detail: Some("not_authenticated"),
+        },
+        CodexSubscriptionAvailability::NotChatGpt => AvailabilityView {
+            codex_installed: true,
+            connected: false,
+            plan_type: None,
+            connection_state: "not_connected",
+            detail: Some("not_chatgpt"),
+        },
+        CodexSubscriptionAvailability::Unavailable(_) => AvailabilityView {
+            codex_installed: true,
+            connected: false,
+            plan_type: None,
+            connection_state: "unavailable",
+            detail: Some("codex_probe_unavailable"),
+        },
     }
 }
 
@@ -162,8 +207,8 @@ pub async fn codex_login_status(
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<CodexLoginStatusResponse>, ApiError> {
     let availability = owner_availability(&state, principal.owner_id()).await?;
-    let (_, connected, plan) = map_availability(availability);
-    if connected {
+    let view = map_availability(availability);
+    if view.connected {
         let mut pending = state.codex_login_client.lock().await;
         if pending
             .as_ref()
@@ -173,8 +218,8 @@ pub async fn codex_login_status(
         }
     }
     Ok(Json(CodexLoginStatusResponse {
-        connected,
-        plan_type: plan,
+        connected: view.connected,
+        plan_type: view.plan_type,
     }))
 }
 
@@ -255,3 +300,23 @@ async fn owner_availability(
     .await)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unavailable_probe_is_not_reported_as_disconnected() {
+        let view = map_availability(CodexSubscriptionAvailability::Unavailable("timeout".into()));
+        assert!(!view.connected);
+        assert_eq!(view.connection_state, "unavailable");
+        assert_eq!(view.detail, Some("codex_probe_unavailable"));
+    }
+
+    #[test]
+    fn unauthenticated_profile_is_explicitly_not_connected() {
+        let view = map_availability(CodexSubscriptionAvailability::NotAuthenticated);
+        assert!(!view.connected);
+        assert_eq!(view.connection_state, "not_connected");
+        assert_eq!(view.detail, Some("not_authenticated"));
+    }
+}

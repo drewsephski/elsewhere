@@ -1,6 +1,8 @@
 export interface ProviderStatus {
   codexInstalled: boolean;
   chatgptConnected: boolean;
+  chatgptConnectionState: "connected" | "not_connected" | "unavailable";
+  connectionDetail: string | null;
   chatgptPlanType: string | null;
   preferredEngine: string;
   apiFallbackConfigured: boolean;
