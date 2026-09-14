@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prove Elsewhere can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
+Prove GPT Bot can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
 
 ## Approaches considered
 
@@ -33,7 +33,7 @@ gptbot-guest-agent (Rust, guest-agent/)
 
 Control protocol (host Rust ↔ Swift): newline-delimited JSON on `vm/runtime/vmm.sock`.
 
-Guest protocol: newline-delimited JSON RPC (`ping`, `exec`, `read_file`, `write_file`), version field `protocolVersion: 1`.
+Guest protocol: newline-delimited JSON RPC (`ping`, `exec`, `read_file`, `write_file`, `list_dir`), version field `protocolVersion: 1`.
 
 ## Host architecture
 
@@ -42,9 +42,10 @@ Guest protocol: newline-delimited JSON RPC (`ping`, `exec`, `read_file`, `write_
 
 ## Guest image strategy
 
-- **Kernel / initrd**: Alpine `latest-stable` `netboot/vmlinuz-virt` + `initramfs-virt` (downloaded on provision).
-- **Root disk**: 4 GiB `ext4` on `vm/disks/root.raw`, built once by `scripts/build-guest-disk.sh` (Docker + `rust:bookworm` cross-builds `gptbot-guest-agent` for `*-unknown-linux-musl`).
-- **Agent**: OpenRC service `gptbot-guest-agent` on boot, listens on vsock port **1024**.
+- **Kernel**: Pinned **Kata Containers** `vmlinux-6.12.36-160` from `kata-static-3.19.1-*` (ARM64 Linux **Image** magic — required by `VZLinuxBootLoader`; Alpine `vmlinuz-virt` PE stubs are rejected).
+- **Root disk**: 4 GiB `ext4` on `vm/disks/root.raw`, built by `scripts/build-guest-disk.sh` (Docker + musl `gptbot-guest-agent`).
+- **PID1**: Minimal `/sbin/init` script (`scripts/gptbot-guest-init.sh`) that `exec`s `gptbot-guest-agent`; OpenRC remains on disk as fallback with `gptbot-guest-agent` in **sysinit**.
+- **Cmdline** (in `vm.json`): `console=hvc0 root=/dev/vda rw rootfstype=ext4 rootwait init=/sbin/gptbot-init`
 
 ## VM storage layout
 
@@ -54,64 +55,80 @@ Under app data (`~/Library/Application Support/com.drewsepeczi.gptbot/`):
 vm/
   config/vm.json
   disks/root.raw
-  artifacts/vmlinuz-virt, initramfs-virt
+  artifacts/linux-image
   runtime/vmm.sock
+  logs/console.log
   logs/vmm.log
 ```
 
 ## Entitlements
 
-`src-tauri/entitlements.plist`:
+`src-tauri/entitlements.plist`: `com.apple.security.virtualization` = true
 
-- `com.apple.security.virtualization` = true
-
-Bundled via `tauri.conf.json` → `bundle.macOS.entitlements`.
-
-**Local dev:** unsigned `cargo run` binaries may need ad-hoc signing, e.g.:
+**Local dev:** sign the VMM helper after SwiftPM build:
 
 ```bash
-codesign -s - --entitlements src-tauri/entitlements.plist --force \
+swift build -c release --package-path macos/gptbot-vmm
+codesign -f -s - --entitlements src-tauri/entitlements.plist --generate-entitlement-der \
   macos/gptbot-vmm/.build/release/gptbot-vmm
+export GPTBOT_VMM_PATH="$PWD/macos/gptbot-vmm/.build/release/gptbot-vmm"
 ```
 
-## Provisioning steps
+## Lifecycle (Phase 2A)
 
-1. Open Elsewhere → header **VM** → **Provision** (or `cargo run --example vm_acceptance -- <app_data> provision`).
-2. Downloads Alpine netboot artifacts and runs `build-guest-disk.sh` (requires Docker).
-3. Writes `vm/config/vm.json`.
+- **`start`**: bring up `VZVirtualMachine` only; returns `running` without blocking on the guest agent.
+- **`wait_guest`**: poll vsock `ping` with host-side timeouts (Rust control socket + Swift `SO_RCVTIMEO` / `SO_SNDTIMEO`).
+- **`stop`**: stop VM and tear down the VMM process.
 
-## Lifecycle states
+On guest wait failure, Rust/Swift append **`console.log` tail** to the error.
 
-`notCreated` → `stopped` → `starting` → `running` → `stopping` → `stopped` / `error`
+## Development loop
 
-Swift VMM reports real `VZVirtualMachine` state; start waits for guest `ping` (no arbitrary sleep).
+```bash
+./scripts/vm-acceptance-test.sh          # reuse kernel, disk, signed VMM when possible
+./scripts/vm-acceptance-test.sh --fresh  # wipe test app data + cold provision
+```
+
+`GPTBOT_FORCE_DISK_REBUILD=1` is honored by `provision.rs` (not only by the shell script). Guest disk generation stamp: `v3-exec-init` under `GPTBOT_TEST_APP_DATA/.guest-disk-generation`.
 
 ## Known limitations
 
-- **Docker required** for first-time disk build.
+- **Docker required** for guest disk builds.
 - **No desktop / Chromium** — headless Alpine only.
 - **Single VM** (`default` id).
-- **Virtio socket I/O** must stay request/response sized (avoid huge streaming payloads).
-- **Entitlement**: VM start fails with a clear error if virtualization entitlement is missing.
-- Guest agent uses **one connection per request** on the host side (fine for spike RPC).
+- **Kata kernel** without external initrd: root must come up on `/dev/vda` directly; guest tuning is sensitive to PID1/OpenRC interaction.
+- **Entitlement**: VM start fails clearly if virtualization entitlement is missing.
+- Guest `exec` cannot be interrupted cleanly from the host yet.
 
 ## Acceptance test
 
-Script: `scripts/vm-acceptance-test.sh` (wraps `cargo run --example vm_acceptance`).
+Script: `scripts/vm-acceptance-test.sh` → `cargo run --example vm_acceptance`.
 
-### Results (fill after running on hardware)
+Proof file: `/workspace/proof.txt` with contents `hello from the persistent GPT Bot computer`.
+
+### Results (2026-09-14, this workspace)
 
 | Step | Status | Notes |
 |------|--------|-------|
-| Provision (artifacts + disk) | **Verified** | Alpine netboot download + Docker disk build (`root.raw` ~4 GiB) |
-| VMM control plane | **Verified** | `status` over Unix socket; queue-correct `VZVirtualMachine.start` |
-| VM boot + guest agent | **In progress** | Requires `codesign --generate-entitlement-der`; Alpine kernel/disk tuning ongoing |
-| Persistence proof | _pending_ | Blocked on successful guest boot |
+| Harness reuse / `--fresh` | **Verified** | Incremental SwiftPM + conditional disk rebuild |
+| Kata kernel + ext4 validation | **Verified** | Rejects zero-filled / non-ext4 disks |
+| VMM `start` / `wait_guest` split | **Verified** | Swift `start` no longer waits on guest |
+| Control socket timeouts | **Verified** | Rust read/write deadlines; Swift guest vsock timeouts |
+| VM boot + guest `ping` | **Blocked** | Console shows OpenRC at PID1 on some boots; guest vsock not ready within 120s |
+| Write/read proof + persistence | **Pending** | Blocked on guest readiness |
 
-Run locally:
+**Blockers observed**
+
+1. **`GPTBOT_FORCE_DISK_REBUILD` ignored by Rust** until fixed in `provision.rs` (disk reuse skipped rebuild while iterating init).
+2. **Guest PID1**: Even with `/sbin/init` replaced on `root.raw`, serial console still showed OpenRC during failed runs — likely stale boots before rebuild; continue validating with `v3-exec-init` disk generation and `vmm.log` cmdline logging.
+3. **OpenRC hang** at “Caching service dependencies …” when OpenRC is PID1 — mitigations: custom init + sysinit service + `rc_depend_strict="NO"`.
+
+Re-run after disk generation `v3-exec-init`:
 
 ```bash
+export GPTBOT_FORCE_DISK_REBUILD=1
 ./scripts/vm-acceptance-test.sh
+./scripts/vm-acceptance-test.sh --fresh
 ```
 
-Record output in this table after a successful run.
+Record `ACCEPTANCE PASSED` lines here when green.

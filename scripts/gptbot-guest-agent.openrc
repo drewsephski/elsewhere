@@ -9,5 +9,4 @@ pidfile=/run/gptbot-guest-agent.pid
 
 depend() {
     need localmount
-    after localmount
 }

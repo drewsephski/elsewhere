@@ -98,13 +98,14 @@ docker run --rm --privileged \
     done
 
     install -m 755 /scripts/gptbot-guest-agent.openrc /mnt/etc/init.d/gptbot-guest-agent
+    chroot /mnt /sbin/rc-update add gptbot-guest-agent sysinit
+
     install -m 755 /scripts/gptbot-guest-init.sh /mnt/sbin/gptbot-init
-    # Default kernel init is /sbin/init — install our minimal PID1 there so boot does not
-    # depend on the init= cmdline token (Kata/vmlinux may ignore or override it).
     install -m 755 /scripts/gptbot-guest-init.sh /mnt/sbin/init
     echo gptbot-disk-v2 >/mnt/.gptbot-disk-version
+    printf '%s\n' 'rc_interactive="NO"' 'rc_depend_strict="NO"' >>/mnt/etc/rc.conf
 
-    chroot /mnt /sbin/rc-update add gptbot-guest-agent default
+    sync
 
     if ! grep -q '^/dev/vda ' /mnt/etc/fstab; then
       echo '/dev/vda / ext4 defaults 0 1' >> /mnt/etc/fstab

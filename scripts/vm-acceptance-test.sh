@@ -29,7 +29,7 @@ mkdir -p "$APP_DATA"
 
 DISK="$APP_DATA/vm/disks/root.raw"
 DISK_GEN_STAMP="$APP_DATA/.guest-disk-generation"
-EXPECTED_DISK_GEN="v2-minimal-init"
+EXPECTED_DISK_GEN="v3-exec-init"
 if [[ -f "$DISK" ]] && [[ ! -f "$DISK_GEN_STAMP" || "$(cat "$DISK_GEN_STAMP" 2>/dev/null)" != "$EXPECTED_DISK_GEN" ]]; then
   echo "== Guest disk generation mismatch (need $EXPECTED_DISK_GEN) — forcing rebuild =="
   export GPTBOT_FORCE_DISK_REBUILD=1

@@ -123,6 +123,7 @@ public final class LinuxVirtualMachine: NSObject, @unchecked Sendable {
         }
 
         bootLoader.commandLine = config.kernelCommandLine
+        fputs("gptbot-vmm: kernel cmdline: \(config.kernelCommandLine)\n", stderr)
 
         let vmConfig = VZVirtualMachineConfiguration()
         vmConfig.bootLoader = bootLoader

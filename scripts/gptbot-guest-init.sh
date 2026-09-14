@@ -10,9 +10,4 @@ if ! grep -q ' / ' /proc/mounts; then
 fi
 mkdir -p /workspace
 echo "gptbot-init: launching guest agent" >/dev/console
-/usr/local/bin/gptbot-guest-agent >>/var/log/gptbot-guest-agent.log 2>&1 &
-
-# Keep PID 1 alive so the VM stays up.
-while true; do
-  sleep 3600
-done
+exec /usr/local/bin/gptbot-guest-agent
