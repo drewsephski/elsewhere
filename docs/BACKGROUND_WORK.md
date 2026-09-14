@@ -53,3 +53,11 @@ No deployment, paid resources, DNS changes, live ChatGPT login, or provider call
 Bot settings apply only to new work. Changing the assigned computer does not transfer files. Concurrent partial settings updates preserve unrelated fields. The browser obtains authorization from the current Better Auth session for each request, avoiding stale-owner bearer reuse after account switching; existing JWTs remain subject to the server's configured expiration policy.
 
 Web downloads use the same-origin `/api/results/:id/download` route. It obtains a bearer for the current Better Auth session server-side and streams the owner-scoped attachment from the runner with no caching or redirects. Browser download links never carry a bearer token in the URL.
+
+## Hosted alpha preparation — September 14
+
+See [the hosted alpha proposal](HOSTED_ALPHA_PROPOSAL.md) for the approval-gated Fly resource list, cost estimate, secrets layout, backup/recovery model, and live acceptance procedure. Provisioning and deployment await the owner's approval.
+
+The runner now acquires leadership before migrations and recovery. SIGTERM/SIGINT switches readiness off and stops new dispatch/routine admission, allowing up to 240 seconds for active executions and artifact collection. Leadership checks and cancellation handling continue during draining. Configure the supervisor with a 300-second stop grace and restart policy; a shorter forced stop remains recoverable as interruption. Tracked execution tasks are aborted and joined before the process relinquishes leadership. Dropping a run also cancels its MCP endpoint. Remote commands already accepted by a Sprite may finish independently, so interruption must never imply a safe automatic retry.
+
+SQLx supports TLS for hosted Postgres. Use a verified direct connection endpoint for session advisory locks and migrations; do not point the single-runner leadership connection at a transaction pooler. The new `/ready` response includes database, dispatcher, and draining flags without exposing credentials or owner data. Existing `ready` and workspace readiness fields remain compatible.

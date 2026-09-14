@@ -70,3 +70,19 @@ Milestone 4 verification: full cloud-host and Sprite regressions pass, including
 Milestone 5 verification: 60 cloud-host tests and 55 portable runtime/provider/computer tests pass; desktop's 10 tests and both TypeScript checks pass. The production Next build succeeds. Cargo Clippy completes with existing warnings. Browser QA confirms live overview counts, bot-role updates, saved context, native authenticated result downloads, and a readable mobile layout without page overflow. The native download route also rejects anonymous access and returns exact saved fixture bytes for its owner.
 
 Final local state: five clean product checkpoints; no push or deployment. The pre-existing change in `apps/www/next-env.d.ts` is preserved outside these commits. QA uses an isolated database and visibly labeled result fixtures. Real ChatGPT authorization, paid infrastructure, and browser/computer-use execution were not exercised.
+
+
+### 6 — Hosted alpha proposal and shutdown preparation
+
+The September 14 request makes live laptop-off execution the next gate. The user confirmed there are no hosted web/control-plane/Postgres resources to assume and asked for a Fly proposal **before provisioning or deployment**. See [the resource, cost, secrets, recovery, and acceptance proposal](HOSTED_ALPHA_PROPOSAL.md). The existing `elsewhere` Sprite remains a computer test resource.
+
+Local preparation completed before the approval pause:
+
+- Enabled SQLx TLS for a hosted Postgres connection. The proposal requires the direct database endpoint for the single-runner session lock.
+- Acquire leadership before migrations/recovery. Handle SIGTERM and SIGINT with a 240-second drain: readiness becomes false, new dispatch stops, active work/artifact collection can finish, and the worker continues leadership checks and cancellation processing.
+- Track execution tasks and abort/join them before relinquishing leadership. Drop also cancels the per-run MCP server so timeout/abort paths do not leave a computer endpoint listening.
+- Added regressions for drain/queue preservation, execution shutdown, and MCP listener revocation. CI now includes web type generation/checking and the computer-MCP/Codex-provider suites.
+
+Verification: **122 Rust tests passed**, including cloud-host tests against a separate local Postgres database; both TypeScript checks and 10 desktop tests passed. `cargo check -p cloud-host` and Clippy for cloud-host/computer-MCP all targets passed with existing warnings. A real local cloud-host process reached readiness, rejected a second runner, exited cleanly on SIGTERM, and reached readiness again after restart. `git diff --check` passed. Repository-wide `cargo fmt --all -- --check` reports pre-existing formatting differences; no broad formatting rewrite was made. Hosted Linux image, remote TLS connection, GitHub CI execution, and live provider behavior are not proven by these checks.
+
+Still unproven: hosted ChatGPT device authorization; subscription execution/pairing across hosted restart; laptop-off work and routine completion; live Sprite persistence; hosted artifact retrieval; volume restore/recovery. No paid resources, deployment, DNS changes, OAuth token handling, API fallback, or browser feature expansion occurred. Docker/Fly deployment packaging and admission restrictions remain work after proposal approval.
