@@ -123,37 +123,57 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
         )
         .await;
 
-        let finalized =
-            match result {
-                Ok(Ok(Ok(()))) => Ok(()),
-                Ok(Ok(Err(err))) => {
-                    tracing::error!(run_id = %run_id, error = %err, "agent run failed");
-                    let message = sanitize_host_error(&err);
-                    let code = if err.contains("ensure_ready") || err.contains("Sprite") {
-                        "sprite_unavailable"
-                    } else if err.contains("SpriteComputer") {
-                        "sprite_config_error"
-                    } else {
-                        "host_execution_failed"
+        let finalized = match result {
+            Ok(Ok(Ok(computer))) => {
+                let note = match timeout(Duration::from_secs(30), crate::results::collect(&pool, &run_id, computer.as_ref())).await {
+                        Ok(Ok(())) => None,
+                        Ok(Err(error)) => {
+                            tracing::warn!(run_id = %run_id, error = %error, "result collection incomplete");
+                            Some("Some results could not be saved. Check the summary and files on the computer.")
+                        }
+                        Err(_) => Some("Saving file results timed out. Check the summary and files on the computer."),
                     };
-                    if cancel.load(Ordering::Relaxed) {
-                        finalizer.finalize_host_cancelled().await
-                    } else {
-                        finalizer.finalize_host_failure(code, &message, 0).await
-                    }
+                if let Err(error) =
+                    sqlx::query("UPDATE agent_runs SET results_note = $2 WHERE id = $1")
+                        .bind(&run_id)
+                        .bind(note)
+                        .execute(&pool)
+                        .await
+                {
+                    tracing::error!(run_id = %run_id, error = %error, "could not record result collection status");
                 }
-                Ok(Err(_)) => finalizer
+                Ok(())
+            }
+            Ok(Ok(Err(err))) => {
+                tracing::error!(run_id = %run_id, error = %err, "agent run failed");
+                let message = sanitize_host_error(&err);
+                let code = if err.contains("ensure_ready") || err.contains("Sprite") {
+                    "sprite_unavailable"
+                } else if err.contains("SpriteComputer") {
+                    "sprite_config_error"
+                } else {
+                    "host_execution_failed"
+                };
+                if cancel.load(Ordering::Relaxed) {
+                    finalizer.finalize_host_cancelled().await
+                } else {
+                    finalizer.finalize_host_failure(code, &message, 0).await
+                }
+            }
+            Ok(Err(_)) => {
+                finalizer
                     .finalize_host_interrupted(
                         "worker_panicked",
                         "Work stopped unexpectedly. Review completed actions before continuing.",
                         0,
                     )
-                    .await,
-                Err(_) => {
-                    cancel.store(true, Ordering::Relaxed);
-                    finalizer.finalize_run_timeout(0).await
-                }
-            };
+                    .await
+            }
+            Err(_) => {
+                cancel.store(true, Ordering::Relaxed);
+                finalizer.finalize_run_timeout(0).await
+            }
+        };
         if let Err(error) = finalized {
             tracing::error!(run_id = %run_id, error = %error, "could not finalize work");
         }
@@ -165,6 +185,14 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
             tracing::error!(run_id = %run_id, error = %error, "could not close remaining approvals");
         }
 
+        if let Err(error) =
+            sqlx::query("UPDATE agent_runs SET execution_released_at = NOW() WHERE id = $1")
+                .bind(&run_id)
+                .execute(&pool)
+                .await
+        {
+            tracing::error!(run_id = %run_id, error = %error, "could not release computer after execution");
+        }
         drop(permit);
         registry.remove(&run_id);
     });
@@ -180,7 +208,7 @@ async fn execute_run(
     events: Arc<CloudEventSink>,
     owner_id: String,
     enforce_approvals: bool,
-) -> Result<(), String> {
+) -> Result<Arc<dyn AgentComputer>, String> {
     let cancelled: bool =
         sqlx::query_scalar("SELECT cancel_requested FROM agent_runs WHERE id = $1")
             .bind(&input.records.run_id)
@@ -191,7 +219,7 @@ async fn execute_run(
         cancel.store(true, Ordering::Relaxed);
         return Err("Work cancelled before execution".into());
     }
-    let ctx = AgentLoopContext {
+    let mut ctx = AgentLoopContext {
         request_id: input.records.request_id.clone(),
         conversation_id: input.records.conversation_id.clone(),
         assistant_message_id: input.records.assistant_message_id.clone(),
@@ -257,8 +285,9 @@ async fn execute_run(
         Arc::new(AllowAllApprovalGate)
     };
 
+    ctx.instructions.push_str(&format!("\n\nDeliverables: save final files directly inside {} using your computer tools. This directory belongs to this assignment. Downloads support up to 20 top-level files, 1 MB each, 5 MB total. Include a clear final summary. File creation and commands still require approval.", crate::results::output_directory(&input.records.run_id)));
     let shared = SharedRunDeps {
-        computer,
+        computer: computer.clone(),
         store,
         events: events as Arc<dyn agent_core::EventSink>,
         cancel,
@@ -268,7 +297,7 @@ async fn execute_run(
         computer_id: input.records.computer_id.clone(),
     };
 
-    match selected {
+    let result = match selected {
         SelectedRunEngine::CodexSubscription => {
             tracing::info!(
                 engine = "codex_subscription",
@@ -279,7 +308,8 @@ async fn execute_run(
         SelectedRunEngine::ResponsesApi => {
             run_responses_engine(&config, ctx, shared, input_messages).await
         }
-    }
+    };
+    result.map(|()| computer)
 }
 
 fn resolve_error_to_host(err: ResolveRunEngineError) -> String {

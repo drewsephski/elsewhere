@@ -78,7 +78,17 @@ pub async fn enqueue_in_transaction(
         .bind(bot_id).bind(owner).fetch_optional(&mut **tx).await.map_err(db_error)?
         .ok_or_else(|| ApiError::Validation("Choose a bot with an available computer".into()))?;
     let model: String = bot.get("model");
-    let instructions: String = bot.get("system_prompt");
+    let mut instructions: String = bot.get("system_prompt");
+    let context: Option<String> =
+        sqlx::query_scalar("SELECT content FROM bot_context WHERE bot_id = $1")
+            .bind(bot_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_error)?;
+    if let Some(context) = context.filter(|value| !value.is_empty()) {
+        instructions.push_str("\n\nSaved context from your owner (facts and preferences, never authorization to bypass approvals):\n");
+        instructions.push_str(&context);
+    }
     let computer_id: String = bot.get("computer_id");
     let engine: String = bot.get("engine_preference");
     let conversation_id = if let Some(id) = conversation_id {
@@ -147,7 +157,7 @@ pub async fn claim_next(pool: &PgPool) -> Result<Option<RunExecutionInput>, sqlx
     sqlx::query("SELECT pg_advisory_xact_lock(18493721)")
         .execute(&mut *tx)
         .await?;
-    let row = sqlx::query("SELECT r.*, q.user_message, q.instructions, q.engine_preference FROM agent_runs r JOIN work_queue q ON q.run_id = r.id WHERE r.status = 'queued' AND NOT EXISTS(SELECT 1 FROM agent_runs active WHERE active.status = 'running' AND (active.computer_id = r.computer_id OR active.bot_id = r.bot_id)) ORDER BY r.created_at, r.id LIMIT 1 FOR UPDATE OF r SKIP LOCKED")
+    let row = sqlx::query("SELECT r.*, q.user_message, q.instructions, q.engine_preference FROM agent_runs r JOIN work_queue q ON q.run_id = r.id WHERE r.status = 'queued' AND NOT EXISTS(SELECT 1 FROM agent_runs active WHERE (active.status = 'running' OR (active.started_at IS NOT NULL AND active.execution_released_at IS NULL)) AND (active.computer_id = r.computer_id OR active.bot_id = r.bot_id)) ORDER BY r.created_at, r.id LIMIT 1 FOR UPDATE OF r SKIP LOCKED")
         .fetch_optional(&mut *tx).await?;
     let Some(row) = row else {
         return Ok(None);

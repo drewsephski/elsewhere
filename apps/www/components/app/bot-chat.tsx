@@ -4,6 +4,7 @@ import type { BotSummary, CreateRunResponse } from "@/lib/api-types";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { BotContext } from "./bot-context";
 import { RecentRunsPanel } from "./recent-runs-panel";
 
 export function BotChat({ botId }: { botId: string }) {
@@ -47,6 +48,7 @@ export function BotChat({ botId }: { botId: string }) {
         {bot && !bot.computerId ? <p className="mt-3 text-sm text-amber-700">Assign this bot a computer before delegating work.</p> : null}
         {error ? <p className="mt-3 text-sm text-red-700" role="alert">{error}</p> : null}
       </section>
+      <BotContext botId={botId} />
       <RecentRunsPanel botId={botId} />
     </div>
   );

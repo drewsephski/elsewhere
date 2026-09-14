@@ -372,3 +372,24 @@ async fn progress_replay_drains_every_page_and_respects_cursor() {
     assert!(!body.contains("event: queued"));
     assert!(body.contains("event: terminal"));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn result_downloads_and_context_are_owner_scoped(pool: PgPool) {
+    let computer = insert_computer_placeholder(&pool, "alice", "Computer").await.unwrap();
+    let bot = cloud_host::db::resources::insert_bot(&pool, "alice", "Scout", "Instructions", "gpt-5.6-luna", Some(&computer.id), "codex").await.unwrap();
+    let run = cloud_host::work::enqueue(&pool, "alice", "private-result", &bot.id, None, "Work").await.unwrap();
+    cloud_host::results::save(&pool, &run.run_id, "report.html", "file", b"<script>secret</script>").await.unwrap();
+    let id: Uuid = sqlx::query_scalar("SELECT id FROM work_results WHERE run_id = $1").bind(&run.run_id).fetch_one(&pool).await.unwrap();
+    let app = build_router(jwt_state(pool));
+    for path in [format!("/v1/results/{id}/download"), format!("/v1/runs/{}/results", run.run_id), format!("/v1/bots/{}/context", bot.id)] {
+        let response = app.clone().oneshot(http::Request::builder().uri(path).header("authorization", format!("Bearer {}", token("bob"))).body(axum::body::Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), http::StatusCode::NOT_FOUND);
+    }
+    let response = app.oneshot(http::Request::builder().uri(format!("/v1/results/{id}/download")).header("authorization", format!("Bearer {}", token("alice"))).body(axum::body::Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(response.status(), http::StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "application/octet-stream");
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    assert!(response.headers()["content-disposition"].to_str().unwrap().starts_with("attachment;"));
+    let body = axum::body::to_bytes(response.into_body(), 100).await.unwrap();
+    assert_eq!(&body[..], b"<script>secret</script>");
+}

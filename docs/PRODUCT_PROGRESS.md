@@ -49,3 +49,12 @@ Milestone 2 verification: cloud-host regression tests pass against local Postgre
 - Owner-scoped APIs and regression cases cover concurrency, missed occurrences, cancellation/pause, manual idempotency, foreign ownership, unavailable computers, and resume after failure.
 
 Milestone 3 verification: full cloud-host regressions and six routine-specific tests pass against Postgres; web type checks pass. Browser QA confirmed routine creation, pause, and run-once navigation to persisted work, with live providers disabled.
+
+### 4 — Useful context and saved results
+
+- Bot memory has an owner-editable, versioned surface with conflict handling and immutable snapshots for queued work and routines.
+- Completed work now captures its summary and bounded output files through AgentComputer, preserving the approval boundary. Immutable downloads remain available independently of the computer.
+- Added Results navigation, per-assignment saved files, and private attachment downloads. Computer execution stays reserved while files are collected.
+- Tightened the Sprite client to reject oversized response bodies during reception, for both successful and failed requests.
+
+Milestone 4 verification: full cloud-host and Sprite regressions pass, including context ownership/conflicts/snapshots, bounded file capture, immutable snapshots, execution reservation/restart, and private download headers. Browser QA confirmed context persistence after reload and populated Results views using clearly labeled local fixtures. The in-app browser did not emit a download event; authenticated download bytes and headers are verified by the HTTP regression. No live model or paid infrastructure is implied by this verification.

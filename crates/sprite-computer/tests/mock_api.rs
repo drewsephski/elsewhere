@@ -284,3 +284,17 @@ async fn sprite_computer_enforces_workspace_boundary() {
         agent_core::ComputerError::SandboxRejected(_)
     ));
 }
+
+#[tokio::test]
+async fn oversized_file_and_error_bodies_are_rejected() {
+    for status in [200, 400] {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/sprites/large/fs/read"))
+            .respond_with(ResponseTemplate::new(status).set_body_bytes(vec![b'x'; 16 * 1024 * 1024 + 1]))
+            .mount(&server).await;
+        let client = SpriteClient::new(test_config(&server.uri(), "large")).unwrap();
+        let error = client.fs_read("/workspace/large.bin").await.unwrap_err();
+        assert!(error.to_string().contains("response body too large"));
+    }
+}

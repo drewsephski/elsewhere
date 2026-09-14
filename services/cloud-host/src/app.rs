@@ -9,6 +9,10 @@ use crate::auth::require_authenticated;
 
 pub fn build_router(state: AppState) -> Router {
     let protected = Router::new()
+        .route("/v1/bots/{id}/context", get(api::context_results::get_context).put(api::context_results::save_context))
+        .route("/v1/results", get(api::context_results::list_results))
+        .route("/v1/results/{id}/download", get(api::context_results::download))
+        .route("/v1/runs/{id}/results", get(api::context_results::run_results))
         .route(
             "/v1/routines",
             get(api::routines::list).post(api::routines::create),

@@ -81,6 +81,8 @@ pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
         .await?;
     }
 
+    sqlx::query("UPDATE agent_runs SET execution_released_at = NOW(), results_note = CASE WHEN status = 'completed' THEN 'The runner restarted while saving results. The summary is available; some files may remain on the computer.' ELSE results_note END WHERE started_at IS NOT NULL AND execution_released_at IS NULL")
+        .execute(&mut *tx).await?;
     tx.commit().await?;
     Ok(restarted.len() as u64)
 }

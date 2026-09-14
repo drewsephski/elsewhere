@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { cloudHostEventStream, cloudHostFetch } from "@/lib/cloud-api";
 import type { RunDetail } from "@/lib/api-types";
+import { ResultsPanel } from "./results-panel";
 import { activityText, workStatus } from "@/lib/work-events";
 import { ApprovalCard, type ApprovalRequestedPayload, type ApprovalTerminalState } from "./approval-card";
 
@@ -89,6 +90,7 @@ export function WorkDetail({ runId }: { runId: string }) {
       {detail?.status === "interrupted" ? <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">This work was interrupted. Actions already taken have not been repeated. Review the progress below, then <Link href={`/app/bots/${detail.botId}`} className="underline">give your bot a follow-up</Link> to continue safely.</div> : null}
       {detail?.status === "failed" ? <p className="text-sm text-red-700">Your bot could not finish this assignment. Review its progress and connection, then send a follow-up.</p> : null}
       {detail?.assistantResult ? <section className="surface-card"><h2 className="text-base font-semibold">{active(detail.status) ? "Work so far" : "Result"}</h2><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-7">{detail.assistantResult}</p></section> : null}
+      <ResultsPanel runId={runId} />
       <section className="surface-card"><h2 className="text-base font-semibold">Progress</h2><ol className="mt-4 space-y-3">{timeline.map(item => <li key={item.id}>{item.approval ? <ApprovalCard payload={item.approval} externalStatus={item.decision} /> : <p className="border-l-2 border-border pl-4 text-sm text-muted-foreground">{item.text}</p>}</li>)}</ol>{!timeline.length ? <p className="mt-4 text-sm text-muted-foreground">Your bot’s activity will appear here.</p> : null}</section>
       {detail ? <Link href={`/app/bots/${detail.botId}`} className="inline-block text-sm underline underline-offset-4">Back to your bot</Link> : null}
     </section>

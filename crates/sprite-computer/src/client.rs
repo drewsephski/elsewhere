@@ -344,7 +344,7 @@ impl SpriteClient {
 
             let result = req.send().await;
             match result {
-                Ok(response) => {
+                Ok(mut response) => {
                     let status = response.status();
                     let request_id = response
                         .headers()
@@ -365,20 +365,19 @@ impl SpriteClient {
                         return Err(SpriteError::NotFound);
                     }
 
-                    if status.is_success() {
-                        let bytes = response.bytes().await.map_err(|e| map_network(e, &self.config.token))?;
-                        if bytes.len() > MAX_RESPONSE_BYTES {
-                            return Err(SpriteError::MalformedResponse(
-                                "response body too large".into(),
-                            ));
-                        }
-                        return Ok(bytes.to_vec());
+                    // Bound allocation while receiving both successful and error bodies.
+                    if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
+                        return Err(SpriteError::MalformedResponse("response body too large".into()));
                     }
-
-                    let message = response
-                        .text()
-                        .await
-                        .unwrap_or_else(|_| status.to_string());
+                    let mut bytes = Vec::new();
+                    while let Some(chunk) = response.chunk().await.map_err(|e| map_network(e, &self.config.token))? {
+                        if chunk.len() > MAX_RESPONSE_BYTES.saturating_sub(bytes.len()) {
+                            return Err(SpriteError::MalformedResponse("response body too large".into()));
+                        }
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    if status.is_success() { return Ok(bytes); }
+                    let message = String::from_utf8_lossy(&bytes);
                     let message = SpriteError::sanitize_message(&message, &self.config.token);
 
                     if retry_safe && status.is_server_error() && attempts > 0 {

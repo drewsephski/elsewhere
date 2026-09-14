@@ -6,6 +6,7 @@ import {
   Bot,
   BriefcaseBusiness,
   CalendarClock,
+  Files,
   CheckCircle2,
   LayoutDashboard,
   Monitor,
@@ -20,6 +21,7 @@ const links = [
   { href: "/app/work", label: "Work", icon: BriefcaseBusiness },
   { href: "/app/computers", label: "Computers", icon: Monitor },
   { href: "/app/routines", label: "Routines", icon: CalendarClock },
+  { href: "/app/results", label: "Results", icon: Files },
   { href: "/app/approvals", label: "Approvals", icon: CheckCircle2 },
 ] as const;
 
