@@ -23,8 +23,17 @@ VMM_PKG="$REPO_ROOT/macos/gptbot-vmm"
 if [[ "$FRESH" -eq 1 ]]; then
   echo "== Fresh run: removing $APP_DATA =="
   rm -rf "$APP_DATA"
+  export GPTBOT_FORCE_DISK_REBUILD=1
 fi
 mkdir -p "$APP_DATA"
+
+DISK="$APP_DATA/vm/disks/root.raw"
+DISK_GEN_STAMP="$APP_DATA/.guest-disk-generation"
+EXPECTED_DISK_GEN="v2-minimal-init"
+if [[ -f "$DISK" ]] && [[ ! -f "$DISK_GEN_STAMP" || "$(cat "$DISK_GEN_STAMP" 2>/dev/null)" != "$EXPECTED_DISK_GEN" ]]; then
+  echo "== Guest disk generation mismatch (need $EXPECTED_DISK_GEN) — forcing rebuild =="
+  export GPTBOT_FORCE_DISK_REBUILD=1
+fi
 
 echo "== Build + sign gptbot-vmm (incremental SwiftPM) =="
 swift build -c release --package-path "$VMM_PKG"
@@ -46,6 +55,7 @@ run_rust() {
 
 echo "== Provision (skips disk/kernel when already present) =="
 run_rust provision
+echo "$EXPECTED_DISK_GEN" > "$DISK_GEN_STAMP"
 
 echo "== Start + wait guest + write proof =="
 run_rust write-proof

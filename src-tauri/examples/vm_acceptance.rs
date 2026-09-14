@@ -41,7 +41,7 @@ fn run() -> Result<(), String> {
                 method: "write_file".into(),
                 params: serde_json::json!({
                     "path": "/workspace/proof.txt",
-                    "content": "hello from the persistent Elsewhere computer\n"
+                    "content": "hello from the persistent GPT Bot computer\n"
                 }),
             })?;
             if !response.ok {
@@ -69,7 +69,7 @@ fn run() -> Result<(), String> {
                     .unwrap_or_else(|| "read failed".into()));
             }
             let stdout = response.stdout.unwrap_or_default();
-            if stdout.trim() != "hello from the persistent Elsewhere computer" {
+            if stdout.trim() != "hello from the persistent GPT Bot computer" {
                 return Err(format!("unexpected proof contents: {stdout}"));
             }
             println!("proof ok: {}", stdout.trim());

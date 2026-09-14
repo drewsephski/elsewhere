@@ -172,7 +172,7 @@ impl VirtualMachineManager {
             &socket_path,
             "start",
             None,
-            Duration::from_secs(60),
+            Duration::from_secs(30),
         );
 
         let response = match response {
