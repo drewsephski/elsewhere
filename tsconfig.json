@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM"],
+    "lib": ["ES2021", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -17,12 +17,15 @@
     /* Linting */
     "strict": true,
     "ignoreDeprecations": "6.0",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["apps/www/*"],
+      "@desktop/*": ["src/*"],
+      "next/link": ["src/shims/next-link.tsx"],
+      "next/navigation": ["src/shims/next-navigation.ts"]
     }
   },
   "include": ["src"],

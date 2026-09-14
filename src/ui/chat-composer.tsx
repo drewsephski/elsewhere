@@ -1,8 +1,8 @@
 import type { KeyboardEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Mic, Plus, Square } from "@/components/icons/lucide";
-import { cn } from "@/lib/utils";
+import { Button } from "@desktop/components/ui/button";
+import { Input } from "@desktop/components/ui/input";
+import { Mic, Plus, Square } from "@desktop/components/icons/lucide";
+import { cn } from "@desktop/lib/utils";
 
 interface ChatComposerProps {
   value: string;

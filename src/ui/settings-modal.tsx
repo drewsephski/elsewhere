@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@desktop/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,11 +6,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { KeyRound } from "@/components/icons/lucide";
+} from "@desktop/components/ui/dialog";
+import { Input } from "@desktop/components/ui/input";
+import { Label } from "@desktop/components/ui/label";
+import { Alert, AlertDescription } from "@desktop/components/ui/alert";
+import { KeyRound } from "@desktop/components/icons/lucide";
 
 interface SettingsModalProps {
   open: boolean;

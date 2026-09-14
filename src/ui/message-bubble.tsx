@@ -1,8 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Message } from "@/lib/definitions";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import type { Message } from "@desktop/lib/definitions";
+import { Skeleton } from "@desktop/components/ui/skeleton";
+import { cn } from "@desktop/lib/utils";
 
 interface MessageBubbleProps {
   message: Message;

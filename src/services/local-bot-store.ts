@@ -1,9 +1,9 @@
-import type { Bot } from "@/lib/definitions";
+import type { Bot } from "@desktop/lib/definitions";
 import {
   DEMO_AGENT_INPUT,
   isDemoAgent,
-} from "@/lib/demo-agent";
-import type { CreateBotInput, UpdateBotInput } from "@/lib/tauri-api";
+} from "@desktop/lib/demo-agent";
+import type { CreateBotInput, UpdateBotInput } from "@desktop/lib/tauri-api";
 
 const STORAGE_KEY = "gptbot.local-bots.v1";
 

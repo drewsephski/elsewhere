@@ -15,8 +15,8 @@ use crate::auth::Principal;
 use crate::codex_ops::{CodexOperationKind, CODEX_BUSY_REASON};
 use crate::error::ApiError;
 
-/// Bound how long status checks block on Codex app-server probes (launch + account read).
-const PROVIDER_STATUS_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Background refresh only; `/v1/providers/status` must not block on Codex probes.
+const PROVIDER_STATUS_BACKGROUND_PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -228,8 +228,11 @@ pub async fn codex_login_status(
     } else {
         owner_availability(&state, principal.owner_id()).await?
     };
-    let view = map_availability(availability);
+    let view = map_availability(availability.clone());
     if view.connected {
+        state
+            .provider_status_cache
+            .store(principal.owner_id(), availability);
         let mut pending = state.codex_login_client.lock().await;
         if pending
             .as_ref()
@@ -287,17 +290,58 @@ async fn owner_availability_for_status(
     {
         return Ok(CodexSubscriptionAvailability::NotAuthenticated);
     }
-    match tokio::time::timeout(
-        PROVIDER_STATUS_PROBE_TIMEOUT,
-        owner_availability_for_status_probe(state, owner_id),
-    )
-    .await
-    {
-        Ok(availability) => availability,
-        Err(_) => Ok(CodexSubscriptionAvailability::Unavailable(
-            "Codex availability check timed out".into(),
-        )),
+
+    if state.provider_status_cache.is_fresh(owner_id) {
+        return Ok(
+            state
+                .provider_status_cache
+                .get(owner_id)
+                .unwrap_or(CodexSubscriptionAvailability::Unavailable(
+                    "Provider status cache missing".into(),
+                )),
+        );
     }
+
+    if let Some(cached) = state.provider_status_cache.get(owner_id) {
+        schedule_provider_status_refresh(state.clone(), owner_id.to_string());
+        return Ok(cached);
+    }
+
+    schedule_provider_status_refresh(state.clone(), owner_id.to_string());
+    Ok(CodexSubscriptionAvailability::Unavailable(
+        "Provider status is refreshing".into(),
+    ))
+}
+
+fn schedule_provider_status_refresh(state: AppState, owner_id: String) {
+    if state.provider_status_cache.is_fresh(&owner_id) {
+        return;
+    }
+    if !state
+        .provider_status_cache
+        .try_begin_background_refresh(&owner_id)
+    {
+        return;
+    }
+    tokio::spawn(async move {
+        let availability = match tokio::time::timeout(
+            PROVIDER_STATUS_BACKGROUND_PROBE_TIMEOUT,
+            owner_availability_for_status_probe(&state, &owner_id),
+        )
+        .await
+        {
+            Ok(Ok(availability)) => availability,
+            Ok(Err(err)) => {
+                tracing::warn!(owner_id = %owner_id, error = %err, "provider status refresh failed");
+                CodexSubscriptionAvailability::Unavailable(err.to_string())
+            }
+            Err(_) => CodexSubscriptionAvailability::Unavailable(
+                "Codex availability check timed out".into(),
+            ),
+        };
+        state.provider_status_cache.store(&owner_id, availability);
+        state.provider_status_cache.end_background_refresh(&owner_id);
+    });
 }
 
 async fn owner_availability_for_status_probe(

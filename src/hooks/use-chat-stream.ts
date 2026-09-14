@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
-import { streamEventSchema, type StreamEvent } from "@/lib/definitions";
-import type { ProviderStreamEvent } from "@/providers/types";
+import { streamEventSchema, type StreamEvent } from "@desktop/lib/definitions";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
 
 const STREAM_EVENT = "gptbot://chat-stream";
 

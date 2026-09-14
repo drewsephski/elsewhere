@@ -1,6 +1,6 @@
-import type { Conversation, Message } from "@/lib/definitions";
-import { getProvider } from "@/providers/openai-provider";
-import { tauriApi } from "@/lib/tauri-api";
+import type { Conversation, Message } from "@desktop/lib/definitions";
+import { getProvider } from "@desktop/providers/openai-provider";
+import { tauriApi } from "@desktop/lib/tauri-api";
 
 export const chatService = {
   async loadConversation(botId: string): Promise<{

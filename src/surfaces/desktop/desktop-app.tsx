@@ -1,33 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Bot, Message, ModelDescriptor } from "@/lib/definitions";
-import { DEFAULT_MODEL_ID, resolveDefaultModelId } from "@/lib/definitions";
-import { useChatStreamListener } from "@/hooks/use-chat-stream";
-import { shouldCommitChatLoad } from "@/lib/chat-load-guard";
+import type { Bot, Message, ModelDescriptor } from "@desktop/lib/definitions";
+import { DEFAULT_MODEL_ID, resolveDefaultModelId } from "@desktop/lib/definitions";
+import { useChatStreamListener } from "@desktop/hooks/use-chat-stream";
+import { shouldCommitChatLoad } from "@desktop/lib/chat-load-guard";
 import {
   applyChatStreamEventToMessages,
   applyChatStreamEventsToMessages,
-} from "@/providers/chat-stream-state";
+} from "@desktop/providers/chat-stream-state";
 import {
   drainPreAckStreamEvents,
   pushPreAckStreamEvent,
-} from "@/providers/pre-ack-stream-buffer";
-import type { ProviderStreamEvent } from "@/providers/types";
-import { isDemoAgent } from "@/lib/demo-agent";
-import { botService } from "@/services/bot-service";
-import { chatService } from "@/services/chat-service";
-import { tauriApi } from "@/lib/tauri-api";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { XIcon } from "@/components/icons/lucide";
-import { Skeleton } from "@/components/ui/skeleton";
-import { BotSidebar } from "@/ui/bot-sidebar";
-import { ChatComposer } from "@/ui/chat-composer";
-import { ChatHeader } from "@/ui/chat-header";
-import { ContextSidebar } from "@/ui/context-sidebar";
-import { CreateBotModal } from "@/ui/create-bot-modal";
-import { EmptyChat } from "@/ui/empty-chat";
-import { MessageBubble } from "@/ui/message-bubble";
-import { SettingsModal } from "@/ui/settings-modal";
+} from "@desktop/providers/pre-ack-stream-buffer";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
+import { isDemoAgent } from "@desktop/lib/demo-agent";
+import { botService } from "@desktop/services/bot-service";
+import { chatService } from "@desktop/services/chat-service";
+import { tauriApi } from "@desktop/lib/tauri-api";
+import { Alert, AlertAction, AlertDescription } from "@desktop/components/ui/alert";
+import { Button } from "@desktop/components/ui/button";
+import { XIcon } from "@desktop/components/icons/lucide";
+import { Skeleton } from "@desktop/components/ui/skeleton";
+import { BotSidebar } from "@desktop/ui/bot-sidebar";
+import { ChatComposer } from "@desktop/ui/chat-composer";
+import { ChatHeader } from "@desktop/ui/chat-header";
+import { ContextSidebar } from "@desktop/ui/context-sidebar";
+import { CreateBotModal } from "@desktop/ui/create-bot-modal";
+import { EmptyChat } from "@desktop/ui/empty-chat";
+import { MessageBubble } from "@desktop/ui/message-bubble";
+import { SettingsModal } from "@desktop/ui/settings-modal";
 
 function formatInvokeError(error: unknown): string {
   if (typeof error === "string") {

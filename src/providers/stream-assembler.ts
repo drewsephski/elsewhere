@@ -1,4 +1,4 @@
-import type { ProviderStreamEvent } from "@/providers/types";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
 
 export function applyStreamEvent(
   content: string,

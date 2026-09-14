@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyStreamEvent, assembleChunks } from "@/providers/stream-assembler";
+import { applyStreamEvent, assembleChunks } from "@desktop/providers/stream-assembler";
 
 describe("stream-assembler", () => {
   test("assembles delta chunks", () => {

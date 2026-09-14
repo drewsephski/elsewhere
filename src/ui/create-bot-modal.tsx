@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@desktop/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,18 +6,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from "@desktop/components/ui/dialog";
+import { Input } from "@desktop/components/ui/input";
+import { Label } from "@desktop/components/ui/label";
+import { Textarea } from "@desktop/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+} from "@desktop/components/ui/select";
+import { Alert, AlertDescription } from "@desktop/components/ui/alert";
 
 interface CreateBotModalProps {
   open: boolean;

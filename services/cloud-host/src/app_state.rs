@@ -11,6 +11,7 @@ use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
 use crate::codex_ops::CodexOpsPermit;
 use crate::events::registry::RunRegistry;
+use crate::provider_status_cache::ProviderStatusCache;
 
 pub struct PendingCodexLogin {
     pub owner_id: String,
@@ -38,6 +39,7 @@ pub struct AppState {
     /// One Codex app-server child at a time (probe, login, runs) on this host.
     pub codex_ops: crate::codex_ops::CodexOpsGate,
     pub dispatcher_alive: Arc<std::sync::atomic::AtomicBool>,
+    pub provider_status_cache: ProviderStatusCache,
 }
 
 impl AppState {
@@ -76,6 +78,7 @@ impl AppState {
             computer_registry: ComputerRegistry::default(),
             codex_ops: crate::codex_ops::CodexOpsGate::from_permits(1),
             dispatcher_alive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            provider_status_cache: ProviderStatusCache::default(),
         }
     }
 }

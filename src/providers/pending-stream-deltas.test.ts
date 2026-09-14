@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   bufferStreamDelta,
   takeBufferedStreamBody,
-} from "@/providers/pending-stream-deltas";
+} from "@desktop/providers/pending-stream-deltas";
 
 describe("pending-stream-deltas", () => {
   test("buffers and drains by assistant message id", () => {

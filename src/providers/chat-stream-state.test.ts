@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { Message } from "@/lib/definitions";
-import { applyChatStreamEventToMessages } from "@/providers/chat-stream-state";
+import type { Message } from "@desktop/lib/definitions";
+import { applyChatStreamEventToMessages } from "@desktop/providers/chat-stream-state";
 
 describe("applyChatStreamEventToMessages", () => {
   test("appends structured tool timeline messages", () => {

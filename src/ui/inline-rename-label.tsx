@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Input } from "@desktop/components/ui/input";
+import { cn } from "@desktop/lib/utils";
 
 interface InlineRenameLabelProps {
   value: string;

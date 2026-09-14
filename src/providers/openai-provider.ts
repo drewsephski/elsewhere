@@ -1,5 +1,5 @@
-import { tauriApi } from "@/lib/tauri-api";
-import type { ModelProvider } from "@/providers/types";
+import { tauriApi } from "@desktop/lib/tauri-api";
+import type { ModelProvider } from "@desktop/providers/types";
 
 export const openAiProvider: ModelProvider = {
   id: "openai",

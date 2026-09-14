@@ -1,8 +1,8 @@
-import type { Bot } from "@/lib/definitions";
-import { DEMO_AGENT_INPUT, isDemoAgent } from "@/lib/demo-agent";
-import { isTauriRuntime } from "@/lib/tauri-runtime";
-import { tauriApi, type CreateBotInput, type UpdateBotInput } from "@/lib/tauri-api";
-import { localBotStore } from "@/services/local-bot-store";
+import type { Bot } from "@desktop/lib/definitions";
+import { DEMO_AGENT_INPUT, isDemoAgent } from "@desktop/lib/demo-agent";
+import { isTauriRuntime } from "@desktop/lib/tauri-runtime";
+import { tauriApi, type CreateBotInput, type UpdateBotInput } from "@desktop/lib/tauri-api";
+import { localBotStore } from "@desktop/services/local-bot-store";
 
 async function bootstrapInTauri(): Promise<Bot[]> {
   try {

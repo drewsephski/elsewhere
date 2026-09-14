@@ -1,7 +1,7 @@
-import type { Bot } from "@/lib/definitions";
-import { DEFAULT_MODEL_ID } from "@/lib/definitions";
-import type { CreateBotInput } from "@/lib/tauri-api";
-import { botService } from "@/services/bot-service";
+import type { Bot } from "@desktop/lib/definitions";
+import { DEFAULT_MODEL_ID } from "@desktop/lib/definitions";
+import type { CreateBotInput } from "@desktop/lib/tauri-api";
+import { botService } from "@desktop/services/bot-service";
 
 export const DEMO_AGENT_NAME = "Scout";
 

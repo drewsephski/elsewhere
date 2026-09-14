@@ -1,14 +1,14 @@
-import type { Bot } from "@/lib/definitions";
-import { BotCreatureAvatar } from "@/ui/bot-creature-avatar";
-import { Button } from "@/components/ui/button";
+import type { Bot } from "@desktop/lib/definitions";
+import { BotCreatureAvatar } from "@desktop/ui/bot-creature-avatar";
+import { Button } from "@desktop/components/ui/button";
 import {
   Sheet,
   SheetContent,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet";
-import { BotNav } from "@/ui/bot-nav";
-import { Menu, MoreHorizontal } from "@/components/icons/lucide";
+} from "@desktop/components/ui/sheet";
+import { BotNav } from "@desktop/ui/bot-nav";
+import { Menu, MoreHorizontal } from "@desktop/components/icons/lucide";
 
 interface ChatHeaderProps {
   bot: Bot | null;

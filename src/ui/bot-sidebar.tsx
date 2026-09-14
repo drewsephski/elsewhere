@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Bot } from "@/lib/definitions";
-import { BotNav } from "@/ui/bot-nav";
-import { SidebarEdgeHandle } from "@/ui/sidebar-edge-handle";
-import { SidebarExpandTab } from "@/ui/sidebar-expand-tab";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import type { Bot } from "@desktop/lib/definitions";
+import { BotNav } from "@desktop/ui/bot-nav";
+import { SidebarEdgeHandle } from "@desktop/ui/sidebar-edge-handle";
+import { SidebarExpandTab } from "@desktop/ui/sidebar-expand-tab";
+import { TooltipProvider } from "@desktop/components/ui/tooltip";
+import { cn } from "@desktop/lib/utils";
 
 const SIDEBAR_COLLAPSED_KEY = "gptbot.bot-sidebar.collapsed";
 const SIDEBAR_WIDTH_KEY = "gptbot.bot-sidebar.width";

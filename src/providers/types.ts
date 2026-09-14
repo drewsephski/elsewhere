@@ -1,4 +1,4 @@
-import type { ModelDescriptor } from "@/lib/definitions";
+import type { ModelDescriptor } from "@desktop/lib/definitions";
 
 export interface GenerateMessage {
   role: "system" | "user" | "assistant";
@@ -20,7 +20,7 @@ export interface ProviderStreamEvent {
   delta?: string;
   error?: string;
   fullContent?: string;
-  message?: import("@/lib/definitions").Message;
+  message?: import("@desktop/lib/definitions").Message;
 }
 
 export interface ModelProvider {

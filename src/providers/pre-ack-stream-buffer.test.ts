@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   drainPreAckStreamEvents,
   pushPreAckStreamEvent,
-} from "@/providers/pre-ack-stream-buffer";
-import type { ProviderStreamEvent } from "@/providers/types";
+} from "@desktop/providers/pre-ack-stream-buffer";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
 
 describe("pre-ack-stream-buffer", () => {
   test("preserves event order until drained", () => {

@@ -1,5 +1,5 @@
-import { Button } from "@/components/ui/button";
-import { Bot, KeyRound, Plus } from "@/components/icons/lucide";
+import { Button } from "@desktop/components/ui/button";
+import { Bot, KeyRound, Plus } from "@desktop/components/icons/lucide";
 
 interface EmptyChatProps {
   apiKeyConfigured: boolean;

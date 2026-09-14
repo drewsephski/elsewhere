@@ -1,6 +1,6 @@
-import type { Message } from "@/lib/definitions";
-import type { ProviderStreamEvent } from "@/providers/types";
-import { applyStreamEvent } from "@/providers/stream-assembler";
+import type { Message } from "@desktop/lib/definitions";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
+import { applyStreamEvent } from "@desktop/providers/stream-assembler";
 
 export function applyChatStreamEventToMessages(
   messages: Message[],

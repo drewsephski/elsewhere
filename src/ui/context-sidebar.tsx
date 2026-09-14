@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type { Bot, ModelDescriptor } from "@/lib/definitions";
-import { BotCreatureAvatar } from "@/ui/bot-creature-avatar";
-import { Button } from "@/components/ui/button";
+import type { Bot, ModelDescriptor } from "@desktop/lib/definitions";
+import { BotCreatureAvatar } from "@desktop/ui/bot-creature-avatar";
+import { Button } from "@desktop/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { BotSettingsPanel } from "@/ui/bot-settings-panel";
-import { InlineRenameLabel } from "@/ui/inline-rename-label";
-import { VmDiagnosticsPanel } from "@/ui/vm-diagnostics-panel";
-import { ContextSidebarExpandTab } from "@/ui/context-sidebar-expand-tab";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@desktop/components/ui/collapsible";
+import { ScrollArea } from "@desktop/components/ui/scroll-area";
+import { BotSettingsPanel } from "@desktop/ui/bot-settings-panel";
+import { InlineRenameLabel } from "@desktop/ui/inline-rename-label";
+import { VmDiagnosticsPanel } from "@desktop/ui/vm-diagnostics-panel";
+import { ContextSidebarExpandTab } from "@desktop/ui/context-sidebar-expand-tab";
+import { TooltipProvider } from "@desktop/components/ui/tooltip";
+import { cn } from "@desktop/lib/utils";
 import {
   Activity,
   ChevronDown,
@@ -24,7 +24,7 @@ import {
   Pause,
   Plus,
   Wand2,
-} from "@/components/icons/lucide";
+} from "@desktop/components/icons/lucide";
 
 const CONTEXT_SIDEBAR_COLLAPSED_KEY = "gptbot.context-sidebar.collapsed";
 

@@ -9,8 +9,8 @@ export const siteConfig = {
   contactEmail: "hello@elsewhere.dev",
   waitlistMailSubject: "Elsewhere cloud waitlist",
   links: {
-    docs: "https://github.com/drewsepeczi/elsewhere",
-    download: "https://github.com/drewsepeczi/elsewhere/releases",
+    docs: "https://github.com/drewsephski/elsewhere",
+    download: "https://github.com/drewsephski/elsewhere/releases",
   },
 } as const;
 

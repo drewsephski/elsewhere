@@ -1,5 +1,50 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use cloud_host::{build_router, AppState, Config};
 use tracing_subscriber::EnvFilter;
+
+static TOKIO_HEARTBEAT_EPOCH_SECS: AtomicU64 = AtomicU64::new(0);
+
+fn epoch_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn spawn_runtime_watchdog() {
+    const TICK_SECS: u64 = 1;
+    const CHECK_EVERY_SECS: u64 = 3;
+    const STALL_SECS: u64 = 20;
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(TICK_SECS));
+        loop {
+            interval.tick().await;
+            TOKIO_HEARTBEAT_EPOCH_SECS.store(epoch_secs(), Ordering::Relaxed);
+        }
+    });
+
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(CHECK_EVERY_SECS));
+            let last = TOKIO_HEARTBEAT_EPOCH_SECS.load(Ordering::Relaxed);
+            if last == 0 {
+                continue;
+            }
+            let age = epoch_secs().saturating_sub(last);
+            if age > STALL_SECS {
+                eprintln!(
+                    "fatal runtime_stall: tokio heartbeat stale for {}s (threshold {}s)",
+                    age,
+                    STALL_SECS
+                );
+                std::process::exit(1);
+            }
+        }
+    });
+}
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -8,6 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
+
+    spawn_runtime_watchdog();
 
     let config = Config::from_env().map_err(|e| {
         eprintln!("configuration error: {e}");

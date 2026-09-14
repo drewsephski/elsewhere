@@ -4,7 +4,7 @@ import type {
   Conversation,
   Message,
   ModelDescriptor,
-} from "@/lib/definitions";
+} from "@desktop/lib/definitions";
 
 export interface CreateBotInput {
   name: string;

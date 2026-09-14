@@ -3,7 +3,7 @@ import {
   DEFAULT_MODEL_ID,
   isLunaModelAvailable,
   resolveDefaultModelId,
-} from "@/lib/definitions";
+} from "@desktop/lib/definitions";
 
 describe("Luna default model policy", () => {
   test("DEFAULT_MODEL_ID is gpt-5.6-luna", () => {

@@ -1,22 +1,22 @@
-import type { Bot, ModelDescriptor } from "@/lib/definitions";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
+import type { Bot, ModelDescriptor } from "@desktop/lib/definitions";
+import { Button } from "@desktop/components/ui/button";
+import { Input } from "@desktop/components/ui/input";
+import { Label } from "@desktop/components/ui/label";
+import { ScrollArea } from "@desktop/components/ui/scroll-area";
+import { Textarea } from "@desktop/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@desktop/components/ui/select";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown, Save, Settings2, Trash2 } from "@/components/icons/lucide";
+} from "@desktop/components/ui/collapsible";
+import { ChevronDown, Save, Settings2, Trash2 } from "@desktop/components/icons/lucide";
 
 interface BotSettingsPanelProps {
   bot: Bot;

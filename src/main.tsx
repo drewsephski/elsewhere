@@ -1,21 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import DesktopApp from "@/surfaces/desktop/desktop-app";
-import { ThemeProvider } from "@/components/theme-provider";
-import { MotionIconConfig } from "@/components/icons/lucide";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
-import "./index.css";
+import { BrowserRouter } from "react-router-dom";
+import CloudShell from "./cloud-shell";
+import "../apps/www/app/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <MotionIconConfig trigger="hover" mode="signature" duration={0.35}>
-        <TooltipProvider>
-          <DesktopApp />
-          <Toaster position="top-center" richColors closeButton />
-        </TooltipProvider>
-      </MotionIconConfig>
-    </ThemeProvider>
+    <BrowserRouter>
+      <CloudShell />
+    </BrowserRouter>
   </React.StrictMode>,
 );

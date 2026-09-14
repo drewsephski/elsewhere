@@ -2,84 +2,69 @@
 
 **Create AI workers. Give them computers.** Elsewhere combines persistent bots, ChatGPT/Codex subscription execution, durable work history, private computers, and human approvals.
 
-The web product is in `apps/www`; its Rust control plane is `services/cloud-host`. The native macOS client remains available for local development. Start with [the authenticated cloud setup](docs/PHASE_3C1.md) and [current product progress](docs/PRODUCT_PROGRESS.md). The desktop setup below describes the legacy local API-key path.
+The product lives in [`apps/www`](apps/www) (Next.js + Better Auth). The Rust control plane is [`services/cloud-host`](services/cloud-host). The macOS Tauri app in the repo root is still available for local/desktop experiments. For full setup, see [authenticated cloud setup](docs/PHASE_3C1.md) and [product progress](docs/PRODUCT_PROGRESS.md).
 
 ## Prerequisites
 
-- macOS (primary target for Phase 1)
+- [Node.js](https://nodejs.org/) 20+ and [pnpm](https://pnpm.io/) 9+
 - [Rust](https://rustup.rs/) (stable)
-- [Node.js](https://nodejs.org/) 20+
-- [pnpm](https://pnpm.io/) 9+
+- Postgres for the web app and control plane (local or hosted)
+- macOS only if you run the Tauri shell
 
-## Installation
+## Quick start (web)
 
 ```bash
 pnpm install
-```
-
-Rust dependencies are fetched automatically on first `cargo` / `tauri` build.
-
-## API configuration
-
-1. Launch the app.
-2. Open **Settings** from the sidebar.
-3. Paste your [OpenAI API key](https://platform.openai.com/api-keys).
-4. The key is stored in the **macOS Keychain** (service `com.drewsepeczi.gptbot`). It is not written to SQLite or application logs.
-
-Model names in the selector come from the OpenAI **Models** API for your account.
-
-## Development
-
-Start the Tauri dev shell (Vite + Rust):
-
-```bash
-pnpm tauri dev
-```
-
-Frontend only (no native commands):
-
-```bash
-pnpm dev
-```
-
-Marketing site (Next.js, port 3000):
-
-```bash
+cp .env.example .env.local   # fill DATABASE_URL, auth, and cloud-host vars
+pnpm --filter @elsewhere/www auth:migrate
+cargo run -p cloud-host
 pnpm dev:www
 ```
 
-Structured Rust logs (no secrets):
+Sign in at `/sign-in`, open `/app`, create a computer and bot, then delegate work from the dashboard.
 
-```bash
-RUST_LOG=elsewhere=info pnpm tauri dev
-```
+## ChatGPT / Codex auth
 
-## Running the application
+You do **not** paste an OpenAI API key to use the default product path. Link your **ChatGPT subscription** from the dashboard via Codex device sign-in (`chatgptDeviceCode`): you get a verification code and link, Codex stores credentials on the runner profile volume, and Elsewhere only keeps a profile reference.
 
-Production build:
+- Set `ELSEWHERE_ALLOW_CODEX_LOGIN=1` on cloud-host and point `ELSEWHERE_CODEX_PROFILES_DIR` at a private, persistent directory on the runner (see [Phase 3C.1](docs/PHASE_3C1.md)).
+- Automatic provider selection uses subscription execution only; it does not fall back to paid API usage.
+- Optional `OPENAI_API_KEY` in `.env` is for explicit Responses/API billing when you choose that provider—not for everyday ChatGPT pairing.
+
+## Development
+
+| What | Command |
+|------|---------|
+| Web app | `pnpm dev:www` |
+| Control plane | `cargo run -p cloud-host` |
+| Desktop (Tauri) | `pnpm tauri dev` (starts the web workspace UI on `:1420` and proxies `/api` to `:3000`; run `cargo run -p cloud-host` separately) |
+| Frontend only (Vite) | `pnpm dev` |
+| Rust logs | `RUST_LOG=elsewhere=info cargo run -p cloud-host` |
+
+Hosted operations: [`infra/fly/README.md`](infra/fly/README.md).
+
+## Desktop build (optional)
 
 ```bash
 pnpm tauri build
 ```
 
-The `.app` bundle is emitted under `src-tauri/target/release/bundle/macos/`.
+The `.app` bundle is under `src-tauri/target/release/bundle/macos/`. The desktop shell renders the same workspace UI as [`apps/www`](apps/www) (shared components, theme, and routes). Keep the Next.js app running on port 3000 during development so auth and `/api/cloud` BFF routes work through the Vite proxy.
 
 ## Testing
 
 ```bash
-# TypeScript
-pnpm lint
-pnpm test
-
-# Rust (SQLite persistence + stream helpers)
+pnpm lint && pnpm test
+pnpm --filter @elsewhere/www lint
+cargo test -p cloud-host --features test-utils
 cd src-tauri && cargo test
 ```
 
-## Phase 1 workflow
+## Typical flow
 
-1. Configure OpenAI API key.
-2. Create a Bot, pick a model, set system instructions.
-3. Send a message and watch the streamed reply.
-4. Quit and relaunch — Bots, model selection, and conversation history remain.
+1. Sign in to Elsewhere and connect ChatGPT (device sign-in) when prompted.
+2. Create a computer, then a bot with a role and instructions.
+3. Send work—stream progress, approve tool use when needed, and find results in the dashboard.
+4. Refresh or come back later; history, routines, and saved artifacts persist in Postgres.
 
-See `docs/ARCHITECTURE.md` for layering and `docs/ROADMAP.md` for later phases.
+Layering and roadmap: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ROADMAP.md`](docs/ROADMAP.md).

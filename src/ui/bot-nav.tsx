@@ -1,34 +1,34 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Bot } from "@/lib/definitions";
+import type { Bot } from "@desktop/lib/definitions";
 import {
   getBotActivityIndicator,
   getBotSubtitle,
   type BotActivityIndicator,
-} from "@/lib/bot-visual";
-import { BotCreatureAvatar } from "@/ui/bot-creature-avatar";
-import { isDemoAgent, sortBotsForNav } from "@/lib/demo-agent";
+} from "@desktop/lib/bot-visual";
+import { BotCreatureAvatar } from "@desktop/ui/bot-creature-avatar";
+import { isDemoAgent, sortBotsForNav } from "@desktop/lib/demo-agent";
 import {
   readWorkspaceName,
   writeWorkspaceName,
-} from "@/lib/workspace-preferences";
-import { InlineRenameLabel } from "@/ui/inline-rename-label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+} from "@desktop/lib/workspace-preferences";
+import { InlineRenameLabel } from "@desktop/ui/inline-rename-label";
+import { Avatar, AvatarFallback } from "@desktop/components/ui/avatar";
+import { Badge } from "@desktop/components/ui/badge";
+import { Button } from "@desktop/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
+} from "@desktop/components/ui/collapsible";
+import { Input } from "@desktop/components/ui/input";
+import { ScrollArea } from "@desktop/components/ui/scroll-area";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+} from "@desktop/components/ui/tooltip";
+import { cn } from "@desktop/lib/utils";
 import {
   Activity,
   ChevronDown,
@@ -39,7 +39,7 @@ import {
   Search,
   Settings2,
   Sparkles,
-} from "@/components/icons/lucide";
+} from "@desktop/components/icons/lucide";
 
 interface BotNavProps {
   bots: Bot[];

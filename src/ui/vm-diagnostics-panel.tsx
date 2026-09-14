@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@desktop/components/ui/alert";
+import { Button } from "@desktop/components/ui/button";
+import { Input } from "@desktop/components/ui/input";
 import {
   guestResponseSchema,
   vmInfoSchema,
   vmService,
   type GuestResponse,
   type VmInfo,
-} from "@/services/vm-service";
-import { LoaderCircle } from "@/components/icons/lucide";
-import { cn } from "@/lib/utils";
+} from "@desktop/services/vm-service";
+import { LoaderCircle } from "@desktop/components/icons/lucide";
+import { cn } from "@desktop/lib/utils";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

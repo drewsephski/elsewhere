@@ -9,6 +9,7 @@ pub mod error;
 pub mod events;
 pub mod finalizer;
 pub mod provider_profile;
+pub mod provider_status_cache;
 pub mod redact;
 pub mod run_engine_select;
 pub mod run_archive;

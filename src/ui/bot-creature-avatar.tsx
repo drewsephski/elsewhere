@@ -1,7 +1,7 @@
 import { useId } from "react";
-import type { BotCreatureKind, BotCreatureSpec } from "@/lib/bot-visual";
-import { getBotCreatureShellClass, getBotCreatureSpec } from "@/lib/bot-visual";
-import { cn } from "@/lib/utils";
+import type { BotCreatureKind, BotCreatureSpec } from "@desktop/lib/bot-visual";
+import { getBotCreatureShellClass, getBotCreatureSpec } from "@desktop/lib/bot-visual";
+import { cn } from "@desktop/lib/utils";
 
 export type BotCreatureAvatarSize = "sm" | "md" | "lg";
 

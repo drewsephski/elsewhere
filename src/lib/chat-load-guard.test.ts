@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { shouldCommitChatLoad } from "@/lib/chat-load-guard";
+import { shouldCommitChatLoad } from "@desktop/lib/chat-load-guard";
 
 describe("chat-load-guard", () => {
   test("commits only when epoch and bot selection match", () => {

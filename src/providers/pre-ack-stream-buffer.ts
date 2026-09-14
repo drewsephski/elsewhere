@@ -1,4 +1,4 @@
-import type { ProviderStreamEvent } from "@/providers/types";
+import type { ProviderStreamEvent } from "@desktop/providers/types";
 
 /** Events received before `startChat` returns durable message ids. */
 export function pushPreAckStreamEvent(

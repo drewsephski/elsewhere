@@ -6,7 +6,7 @@ import {
   Loader2Icon,
   OctagonXIcon,
   TriangleAlertIcon,
-} from "@/components/icons/lucide"
+} from "@desktop/components/icons/lucide"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()

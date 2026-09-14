@@ -2,9 +2,9 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { PanelLeftOpen } from "@/components/icons/lucide";
+} from "@desktop/components/ui/tooltip";
+import { cn } from "@desktop/lib/utils";
+import { PanelLeftOpen } from "@desktop/components/icons/lucide";
 
 interface SidebarExpandTabProps {
   onExpand: () => void;

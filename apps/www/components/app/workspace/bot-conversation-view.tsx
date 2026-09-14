@@ -10,7 +10,6 @@ import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { workStatus } from "@/lib/work-events";
 import { useActiveRun } from "@/contexts/active-run-context";
 import { Button } from "@/components/ui/button";
-import { cn } from "cn";
 import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
