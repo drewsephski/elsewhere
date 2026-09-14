@@ -116,11 +116,7 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         }
         "workspace_exec" => {
             let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
-            let command = if command.len() > MAX_EXEC_COMMAND_CHARS {
-                command[..MAX_EXEC_COMMAND_CHARS].to_string()
-            } else {
-                command.to_string()
-            };
+            let command = truncate_str(command, MAX_EXEC_COMMAND_CHARS);
             json!({ "command": command })
         }
         "workspace_list" | "workspace_read" => json!({
@@ -190,12 +186,15 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
     }
 }
 
-fn truncate_str(value: &str, max: usize) -> String {
-    if value.len() > max {
-        value[..max].to_string()
-    } else {
-        value.to_string()
+fn truncate_str(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
     }
+    let mut end = max_bytes;
+    while end > 0 && !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 #[cfg(test)]
@@ -252,6 +251,22 @@ mod tests {
             .await
             .expect("authorize");
         assert_eq!(decision, ApprovalDecision::Allow);
+    }
+
+    #[test]
+    fn truncate_str_does_not_split_multibyte_characters() {
+        let text = format!("{}🎉", "a".repeat(79));
+        assert!(text.len() > 80);
+        assert_eq!(truncate_str(&text, 80), "a".repeat(79));
+
+        let sanitized = sanitize_tool_arguments(
+            "browser_type",
+            &json!({"ref":"e1","text": text}),
+        );
+        assert_eq!(
+            sanitized.get("textPreview"),
+            Some(&json!("a".repeat(79)))
+        );
     }
 
     #[test]
