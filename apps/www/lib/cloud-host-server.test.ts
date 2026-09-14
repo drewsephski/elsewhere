@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  CloudHostUnavailableError,
   resetCloudHostUpstreamCacheForTests,
   selectCloudHostUpstream,
 } from "./cloud-host-server";
@@ -54,7 +53,7 @@ describe("selectCloudHostUpstream", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns a typed retryable transport failure when no runner is reachable", async () => {
+  it("returns a typed transport failure when no runner is reachable", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("unreachable")));
 
     await expect(
@@ -62,10 +61,9 @@ describe("selectCloudHostUpstream", () => {
         env: env({
           NODE_ENV: "production",
           ELSEWHERE_CLOUD_HOST_URL: "http://runner.internal:8080",
-          NEXT_PUBLIC_ELSEWHERE_CLOUD_HOST_HOST_URL: undefined,
         }),
       }),
-    ).rejects.toMatchObject<Partial<CloudHostUnavailableError>>({
+    ).rejects.toMatchObject({
       name: "CloudHostUnavailableError",
       attemptedSources: ["server"],
     });
