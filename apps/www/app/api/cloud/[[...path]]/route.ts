@@ -32,6 +32,16 @@ async function proxyToCloudHost(request: Request, context: RouteContext): Promis
   headers.set("Authorization", `Bearer ${token}`);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  const isEventStream = incoming.pathname.includes("/events");
+  const upstreamTimeoutMs = isEventStream ? 0 : 45_000;
+  const upstreamSignal =
+    upstreamTimeoutMs > 0
+      ? AbortSignal.any(
+          request.signal
+            ? [request.signal, AbortSignal.timeout(upstreamTimeoutMs)]
+            : [AbortSignal.timeout(upstreamTimeoutMs)],
+        )
+      : request.signal;
 
   try {
     const upstream = await fetch(target, {
@@ -40,7 +50,7 @@ async function proxyToCloudHost(request: Request, context: RouteContext): Promis
       body: hasBody ? request.body : undefined,
       // Required when forwarding a streaming request body (Node fetch).
       duplex: hasBody ? "half" : undefined,
-      signal: request.signal,
+      signal: upstreamSignal,
       cache: "no-store",
     } as RequestInit);
 

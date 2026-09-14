@@ -33,8 +33,7 @@ pub async fn status(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<ProviderStatusResponse>, ApiError> {
-    let availability =
-        owner_availability_with_timeout(&state, principal.owner_id()).await?;
+    let availability = owner_availability_for_status(&state, principal.owner_id()).await?;
     let (codex_installed, chatgpt_connected, plan_type) = map_availability(availability);
 
     Ok(Json(ProviderStatusResponse {
@@ -108,6 +107,11 @@ pub async fn codex_login_start(
             "ChatGPT sign-in is busy. Please try again shortly.".into(),
         ));
     }
+    let _permit = state
+        .codex_ops_semaphore
+        .acquire()
+        .await
+        .map_err(|_| ApiError::Conflict("Codex is busy. Please try again shortly.".into()))?;
     let mut launch = CodexProcessLaunch::from_path(executable).subscription_child();
     if let Some(profile) = profile {
         launch = launch.with_profile(&profile);
@@ -204,6 +208,32 @@ pub async fn codex_login_cancel(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+async fn owner_availability_for_status(
+    state: &AppState,
+    owner_id: &str,
+) -> Result<CodexSubscriptionAvailability, ApiError> {
+    if state
+        .codex_login_client
+        .lock()
+        .await
+        .as_ref()
+        .is_some_and(|login| login.owner_id == owner_id)
+    {
+        return Ok(CodexSubscriptionAvailability::NotAuthenticated);
+    }
+    match tokio::time::timeout(
+        PROVIDER_STATUS_PROBE_TIMEOUT,
+        owner_availability(state, owner_id),
+    )
+    .await
+    {
+        Ok(availability) => availability,
+        Err(_) => Ok(CodexSubscriptionAvailability::Unavailable(
+            "Codex availability check timed out".into(),
+        )),
+    }
+}
+
 async fn owner_availability(
     state: &AppState,
     owner_id: &str,
@@ -213,6 +243,11 @@ async fn owner_availability(
     }
     let profile =
         crate::provider_profile::profile_for_owner(&state.pool, &state.config, owner_id).await?;
+    let _permit = state
+        .codex_ops_semaphore
+        .acquire()
+        .await
+        .map_err(|_| ApiError::Internal("Codex is busy on this host".into()))?;
     Ok(probe_codex_subscription_availability_with_profile(
         state.config.codex_executable.clone(),
         profile,
@@ -220,19 +255,3 @@ async fn owner_availability(
     .await)
 }
 
-async fn owner_availability_with_timeout(
-    state: &AppState,
-    owner_id: &str,
-) -> Result<CodexSubscriptionAvailability, ApiError> {
-    match tokio::time::timeout(
-        PROVIDER_STATUS_PROBE_TIMEOUT,
-        owner_availability(state, owner_id),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => Ok(CodexSubscriptionAvailability::Unavailable(
-            "ChatGPT connection check timed out on the runner".into(),
-        )),
-    }
-}

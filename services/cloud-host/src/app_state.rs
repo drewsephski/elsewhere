@@ -33,6 +33,8 @@ pub struct AppState {
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub runner_heartbeat: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
     pub computer_registry: ComputerRegistry,
+    /// One Codex app-server child at a time (probe, login, runs) on this host.
+    pub codex_ops_semaphore: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -69,6 +71,7 @@ impl AppState {
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             runner_heartbeat: Arc::new(std::sync::Mutex::new(None)),
             computer_registry: ComputerRegistry::default(),
+            codex_ops_semaphore: Arc::new(Semaphore::new(1)),
         }
     }
 }

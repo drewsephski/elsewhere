@@ -12,12 +12,15 @@ export type ProviderStatusLoadPhase = "idle" | "loading" | "ready" | "error";
 type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
 
 async function readCloudJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
   let body: unknown = null;
   try {
-    body = await response.json();
+    body = text ? JSON.parse(text) : null;
   } catch {
     if (!response.ok) {
-      throw new Error(`Could not connect to Elsewhere (${response.status})`);
+      throw new Error(
+        text.trim() || `Could not connect to Elsewhere (${response.status})`,
+      );
     }
     throw new Error("Could not read workspace response");
   }
