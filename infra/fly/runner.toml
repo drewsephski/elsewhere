@@ -4,7 +4,7 @@ kill_signal = "SIGTERM"
 kill_timeout = 300
 
 [build]
-  dockerfile = "infra/fly/Dockerfile.runner"
+  dockerfile = "Dockerfile.runner"
 
 [env]
   ELSEWHERE_AUTH_MODE = "jwt"
