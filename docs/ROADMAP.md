@@ -22,6 +22,8 @@
 - [x] Terminal / filesystem tools via guest RPC (`workspace_*` tools + `LocalMacComputer`)
 - [x] Fly Sprites adapter (`SpriteComputer` + mock/live proofs)
 - [x] `run_events` table (dual-write with structured `messages` during migration)
+- [x] Cloud host vertical slice (Postgres `RunStore`, SSE events, authenticated run API — Phase 3B.1)
+- [ ] **Phase 3B.2 — Codex subscription provider** (`CodexRunEngine`, app-server, Computer MCP; API key fallback)
 - [ ] Browser automation
 - [ ] Approvals and activity timeline
 

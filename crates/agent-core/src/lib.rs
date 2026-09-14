@@ -5,6 +5,7 @@ mod events;
 mod input;
 mod luna;
 mod model;
+mod run_engine;
 mod runtime;
 mod run_store;
 mod tools;
@@ -19,6 +20,9 @@ pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult,
     ModelError, ResponsesModel,
+};
+pub use run_engine::{
+    responses_loop_deps, CodexRunEngine, ResponsesRunEngine, RunEngineKind, SharedRunDeps,
 };
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use tools::MAX_AGENT_TOOL_STEPS;

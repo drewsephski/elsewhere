@@ -32,7 +32,8 @@ The portable contract is **`AgentComputer`**, not a single RPC protocol.
 | `AgentComputer` | `LocalMacComputer` | `SpriteComputer` (`crates/sprite-computer`) |
 | `RunStore` | `SqliteRunStore` | *(Phase 3B — Postgres)* |
 | `EventSink` | `TauriEventSink` | *(Phase 3B — SSE/WebSocket)* |
-| `ResponsesModel` | `OpenAiResponsesModel` | *(Phase 3B — same Luna adapter)* |
+| `ResponsesModel` | `OpenAiResponsesModel` | `OpenAiResponsesModel` (API key fallback) |
+| `RunEngine` | `ResponsesRunEngine` | `ResponsesRunEngine` today; `CodexRunEngine` in 3B.2 |
 
 ```text
 Elsewhere host process

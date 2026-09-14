@@ -1,0 +1,11 @@
+[package]
+name = "codex-provider"
+version = "0.1.0"
+edition = "2021"
+description = "Detect local Codex install and ChatGPT subscription auth (Phase 3B.2)"
+
+[dependencies]
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

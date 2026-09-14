@@ -15,14 +15,20 @@ Desktop and web are separate bundles. Run `pnpm dev:www` for marketing and `pnpm
 ## Runtime boundary (portable core)
 
 ```text
-AgentRuntime (agent-core::run_agent_loop)
+RunEngine (Phase 3B.2+)
+ ├── ResponsesRunEngine   — API key + agent-core::run_agent_loop (today)
+ └── CodexRunEngine       — ChatGPT subscription via Codex app-server (planned)
+
+ResponsesRunEngine:
  ├── ResponsesModel      (OpenAI Responses API — host-provided)
- ├── RunStore            (SQLite today, Postgres later)
- ├── EventSink           (Tauri events today, SSE/WebSocket later)
+ ├── RunStore            (SQLite today, Postgres in cloud-host)
+ ├── EventSink           (Tauri events today, SSE in cloud-host)
  └── AgentComputer (async)
       ├── LocalMacComputer   (desktop — VZ + guest-agent)
       └── SpriteComputer     (Fly Sprites REST — `crates/sprite-computer`)
 ```
+
+See `docs/PHASE_3B2_CODEX_PROVIDER.md` for the Codex subscription path (preferred default when ChatGPT-authenticated Codex is available).
 
 The core loop does **not** depend on Tauri, macOS, SQLite, or Virtualization.framework. The desktop app wires concrete adapters in `src-tauri/src/agent/`.
 
