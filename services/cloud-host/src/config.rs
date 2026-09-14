@@ -23,7 +23,7 @@ impl Config {
     pub fn from_env() -> Result<Self, String> {
         let database_url = require_env("DATABASE_URL")?;
         let openai_api_key = env::var("OPENAI_API_KEY").ok().filter(|v| !v.is_empty());
-        let run_engine = RunEngineMode::from_env();
+        let run_engine = RunEngineMode::from_env()?;
         if run_engine == RunEngineMode::Responses && openai_api_key.is_none() {
             return Err(
                 "OPENAI_API_KEY is required when ELSEWHERE_RUN_ENGINE=responses".to_string(),

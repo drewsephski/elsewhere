@@ -25,6 +25,10 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 name = "run_engine_mapping"
 required-features = ["test-utils"]
 
+[[test]]
+name = "subscription_availability"
+required-features = ["test-utils"]
+
 [[example]]
 name = "account_probe"
 path = "examples/account_probe.rs"

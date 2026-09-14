@@ -672,6 +672,7 @@ async fn handle_item_started(
 
     let arguments = item.get("arguments").cloned().unwrap_or(json!({}));
     let call_body = json!({
+        "server": MCP_SERVER_NAME,
         "tool": tool,
         "callId": call_id,
         "arguments": arguments
@@ -745,6 +746,7 @@ async fn handle_item_completed(
     let duration_ms = item.get("durationMs").cloned().unwrap_or(json!(0));
     let output = mcp_tool_output_string(item);
     let result_body = json!({
+        "server": MCP_SERVER_NAME,
         "tool": tool,
         "callId": call_id,
         "ok": ok,

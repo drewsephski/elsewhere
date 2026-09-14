@@ -20,7 +20,11 @@ use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
 use crate::finalizer::{sanitize_host_error, HostFinalizer};
-use crate::run_engine_select::{auto_fallback_from_codex_error, RunEngineMode};
+use codex_provider::probe_codex_subscription_availability;
+
+use crate::run_engine_select::{
+    resolve_run_engine, ResolveRunEngineError, SelectedRunEngine, RunEngineMode,
+};
 
 #[derive(Clone)]
 pub struct RunExecutionInput {
@@ -131,65 +135,52 @@ async fn execute_run(
 
     let input_messages = vec![json!({"role":"user","content": input.user_message})];
 
-    match config.run_engine {
-        RunEngineMode::Codex => {
+    let codex_availability = if config.run_engine == RunEngineMode::Responses {
+        codex_provider::CodexSubscriptionAvailability::NotInstalled
+    } else {
+        probe_codex_subscription_availability(config.codex_executable.clone()).await
+    };
+    let selected = match resolve_run_engine(
+        config.run_engine,
+        config.openai_api_key.as_deref(),
+        &codex_availability,
+    ) {
+        Ok(engine) => engine,
+        Err(err) => return Err(resolve_error_to_host(err)),
+    };
+
+    let shared = SharedRunDeps {
+        computer,
+        store,
+        events: events as Arc<dyn agent_core::EventSink>,
+        cancel,
+    };
+
+    match selected {
+        SelectedRunEngine::CodexSubscription => {
             tracing::info!(engine = "codex_subscription", "cloud-host selected Codex engine");
-            let shared = SharedRunDeps {
-                computer,
-                store,
-                events: events as Arc<dyn agent_core::EventSink>,
-                cancel,
-            };
             run_codex_engine(&config, ctx, shared, input_messages).await
         }
-        RunEngineMode::Responses => {
-            let shared = SharedRunDeps {
-                computer,
-                store,
-                events: events as Arc<dyn agent_core::EventSink>,
-                cancel,
-            };
-            run_responses_engine(&config, ctx, shared, input_messages).await
-        }
-        RunEngineMode::Auto => {
-            let shared_codex = SharedRunDeps {
-                computer: computer.clone(),
-                store: store.clone(),
-                events: events.clone() as Arc<dyn agent_core::EventSink>,
-                cancel: cancel.clone(),
-            };
-            let codex_result =
-                run_codex_engine(&config, ctx, shared_codex, input_messages.clone()).await;
-            if codex_result.is_ok() {
-                return Ok(());
-            }
-            let err = codex_result.unwrap_err();
-            if auto_fallback_from_codex_error(&err) && config.openai_api_key.is_some() {
+        SelectedRunEngine::ResponsesApi => {
+            if config.run_engine == RunEngineMode::Auto {
                 tracing::warn!(
                     engine = "auto",
-                    reason = %err,
+                    codex = ?codex_availability,
                     "falling back to Responses API engine"
                 );
-                let ctx_responses = AgentLoopContext {
-                    request_id: input.records.request_id.clone(),
-                    conversation_id: input.records.conversation_id.clone(),
-                    assistant_message_id: input.records.assistant_message_id.clone(),
-                    bot_id: input.bot_id.clone(),
-                    model: input.records.model.clone(),
-                    instructions: input.records.instructions.clone(),
-                };
-                let shared_responses = SharedRunDeps {
-                    computer,
-                    store,
-                    events: events as Arc<dyn agent_core::EventSink>,
-                    cancel,
-                };
-                return run_responses_engine(&config, ctx_responses, shared_responses, input_messages)
-                    .await;
             }
-            Err(err)
+            run_responses_engine(&config, ctx, shared, input_messages).await
         }
     }
+}
+
+fn resolve_error_to_host(err: ResolveRunEngineError) -> String {
+    let code = match &err {
+        ResolveRunEngineError::NoModelProviderAvailable => "no_model_provider_available",
+        ResolveRunEngineError::ResponsesApiKeyRequired => "responses_api_key_required",
+        ResolveRunEngineError::CodexUnavailable(_) => "codex_unavailable",
+    };
+    format!("{code}: {}", err.as_run_message())
 }
 
 async fn run_codex_engine(

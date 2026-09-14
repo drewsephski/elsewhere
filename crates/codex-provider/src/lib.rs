@@ -11,6 +11,7 @@ mod run_input;
 mod run_persistence;
 
 mod probe;
+mod subscription_availability;
 
 mod testing;
 
@@ -33,3 +34,8 @@ pub use probe::{
     CodexInstallProbe, CodexProbeError,
 };
 pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};
+pub use subscription_availability::{
+    probe_codex_subscription_availability, CodexSubscriptionAvailability,
+};
+#[cfg(any(test, feature = "test-utils"))]
+pub use subscription_availability::probe_codex_subscription_availability_on_client;
