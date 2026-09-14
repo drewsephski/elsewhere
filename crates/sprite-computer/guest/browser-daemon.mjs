@@ -10,6 +10,7 @@ import {
   MAX_TYPE_TEXT_CHARS,
   assertPublicHttpUrl,
   buildSnapshot,
+  downloadHttpWithRedirects,
   launchPersistentContext,
   requireWorkspacePath,
   resolveRef,
@@ -17,6 +18,15 @@ import {
 
 let contextPromise;
 let shuttingDown = false;
+
+/** Serialize all daemon RPCs so concurrent MCP calls cannot race page/refs. */
+let requestTail = Promise.resolve();
+
+function runExclusive(task) {
+  const next = requestTail.then(() => task());
+  requestTail = next.catch(() => {});
+  return next;
+}
 
 async function getContext() {
   if (!contextPromise) {
@@ -62,7 +72,7 @@ async function handleRequest(req) {
 
   switch (action) {
     case "navigate": {
-      const url = assertPublicHttpUrl(String(req.url ?? ""), "url");
+      const url = await assertPublicHttpUrl(String(req.url ?? ""), "url");
       await page.goto(url, {
         waitUntil: "domcontentloaded",
         timeout: MAX_NAVIGATION_TIMEOUT_MS,
@@ -115,18 +125,11 @@ async function handleRequest(req) {
     }
     case "download": {
       const outPath = requireWorkspacePath(String(req.path ?? ""));
-      const url = assertPublicHttpUrl(String(req.url ?? ""), "url");
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
-      const response = await context.request.get(url, {
-        timeout: MAX_NAVIGATION_TIMEOUT_MS,
-      });
-      if (!response.ok()) {
-        throw new Error(`download failed: HTTP ${response.status()}`);
-      }
-      const body = await response.body();
-      if (body.length > MAX_DOWNLOAD_BYTES) {
-        throw new Error(`download exceeds ${MAX_DOWNLOAD_BYTES} bytes`);
-      }
+      const body = await downloadHttpWithRedirects(
+        context,
+        String(req.url ?? ""),
+      );
       fs.writeFileSync(outPath, body);
       return { ok: true, path: outPath, bytes: body.length };
     }
@@ -153,7 +156,7 @@ async function handleConnection(socket) {
       }
       try {
         const req = JSON.parse(line);
-        const result = await handleRequest(req);
+        const result = await runExclusive(() => handleRequest(req));
         writeResponse(socket, result);
       } catch (err) {
         writeResponse(socket, {

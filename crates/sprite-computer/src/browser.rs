@@ -2,7 +2,9 @@ use agent_core::ComputerError;
 use std::time::Duration;
 
 use crate::client::SpriteClient;
-use crate::policy::{browser_workload_network_policy, NetworkPolicyConfig};
+use crate::policy::{
+    browser_workload_network_policy, network_policy_matches, NetworkPolicyConfig,
+};
 
 pub const BROWSER_ROOT: &str = "/var/elsewhere/browser";
 pub const BROWSER_CLIENT: &str = "/var/elsewhere/browser/client.mjs";
@@ -294,7 +296,31 @@ rm -f /var/elsewhere/browser/daemon.sock
     Ok(())
 }
 
-pub async fn with_temporary_egress<T, F>(client: &SpriteClient, baseline: &NetworkPolicyConfig, f: F) -> Result<T, ComputerError>
+async fn restore_and_verify_baseline_network_policy(
+    client: &SpriteClient,
+    baseline: &NetworkPolicyConfig,
+) -> Result<(), ComputerError> {
+    client
+        .set_network_policy(baseline)
+        .await
+        .map_err(map_err)?;
+    // Fly Sprites network policy updates are asynchronous; give deny a moment to apply.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let actual = client.get_network_policy().await.map_err(map_err)?;
+    if !network_policy_matches(&actual, baseline) {
+        return Err(ComputerError::GuestUnavailable(
+            "sprite network policy is not default-deny after browser egress; computer is not safe for exec"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+pub async fn with_temporary_egress<T, F>(
+    client: &SpriteClient,
+    baseline: &NetworkPolicyConfig,
+    f: F,
+) -> Result<T, ComputerError>
 where
     F: std::future::Future<Output = Result<T, ComputerError>>,
 {
@@ -305,9 +331,12 @@ where
     // Fly Sprites network policy updates are asynchronous; give egress a moment to apply.
     tokio::time::sleep(Duration::from_millis(400)).await;
     let result = f.await;
-    let _ = client.set_network_policy(baseline).await;
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    result
+    let restore = restore_and_verify_baseline_network_policy(client, baseline).await;
+    match (result, restore) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(inner), Ok(())) => Err(inner),
+        (_, Err(restore_err)) => Err(restore_err),
+    }
 }
 
 pub fn map_browser_exec_error(stdout: &str, stderr: &str, exit_code: i32) -> ComputerError {
@@ -352,5 +381,7 @@ mod tests {
         assert!(CLIENT_SOURCE.contains("callDaemon"));
         assert!(DAEMON_SOURCE.contains("buildSnapshot"));
         assert!(COMMON_SOURCE.contains("assertPublicHttpUrl"));
+        assert!(COMMON_SOURCE.contains("downloadHttpWithRedirects"));
+        assert!(DAEMON_SOURCE.contains("runExclusive"));
     }
 }

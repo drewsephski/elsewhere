@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 use crate::browser::{ensure_browser_guest, invoke_browser_daemon};
 use crate::client::{SpriteClient, SpriteClientConfig};
@@ -46,6 +47,8 @@ pub struct SpriteComputer {
     browser_enabled: bool,
     browser_exec_timeout: Duration,
     network_policy: NetworkPolicyConfig,
+    /// Serializes `workspace_exec` and browser work so egress cannot overlap shell exec.
+    execution_gate: Mutex<()>,
 }
 
 impl SpriteComputer {
@@ -63,6 +66,7 @@ impl SpriteComputer {
             browser_enabled,
             browser_exec_timeout,
             network_policy,
+            execution_gate: Mutex::new(()),
         })
     }
 
@@ -119,24 +123,27 @@ impl AgentComputer for SpriteComputer {
             .await
             .map_err(map_sprite_error)?;
 
-        let (_, _, code) = self
-            .client
-            .exec_http("pwd", &self.workspace_root, self.exec_timeout)
-            .await
-            .map_err(map_sprite_error)?;
-        if code != 0 {
-            return Err(ComputerError::GuestUnavailable(
-                "workspace exec probe failed".into(),
-            ));
-        }
+        {
+            let _gate = self.execution_gate.lock().await;
+            let (_, _, code) = self
+                .client
+                .exec_http("pwd", &self.workspace_root, self.exec_timeout)
+                .await
+                .map_err(map_sprite_error)?;
+            if code != 0 {
+                return Err(ComputerError::GuestUnavailable(
+                    "workspace exec probe failed".into(),
+                ));
+            }
 
-        if self.browser_enabled {
-            ensure_browser_guest(
-                &self.client,
-                &self.network_policy,
-                self.browser_exec_timeout,
-            )
-            .await?;
+            if self.browser_enabled {
+                ensure_browser_guest(
+                    &self.client,
+                    &self.network_policy,
+                    self.browser_exec_timeout,
+                )
+                .await?;
+            }
         }
 
         Ok(ComputerInfo {
@@ -177,6 +184,7 @@ impl AgentComputer for SpriteComputer {
     }
 
     async fn exec(&self, command: &str) -> Result<ExecResult, ComputerError> {
+        let _gate = self.execution_gate.lock().await;
         let (stdout, stderr, exit_code) = self
             .client
             .exec_http(command, &self.workspace_root, self.exec_timeout)
@@ -196,6 +204,8 @@ impl AgentComputer for SpriteComputer {
                 "browser automation is disabled for this computer".into(),
             ));
         }
+
+        let _gate = self.execution_gate.lock().await;
 
         ensure_browser_guest(
             &self.client,

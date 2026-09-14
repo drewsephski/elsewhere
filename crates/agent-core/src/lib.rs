@@ -2,6 +2,7 @@
 
 mod approval;
 mod browser_tools;
+mod public_http_url;
 mod computer;
 mod events;
 mod fake_computer;

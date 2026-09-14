@@ -1,4 +1,5 @@
 import fs from "fs";
+import dns from "dns/promises";
 import { chromium } from "playwright-core";
 
 export const BROWSER_ROOT = "/var/elsewhere/browser";
@@ -15,6 +16,7 @@ export const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_TYPE_TEXT_CHARS = 8_192;
 export const MAX_NAVIGATION_TIMEOUT_MS = 120_000;
 export const MAX_ACTION_TIMEOUT_MS = 30_000;
+export const MAX_DOWNLOAD_REDIRECTS = 10;
 
 const BLOCKED_HOSTNAMES = new Set([
   "localhost",
@@ -76,7 +78,31 @@ function isBlockedIpv6(host) {
   );
 }
 
-export function assertPublicHttpUrl(rawUrl, label = "url") {
+function assertLiteralHostAllowed(host, label) {
+  if (BLOCKED_HOSTNAMES.has(host) || host.endsWith(".localhost")) {
+    throw new Error(`${label} targets a blocked host`);
+  }
+  if (isPrivateIpv4(host) || isBlockedIpv6(host)) {
+    throw new Error(`${label} targets a private or link-local address`);
+  }
+  if (host === "169.254.169.254") {
+    throw new Error(`${label} targets cloud metadata`);
+  }
+}
+
+async function assertResolvedHostAllowed(hostname, label) {
+  const v4 = await dns.resolve4(hostname).catch(() => []);
+  const v6 = await dns.resolve6(hostname).catch(() => []);
+  const all = [...v4, ...v6];
+  if (all.length === 0) {
+    throw new Error(`${label} host could not be resolved`);
+  }
+  for (const addr of all) {
+    assertLiteralHostAllowed(addr.toLowerCase(), label);
+  }
+}
+
+export async function assertPublicHttpUrl(rawUrl, label = "url") {
   let parsed;
   try {
     parsed = new URL(rawUrl);
@@ -87,14 +113,12 @@ export function assertPublicHttpUrl(rawUrl, label = "url") {
     throw new Error(`${label} must use http or https`);
   }
   const host = parsed.hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(host) || host.endsWith(".localhost")) {
-    throw new Error(`${label} targets a blocked host`);
-  }
-  if (isPrivateIpv4(host) || isBlockedIpv6(host)) {
-    throw new Error(`${label} targets a private or link-local address`);
-  }
-  if (host === "169.254.169.254") {
-    throw new Error(`${label} targets cloud metadata`);
+  assertLiteralHostAllowed(host, label);
+  if (!isPrivateIpv4(host) && !isBlockedIpv6(host)) {
+    const isIpLiteral = /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(":");
+    if (!isIpLiteral) {
+      await assertResolvedHostAllowed(host, label);
+    }
   }
   return parsed.toString();
 }
@@ -109,12 +133,40 @@ export function requireWorkspacePath(filePath) {
 export async function installRequestGuards(context) {
   await context.route("**/*", async (route) => {
     try {
-      assertPublicHttpUrl(route.request().url(), "request");
+      await assertPublicHttpUrl(route.request().url(), "request");
       await route.continue();
-    } catch (err) {
+    } catch {
       await route.abort("blockedbyclient");
     }
   });
+}
+
+export async function downloadHttpWithRedirects(context, startUrl) {
+  let url = await assertPublicHttpUrl(String(startUrl ?? ""), "url");
+  for (let hop = 0; hop <= MAX_DOWNLOAD_REDIRECTS; hop += 1) {
+    const response = await context.request.get(url, {
+      timeout: MAX_NAVIGATION_TIMEOUT_MS,
+      maxRedirects: 0,
+    });
+    const status = response.status();
+    if (status >= 300 && status < 400) {
+      const location = response.headers().location || response.headers().Location;
+      if (!location) {
+        throw new Error("redirect response missing Location header");
+      }
+      url = await assertPublicHttpUrl(new URL(location, url).toString(), "redirect");
+      continue;
+    }
+    if (!response.ok()) {
+      throw new Error(`download failed: HTTP ${status}`);
+    }
+    const body = await response.body();
+    if (body.length > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`download exceeds ${MAX_DOWNLOAD_BYTES} bytes`);
+    }
+    return body;
+  }
+  throw new Error("download exceeded redirect limit");
 }
 
 export async function buildSnapshot(page) {

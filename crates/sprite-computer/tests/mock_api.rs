@@ -1,10 +1,10 @@
 use agent_core::AgentComputer;
 use sprite_computer::{
-    default_deny_network_policy, SpriteClient, SpriteClientConfig, SpriteComputer,
-    SpriteComputerConfig,
+    default_deny_network_policy, with_temporary_egress, SpriteClient, SpriteClientConfig,
+    SpriteComputer, SpriteComputerConfig,
 };
 use std::time::Duration;
-use wiremock::matchers::{method, path, query_param};
+use wiremock::matchers::{body_string_contains, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn test_config(base: &str, name: &str) -> SpriteClientConfig {
@@ -284,6 +284,95 @@ async fn sprite_computer_enforces_workspace_boundary() {
     assert!(matches!(
         err,
         agent_core::ComputerError::SandboxRejected(_)
+    ));
+}
+
+#[tokio::test]
+async fn temporary_egress_restores_and_verifies_default_deny() {
+    let server = MockServer::start().await;
+    let deny_body = serde_json::json!({
+        "rules": [{"action": "deny", "domain": "*"}]
+    });
+    let allow_body = serde_json::json!({
+        "rules": [{"action": "allow", "domain": "*"}]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/egress-test/policy/network"))
+        .and(body_string_contains("\"allow\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(allow_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/egress-test/policy/network"))
+        .and(body_string_contains("\"deny\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(deny_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/sprites/egress-test/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(deny_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = SpriteClient::new(test_config(&server.uri(), "egress-test")).unwrap();
+    let baseline = default_deny_network_policy();
+    let value = with_temporary_egress(&client, &baseline, async {
+        Ok::<_, agent_core::ComputerError>(42)
+    })
+    .await
+    .unwrap();
+    assert_eq!(value, 42);
+}
+
+#[tokio::test]
+async fn temporary_egress_fails_when_baseline_not_restored() {
+    let server = MockServer::start().await;
+    let deny_body = serde_json::json!({
+        "rules": [{"action": "deny", "domain": "*"}]
+    });
+    let allow_body = serde_json::json!({
+        "rules": [{"action": "allow", "domain": "*"}]
+    });
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/egress-leak/policy/network"))
+        .and(body_string_contains("\"allow\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(allow_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/egress-leak/policy/network"))
+        .and(body_string_contains("\"deny\""))
+        .respond_with(ResponseTemplate::new(200).set_body_json(deny_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("GET"))
+        .and(path("/sprites/egress-leak/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(allow_body.clone()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = SpriteClient::new(test_config(&server.uri(), "egress-leak")).unwrap();
+    let baseline = default_deny_network_policy();
+    let err = with_temporary_egress(&client, &baseline, async {
+        Ok::<_, agent_core::ComputerError>(())
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        agent_core::ComputerError::GuestUnavailable(_)
     ));
 }
 
