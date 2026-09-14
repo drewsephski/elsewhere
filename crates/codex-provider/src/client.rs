@@ -5,8 +5,9 @@ use serde_json::{json, Value};
 use crate::error::CodexProviderError;
 use crate::process::{CodexProcessLaunch, ManagedCodexProcess, DEFAULT_REQUEST_TIMEOUT};
 use crate::protocol::{
+    build_elsewhere_thread_start_params, build_turn_interrupt_params, build_turn_start_params,
     parse_account_response, parse_list_mcp_status, parse_rate_limits_response,
-    parse_thread_start_response, build_elsewhere_thread_start_params, CodexAccountState,
+    parse_thread_start_response, parse_turn_start_response, CodexAccountState,
     CodexRateLimitsSnapshot, ElsewhereThreadConfig,
 };
 
@@ -77,6 +78,33 @@ impl CodexAppServerClient {
             .request("thread/start", params, Duration::from_secs(120))
             .await?;
         parse_thread_start_response(result)
+    }
+
+    pub async fn turn_start(
+        &self,
+        thread_id: &str,
+        user_text: &str,
+        timeout: Duration,
+    ) -> Result<String, CodexProviderError> {
+        let params = build_turn_start_params(thread_id, user_text);
+        let result = self
+            .process
+            .request("turn/start", params, timeout)
+            .await?;
+        parse_turn_start_response(result)
+    }
+
+    pub async fn turn_interrupt(
+        &self,
+        thread_id: &str,
+        turn_id: &str,
+        timeout: Duration,
+    ) -> Result<(), CodexProviderError> {
+        let params = build_turn_interrupt_params(thread_id, turn_id);
+        self.process
+            .request("turn/interrupt", params, timeout)
+            .await?;
+        Ok(())
     }
 
     pub async fn list_mcp_server_tools(

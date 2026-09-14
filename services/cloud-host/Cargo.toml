@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 agent-core = { path = "../../crates/agent-core" }
+codex-provider = { path = "../../crates/codex-provider" }
 sprite-computer = { path = "../../crates/sprite-computer" }
 openai-responses = { path = "../../crates/openai-responses" }
 async-trait = "0.1"

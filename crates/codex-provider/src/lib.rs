@@ -7,12 +7,14 @@ mod login;
 mod process;
 mod protocol;
 mod run_engine;
+mod run_input;
+mod run_persistence;
 
 mod probe;
 
 mod testing;
 
-pub use testing::spawn_fake_app_server;
+pub use testing::{spawn_fake_app_server, spawn_fake_app_server_with_mode, FakeServerMode};
 
 pub use client::CodexAppServerClient;
 pub use compat::{
@@ -30,4 +32,4 @@ pub use probe::{
     parse_login_status, prefers_chatgpt_subscription, probe_codex, CodexAuthMethod,
     CodexInstallProbe, CodexProbeError,
 };
-pub use run_engine::CodexRunEngine;
+pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};

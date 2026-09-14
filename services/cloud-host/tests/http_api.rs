@@ -103,13 +103,15 @@ fn test_config() -> Config {
     Config {
         database_url: std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into()),
-        openai_api_key: "test-key".into(),
+        openai_api_key: Some("test-key".into()),
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
         sprites_api_base: "http://127.0.0.1:9".into(),
         max_concurrent_runs: 2,
         run_timeout_secs: 120,
         bind_addr: "127.0.0.1:0".into(),
+        run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
+        codex_executable: None,
     }
 }
 

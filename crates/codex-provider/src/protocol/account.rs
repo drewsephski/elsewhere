@@ -107,6 +107,29 @@ pub fn parse_rate_limits_response(value: Value) -> Result<CodexRateLimitsSnapsho
     Ok(CodexRateLimitsSnapshot { raw: value })
 }
 
+/// Subscription runs require `account.type == chatgpt`. `requiresOpenaiAuth` is informational only.
+pub fn require_chatgpt_account(state: &CodexAccountState) -> Result<String, CodexProviderError> {
+    match &state.account {
+        CodexAccountKind::NotLoggedIn => Err(CodexProviderError::Account(
+            "codex_not_authenticated".into(),
+        )),
+        CodexAccountKind::ApiKey => Err(CodexProviderError::Account("codex_not_chatgpt".into())),
+        CodexAccountKind::ChatGpt { plan_type, .. } => Ok(plan_type.clone()),
+        CodexAccountKind::Other(kind) => Err(CodexProviderError::Account(format!(
+            "codex_unsupported_account:{kind}"
+        ))),
+    }
+}
+
+pub fn account_auth_metadata(state: &CodexAccountState) -> (String, Option<String>) {
+    match &state.account {
+        CodexAccountKind::ChatGpt { plan_type, .. } => ("chatgpt".into(), Some(plan_type.clone())),
+        CodexAccountKind::ApiKey => ("apiKey".into(), None),
+        CodexAccountKind::NotLoggedIn => ("none".into(), None),
+        CodexAccountKind::Other(kind) => (kind.clone(), None),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +149,16 @@ mod tests {
                 plan_type: "pro".into()
             }
         );
+    }
+
+    #[test]
+    fn chatgpt_account_valid_when_requires_openai_auth_true() {
+        let state = parse_account_response(json!({
+            "account": { "type": "chatgpt", "planType": "prolite" },
+            "requiresOpenaiAuth": true
+        }))
+        .unwrap();
+        assert_eq!(require_chatgpt_account(&state).unwrap(), "prolite");
     }
 
     #[test]

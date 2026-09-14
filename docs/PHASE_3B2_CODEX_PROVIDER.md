@@ -107,7 +107,7 @@ Treat multi-tenant credential storage and ToS as product/legal constraints; arch
 
 1. [x] Document phase (this file) + `RunEngine` types in `agent-core`.
 2. [x] `codex-provider` crate: install probe + auth state (CLI interim).
-3. [ ] `CodexRunEngine`: app-server client, thread lifecycle, event mapping → `EventSink` / `RunStore`.
+3. [x] `CodexRunEngine`: app-server client, thread lifecycle, event mapping → `EventSink` / `RunStore`.
 4. [ ] Browser ChatGPT login via Codex-supported flow (`login_chatgpt` / `codex login`).
 5. [ ] Elsewhere Computer MCP server (workspace_* → `AgentComputer`).
 6. [ ] Desktop: prefer Codex when ChatGPT-authenticated; API key fallback.

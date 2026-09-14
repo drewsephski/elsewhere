@@ -639,6 +639,7 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "codex-provider",
  "dashmap",
  "dotenvy",
  "futures-util",

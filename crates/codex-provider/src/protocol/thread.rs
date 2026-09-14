@@ -18,6 +18,8 @@ pub struct ElsewhereThreadConfig {
     pub mcp_url: String,
     pub bearer_env_var: String,
     pub model: String,
+    pub base_instructions: Option<String>,
+    pub developer_instructions: Option<String>,
 }
 
 impl ElsewhereThreadConfig {
@@ -55,7 +57,7 @@ pub fn build_elsewhere_thread_start_params(
         }
     });
 
-    Ok(json!({
+    let mut payload = json!({
         "model": config.model,
         "cwd": config.cwd.to_string_lossy(),
         "sandbox": "read-only",
@@ -64,7 +66,14 @@ pub fn build_elsewhere_thread_start_params(
             "features": features,
             "mcp_servers": mcp_servers
         }
-    }))
+    });
+    if let Some(base) = &config.base_instructions {
+        payload["baseInstructions"] = json!(base);
+    }
+    if let Some(dev) = &config.developer_instructions {
+        payload["developerInstructions"] = json!(dev);
+    }
+    Ok(payload)
 }
 
 pub fn parse_thread_start_response(value: Value) -> Result<String, CodexProviderError> {
@@ -141,6 +150,8 @@ mod tests {
             mcp_url: "http://127.0.0.1:1234/mcp".into(),
             bearer_env_var: "ELSEWHERE_MCP_TOKEN".into(),
             model: "gpt-5.6-luna".into(),
+            base_instructions: None,
+            developer_instructions: None,
         })
         .unwrap();
         assert_host_tools_disabled(&params).unwrap();

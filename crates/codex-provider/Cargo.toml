@@ -15,8 +15,15 @@ thiserror = "2"
 tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
 tracing = "0.1"
 
+[features]
+test-utils = []
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[test]]
+name = "run_engine_mapping"
+required-features = ["test-utils"]
 
 [[example]]
 name = "account_probe"

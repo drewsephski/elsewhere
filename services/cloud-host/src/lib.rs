@@ -8,6 +8,7 @@ pub mod error;
 pub mod finalizer;
 pub mod events;
 pub mod redact;
+pub mod run_engine_select;
 pub mod runner;
 
 pub use app::build_router;

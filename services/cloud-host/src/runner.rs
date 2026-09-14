@@ -3,8 +3,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    run_agent_loop, AgentComputer, AgentLoopContext, AgentLoopDeps, ResponsesModel, RunStore,
+    AgentComputer, AgentLoopContext, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore,
+    SharedRunDeps,
 };
+use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
 use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
@@ -12,11 +14,13 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
 use crate::app_state::AppState;
+use crate::config::Config;
 use crate::db::postgres_run_store::PostgresRunStore;
 use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
 use crate::finalizer::{sanitize_host_error, HostFinalizer};
+use crate::run_engine_select::{auto_fallback_from_codex_error, RunEngineMode};
 
 #[derive(Clone)]
 pub struct RunExecutionInput {
@@ -68,7 +72,6 @@ pub fn spawn_agent_run(
         let config = state.config.clone();
         let registry = state.registry.clone();
         let run_id = input.records.run_id.clone();
-        let request_id = input.records.request_id.clone();
         let timeout_secs = config.run_timeout_secs;
 
         let result = timeout(
@@ -103,14 +106,14 @@ pub fn spawn_agent_run(
 }
 
 async fn execute_run(
-    config: Arc<crate::config::Config>,
+    config: Arc<Config>,
     pool: sqlx::PgPool,
     store: Arc<dyn RunStore>,
     input: RunExecutionInput,
     cancel: Arc<AtomicBool>,
     events: Arc<CloudEventSink>,
 ) -> Result<(), String> {
-    let (computer, model) = build_deps(&config, &pool, &input, cancel.clone()).await?;
+    let computer = build_computer(&config, &pool, &input).await?;
 
     computer
         .ensure_ready()
@@ -126,21 +129,128 @@ async fn execute_run(
         instructions: input.records.instructions.clone(),
     };
 
-    let deps = AgentLoopDeps {
-        computer,
-        store,
-        events: events as Arc<dyn agent_core::EventSink>,
-        model,
-        cancel,
-    };
+    let input_messages = vec![json!({"role":"user","content": input.user_message})];
 
-    run_agent_loop(
-        ctx,
-        deps,
-        vec![json!({"role":"user","content": input.user_message})],
-    )
-    .await
-    .map_err(|e| e.to_string())
+    match config.run_engine {
+        RunEngineMode::Codex => {
+            tracing::info!(engine = "codex_subscription", "cloud-host selected Codex engine");
+            let shared = SharedRunDeps {
+                computer,
+                store,
+                events: events as Arc<dyn agent_core::EventSink>,
+                cancel,
+            };
+            run_codex_engine(&config, ctx, shared, input_messages).await
+        }
+        RunEngineMode::Responses => {
+            let shared = SharedRunDeps {
+                computer,
+                store,
+                events: events as Arc<dyn agent_core::EventSink>,
+                cancel,
+            };
+            run_responses_engine(&config, ctx, shared, input_messages).await
+        }
+        RunEngineMode::Auto => {
+            let shared_codex = SharedRunDeps {
+                computer: computer.clone(),
+                store: store.clone(),
+                events: events.clone() as Arc<dyn agent_core::EventSink>,
+                cancel: cancel.clone(),
+            };
+            let codex_result =
+                run_codex_engine(&config, ctx, shared_codex, input_messages.clone()).await;
+            if codex_result.is_ok() {
+                return Ok(());
+            }
+            let err = codex_result.unwrap_err();
+            if auto_fallback_from_codex_error(&err) && config.openai_api_key.is_some() {
+                tracing::warn!(
+                    engine = "auto",
+                    reason = %err,
+                    "falling back to Responses API engine"
+                );
+                let ctx_responses = AgentLoopContext {
+                    request_id: input.records.request_id.clone(),
+                    conversation_id: input.records.conversation_id.clone(),
+                    assistant_message_id: input.records.assistant_message_id.clone(),
+                    bot_id: input.bot_id.clone(),
+                    model: input.records.model.clone(),
+                    instructions: input.records.instructions.clone(),
+                };
+                let shared_responses = SharedRunDeps {
+                    computer,
+                    store,
+                    events: events as Arc<dyn agent_core::EventSink>,
+                    cancel,
+                };
+                return run_responses_engine(&config, ctx_responses, shared_responses, input_messages)
+                    .await;
+            }
+            Err(err)
+        }
+    }
+}
+
+async fn run_codex_engine(
+    config: &Config,
+    ctx: AgentLoopContext,
+    shared: SharedRunDeps,
+    input: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let engine = CodexRunEngine::new(CodexRunEngineConfig {
+        executable: config.codex_executable.clone(),
+        ..CodexRunEngineConfig::default()
+    });
+    engine
+        .run(ctx, shared, input)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn run_responses_engine(
+    config: &Config,
+    ctx: AgentLoopContext,
+    shared: SharedRunDeps,
+    input: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let api_key = config
+        .openai_api_key
+        .clone()
+        .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
+    tracing::info!(engine = "responses_api", "cloud-host selected Responses engine");
+    let model = OpenAiResponsesModel::new(api_key, shared.cancel.clone());
+    let engine = ResponsesRunEngine::new(Arc::new(model));
+    engine
+        .run(ctx, shared, input)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn build_computer(
+    config: &Config,
+    pool: &sqlx::PgPool,
+    input: &RunExecutionInput,
+) -> Result<Arc<dyn AgentComputer>, String> {
+    #[cfg(any(test, feature = "test-utils"))]
+    if let Some(o) = test_overrides() {
+        return Ok(o.computer);
+    }
+
+    let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
+    let computer = SpriteComputer::new(SpriteComputerConfig {
+        base_url: config.sprites_api_base.clone(),
+        token: config.sprite_token.clone(),
+        sprite_name,
+        workspace_root: "/workspace".into(),
+        request_timeout: Duration::from_secs(120),
+        auto_create: true,
+        network_policy: default_deny_network_policy(),
+        exec_timeout: Duration::from_secs(60),
+    })
+    .map_err(|e| format!("SpriteComputer: {e}"))?;
+
+    Ok(Arc::new(computer))
 }
 
 async fn sprite_resource_for_computer(
@@ -158,34 +268,6 @@ async fn sprite_resource_for_computer(
     Ok(row
         .map(|(name,)| name)
         .unwrap_or_else(|| sprite_computer::sprite_name_for_sandbox(computer_id)))
-}
-
-async fn build_deps(
-    config: &crate::config::Config,
-    pool: &sqlx::PgPool,
-    input: &RunExecutionInput,
-    cancel: Arc<AtomicBool>,
-) -> Result<(Arc<dyn AgentComputer>, Arc<dyn ResponsesModel>), String> {
-    #[cfg(any(test, feature = "test-utils"))]
-    if let Some(o) = test_overrides() {
-        return Ok((o.computer, o.model));
-    }
-
-    let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
-    let computer = SpriteComputer::new(SpriteComputerConfig {
-        base_url: config.sprites_api_base.clone(),
-        token: config.sprite_token.clone(),
-        sprite_name,
-        workspace_root: "/workspace".into(),
-        request_timeout: Duration::from_secs(120),
-        auto_create: true,
-        network_policy: default_deny_network_policy(),
-        exec_timeout: Duration::from_secs(60),
-    })
-    .map_err(|e| format!("SpriteComputer: {e}"))?;
-
-    let model = OpenAiResponsesModel::new(config.openai_api_key.clone(), cancel);
-    Ok((Arc::new(computer), Arc::new(model)))
 }
 
 #[cfg(any(test, feature = "test-utils"))]

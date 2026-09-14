@@ -32,6 +32,8 @@ async fn main() {
         mcp_url: mcp.url().to_string(),
         bearer_env_var: MCP_BEARER_ENV_VAR.to_string(),
         model: "gpt-5.6-luna".into(),
+        base_instructions: None,
+        developer_instructions: None,
     };
     let thread_params = build_elsewhere_thread_start_params(&thread_config).expect("thread params");
     assert_host_tools_disabled(&thread_params).expect("host tools disabled");

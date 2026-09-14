@@ -21,6 +21,8 @@ pub struct CodexProcessLaunch {
     pub executable: PathBuf,
     pub config_overrides: Vec<String>,
     pub env: HashMap<String, String>,
+    /// When true, strip `OPENAI_API_KEY` from the child environment (subscription proof path).
+    pub strip_openai_api_key: bool,
 }
 
 impl CodexProcessLaunch {
@@ -29,7 +31,13 @@ impl CodexProcessLaunch {
             executable,
             config_overrides: Vec::new(),
             env: HashMap::new(),
+            strip_openai_api_key: false,
         }
+    }
+
+    pub fn subscription_child(mut self) -> Self {
+        self.strip_openai_api_key = true;
+        self
     }
 
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
@@ -65,6 +73,9 @@ impl ManagedCodexProcess {
         }
         for (key, value) in &launch.env {
             command.env(key, value);
+        }
+        if launch.strip_openai_api_key {
+            command.env_remove("OPENAI_API_KEY");
         }
 
         let mut child = command
