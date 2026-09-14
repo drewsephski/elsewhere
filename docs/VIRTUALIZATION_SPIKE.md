@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prove GPT Bot can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
+Prove Elsewhere can own a **persistent Linux VM** on macOS via **Virtualization.framework**, talk to a **guest agent** over **Virtio sockets**, and survive stop / app restart without recreating the disk.
 
 ## Approaches considered
 
@@ -76,7 +76,7 @@ codesign -s - --entitlements src-tauri/entitlements.plist --force \
 
 ## Provisioning steps
 
-1. Open GPT Bot → header **VM** → **Provision** (or `cargo run --example vm_acceptance -- <app_data> provision`).
+1. Open Elsewhere → header **VM** → **Provision** (or `cargo run --example vm_acceptance -- <app_data> provision`).
 2. Downloads Alpine netboot artifacts and runs `build-guest-disk.sh` (requires Docker).
 3. Writes `vm/config/vm.json`.
 

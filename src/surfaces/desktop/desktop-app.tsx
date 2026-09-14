@@ -39,7 +39,7 @@ function formatInvokeError(error: unknown): string {
   return "An unexpected error occurred";
 }
 
-export default function App() {
+export default function DesktopApp() {
   const [bots, setBots] = useState<Bot[]>([]);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [botDraft, setBotDraft] = useState<Bot | null>(null);

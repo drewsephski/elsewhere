@@ -1,4 +1,4 @@
-# GPT Bot Roadmap
+# Elsewhere Roadmap
 
 ## 1. Foundation — **Phase 1 (this repo)**
 

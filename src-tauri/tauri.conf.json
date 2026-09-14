@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "GPT Bot",
+  "productName": "Elsewhere",
   "version": "0.1.0",
   "identifier": "com.drewsepeczi.gptbot",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "GPT Bot",
+        "title": "Elsewhere",
         "width": 1180,
         "height": 780,
         "minWidth": 900,

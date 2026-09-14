@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import DesktopApp from "@/surfaces/desktop/desktop-app";
 import { ThemeProvider } from "@/components/theme-provider";
 import { MotionIconConfig } from "@/components/icons/lucide";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,7 +12,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
       <MotionIconConfig trigger="hover" mode="signature" duration={0.35}>
         <TooltipProvider>
-          <App />
+          <DesktopApp />
           <Toaster position="top-center" richColors closeButton />
         </TooltipProvider>
       </MotionIconConfig>

@@ -1,0 +1,13 @@
+#!/sbin/openrc-run
+
+name="gptbot-guest-agent"
+description="GPT Bot virtio guest agent"
+
+command=/usr/local/bin/gptbot-guest-agent
+command_background=yes
+pidfile=/run/gptbot-guest-agent.pid
+
+depend() {
+    need localmount
+    after localmount
+}

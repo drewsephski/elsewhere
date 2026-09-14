@@ -1,6 +1,6 @@
 You are acting as the principal software architect, macOS engineer,or this project.
 
-I want to build **GPT Bot**, a production-quality macOS desktop application inspired by the functionality and interaction model of **Grok Bot**.
+I want to build **Elsewhere**, a production-quality macOS desktop application inspired by the functionality and interaction model of **Grok Bot**.
 
 Reference documentation:
 https://docs.x.ai/grok-bot/
@@ -70,7 +70,7 @@ Make reasonable technical decisions yourself.
 
 # 2. FUNCTIONAL PARITY, NOT IP COPYING
 
-Grok Bot is the product reference, but GPT Bot must be its own implementation.
+Grok Bot is the product reference, but Elsewhere must be its own implementation.
 
 We want:
 
@@ -94,7 +94,7 @@ We do NOT want:
 
 Use a **clean-room implementation**.
 
-Call the product **GPT Bot** for now.
+Call the product **Elsewhere** for now.
 
 Use original visual treatment and components while preserving the interaction patterns that make Grok Bot effective.
 
@@ -104,7 +104,7 @@ Think “functional equivalent,” not “reskin.”
 
 # 3. OPENAI / CHATGPT MODEL LAYER
 
-GPT Bot should be designed around OpenAI models.
+Elsewhere should be designed around OpenAI models.
 
 I want a model selector capable of exposing the OpenAI/ChatGPT models actually available to the authenticated user.
 
@@ -261,11 +261,11 @@ This is the biggest technical difference from Grok Bot.
 
 Grok Bot has a persistent cloud computer.
 
-GPT Bot must provide a **persistent local agent computer**.
+Elsewhere must provide a **persistent local agent computer**.
 
 It should behave conceptually like:
 
-`GPT Bot UI`
+`Elsewhere UI`
 ↓
 `Agent Runtime`
 ↓
@@ -311,7 +311,7 @@ The computer should contain at minimum:
 
 Potential architecture:
 
-`GPT Bot.app`
+`Elsewhere.app`
 ↕
 `Local Agent Daemon`
 ↕
@@ -329,8 +329,8 @@ You may change this architecture if you can justify something better.
 
 The environment must survive:
 
-* closing GPT Bot
-* reopening GPT Bot
+* closing Elsewhere
+* reopening Elsewhere
 * normal VM restarts
 * application upgrades
 
@@ -365,7 +365,7 @@ Follow Grok Bot's useful shared-computer concept.
 
 Conceptually:
 
-**One user → one persistent GPT Bot computer**
+**One user → one persistent Elsewhere computer**
 
 Bots should share:
 
@@ -613,7 +613,7 @@ Provide:
 * Test Run
 * recent run history
 
-The background daemon should execute routines even when the main GPT Bot window is closed, assuming the Mac is awake.
+The background daemon should execute routines even when the main Elsewhere window is closed, assuming the Mac is awake.
 
 Handle:
 
@@ -940,7 +940,7 @@ The screenshots I provide should inform:
 * computer-view behavior
 * agent activity presentation
 
-But GPT Bot should establish its own design language.
+But Elsewhere should establish its own design language.
 
 Aim for:
 
@@ -1137,7 +1137,7 @@ Use integration tests where mocks would give false confidence.
 
 I should eventually be able to perform this exact workflow:
 
-1. Install GPT Bot on my Mac.
+1. Install Elsewhere on my Mac.
 
 2. Launch it.
 
@@ -1157,9 +1157,9 @@ I should eventually be able to perform this exact workflow:
 
 9. See it create the report.
 
-10. Close the GPT Bot window while it is working.
+10. Close the Elsewhere window while it is working.
 
-11. Reopen GPT Bot.
+11. Reopen Elsewhere.
 
 12. See that the job and conversation persisted.
 
@@ -1301,7 +1301,7 @@ As architecture stabilizes, maintain:
 `docs/GROK_PARITY.md`
 
 * reference functionality
-* GPT Bot equivalent
+* Elsewhere equivalent
 * status
 * deliberate differences
 
@@ -1327,7 +1327,7 @@ Do not spend hours writing documentation before functionality exists. Update it 
 
 I do not want a Grok Bot-looking frontend sitting on top of a normal chatbot.
 
-GPT Bot is successful when it behaves like a persistent AI-computer product.
+Elsewhere is successful when it behaves like a persistent AI-computer product.
 
 The core loop must be real:
 
@@ -1335,7 +1335,7 @@ The core loop must be real:
 
 Every major architectural decision should serve that loop.
 
-Use Grok Bot as a very strong reference for product behavior, but solve the local-computer architecture correctly for macOS and make GPT Bot technically independent.
+Use Grok Bot as a very strong reference for product behavior, but solve the local-computer architecture correctly for macOS and make Elsewhere technically independent.
 
 Start by inspecting the repository, screenshots, and Grok Bot documentation.
 

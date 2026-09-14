@@ -441,7 +441,11 @@ pub fn list_workspace_dir(path: &str) -> Result<Vec<WorkspaceEntry>, String> {
         } else {
             "file"
         };
-        entries.push(WorkspaceEntry { name, path, kind });
+        entries.push(WorkspaceEntry {
+            name,
+            path,
+            kind: kind.to_string(),
+        });
     }
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(entries)

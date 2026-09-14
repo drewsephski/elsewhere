@@ -344,6 +344,11 @@
       "id": "grokbot-shell-2026-09",
       "summary": "Adopted Grokbot-inspired three-column shell: workspace sidebar, centered chat, context panel with screen preview and routines.",
       "chosenAt": "2026-09-13T22:30:00.000Z"
+    },
+    {
+      "id": "www-landing-console-observatory-2026-09",
+      "summary": "Marketing landing (apps/www): Console Observatory direction — split hero with sandbox terminal preview, asymmetric bento features, layered architecture diagram, topo grid atmosphere. Geist + Geist Mono, existing violet tokens.",
+      "chosenAt": "2026-09-13T23:59:00.000Z"
     }
   ],
   "evidence": [

@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-brand-dark: #2d3a2e;
+  --color-brand-green: #3d5a3e;
+  --color-brand-light: #f5f3ef;
+  --color-brand-cream: #faf8f5;
+  --font-helvetica-neue: "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-playfair: "Playfair Display", Georgia, serif;
+  --font-oswald: "Oswald", "Arial Narrow", sans-serif;
+  --font-montserrat: "Montserrat", Helvetica, Arial, sans-serif;
+  --font-roboto-slab: "Roboto Slab", Georgia, serif;
+  --font-raleway: "Raleway", Helvetica, Arial, sans-serif;
+}
+
+/* Must live in @layer base — unlayered * reset overrides Tailwind padding/margin utilities. */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #faf8f5;
+    color: #2d3a2e;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-down {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-down {
+  animation: fade-down 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.stagger-1 {
+  animation-delay: 0ms;
+}
+
+.stagger-2 {
+  animation-delay: 120ms;
+}
+
+.stagger-3 {
+  animation-delay: 240ms;
+}
+
+.stagger-4 {
+  animation-delay: 360ms;
+}
+
+.stagger-5 {
+  animation-delay: 480ms;
+}
+
+.stagger-6 {
+  animation-delay: 600ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-down {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

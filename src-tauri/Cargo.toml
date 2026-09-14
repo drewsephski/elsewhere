@@ -1,7 +1,7 @@
 [package]
 name = "gptbot"
 version = "0.1.0"
-description = "GPT Bot — persistent macOS AI agents"
+description = "Elsewhere — persistent macOS AI agents with their own computer"
 authors = ["drewsepeczi"]
 edition = "2021"
 

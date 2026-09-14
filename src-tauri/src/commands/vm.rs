@@ -35,6 +35,14 @@ pub fn vm_restart(state: State<AppState>) -> Result<VmInfo, AppError> {
 }
 
 #[tauri::command]
+pub fn vm_wait_guest(state: State<AppState>) -> Result<VmInfo, AppError> {
+    state
+        .vm
+        .wait_for_guest(std::time::Duration::from_secs(120))
+        .map_err(|e| AppError::Other(e))
+}
+
+#[tauri::command]
 pub fn vm_guest_health(state: State<AppState>) -> Result<bool, AppError> {
     state.vm.guest_health().map_err(|e| AppError::Other(e))
 }

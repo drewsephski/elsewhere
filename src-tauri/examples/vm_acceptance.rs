@@ -33,6 +33,7 @@ fn run() -> Result<(), String> {
             Ok(())
         }
         "write-proof" => {
+            vm.stop()?;
             vm.start()?;
             vm.wait_for_guest(GUEST_WAIT)?;
             let response = vm.guest_request(GuestRequest {
@@ -40,7 +41,7 @@ fn run() -> Result<(), String> {
                 method: "write_file".into(),
                 params: serde_json::json!({
                     "path": "/workspace/proof.txt",
-                    "content": "hello from the persistent GPT Bot computer\n"
+                    "content": "hello from the persistent Elsewhere computer\n"
                 }),
             })?;
             if !response.ok {
@@ -52,6 +53,7 @@ fn run() -> Result<(), String> {
             Ok(())
         }
         "read-proof" => {
+            vm.stop()?;
             vm.start()?;
             vm.wait_for_guest(GUEST_WAIT)?;
             let response = vm.guest_request(GuestRequest {
@@ -67,7 +69,7 @@ fn run() -> Result<(), String> {
                     .unwrap_or_else(|| "read failed".into()));
             }
             let stdout = response.stdout.unwrap_or_default();
-            if stdout.trim() != "hello from the persistent GPT Bot computer" {
+            if stdout.trim() != "hello from the persistent Elsewhere computer" {
                 return Err(format!("unexpected proof contents: {stdout}"));
             }
             println!("proof ok: {}", stdout.trim());

@@ -8,9 +8,26 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISK_DIR="$(dirname "$DISK_PATH")"
 mkdir -p "$DISK_DIR"
 
-if [[ -f "$DISK_PATH" ]] && [[ "$(stat -f%z "$DISK_PATH" 2>/dev/null || stat -c%s "$DISK_PATH")" -gt 10485760 ]]; then
-  echo "Disk already exists at $DISK_PATH — skipping build"
-  exit 0
+disk_has_ext4() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  local magic
+  magic="$(dd if="$path" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')"
+  [[ "$magic" == "53ef" ]]
+}
+
+if disk_has_ext4 "$DISK_PATH"; then
+  if [[ "${GPTBOT_FORCE_DISK_REBUILD:-}" != "1" ]]; then
+    echo "Disk already exists at $DISK_PATH — skipping build"
+    exit 0
+  fi
+  echo "GPTBOT_FORCE_DISK_REBUILD=1 — rebuilding guest disk at $DISK_PATH"
+  rm -f "$DISK_PATH"
+fi
+
+if [[ -f "$DISK_PATH" ]]; then
+  echo "Removing invalid disk at $DISK_PATH (missing ext4 superblock)"
+  rm -f "$DISK_PATH"
 fi
 
 WORK="$(mktemp -d)"
@@ -44,6 +61,7 @@ docker run --rm --privileged \
   -v "$ROOTFS_TAR:/rootfs.tar.gz:ro" \
   -e ARCH_SLUG="$ARCH_SLUG" \
   -v "$REPO_ROOT/guest-agent:/guest-agent" \
+  -v "$REPO_ROOT/scripts:/scripts:ro" \
   "rust:1-bookworm" bash -ec "
     set -euo pipefail
     apt-get update -qq
@@ -66,24 +84,21 @@ docker run --rm --privileged \
     mount -t sysfs sys /mnt/sys
     cp /etc/resolv.conf /mnt/etc/resolv.conf
 
-    chroot /mnt /sbin/apk add --no-cache alpine-base e2fsprogs openrc >/dev/null
+    chroot /mnt /sbin/apk add --no-cache alpine-base e2fsprogs openrc e2fsprogs-extra >/dev/null
 
-    cat > /mnt/etc/init.d/gptbot-guest-agent <<'EOF'
-#!/sbin/openrc-run
+    for svc in dev dev-mount mdev sysfs; do
+      if [ -x \"/mnt/etc/init.d/\$svc\" ]; then
+        chroot /mnt /sbin/rc-update add \"\$svc\" sysinit
+      fi
+    done
+    for svc in modules fsck root localmount bootmisc hostname; do
+      if [ -x \"/mnt/etc/init.d/\$svc\" ]; then
+        chroot /mnt /sbin/rc-update add \"\$svc\" boot
+      fi
+    done
 
-name=\"gptbot-guest-agent\"
-description=\"GPT Bot virtio guest agent\"
-
-command=/usr/local/bin/gptbot-guest-agent
-command_background=yes
-pidfile=/run/gptbot-guest-agent.pid
-
-depend() {
-    need localmount
-    after localmount
-}
-EOF
-    chmod +x /mnt/etc/init.d/gptbot-guest-agent
+    install -m 755 /scripts/gptbot-guest-agent.openrc /mnt/etc/init.d/gptbot-guest-agent
+    install -m 755 /scripts/gptbot-guest-init.sh /mnt/sbin/gptbot-init
 
     chroot /mnt /sbin/rc-update add gptbot-guest-agent default
 

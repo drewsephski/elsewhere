@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
+use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -12,7 +13,10 @@ struct ControlRequest {
     cmd: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     payload: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "timeoutSeconds",
+        skip_serializing_if = "Option::is_none"
+    )]
     timeout_seconds: Option<f64>,
 }
 
@@ -20,6 +24,7 @@ struct ControlRequest {
 pub struct VmRuntimeStatus {
     pub phase: String,
     pub message: Option<String>,
+    #[serde(rename = "guestBridgeReady")]
     pub guest_bridge_ready: bool,
 }
 
@@ -46,14 +51,18 @@ impl VmmProcess {
         verify_vmm_binary(vmm_binary)?;
 
         if socket_path.exists() {
-            std::fs::remove_file(socket_path).map_err(|e| e.to_string())?;
+            let _ = std::fs::remove_file(socket_path);
         }
 
-        let log_file = std::fs::File::create(log_path).map_err(|e| e.to_string())?;
+        let log_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_path)
+            .map_err(|e| e.to_string())?;
 
         tracing::info!(vmm = %vmm_binary.display(), "spawning gptbot-vmm");
 
-        let child = Command::new(vmm_binary)
+        let mut child = Command::new(vmm_binary)
             .arg("serve")
             .arg("--config")
             .arg(config_path)
@@ -65,6 +74,12 @@ impl VmmProcess {
             .map_err(|e| format!("failed to spawn gptbot-vmm at {}: {e}", vmm_binary.display()))?;
 
         wait_for_socket(socket_path, Duration::from_secs(10))?;
+        if let Ok(Some(status)) = child.try_wait() {
+            let tail = tail_file(log_path, 4096).unwrap_or_default();
+            return Err(format!(
+                "gptbot-vmm exited before serving (status: {status}). Log tail:\n{tail}"
+            ));
+        }
 
         Ok(Self {
             child,
@@ -82,9 +97,10 @@ fn wait_for_socket(socket_path: &Path, timeout: Duration) -> Result<(), String> 
     let start = std::time::Instant::now();
     while start.elapsed() < timeout {
         if socket_path.exists() {
-            if UnixStream::connect(socket_path).is_ok() {
-                return Ok(());
-            }
+            // Do not connect here: a probe connection is accepted by the VMM and can
+            // interfere with the real control request on the single-threaded server.
+            std::thread::sleep(Duration::from_millis(50));
+            return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -119,6 +135,9 @@ pub fn control_request(
     stream
         .write_all(b"\n")
         .map_err(|e| map_io_timeout(e, timeout, "write VMM control newline"))?;
+    stream
+        .shutdown(Shutdown::Write)
+        .map_err(|e| format!("shutdown VMM control socket write half: {e}"))?;
 
     let mut reader = BufReader::new(stream);
     let mut response_line = String::new();
@@ -126,7 +145,21 @@ pub fn control_request(
         .read_line(&mut response_line)
         .map_err(|e| map_io_timeout(e, timeout, "read VMM control response"))?;
 
-    serde_json::from_str(response_line.trim()).map_err(|e| format!("invalid VMM response: {e}"))
+    if response_line.trim().is_empty() {
+        return Err(format!(
+            "empty VMM response for `{cmd}` (gptbot-vmm may have exited). socket={}",
+            socket_path.display()
+        ));
+    }
+
+    let trimmed = response_line.trim();
+    if trimmed.is_empty() {
+        return Err(
+            "invalid VMM response: empty body (gptbot-vmm may have exited during the request)"
+                .into(),
+        );
+    }
+    serde_json::from_str(trimmed).map_err(|e| format!("invalid VMM response: {e} (body: {trimmed})"))
 }
 
 fn map_io_timeout(err: std::io::Error, timeout: Duration, op: &str) -> String {

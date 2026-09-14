@@ -29,7 +29,7 @@ export function VmDiagnosticsPanel({ open, embedded = false }: VmDiagnosticsPane
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [command, setCommand] = useState(
-    'mkdir -p /workspace && echo "hello from the persistent GPT Bot computer" > /workspace/proof.txt',
+    'mkdir -p /workspace && echo "hello from the persistent Elsewhere computer" > /workspace/proof.txt',
   );
   const [lastResponse, setLastResponse] = useState<GuestResponse | null>(null);
 

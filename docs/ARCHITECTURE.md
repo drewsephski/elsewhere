@@ -1,8 +1,18 @@
-# GPT Bot — Architecture
+# Elsewhere — Architecture
+
+## Repository layout
+
+| Package | Path | Role |
+|---------|------|------|
+| `@gptbot/desktop` | repo root (`src/`, `src-tauri/`) | Tauri + Vite chat shell |
+| `@gptbot/www` | `apps/www/` | Next.js App Router marketing site (cloud positioning, SEO) |
+| `@gptbot/brand` | `packages/brand/` | Shared product copy and URLs |
+
+Desktop and web are separate bundles: the desktop app does not ship the landing page. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
 
 ## Process boundary
 
-- **Tauri webview**: React UI (TypeScript).
+- **Tauri webview**: React UI (TypeScript) — `src/surfaces/desktop/`.
 - **Rust host**: SQLite, Keychain, OpenAI HTTP, streaming, Tauri commands and events.
 - **Swift VMM helper** (macOS only): `gptbot-vmm` — Virtualization.framework Linux VM + Virtio socket bridge.
 

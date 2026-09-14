@@ -1,6 +1,6 @@
-# GPT Bot
+# Elsewhere
 
-Native macOS desktop app for persistent AI Bots with OpenAI-backed chat, local SQLite storage, and streaming responses.
+**Run your agents elsewhere.** Native macOS desktop app for persistent AI bots with their own computer—OpenAI-backed chat, local SQLite storage, isolated guest VMs, and streaming responses.
 
 ## Prerequisites
 
@@ -38,6 +38,12 @@ Frontend only (no native commands):
 
 ```bash
 pnpm dev
+```
+
+Marketing site (Next.js, port 3000):
+
+```bash
+pnpm dev:www
 ```
 
 Structured Rust logs (no secrets):

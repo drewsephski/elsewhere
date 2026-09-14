@@ -48,8 +48,16 @@ pub fn provision_vm(layout: &VmLayout) -> Result<(), String> {
 
 fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
     let disk_path = layout.disk_path();
-    if disk_path.exists() {
+    if disk_path.exists() && validate_ext4_disk(&disk_path)? {
         return Ok(());
+    }
+
+    if disk_path.exists() {
+        tracing::warn!(
+            path = %disk_path.display(),
+            "removing invalid guest disk (expected ext4 root)"
+        );
+        fs::remove_file(&disk_path).map_err(|e| e.to_string())?;
     }
 
     let repo_script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../scripts/build-guest-disk.sh");
@@ -69,7 +77,7 @@ fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
                 "build-guest-disk.sh failed:\nstdout:{stdout}\nstderr:{stderr}"
             ));
         }
-        if disk_path.exists() && fs::metadata(&disk_path).map(|m| m.len()).unwrap_or(0) > 10 * 1024 * 1024 {
+        if validate_ext4_disk(&disk_path)? {
             return Ok(());
         }
     }
@@ -78,6 +86,20 @@ fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
         "Guest disk was not built. Build gptbot-guest-agent and run scripts/build-guest-disk.sh."
             .into(),
     )
+}
+
+fn validate_ext4_disk(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let mut header = [0u8; 2048];
+    let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+    use std::io::Read;
+    let read = file.read(&mut header).map_err(|e| e.to_string())?;
+    if read < 0x43A {
+        return Ok(false);
+    }
+    Ok(header[0x438] == 0x53 && header[0x439] == 0xEF)
 }
 
 fn write_vm_config(layout: &VmLayout) -> Result<(), String> {

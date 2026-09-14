@@ -275,5 +275,5 @@ fn sha256_file(path: &Path) -> Result<String, String> {
 }
 
 pub fn kernel_command_line() -> &'static str {
-    "console=hvc0 root=/dev/vda rw rootwait init=/sbin/init"
+    "console=hvc0 root=/dev/vda rw rootfstype=ext4 rootwait init=/sbin/gptbot-init"
 }

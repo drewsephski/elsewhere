@@ -34,7 +34,7 @@ pub async fn start_agent_chat(
         let bot = db.get_bot(&input.bot_id)?;
         if !model_supports_responses_tools(&bot.model) {
             return Err(AppError::ModelUnavailable(format!(
-                "Model {} does not support GPT Bot local tools (OpenAI Responses function calling)",
+                "Model {} does not support Elsewhere local tools (OpenAI Responses function calling)",
                 bot.model
             )));
         }

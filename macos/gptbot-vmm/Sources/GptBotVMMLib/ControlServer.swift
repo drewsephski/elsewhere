@@ -137,6 +137,7 @@ public final class ControlServer {
         case "start":
             do {
                 try vm.start()
+                try vm.waitForGuestAgent(timeout: min(timeout, 120))
                 return .success(status: vm.currentStatus())
             } catch let error as VMMError {
                 return .failure(error.description)

@@ -1,4 +1,4 @@
-//! Minimal GPT Bot guest agent — listens on AF_VSOCK for newline-delimited JSON RPC.
+//! Minimal Elsewhere guest agent — listens on AF_VSOCK for newline-delimited JSON RPC.
 
 mod sandbox;
 

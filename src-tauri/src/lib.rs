@@ -74,6 +74,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             commands::vm_start,
             #[cfg(target_os = "macos")]
+            commands::vm_wait_guest,
+            #[cfg(target_os = "macos")]
             commands::vm_stop,
             #[cfg(target_os = "macos")]
             commands::vm_restart,

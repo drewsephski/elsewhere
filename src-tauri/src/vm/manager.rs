@@ -173,7 +173,18 @@ impl VirtualMachineManager {
             "start",
             None,
             Duration::from_secs(60),
-        )?;
+        );
+
+        let response = match response {
+            Ok(resp) => resp,
+            Err(err) => {
+                if let Some(mut process) = vmm_guard.take() {
+                    process.stop();
+                }
+                *self.state.lock() = InternalState::Stopped;
+                return Err(err);
+            }
+        };
 
         if !response.ok {
             let base = response
