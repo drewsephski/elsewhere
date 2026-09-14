@@ -29,6 +29,8 @@ export type ActiveRunState = {
   assistantStream: AssistantStreamState;
   lastEventId: string | null;
   browserPreviewGeneration: number;
+  workspaceRefreshGeneration: number;
+  lastBrowserToolError: string | null;
   connection: string | null;
   error: string | null;
 };
@@ -39,6 +41,10 @@ function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
 }
 
+function toolNameFromPayload(payload: Record<string, unknown>): string {
+  return String(payload.tool ?? payload.name ?? "").toLowerCase();
+}
+
 function isBrowserToolResult(eventType: string, payload: Record<string, unknown>): boolean {
   if (eventType !== "tool_result") {
     return false;
@@ -46,8 +52,24 @@ function isBrowserToolResult(eventType: string, payload: Record<string, unknown>
   if (payload.ok === false) {
     return false;
   }
-  const tool = String(payload.tool ?? payload.name ?? "").toLowerCase();
+  const tool = toolNameFromPayload(payload);
   return tool.includes("browser");
+}
+
+function isWorkspaceMutationToolResult(
+  eventType: string,
+  payload: Record<string, unknown>,
+): boolean {
+  if (eventType !== "tool_result" || payload.ok === false) {
+    return false;
+  }
+  const tool = toolNameFromPayload(payload);
+  return (
+    tool === "workspace_write" ||
+    tool === "workspace_exec" ||
+    tool === "browser_screenshot" ||
+    tool === "browser_download"
+  );
 }
 
 export function ActiveRunProvider({
@@ -62,6 +84,8 @@ export function ActiveRunProvider({
   const [assistantStream, setAssistantStream] = useState<AssistantStreamState>(emptyAssistantStream);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
   const [browserPreviewGeneration, setBrowserPreviewGeneration] = useState(0);
+  const [workspaceRefreshGeneration, setWorkspaceRefreshGeneration] = useState(0);
+  const [lastBrowserToolError, setLastBrowserToolError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<string | null>(null);
 
@@ -72,6 +96,8 @@ export function ActiveRunProvider({
       setAssistantStream(emptyAssistantStream());
       setLastEventId(null);
       setBrowserPreviewGeneration(0);
+      setWorkspaceRefreshGeneration(0);
+      setLastBrowserToolError(null);
       setError(null);
       setConnection(null);
       return;
@@ -138,6 +164,8 @@ export function ActiveRunProvider({
             }
 
             if (event.event === "terminal") {
+              setBrowserPreviewGeneration((value) => value + 1);
+              setWorkspaceRefreshGeneration((value) => value + 1);
               const fullContent =
                 typeof payload.fullContent === "string"
                   ? payload.fullContent
@@ -203,8 +231,22 @@ export function ActiveRunProvider({
                     : [...previous.slice(-199), { id, kind: "text", text }],
                 );
               }
-              if (isBrowserToolResult(event.event, payload)) {
-                setBrowserPreviewGeneration((value) => value + 1);
+              if (event.event === "tool_result" && toolNameFromPayload(payload).includes("browser")) {
+                if (payload.ok === false) {
+                  const message =
+                    typeof payload.error === "string"
+                      ? payload.error
+                      : typeof payload.output === "string"
+                        ? payload.output
+                        : "Browser operation failed";
+                  setLastBrowserToolError(message);
+                } else {
+                  setLastBrowserToolError(null);
+                  setBrowserPreviewGeneration((value) => value + 1);
+                }
+              }
+              if (isWorkspaceMutationToolResult(event.event, payload)) {
+                setWorkspaceRefreshGeneration((value) => value + 1);
               }
             }
           },
@@ -259,6 +301,8 @@ export function ActiveRunProvider({
       assistantStream,
       lastEventId,
       browserPreviewGeneration,
+      workspaceRefreshGeneration,
+      lastBrowserToolError,
       connection,
       error,
     }),
@@ -269,6 +313,8 @@ export function ActiveRunProvider({
       assistantStream,
       lastEventId,
       browserPreviewGeneration,
+      workspaceRefreshGeneration,
+      lastBrowserToolError,
       connection,
       error,
     ],
@@ -287,11 +333,17 @@ export function useActiveRun(): ActiveRunState {
       assistantStream: emptyAssistantStream(),
       lastEventId: null,
       browserPreviewGeneration: 0,
+      workspaceRefreshGeneration: 0,
+      lastBrowserToolError: null,
       connection: null,
       error: null,
     };
   }
   return ctx;
+}
+
+export function useOptionalActiveRun(): ActiveRunState | null {
+  return useContext(ActiveRunContext);
 }
 
 export function useRequireActiveRun(): ActiveRunState {

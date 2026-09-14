@@ -49,7 +49,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     label: "Violet",
     suggestedName: "Designer",
     suggestedRole:
-      "You are my design bot. Improve layout, hierarchy, and UX copy. Propose concrete UI directions and keep accessibility in mind. Deliver specs or assets on your computer and explain your rationale.",
+      "You are my design specialist. Inspect live interfaces with browser tools and screenshots when visual context matters. Propose concrete layout, hierarchy, typography, and UX copy changes; keep accessibility and responsive behavior in mind. Save specs, assets, and annotated screenshots to this assignment's results folder and explain your design rationale.",
     kind: "kitty",
     colors: {
       body: "#C4B5FD",
@@ -70,7 +70,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     label: "Amber",
     suggestedName: "Researcher",
     suggestedRole:
-      "You are my research bot. Gather sources, compare options, and write concise briefs with citations or links saved on your computer. Flag uncertainty and separate facts from assumptions.",
+      "You are my research specialist. Use browser tools to gather sources, compare options, and write concise briefs with citations. Save links, notes, and exports to this assignment's results folder. Flag uncertainty and separate facts from assumptions.",
     kind: "puff",
     colors: {
       body: "#FCD34D",
@@ -91,7 +91,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     label: "Emerald",
     suggestedName: "Project Manager",
     suggestedRole:
-      "You are my project manager bot. Break work into steps, track dependencies, and keep stakeholders updated. Surface risks early and propose realistic timelines.",
+      "You are my project manager. Break work into steps, track dependencies, and keep stakeholders updated with clear status notes saved to the results folder. Surface risks early and propose realistic timelines.",
     kind: "bunny",
     colors: {
       body: "#34D399",
@@ -112,7 +112,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     label: "Rose",
     suggestedName: "Writer",
     suggestedRole:
-      "You are my writing bot. Draft clear, on-brand copy and refine tone for the audience. Save versions on your computer and call out open questions before publishing.",
+      "You are my writing specialist. Draft clear, on-brand copy and refine tone for the audience. Save drafts and final versions to this assignment's results folder and call out open questions before publishing.",
     kind: "sprout",
     colors: {
       body: "#FDA4AF",
@@ -133,7 +133,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     label: "Teal",
     suggestedName: "Engineer",
     suggestedRole:
-      "You are my engineering bot. Implement changes carefully, run checks when possible, and document what you changed. Ask for approval before destructive or production-impacting steps.",
+      "You are my engineering specialist. Implement and verify changes on the computer workspace, run checks when possible, and document diffs and test results. Save code artifacts and logs to this assignment's results folder. Ask for approval before destructive or production-impacting steps.",
     kind: "wisp",
     colors: {
       body: "#2DD4BF",

@@ -17,6 +17,9 @@ pub const BROWSER_PREVIEW_DIR: &str = "/var/elsewhere/browser/preview";
 pub const BROWSER_PREVIEW_META: &str = "/var/elsewhere/browser/preview/meta.json";
 pub const BROWSER_PREVIEW_FRAMES: &str = "/var/elsewhere/browser/preview/frames";
 
+/// Browser install/daemon work should not depend on `/workspace` existing.
+const BROWSER_EXEC_CWD: &str = "/home/sprite";
+
 const CLIENT_SOURCE: &str = include_str!("../guest/browser-client.mjs");
 const DAEMON_SOURCE: &str = include_str!("../guest/browser-daemon.mjs");
 const COMMON_SOURCE: &str = include_str!("../guest/browser-common.mjs");
@@ -32,7 +35,7 @@ async fn browser_install_healthy(client: &SpriteClient) -> Result<bool, Computer
              && test -f /var/elsewhere/browser/.bootstrapped \
              && ls /var/elsewhere/browser/browsers/chromium-* >/dev/null 2>&1 \
              && test -f /var/elsewhere/browser/.deps-ready",
-            "/workspace",
+            BROWSER_EXEC_CWD,
             Duration::from_secs(15),
         )
         .await
@@ -132,7 +135,7 @@ touch "$BROWSER_DIR/.bootstrapped"
 
     with_temporary_egress(client, baseline_policy, async {
         let (stdout, stderr, code) = client
-            .exec_http(bootstrap, "/workspace", Duration::from_secs(300))
+            .exec_http(bootstrap, BROWSER_EXEC_CWD, Duration::from_secs(300))
             .await
             .map_err(map_err)?;
         if code != 0 {
@@ -194,7 +197,7 @@ sleep 1
 
     with_temporary_egress(client, baseline_policy, async {
         let (_, stderr, code) = client
-            .exec_http(&start, "/workspace", Duration::from_secs(30))
+            .exec_http(&start, BROWSER_EXEC_CWD, Duration::from_secs(30))
             .await
             .map_err(map_err)?;
         if code != 0 {
@@ -215,7 +218,7 @@ sleep 1
             let (_, _, _) = client
                 .exec_http(
                     &format!("sleep {}", wait_ms as f64 / 1000.0),
-                    "/workspace",
+                    BROWSER_EXEC_CWD,
                     Duration::from_secs(5),
                 )
                 .await
@@ -234,7 +237,7 @@ async fn daemon_health(
     timeout: Duration,
 ) -> Result<bool, ComputerError> {
     let (stdout, _, code) = client
-        .exec_http(health_cmd, "/workspace", timeout)
+        .exec_http(health_cmd, BROWSER_EXEC_CWD, timeout)
         .await
         .map_err(map_err)?;
     Ok(code == 0 && stdout.contains("\"ok\":true"))
@@ -264,7 +267,7 @@ pub async fn invoke_browser_daemon(
         exec_timeout: Duration,
     ) -> Result<String, ComputerError> {
         let (stdout, stderr, exit_code) = client
-            .exec_http(command, "/workspace", exec_timeout)
+            .exec_http(command, BROWSER_EXEC_CWD, exec_timeout)
             .await
             .map_err(map_err)?;
         if exit_code != 0 {
@@ -320,7 +323,7 @@ rm -f /var/elsewhere/browser/daemon.sock
     );
     with_temporary_egress(client, baseline_policy, async {
         let (_, _, code) = client
-            .exec_http(&script, "/workspace", Duration::from_secs(15))
+            .exec_http(&script, BROWSER_EXEC_CWD, Duration::from_secs(15))
             .await
             .map_err(map_err)?;
         if code != 0 {

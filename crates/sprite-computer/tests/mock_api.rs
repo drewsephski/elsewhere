@@ -119,40 +119,8 @@ async fn lifecycle_missing_without_auto_create() {
 }
 
 #[tokio::test]
-async fn list_dir_materializes_workspace() {
+async fn list_dir_does_not_bootstrap_workspace() {
     let server = MockServer::start().await;
-    Mock::given(method("GET"))
-        .and(path("/sprites/list-bootstrap"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "id": "id-list",
-            "name": "list-bootstrap",
-            "organization": "org",
-            "status": "ready"
-        })))
-        .expect(2)
-        .mount(&server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(path("/sprites/list-bootstrap/policy/network"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "rules": [{"action": "deny", "domain": "*"}]
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    Mock::given(method("PUT"))
-        .and(path("/sprites/list-bootstrap/fs/write"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "path": "/workspace/.elsewhere-bootstrap",
-            "size": 1,
-            "mode": "0644"
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
     Mock::given(method("GET"))
         .and(path("/sprites/list-bootstrap/fs/list"))
         .and(query_param("path", "."))
@@ -183,6 +151,58 @@ async fn list_dir_materializes_workspace() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].name, "README.md");
     assert_eq!(entries[0].path, "/workspace/README.md");
+}
+
+#[tokio::test]
+async fn write_file_materializes_workspace_on_cold_sprite() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/sprites/list-bootstrap"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "id-list",
+            "name": "list-bootstrap",
+            "organization": "org",
+            "status": "ready"
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/list-bootstrap/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "rules": [{"action": "deny", "domain": "*"}]
+        })))
+        .mount(&server)
+        .await;
+
+    Mock::given(method("PUT"))
+        .and(path("/sprites/list-bootstrap/fs/write"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "path": "/workspace/.elsewhere-bootstrap",
+            "size": 1,
+            "mode": "0644"
+        })))
+        .mount(&server)
+        .await;
+
+    let computer = SpriteComputer::new(SpriteComputerConfig {
+        base_url: server.uri(),
+        token: "test-token-secret".into(),
+        sprite_name: "list-bootstrap".into(),
+        workspace_root: "/workspace".into(),
+        request_timeout: Duration::from_secs(5),
+        auto_create: true,
+        network_policy: default_deny_network_policy(),
+        exec_timeout: Duration::from_secs(5),
+        browser_enabled: false,
+        browser_exec_timeout: Duration::from_secs(5),
+    })
+    .unwrap();
+
+    computer
+        .write_file("/workspace/hello_world", b"hello")
+        .await
+        .expect("write should bootstrap workspace");
 }
 
 #[tokio::test]

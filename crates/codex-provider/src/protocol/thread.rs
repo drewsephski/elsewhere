@@ -296,4 +296,28 @@ mod tests {
         assert_host_tools_disabled(&params).unwrap();
         assert_elsewhere_mcp_direct_exposure(&params).unwrap();
     }
+
+    #[test]
+    fn thread_start_and_resume_carry_bot_identity_in_base_instructions() {
+        let identity = "You are \"Designer\", an AI teammate in Elsewhere.\n\nYour assigned role:\nDesign specialist.";
+        let config = ElsewhereThreadConfig {
+            cwd: PathBuf::from("/tmp/elsewhere-empty"),
+            mcp_url: "http://127.0.0.1:1234/mcp".into(),
+            bearer_env_var: "ELSEWHERE_MCP_TOKEN".into(),
+            model: "gpt-5.6-luna".into(),
+            base_instructions: Some(identity.into()),
+            developer_instructions: Some("execution policy".into()),
+        };
+        let start = build_elsewhere_thread_start_params(&config).unwrap();
+        let resume = build_elsewhere_thread_resume_params("thread-abc", &config).unwrap();
+        assert_eq!(
+            start.get("baseInstructions").and_then(|v| v.as_str()),
+            Some(identity)
+        );
+        assert_eq!(
+            resume.get("baseInstructions").and_then(|v| v.as_str()),
+            Some(identity)
+        );
+        assert_eq!(resume.get("threadId").and_then(|v| v.as_str()), Some("thread-abc"));
+    }
 }

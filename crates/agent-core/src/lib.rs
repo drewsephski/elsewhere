@@ -12,9 +12,11 @@ mod model;
 mod run_engine;
 mod runtime;
 mod readiness_cache;
+mod runtime_identity;
 mod run_store;
 mod tool_catalog;
 mod tools;
+mod workspace_entries;
 
 pub use approval::{
     approval_action_summary, operation_kind_for_tool, sanitize_tool_arguments,
@@ -22,7 +24,8 @@ pub use approval::{
     ToolApprovalGate, ToolOperationKind, MAX_EXEC_COMMAND_CHARS,
 };
 pub use computer::{
-    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
+    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry, WorkspaceRevisionCounter,
+    workspace_tool_mutation,
 };
 pub use events::{AgentEvent, EventSink, RuntimeError};
 pub use input::{build_responses_input, ConversationMessage, MessageRole, MessageStatus};
@@ -34,6 +37,8 @@ pub use model::{
 };
 pub use fake_computer::FakeAgentComputer;
 pub use readiness_cache::ReadinessCachedComputer;
+pub use runtime_identity::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
+pub use workspace_entries::{filter_workspace_listing, is_internal_workspace_entry};
 pub use run_engine::{
     legacy_local_loop_deps, responses_loop_deps, ResponsesRunEngine, RunEngine, RunEngineKind,
     SharedRunDeps,

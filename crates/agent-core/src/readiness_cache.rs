@@ -88,6 +88,14 @@ impl AgentComputer for ReadinessCachedComputer {
     async fn browser_invoke(&self, action: &str, args: &Value) -> Result<Value, ComputerError> {
         self.inner.browser_invoke(action, args).await
     }
+
+    fn workspace_revision(&self) -> u64 {
+        self.inner.workspace_revision()
+    }
+
+    fn record_workspace_mutation(&self, tool_name: &str, result: &Value) {
+        self.inner.record_workspace_mutation(tool_name, result);
+    }
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ChevronRight, FileText, Files, RefreshCw } from "@/components/icons/lucide";
+import { useActiveRun } from "@/contexts/active-run-context";
 import { useComputerWorkspace } from "@/hooks/use-computer-workspace";
 import {
   WORKSPACE_ROOT,
@@ -127,8 +128,11 @@ function WorkspaceTreeNode({
 }
 
 export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspaceTreeProps) {
-  const { dirs, loadDir, refresh, isLoading, errors, rootError } =
-    useComputerWorkspace(computerId);
+  const { workspaceRefreshGeneration } = useActiveRun();
+  const { dirs, loadDir, refresh, isLoading, errors, rootError } = useComputerWorkspace(
+    computerId,
+    workspaceRefreshGeneration,
+  );
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
 

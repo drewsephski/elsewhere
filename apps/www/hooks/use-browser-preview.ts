@@ -27,6 +27,8 @@ interface BrowserPreviewJson {
 const RECOVERY_POLL_MS = 30_000;
 const INITIAL_POLL_MS = 8_000;
 const FETCH_TIMEOUT_MS = 90_000;
+const TOOL_RESULT_RETRY_MS = 450;
+const TOOL_RESULT_RETRY_ATTEMPTS = 4;
 
 function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
@@ -162,7 +164,21 @@ export function useBrowserPreview(
     if (!computerId || !enabled || refreshGeneration === 0) {
       return;
     }
-    requestRefresh();
+    let cancelled = false;
+    let attempt = 0;
+    const runBurst = async () => {
+      while (!cancelled && attempt < TOOL_RESULT_RETRY_ATTEMPTS) {
+        await requestRefresh();
+        attempt += 1;
+        if (attempt < TOOL_RESULT_RETRY_ATTEMPTS) {
+          await new Promise((resolve) => window.setTimeout(resolve, TOOL_RESULT_RETRY_MS));
+        }
+      }
+    };
+    void runBurst();
+    return () => {
+      cancelled = true;
+    };
   }, [computerId, enabled, refreshGeneration, requestRefresh]);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { useOptionalActiveRun } from "@/contexts/active-run-context";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { useElementFullscreen } from "@/hooks/use-element-fullscreen";
 import type { BrowserPreviewFrame } from "@/hooks/use-browser-preview";
@@ -72,6 +73,7 @@ function PreviewChrome({
   frame,
   loading,
   enabled,
+  addressLabel,
   compact,
   subtle,
   children,
@@ -79,13 +81,12 @@ function PreviewChrome({
   frame: BrowserPreviewFrame | null;
   loading: boolean;
   enabled: boolean;
+  addressLabel: string;
   compact?: boolean;
   subtle?: boolean;
   children: ReactNode;
 }) {
-  const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
-  const addressLabel = host ?? (enabled ? "No page yet" : "Browser idle");
 
   if (subtle) {
     return (
@@ -198,10 +199,53 @@ export function BrowserPreviewView({
   enabled: enabledProp,
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
+  const activeRun = useOptionalActiveRun();
   const frame = frameProp ?? ctx?.frame ?? null;
   const loading = loadingProp ?? ctx?.loading ?? false;
   const error = errorProp ?? ctx?.error ?? null;
   const enabled = enabledProp ?? ctx?.enabled ?? false;
+  const browserToolError = activeRun?.lastBrowserToolError ?? null;
+
+  const browserState = useMemo(() => {
+    if (!enabled) {
+      return "idle" as const;
+    }
+    if (browserToolError) {
+      return "error" as const;
+    }
+    if (error && !frame?.imageDataUrl) {
+      return "preparing computer" as const;
+    }
+    if (loading && !frame?.imageDataUrl) {
+      return "preparing browser" as const;
+    }
+    if (frame?.url && !frame?.imageDataUrl) {
+      return "navigating" as const;
+    }
+    if (frame?.imageDataUrl) {
+      return "ready" as const;
+    }
+    return "idle" as const;
+  }, [enabled, browserToolError, error, loading, frame?.imageDataUrl, frame?.url]);
+
+  const statusLabel = useMemo(() => {
+    switch (browserState) {
+      case "idle":
+        return enabled ? "Waiting for browser work" : "Browser idle";
+      case "preparing computer":
+        return "Starting computer…";
+      case "preparing browser":
+        return "Preparing browser…";
+      case "navigating":
+        return "Navigating…";
+      case "ready":
+        return frame?.url ? previewHostname(frame.url) ?? "Live page" : "Live page";
+      case "error":
+        return "Browser error";
+      default:
+        return "Browser";
+    }
+  }, [browserState, enabled, frame?.url]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const {
@@ -212,6 +256,7 @@ export function BrowserPreviewView({
   } = useElementFullscreen<HTMLDivElement>();
 
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
+  const addressLabel = host ?? statusLabel;
   const hasImage = Boolean(frame?.available && frame?.imageDataUrl);
   const pipOpen = ctx?.pipOpen ?? false;
 
@@ -297,7 +342,14 @@ export function BrowserPreviewView({
           </div>
         </div>
         <div ref={fullscreenRef} className={cn(isFullscreen && "flex min-h-0 flex-1 bg-black")}>
-          <PreviewChrome frame={frame} loading={loading} enabled={enabled} compact subtle>
+          <PreviewChrome
+            frame={frame}
+            loading={loading}
+            enabled={enabled}
+            addressLabel={addressLabel}
+            compact
+            subtle
+          >
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -368,6 +420,7 @@ export function BrowserPreviewView({
             frame={frame}
             loading={loading}
             enabled={enabled}
+            addressLabel={addressLabel}
             subtle={variant === "embedded"}
           >
             {frame?.imageDataUrl ? (
@@ -390,7 +443,23 @@ export function BrowserPreviewView({
           </PreviewChrome>
         </button>
 
-        {error ? (
+        {browserToolError ? (
+          <div className="mt-1.5 space-y-1.5 px-1" role="alert">
+            <p className="text-[11px] text-red-600">{browserToolError}</p>
+            {ctx?.refresh ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => void ctx.refresh()}
+              >
+                Retry preview
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {error && !browserToolError ? (
           <p className="mt-1.5 px-1 text-[11px] text-red-600" role="alert">
             {error}
           </p>

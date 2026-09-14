@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 interface WorkspaceListJson {
   path: string;
+  revision?: number;
   entries: Array<{
     name: string;
     path: string;
@@ -34,7 +35,10 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === "AbortError";
 }
 
-export function useComputerWorkspace(computerId: string | null) {
+export function useComputerWorkspace(
+  computerId: string | null,
+  refreshGeneration = 0,
+) {
   const [dirs, setDirs] = useState<Record<string, WorkspaceEntry[]>>({});
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -146,12 +150,27 @@ export function useComputerWorkspace(computerId: string | null) {
     [computerId, setPathLoading],
   );
 
+  const refreshLoaded = useCallback(() => {
+    const paths = Object.keys(dirsRef.current);
+    const targets = paths.length > 0 ? paths : [WORKSPACE_ROOT];
+    for (const path of targets) {
+      void loadDir(path, { force: true });
+    }
+  }, [loadDir]);
+
   const refresh = useCallback(() => {
     setDirs({});
     setErrors({});
     setRootError(null);
     void loadDir(WORKSPACE_ROOT, { force: true });
   }, [loadDir]);
+
+  useEffect(() => {
+    if (!computerId || refreshGeneration === 0) {
+      return;
+    }
+    refreshLoaded();
+  }, [computerId, refreshGeneration, refreshLoaded]);
 
   useEffect(() => {
     inflightSeqRef.current = {};
@@ -173,6 +192,7 @@ export function useComputerWorkspace(computerId: string | null) {
     dirs,
     loadDir,
     refresh,
+    refreshLoaded,
     isLoading,
     errors,
     rootError,

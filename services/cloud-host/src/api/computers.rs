@@ -1,4 +1,4 @@
-use agent_core::ComputerError;
+use agent_core::{filter_workspace_listing, ComputerError};
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -184,6 +184,7 @@ pub struct WorkspacePathQuery {
 pub struct WorkspaceListResponse {
     pub path: String,
     pub entries: Vec<agent_core::WorkspaceEntry>,
+    pub revision: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -197,7 +198,9 @@ pub struct WorkspaceFileResponse {
 
 fn map_computer_error(err: ComputerError) -> ApiError {
     match err {
-        ComputerError::NotProvisioned => ApiError::Validation("computer not provisioned yet".into()),
+        ComputerError::NotProvisioned => ApiError::Validation(
+            "This computer starts when your bot first uses it for work. Send a message to begin.".into(),
+        ),
         ComputerError::SandboxRejected(m) | ComputerError::MalformedArguments(m) => {
             ApiError::Validation(m)
         }
@@ -219,8 +222,7 @@ fn workspace_list_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
 }
 
 fn sort_workspace_entries(entries: Vec<agent_core::WorkspaceEntry>) -> Vec<agent_core::WorkspaceEntry> {
-    let mut entries = entries;
-    entries.retain(|entry| entry.name != ".elsewhere-ready");
+    let mut entries = filter_workspace_listing(entries);
     entries.sort_by(|a, b| {
         match (a.is_dir, b.is_dir) {
             (true, false) => std::cmp::Ordering::Less,
@@ -265,6 +267,7 @@ pub async fn workspace_list(
         )
         .await?;
 
+    let revision = computer.workspace_revision();
     let entries = computer
         .list_dir(&path)
         .await
@@ -273,6 +276,7 @@ pub async fn workspace_list(
     Ok(Json(WorkspaceListResponse {
         path,
         entries: sort_workspace_entries(entries),
+        revision,
     }))
 }
 

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,4 +83,36 @@ pub trait AgentComputer: Send + Sync {
             "browser automation is not available on this computer".into(),
         ))
     }
+
+    /// Monotonic revision for workspace tree invalidation (0 when unsupported).
+    fn workspace_revision(&self) -> u64 {
+        0
+    }
+
+    /// Called after a successful tool dispatch that may have changed workspace listings.
+    fn record_workspace_mutation(&self, _tool_name: &str, _result: &Value) {}
+}
+
+/// Shared revision counter for computers that expose workspace invalidation.
+#[derive(Debug, Default)]
+pub struct WorkspaceRevisionCounter(AtomicU64);
+
+impl WorkspaceRevisionCounter {
+    pub fn get(&self) -> u64 {
+        self.0.load(Ordering::Acquire)
+    }
+
+    pub fn bump(&self) -> u64 {
+        self.0.fetch_add(1, Ordering::SeqCst) + 1
+    }
+}
+
+pub fn workspace_tool_mutation(tool_name: &str, result: &Value) -> bool {
+    if !matches!(
+        tool_name,
+        "workspace_write" | "workspace_exec" | "browser_screenshot" | "browser_download"
+    ) {
+        return false;
+    }
+    result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false)
 }

@@ -183,7 +183,11 @@ pub async fn dispatch_tool_with_gate(
 
     let mut envelope = result;
     if let Some(obj) = envelope.as_object_mut() {
+        obj.insert("tool".into(), json!(name));
         obj.insert("durationMs".into(), json!(started.elapsed().as_millis()));
+    }
+    if crate::computer::workspace_tool_mutation(name, &envelope) {
+        computer.record_workspace_mutation(name, &envelope);
     }
     Ok(envelope)
 }

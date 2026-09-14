@@ -1,5 +1,6 @@
 use agent_core::{
-    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
+    filter_workspace_listing, AgentComputer, ComputerError, ComputerInfo, ExecResult,
+    WorkspaceEntry, WorkspaceRevisionCounter, workspace_tool_mutation,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -57,6 +58,7 @@ pub struct SpriteComputer {
     workspace_bootstrap: Mutex<()>,
     /// Cold sprites may exist before `/workspace` is created on disk.
     workspace_materialized: AtomicBool,
+    revision_counter: WorkspaceRevisionCounter,
 }
 
 impl SpriteComputer {
@@ -77,6 +79,7 @@ impl SpriteComputer {
             execution_gate: Mutex::new(()),
             workspace_bootstrap: Mutex::new(()),
             workspace_materialized: AtomicBool::new(false),
+            revision_counter: WorkspaceRevisionCounter::default(),
         })
     }
 
@@ -231,7 +234,6 @@ impl AgentComputer for SpriteComputer {
 
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let path = self.normalize_path(path)?;
-        self.materialize_workspace().await?;
         let response = self.client.fs_list(&path).await.map_err(|err| {
             if let SpriteError::Provider { status, message } = &err {
                 if *status == 400 {
@@ -245,7 +247,7 @@ impl AgentComputer for SpriteComputer {
             }
             map_sprite_error(err)
         })?;
-        Ok(response
+        let entries: Vec<WorkspaceEntry> = response
             .entries
             .into_iter()
             .map(|entry| WorkspaceEntry {
@@ -253,7 +255,18 @@ impl AgentComputer for SpriteComputer {
                 path: self.absolutize_workspace_path(&entry.path),
                 is_dir: entry.is_dir || entry.r#type.as_deref() == Some("directory"),
             })
-            .collect())
+            .collect();
+        Ok(filter_workspace_listing(entries))
+    }
+
+    fn workspace_revision(&self) -> u64 {
+        self.revision_counter.get()
+    }
+
+    fn record_workspace_mutation(&self, tool_name: &str, result: &serde_json::Value) {
+        if workspace_tool_mutation(tool_name, result) {
+            self.revision_counter.bump();
+        }
     }
 
     async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
@@ -295,6 +308,8 @@ impl AgentComputer for SpriteComputer {
                 "browser automation is disabled for this computer".into(),
             ));
         }
+
+        self.materialize_workspace().await?;
 
         let _gate = self.execution_gate.lock().await;
 

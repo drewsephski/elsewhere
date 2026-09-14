@@ -72,10 +72,11 @@ async fn admission_is_durable_idempotent_and_owner_scoped(pool: PgPool) {
     // A fresh dispatcher reconstructs exactly what was accepted, regardless of later bot edits.
     sqlx::query("UPDATE bots SET system_prompt = 'changed', model = 'changed', engine_preference = 'responses' WHERE id = $1").bind(&bot.id).execute(&pool).await.unwrap();
     let claimed = work::claim_next(&pool).await.unwrap().unwrap();
-    assert_eq!(
-        claimed.records.instructions,
-        "Keep sources with your findings"
+    assert!(
+        claimed.records.instructions.contains("You are \"Scout\""),
+        "queued work should snapshot bot identity at admission"
     );
+    assert!(claimed.records.instructions.contains("Keep sources with your findings"));
     assert_eq!(claimed.records.model, "gpt-5.6-luna");
     assert_eq!(
         claimed.engine_mode,
