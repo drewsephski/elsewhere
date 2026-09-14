@@ -25,6 +25,7 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
 WORKDIR /app
 COPY --from=build --chown=node:node /app/apps/www/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/www/.next/static ./apps/www/.next/static
+COPY --from=build --chown=node:node /app/apps/www/public ./apps/www/public
 COPY infra/certs /app/infra/certs
 USER node
 EXPOSE 3000
