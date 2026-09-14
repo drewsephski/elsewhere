@@ -36,6 +36,21 @@ COMPUTER_ID="elsewhere-cloud-e2e"
 SANDBOX_ID="sandbox-${COMPUTER_ID}"
 EXPECTED_PROOF="hello from Elsewhere via ChatGPT subscription"
 
+if ! command -v pg_isready >/dev/null 2>&1; then
+  echo "pg_isready is required to verify Postgres before cloud-host starts" >&2
+  exit 1
+fi
+PG_HOST="${DATABASE_URL#*@}"
+PG_HOST="${PG_HOST%%/*}"
+PG_HOST="${PG_HOST%%:*}"
+PG_PORT="${DATABASE_URL##*:}"
+PG_PORT="${PG_PORT%%/*}"
+if ! pg_isready -h "${PG_HOST:-127.0.0.1}" -p "${PG_PORT:-5432}" >/dev/null 2>&1; then
+  echo "Postgres is not reachable at ${PG_HOST:-127.0.0.1}:${PG_PORT:-5432}" >&2
+  echo "Start it first, e.g.: docker compose -f infra/dev/docker-compose.yml up -d postgres" >&2
+  exit 1
+fi
+
 redact_secrets() {
   local line=$1
   line="${line//${ELSEWHERE_CLOUD_API_TOKEN}/[REDACTED_TOKEN]}"
@@ -209,23 +224,35 @@ verify_no_host_bypass() {
 
 echo "==> Codex version: $(codex --version 2>/dev/null || true)"
 
+echo "==> building cloud-host (avoid health-check timeout during first compile)"
+cargo build -q -p cloud-host
+
 echo "==> starting cloud-host (subscription path, no OPENAI_API_KEY)"
-cargo run -q -p cloud-host > /tmp/elsewhere-cloud-host-codex.log 2>&1 &
+: > /tmp/elsewhere-cloud-host-codex.log
+cargo run -q -p cloud-host >> /tmp/elsewhere-cloud-host-codex.log 2>&1 &
 HOST_PID=$!
 SSE_FILE=$(mktemp)
 SSE_RECONNECT_FILE=$(mktemp)
 trap 'kill ${HOST_PID} 2>/dev/null || true; rm -f "${SSE_FILE}" "${SSE_RECONNECT_FILE}"' EXIT
 
-for _ in $(seq 1 30); do
+HEALTH_OK=0
+for i in $(seq 1 120); do
   if curl -sf "${BASE}/health" >/dev/null; then
+    HEALTH_OK=1
     break
+  fi
+  if ! kill -0 "${HOST_PID}" 2>/dev/null; then
+    echo "cloud-host process exited before /health became ready (after ${i}s)" >&2
+    tail -40 /tmp/elsewhere-cloud-host-codex.log >&2 || true
+    exit 1
   fi
   sleep 1
 done
-curl -sf "${BASE}/health" >/dev/null || {
-  echo "cloud-host failed to start; see /tmp/elsewhere-cloud-host-codex.log"
+if [ "${HEALTH_OK}" -ne 1 ]; then
+  echo "cloud-host failed to start within 120s; see /tmp/elsewhere-cloud-host-codex.log" >&2
+  tail -40 /tmp/elsewhere-cloud-host-codex.log >&2 || true
   exit 1
-}
+fi
 
 wait_for_run() {
   local run_id=$1
