@@ -73,10 +73,10 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
       <div
         className={cn(
           "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
-          connected
-            ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
-            : checkFailed
-              ? "border-red-200/80 bg-red-50/80 text-red-950"
+          checkFailed
+            ? "border-red-200/80 bg-red-50/80 text-red-950"
+            : connected
+              ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
               : "border-amber-200/80 bg-amber-50/80 text-amber-950",
         )}
         role="status"
@@ -89,7 +89,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         ) : checkFailed ? (
           <>
             <span className="size-2 shrink-0 rounded-full bg-red-500" aria-hidden />
-            <span>Could not verify connection — you can retry or connect below</span>
+            <span>Runner unavailable — your saved ChatGPT connection has not been changed</span>
           </>
         ) : connected ? (
           <>
@@ -109,7 +109,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         )}
       </div>
 
-      {!connected && !challenge ? (
+      {(!connected || checkFailed) && !challenge ? (
         <div className="mt-4 space-y-2">
           <Button
             type="button"
@@ -118,31 +118,33 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
               "w-full gap-2 shadow-sm",
               featured ? "h-11 rounded-full text-base" : "rounded-xl",
             )}
-            disabled={
-              busy ||
-              checking ||
-              (!canConnect && !(checkFailed && !status))
-            }
+            disabled={busy || checking || (!checkFailed && !canConnect)}
             onClick={() => {
-              if (checkFailed && !status) {
+              if (checkFailed) {
                 void load();
                 return;
               }
               void handleConnect();
             }}
           >
-            {busy ? (
+            {busy || checking ? (
               <Loader2 className="size-4 animate-spin" aria-hidden />
             ) : (
               <CodexIcon className="size-4" />
             )}
             {busy
               ? "Preparing sign-in…"
-              : checkFailed && !status
-                ? "Retry connection check"
-                : "Connect ChatGPT"}
+              : checking
+                ? "Checking runner…"
+                : checkFailed
+                  ? "Retry workspace connection"
+                  : "Connect ChatGPT"}
           </Button>
-          {connectBlocked ? (
+          {checkFailed ? (
+            <p className="text-center text-xs text-muted-foreground">
+              Elsewhere will retry automatically. Reconnecting ChatGPT is not required unless the runner later reports that your saved pairing is missing.
+            </p>
+          ) : connectBlocked ? (
             <p className="text-center text-xs text-muted-foreground">
               Sign-in is not enabled on this host. Ask whoever runs Elsewhere to set{" "}
               <code className="rounded bg-muted px-1 py-0.5 text-[0.7rem]">ELSEWHERE_ALLOW_CODEX_LOGIN=1</code>{" "}
@@ -156,7 +158,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
         </div>
       ) : null}
 
-      {connected ? (
+      {connected && !checkFailed ? (
         <p className="mt-3 text-xs text-muted-foreground">
           Uses your Codex allowance. Elsewhere never switches to paid API usage automatically.
         </p>
