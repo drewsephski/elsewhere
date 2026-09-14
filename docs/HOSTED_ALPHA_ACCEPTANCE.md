@@ -13,7 +13,7 @@ This report distinguishes **shipped code evidence**, **local/CI verification**, 
 | Computer registry | Owner/archive revalidation, eviction, provider resource replacement | On `main` + `computer_registry_lifecycle` |
 | SSE replay | Durable `assistant_delta` catch-up via `Last-Event-ID` | `assistant_stream_replay` |
 | Runner routing audit | Server-side Next.js cloud-host calls use `cloudHostUpstreamBaseUrl()` | Verified in repo |
-| Web Docker build | `Dockerfile.web` installs build toolchain for native deps | Shipped (uncommitted until push) |
+| Web Docker build | `Dockerfile.web` installs build toolchain for native deps | Shipped on `main` |
 | Public runner ingress | Still enabled in `infra/fly/runner.toml` until BFF smoke passes | **Not removed yet** |
 
 ### Local verification (this workspace)
@@ -25,7 +25,7 @@ This report distinguishes **shipped code evidence**, **local/CI verification**, 
 | `cargo test -p sprite-computer` | **Pass** |
 | `cargo test -p cloud-host --features test-utils` | **Pass** |
 | `cargo test -p agent-core -p computer-mcp -p codex-provider` | **Pass** (when run with cloud-host batch) |
-| GitHub Actions on current `main` head | **Pending** — acceptance commit not pushed (protected `main`; operator push required) |
+| GitHub Actions on current `main` head | **Pass** — [CI run 34856733236](https://github.com/drewsephski/elsewhere/actions/runs/34856733236) (preview cache + coalescing) |
 
 ## Deployment inventory
 
@@ -49,7 +49,7 @@ Approved scope is two Fly Machines, one encrypted 3 GB volume, and at most one n
 
 | Gate | Evidence needed | Status |
 | --- | --- | --- |
-| GitHub CI green on release head | All CI jobs on pushed commit | **Pending push** |
+| GitHub CI green on release head | All CI jobs on pushed commit | **Pass** (run 34856733236) |
 | Deploy runner/web with this pass | Browser bootstrap v3 + preview cache module on acceptance Sprite | **Pending deploy** |
 | Hosted BFF smoke | Full signed-in flow via `/api/cloud/*`; confirm private `.internal` runner path | **Pending** |
 | Remove public runner ingress | After BFF smoke; re-smoke web-only | **Pending** |
@@ -95,7 +95,7 @@ Create on the acceptance bot/computer (same Sprite as persistence sentinel):
    - Suggested first run (America/Chicago): **2026-09-14 09:52:00 CDT** (adjust if staging completes later; must be ≥15 minutes after assignment is admitted).  
    - Task: read-only — verify `/workspace/laptopoff-r2-sentinel.txt` still contains `ELSEWHERE-LAPTOPOFF-2026-09-14-R2` and append a line `routine-r2-ok` to `/workspace/laptopoff-r2-routine.log` (no destructive commands).
 
-3. **Deploy** uncommitted preview-cache pass to runner/web before closing the laptop so bootstrap version **3** is on the acceptance Sprite.
+3. **Deploy** latest runner/web to Fly before closing the laptop so bootstrap version **3** is on the acceptance Sprite.
 
 ### Your checklist (physical laptop-off)
 
@@ -119,7 +119,7 @@ Record artifact SHA-256 after download in this doc when known.
 | Preview cache transactional consistency (code + unit tests) | **Pass** |
 | Preview refresh single-flight (code + unit tests) | **Pass** |
 | Local CI-equivalent tests | **Pass** |
-| GitHub CI on pushed head | **Fail** (not pushed) |
+| GitHub CI on pushed head | **Pass** (run 34856733236) |
 | Deploy + hosted BFF smoke | **Fail** (not run this session) |
 | Public runner removed + re-smoke | **Fail** |
 | Luna browser acceptance on hosted stack | **Fail** |
@@ -127,6 +127,6 @@ Record artifact SHA-256 after download in this doc when known.
 | Laptop-off assignment + routine | **Fail** (awaiting user) |
 | Recovery drills (DB + volume + drain + password reset) | **Fail** |
 
-**Hosted alpha accepted:** **No** — remaining gates are deploy, live smoke, latency, laptop-off, recovery, and CI on pushed head.
+**Hosted alpha accepted:** **No** — remaining gates are deploy, live smoke, latency, laptop-off, and recovery.
 
 **Next product phase when all green:** Connected Apps Phase 1 (do not start until this table is all Pass).
