@@ -2,6 +2,7 @@
 
 mod computer;
 mod events;
+mod fake_computer;
 mod input;
 mod luna;
 mod model;
@@ -21,8 +22,9 @@ pub use model::{
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult,
     ModelError, ResponsesModel,
 };
+pub use fake_computer::FakeAgentComputer;
 pub use run_engine::{
-    responses_loop_deps, CodexRunEngine, ResponsesRunEngine, RunEngineKind, SharedRunDeps,
+    responses_loop_deps, ResponsesRunEngine, RunEngine, RunEngineKind, SharedRunDeps,
 };
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use tools::MAX_AGENT_TOOL_STEPS;

@@ -2,10 +2,30 @@
 name = "codex-provider"
 version = "0.1.0"
 edition = "2021"
-description = "Detect local Codex install and ChatGPT subscription auth (Phase 3B.2)"
+description = "Codex app-server client and subscription run engine for Elsewhere"
 
 [dependencies]
+agent-core = { path = "../agent-core" }
+async-trait = "0.1"
+computer-mcp = { path = "../computer-mcp" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
 thiserror = "2"
+tokio = { version = "1", features = ["io-util", "macros", "process", "rt-multi-thread", "sync", "time"] }
+tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[[example]]
+name = "account_probe"
+path = "examples/account_probe.rs"
+
+[[example]]
+name = "mcp_probe"
+path = "examples/mcp_probe.rs"
+
+[[example]]
+name = "schema_probe"
+path = "examples/schema_probe.rs"
