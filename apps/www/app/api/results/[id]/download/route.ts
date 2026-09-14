@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { cloudHostUpstreamBaseUrl } from "@/lib/cloud-host-upstream";
+import { fetchCloudHostRead } from "@/lib/cloud-host-server";
 import { mimeTypeForResultFileName } from "@/lib/result-preview";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session) return new Response("Sign in to download this result", { status: 401, headers });
     const { token } = await auth.api.getToken({ headers: request.headers });
-    const response = await fetch(`${cloudHostUpstreamBaseUrl()}/v1/results/${id}/download`, {
+    const response = await fetchCloudHostRead(`/v1/results/${id}/download`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]),
