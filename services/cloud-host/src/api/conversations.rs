@@ -8,7 +8,8 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::groups::{
-    add_participant, append_human_message, create_group, enqueue_group_bot_run,
+    add_participant, append_human_message, create_group, delete_transcript_message,
+    enqueue_group_bot_run,
     get_conversation_for_owner, list_groups, list_messages, remove_participant, send_group_message,
     CreateGroupRequest, GroupConversationDetail, GroupListItem, SendGroupMessageRequest,
     SendGroupMessageResponse, TranscriptMessage,
@@ -32,6 +33,21 @@ pub async fn list_conversation_messages(
     let messages =
         list_messages(&state.pool, principal.owner_id(), &conversation_id).await?;
     Ok(Json(messages))
+}
+
+pub async fn delete_conversation_message(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path((conversation_id, message_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    delete_transcript_message(
+        &state,
+        principal.owner_id(),
+        &conversation_id,
+        &message_id,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn create_group_conversation(

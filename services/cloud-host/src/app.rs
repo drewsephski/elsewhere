@@ -100,6 +100,10 @@ pub fn build_router(state: AppState) -> Router {
                 .post(api::conversations::append_human_message_handler),
         )
         .route(
+            "/v1/conversations/{id}/messages/{message_id}",
+            delete(api::conversations::delete_conversation_message),
+        )
+        .route(
             "/v1/conversations/{id}/participants",
             post(api::conversations::add_participant_handler),
         )

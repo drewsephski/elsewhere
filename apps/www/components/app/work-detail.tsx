@@ -2,9 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cloudHostEventStream, cloudHostFetch } from "@/lib/cloud-api";
 import type { DelegationSummary, RunDetail } from "@/lib/api-types";
+import { archiveWorkRun, canArchiveWorkRun } from "@/lib/archive-work-run";
 import { DelegationCard } from "@/components/app/delegation-card";
+import { MarkdownContent } from "@/components/app/markdown-content";
+import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { ResultsPanel } from "./results-panel";
 import { activityText, workStatus } from "@/lib/work-events";
 import {
@@ -65,11 +69,13 @@ function timelineTitle(item: Activity) {
 }
 
 export function WorkDetail({ runId }: { runId: string }) {
+  const router = useRouter();
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [timeline, setTimeline] = useState<Activity[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState("Connecting to your work…");
   const [stopping, setStopping] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [delegations, setDelegations] = useState<DelegationSummary[]>([]);
 
   useEffect(() => {
@@ -200,7 +206,24 @@ export function WorkDetail({ runId }: { runId: string }) {
     }
   }
 
+  async function handleDeleteMessage() {
+    setDeleting(true);
+    setError(null);
+    try {
+      await archiveWorkRun(runId);
+      if (detail?.botId) {
+        router.push(`/app/bots/${detail.botId}`);
+        return;
+      }
+      router.push("/app");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete message");
+      setDeleting(false);
+    }
+  }
+
   const previewEnabled = Boolean(detail?.computerId && detail && active(detail.status));
+  const canDelete = canArchiveWorkRun(detail?.status) && !deleting;
 
   return (
     <BrowserPreviewProvider
@@ -223,6 +246,13 @@ export function WorkDetail({ runId }: { runId: string }) {
             <Badge variant={statusBadgeVariant(detail?.status)}>
               {detail ? workStatus(detail.status) : "Loading…"}
             </Badge>
+            {canDelete ? (
+              <MessageDeleteButton
+                onDelete={handleDeleteMessage}
+                label="Delete"
+                className="h-8 text-xs text-muted-foreground hover:text-destructive"
+              />
+            ) : null}
             {detail && active(detail.status) ? (
               <Button
                 type="button"
@@ -249,7 +279,9 @@ export function WorkDetail({ runId }: { runId: string }) {
         ) : null}
 
         {detail?.task ? (
-          <UserPromptBubble>{detail.task}</UserPromptBubble>
+          <div className="flex flex-col items-end gap-1">
+            <UserPromptBubble>{detail.task}</UserPromptBubble>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">
             {detail ? "No assignment text saved for this work." : "Loading assignment…"}
@@ -287,26 +319,24 @@ export function WorkDetail({ runId }: { runId: string }) {
         </Alert>
       ) : null}
 
-      {detail?.computerId ? (
-        <div className="mx-auto max-w-2xl">
-          <BrowserPreviewView variant="work" />
-        </div>
-      ) : null}
-
       {detail?.assistantResult ? (
         <Frame spacing="sm">
           <FrameHeader>
             <FrameTitle>{active(detail.status) ? "Work so far" : "Result"}</FrameTitle>
           </FrameHeader>
           <FramePanel>
-            <p className="whitespace-pre-wrap break-words text-sm leading-7">
-              {detail.assistantResult}
-            </p>
+            <MarkdownContent text={detail.assistantResult} />
           </FramePanel>
         </Frame>
       ) : null}
 
       <ResultsPanel runId={runId} />
+
+      {detail?.computerId ? (
+        <div className="mx-auto max-w-2xl border-t border-border/50 pt-4">
+          <BrowserPreviewView variant="work" />
+        </div>
+      ) : null}
 
       <Frame spacing="sm">
         <FrameHeader>

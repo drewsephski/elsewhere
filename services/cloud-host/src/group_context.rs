@@ -84,6 +84,7 @@ pub async fn load_group_context_lines(
         LEFT JOIN bots b ON b.id = m.author_bot_id
         WHERE m.conversation_id = $1
           AND m.sequence <= $2
+          AND m.deleted_at IS NULL
           AND m.status IN ('complete', 'cancelled', 'interrupted', 'error')
           AND m.body <> ''
         ORDER BY m.sequence ASC

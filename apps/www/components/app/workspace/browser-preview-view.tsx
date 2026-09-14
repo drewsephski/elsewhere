@@ -37,6 +37,7 @@ interface BrowserPreviewViewProps {
   addressBar?: ReactNode;
   /** Flush chrome with parent card — no extra border or outer rounding. */
   chromeAttached?: boolean;
+  viewportClassName?: string;
 }
 
 function BrowserIdleScene({ enabled }: { enabled: boolean }) {
@@ -81,6 +82,7 @@ function PreviewChrome({
   className,
   addressBar,
   attached,
+  viewportClassName,
   children,
 }: {
   frame: BrowserPreviewFrame | null;
@@ -92,6 +94,7 @@ function PreviewChrome({
   className?: string;
   addressBar?: ReactNode;
   attached?: boolean;
+  viewportClassName?: string;
   children: ReactNode;
 }) {
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
@@ -131,6 +134,7 @@ function PreviewChrome({
             className={cn(
               "relative w-full overflow-hidden bg-[#e8ecf4]",
               compact ? "aspect-[16/11]" : "aspect-[16/10]",
+              viewportClassName,
             )}
           >
             {loading && showPlaceholder ? (
@@ -189,6 +193,7 @@ function PreviewChrome({
               className={cn(
                 "relative w-full overflow-hidden bg-[#e8ecf4]",
                 compact ? "aspect-[16/11]" : "aspect-[16/10]",
+                viewportClassName,
               )}
             >
               {loading && showPlaceholder ? (
@@ -275,6 +280,9 @@ export function BrowserPreviewView({
   const addressLabel = host ?? statusLabel;
   const hasImage = Boolean(frame?.available && frame?.imageDataUrl);
   const pipOpen = ctx?.pipOpen ?? false;
+  const isWork = variant === "work";
+  const useSubtleChrome = variant === "embedded" || variant === "floating" || isWork;
+  const chromeCompact = variant === "floating" || isWork;
 
   function handleOpenDialog() {
     if (!hasImage) {
@@ -332,8 +340,15 @@ export function BrowserPreviewView({
 
   return (
     <>
-      <div className={cn(variant === "embedded" ? "mt-0" : "space-y-2", className)}>
-        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
+      <div
+        className={cn(
+          variant === "embedded" ? "mt-0" : "space-y-2",
+          isWork && "mx-auto w-full max-w-xs sm:max-w-sm",
+          className,
+        )}
+      >
+        {!isWork ? (
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
             <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/90">
               Live browser
             </p>
@@ -368,6 +383,23 @@ export function BrowserPreviewView({
               ) : null}
             </div>
           </div>
+        ) : (
+          <div className="mb-1 flex items-center justify-between gap-2 px-0.5">
+            <p className="text-[10px] font-medium text-muted-foreground">Browser</p>
+            {hasImage ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[11px] text-muted-foreground"
+                onClick={handleOpenDialog}
+                aria-label="Expand browser preview"
+              >
+                Expand
+              </Button>
+            ) : null}
+          </div>
+        )}
 
         <button
           type="button"
@@ -384,7 +416,9 @@ export function BrowserPreviewView({
             loading={loading}
             enabled={enabled}
             addressLabel={addressLabel}
-            subtle={variant === "embedded"}
+            subtle={useSubtleChrome}
+            compact={chromeCompact}
+            viewportClassName={isWork ? "aspect-[16/10] max-h-36 sm:max-h-40" : undefined}
           >
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element

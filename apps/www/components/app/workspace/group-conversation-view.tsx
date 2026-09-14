@@ -16,6 +16,8 @@ import {
   GroupMentionComposer,
   type MentionToken,
 } from "./group-mention-composer";
+import { deleteConversationMessage, canArchiveWorkRun, archiveWorkRun } from "@/lib/archive-work-run";
+import { MessageDeleteButton } from "@/components/app/message-delete-button";
 
 interface GroupConversationViewProps {
   groupId: string;
@@ -135,6 +137,37 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     setGroup(body);
   }
 
+  async function handleDeleteMessage(item: TranscriptMessage) {
+    setError(null);
+    try {
+      if (item.authorKind === "human") {
+        const activeRecipient = item.recipients?.some(
+          (recipient) => recipient.status === "queued" || recipient.status === "running",
+        );
+        if (activeRecipient) {
+          throw new Error("Wait for bots to finish before deleting this message");
+        }
+        await deleteConversationMessage(groupId, item.id);
+      } else if (item.runId && canArchiveWorkRun(item.status)) {
+        await archiveWorkRun(item.runId);
+      } else {
+        await deleteConversationMessage(groupId, item.id);
+      }
+      await loadMessages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete message");
+    }
+  }
+
+  function canDeleteMessage(item: TranscriptMessage): boolean {
+    if (item.authorKind === "human") {
+      return !item.recipients?.some(
+        (recipient) => recipient.status === "queued" || recipient.status === "running",
+      );
+    }
+    return canArchiveWorkRun(item.status);
+  }
+
   async function handleAddParticipant(botId: string) {
     setError(null);
     const response = await cloudHostFetch(`/v1/conversations/${groupId}/participants`, {
@@ -190,6 +223,13 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
             item.authorKind === "human" ? (
               <div key={item.id} className="flex flex-col items-end gap-1">
                 <UserPromptBubble sentAt={item.createdAt}>{item.body}</UserPromptBubble>
+                {canDeleteMessage(item) ? (
+                  <MessageDeleteButton
+                    onDelete={() => handleDeleteMessage(item)}
+                    label="Delete message"
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                  />
+                ) : null}
                 {item.recipients && item.recipients.length > 0 ? (
                   <ul className="flex flex-wrap justify-end gap-1.5 text-[11px] text-muted-foreground">
                     {item.recipients.map((recipient) => (
@@ -212,7 +252,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                 ) : null}
               </div>
             ) : (
-              <div key={item.id} className="flex justify-start">
+              <div key={item.id} className="flex flex-col items-start gap-1">
+                <div className="flex justify-start">
                 <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
                   <div className="mb-2 flex items-center gap-2">
                     <BotCreatureAvatar
@@ -226,6 +267,14 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                   </div>
                   <MarkdownContent text={item.body || (item.status === "pending" ? "Working…" : "")} />
                 </div>
+                </div>
+                {canDeleteMessage(item) ? (
+                  <MessageDeleteButton
+                    onDelete={() => handleDeleteMessage(item)}
+                    label="Delete message"
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                  />
+                ) : null}
               </div>
             ),
           )}

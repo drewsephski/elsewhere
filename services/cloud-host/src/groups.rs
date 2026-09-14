@@ -159,6 +159,7 @@ pub async fn list_messages(
         FROM messages m
         LEFT JOIN bots b ON b.id = m.author_bot_id
         WHERE m.conversation_id = $1
+          AND m.deleted_at IS NULL
         ORDER BY m.sequence ASC
         "#,
     )
@@ -994,4 +995,65 @@ pub async fn assert_bot_may_use_conversation(
         return Ok(());
     }
     Err(ApiError::Internal("unknown conversation type".into()))
+}
+
+pub async fn delete_transcript_message(
+    state: &crate::app_state::AppState,
+    owner: &str,
+    conversation_id: &str,
+    message_id: &str,
+) -> Result<(), ApiError> {
+    get_conversation_for_owner(&state.pool, owner, conversation_id).await?;
+
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+          SELECT 1 FROM messages m
+          JOIN conversations c ON c.id = m.conversation_id
+          WHERE m.id = $1 AND m.conversation_id = $2 AND c.owner_id = $3 AND m.deleted_at IS NULL
+        )
+        "#,
+    )
+    .bind(message_id)
+    .bind(conversation_id)
+    .bind(owner)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(db_error)?;
+    if !exists {
+        return Err(ApiError::NotFound);
+    }
+
+    let run_ids: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT DISTINCT run_id FROM (
+          SELECT g.run_id AS run_id
+          FROM group_message_recipients g
+          WHERE g.message_id = $1 AND g.run_id IS NOT NULL
+          UNION
+          SELECT r.id AS run_id
+          FROM agent_runs r
+          WHERE r.source_message_id = $1 OR r.assistant_message_id = $1
+        ) AS linked
+        WHERE run_id IS NOT NULL
+        "#,
+    )
+    .bind(message_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(db_error)?;
+
+    for run_id in run_ids {
+        crate::run_archive::archive_run(state, owner, &run_id).await?;
+    }
+
+    sqlx::query(
+        "UPDATE messages SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(message_id)
+    .execute(&state.pool)
+    .await
+    .map_err(db_error)?;
+
+    Ok(())
 }

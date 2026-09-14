@@ -17,6 +17,8 @@ import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { workStatus } from "@/lib/work-events";
+import { archiveWorkRun, canArchiveWorkRun } from "@/lib/archive-work-run";
+import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { useActiveRun } from "@/contexts/active-run-context";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
@@ -353,6 +355,21 @@ export function BotConversationView({
     }
   }
 
+  async function handleDeleteRun(run: RunSummary) {
+    setError(null);
+    try {
+      await archiveWorkRun(run.runId);
+      if (conversationId) {
+        await loadRuns(conversationId);
+      }
+      if (liveRunId === run.runId) {
+        setLiveRunId(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete message");
+    }
+  }
+
   const chronologicalRuns = [...runs].reverse();
 
   return (
@@ -444,9 +461,18 @@ export function BotConversationView({
 
             return (
               <div key={run.runId} className="space-y-3">
-                <UserPromptBubble sentAt={run.createdAt}>
-                  {showOptimisticUser ? pendingTurn.message : run.task}
-                </UserPromptBubble>
+                <div className="flex flex-col items-end gap-1">
+                  <UserPromptBubble sentAt={run.createdAt}>
+                    {showOptimisticUser ? pendingTurn.message : run.task}
+                  </UserPromptBubble>
+                  {canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
+                    <MessageDeleteButton
+                      onDelete={() => handleDeleteRun(run)}
+                      label="Delete message"
+                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                    />
+                  ) : null}
+                </div>
 
                 {isLive && liveDelegations.length > 0 ? (
                   <div className="space-y-2">
