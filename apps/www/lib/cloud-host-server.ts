@@ -1,7 +1,7 @@
 import {
   cloudHostUpstreamCandidates,
   type CloudHostUpstreamCandidate,
-} from "@/lib/cloud-host-upstream";
+} from "./cloud-host-upstream";
 
 const HEALTH_CACHE_MS = 30_000;
 const HEALTH_PROBE_TIMEOUT_MS = 3_000;
@@ -90,8 +90,10 @@ async function probeCandidate(
 export async function selectCloudHostUpstream(options?: {
   signal?: AbortSignal;
   excludeBaseUrls?: Iterable<string>;
+  /** Dependency injection for deterministic tests; production uses process.env. */
+  env?: NodeJS.ProcessEnv;
 }): Promise<CloudHostUpstreamCandidate> {
-  const candidates = cloudHostUpstreamCandidates();
+  const candidates = cloudHostUpstreamCandidates(options?.env ?? process.env);
   const excluded = new Set(options?.excludeBaseUrls ?? []);
 
   const cached = cachedCandidate(candidates, excluded);
