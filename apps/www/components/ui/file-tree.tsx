@@ -159,6 +159,8 @@ type TreeViewProps = {
   closeIcon?: React.ReactNode;
   sort?: TreeSortMode;
   header?: React.ReactNode;
+  /** When false, the tree grows with content (parent should handle scrolling). */
+  scrollable?: boolean;
 } & Omit<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Root>,
   "defaultValue" | "onValueChange" | "type" | "value"
@@ -178,6 +180,7 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
       sort = "default",
       dir,
       header,
+      scrollable = true,
       ...props
     },
     ref,
@@ -262,11 +265,14 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
           direction,
         }}
       >
-        <div className={cn("size-full", className)}>
+        <div className={cn(scrollable ? "size-full" : "w-full", className)}>
           {header}
           <div
             ref={ref}
-            className="relative h-full overflow-y-auto px-1"
+            className={cn(
+              "relative px-1",
+              scrollable ? "h-full overflow-y-auto" : "overflow-visible",
+            )}
             dir={dir as Direction}
           >
             <AccordionPrimitive.Root
@@ -314,6 +320,7 @@ type FolderProps = {
   element: string;
   isSelectable?: boolean;
   isSelect?: boolean;
+  onContextMenu?: React.MouseEventHandler<HTMLButtonElement>;
 } & React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>;
 
 const Folder = forwardRef<
@@ -328,6 +335,7 @@ const Folder = forwardRef<
       isSelectable = true,
       isSelect,
       children,
+      onContextMenu,
       ...props
     },
     ref,
@@ -353,6 +361,7 @@ const Folder = forwardRef<
         className="relative overflow-hidden"
       >
         <AccordionPrimitive.Trigger
+          onContextMenu={onContextMenu}
           className={cn(
             "flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-left text-xs font-medium transition-colors duration-200 ease-in-out",
             className,

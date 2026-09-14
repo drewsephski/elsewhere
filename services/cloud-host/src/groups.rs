@@ -39,6 +39,17 @@ pub struct GroupConversationDetail {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MessageRecipient {
+    pub bot_id: String,
+    pub bot_name: String,
+    pub avatar_id: String,
+    pub routing_kind: String,
+    pub status: String,
+    pub run_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TranscriptMessage {
     pub id: String,
     pub sequence: i64,
@@ -51,6 +62,19 @@ pub struct TranscriptMessage {
     pub author_avatar_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipients: Option<Vec<MessageRecipient>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupListItem {
+    pub id: String,
+    pub name: String,
+    pub updated_at: DateTime<Utc>,
+    pub participants: Vec<ParticipantSummary>,
+    pub queued_runs: i64,
+    pub working_runs: i64,
 }
 
 pub async fn get_conversation_for_owner(
@@ -143,7 +167,7 @@ pub async fn list_messages(
     .await
     .map_err(db_error)?;
 
-    Ok(rows
+    let messages: Vec<TranscriptMessage> = rows
         .into_iter()
         .map(|row| TranscriptMessage {
             id: row.get("id"),
@@ -157,8 +181,121 @@ pub async fn list_messages(
             author_avatar_id: row.get("author_avatar_id"),
             created_at: row.get("created_at"),
             run_id: row.get("run_id"),
+            recipients: None,
+        })
+        .collect();
+
+    let human_ids: Vec<String> = messages
+        .iter()
+        .filter(|m| m.author_kind == "human")
+        .map(|m| m.id.clone())
+        .collect();
+    if human_ids.is_empty() {
+        return Ok(messages);
+    }
+
+    let recipient_rows = sqlx::query(
+        r#"
+        SELECT g.message_id, g.bot_id, g.routing_kind, g.status, g.run_id, b.name, b.avatar_id
+        FROM group_message_recipients g
+        JOIN bots b ON b.id = g.bot_id
+        WHERE g.conversation_id = $1 AND g.message_id = ANY($2)
+        ORDER BY g.created_at ASC
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(&human_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut by_message: std::collections::HashMap<String, Vec<MessageRecipient>> =
+        std::collections::HashMap::new();
+    for row in recipient_rows {
+        let message_id: String = row.get("message_id");
+        by_message
+            .entry(message_id)
+            .or_default()
+            .push(MessageRecipient {
+                bot_id: row.get("bot_id"),
+                bot_name: row.get("name"),
+                avatar_id: row.get("avatar_id"),
+                routing_kind: row.get("routing_kind"),
+                status: row.get("status"),
+                run_id: row.get("run_id"),
+            });
+    }
+
+    Ok(messages
+        .into_iter()
+        .map(|mut m| {
+            if m.author_kind == "human" {
+                m.recipients = by_message.get(&m.id).cloned();
+            }
+            m
         })
         .collect())
+}
+
+pub async fn list_groups(
+    pool: &PgPool,
+    owner: &str,
+    limit: i64,
+) -> Result<Vec<GroupListItem>, ApiError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT c.id, c.name, c.updated_at
+        FROM conversations c
+        WHERE c.owner_id = $1 AND c.conversation_type = 'group'
+        ORDER BY c.updated_at DESC
+        LIMIT $2
+        "#,
+    )
+    .bind(owner)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let id: String = row.get("id");
+        let participants = load_participants(pool, owner, &id).await?;
+        let queued: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM group_message_recipients g
+            JOIN agent_runs r ON r.id = g.run_id
+            WHERE g.conversation_id = $1 AND r.status = 'queued'
+            "#,
+        )
+        .bind(&id)
+        .fetch_one(pool)
+        .await
+        .map_err(db_error)?;
+        let working: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM group_message_recipients g
+            JOIN agent_runs r ON r.id = g.run_id
+            WHERE g.conversation_id = $1 AND r.status = 'running'
+            "#,
+        )
+        .bind(&id)
+        .fetch_one(pool)
+        .await
+        .map_err(db_error)?;
+        out.push(GroupListItem {
+            id,
+            name: row
+                .get::<Option<String>, _>("name")
+                .filter(|n| !n.trim().is_empty())
+                .unwrap_or_else(|| "Group".into()),
+            updated_at: row.get("updated_at"),
+            participants,
+            queued_runs: queued,
+            working_runs: working,
+        });
+    }
+    Ok(out)
 }
 
 #[derive(Debug, Deserialize)]
@@ -278,24 +415,38 @@ pub async fn add_participant(
     if detail.conversation_type != "group" {
         return Err(ApiError::Validation("not a group conversation".into()));
     }
-    let active = detail
-        .participants
-        .iter()
-        .filter(|p| p.left_at.is_none())
-        .count();
-    if active >= MAX_GROUP_BOTS {
+    validate_group_bots(pool, owner, &[bot_id.to_string()]).await?;
+
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("group-members:{conversation_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    let active: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) FROM conversation_participants
+        WHERE conversation_id = $1 AND owner_id = $2 AND left_at IS NULL
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    if active as usize >= MAX_GROUP_BOTS {
         return Err(ApiError::Validation(format!(
             "at most {} active bots are allowed in a group",
             MAX_GROUP_BOTS
         )));
     }
-    validate_group_bots(pool, owner, &[bot_id.to_string()]).await?;
 
     let ordinal: i32 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(ordinal), -1) + 1 FROM conversation_participants WHERE conversation_id = $1",
     )
     .bind(conversation_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *tx)
     .await
     .map_err(db_error)?;
 
@@ -311,15 +462,16 @@ pub async fn add_participant(
     .bind(bot_id)
     .bind(owner)
     .bind(ordinal)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(db_error)?;
 
     sqlx::query("UPDATE conversations SET updated_at = NOW() WHERE id = $1")
         .bind(conversation_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
 
     get_conversation_for_owner(pool, owner, conversation_id).await
 }
@@ -334,12 +486,26 @@ pub async fn remove_participant(
     if detail.conversation_type != "group" {
         return Err(ApiError::Validation("not a group conversation".into()));
     }
-    let active = detail
-        .participants
-        .iter()
-        .filter(|p| p.left_at.is_none())
-        .count();
-    if active <= MIN_GROUP_BOTS {
+
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("group-members:{conversation_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    let active: i64 = sqlx::query_scalar(
+        r#"
+        SELECT COUNT(*) FROM conversation_participants
+        WHERE conversation_id = $1 AND owner_id = $2 AND left_at IS NULL
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    if active as usize <= MIN_GROUP_BOTS {
         return Err(ApiError::Validation(format!(
             "at least {} active bots must remain in a group",
             MIN_GROUP_BOTS
@@ -355,12 +521,13 @@ pub async fn remove_participant(
     .bind(conversation_id)
     .bind(bot_id)
     .bind(owner)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .map_err(db_error)?;
     if updated.rows_affected() == 0 {
         return Err(ApiError::NotFound);
     }
+    tx.commit().await.map_err(db_error)?;
     get_conversation_for_owner(pool, owner, conversation_id).await
 }
 
@@ -429,6 +596,7 @@ pub async fn append_human_message(
         author_avatar_id: None,
         created_at: Utc::now(),
         run_id: None,
+        recipients: None,
     })
 }
 
@@ -468,15 +636,317 @@ pub async fn enqueue_group_bot_run(
     if !is_active_participant(pool, owner, conversation_id, bot_id).await? {
         return Err(ApiError::NotFound);
     }
-    work::enqueue(
-        pool,
+    let trimmed = message.trim();
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    let message_id = Uuid::new_v4().to_string();
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("conversation-seq:{conversation_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+    let sequence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM messages WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    sqlx::query(
+        r#"
+        INSERT INTO messages (id, conversation_id, role, body, status, sequence, author_kind)
+        VALUES ($1, $2, 'user', $3, 'complete', $4, 'human')
+        "#,
+    )
+    .bind(&message_id)
+    .bind(conversation_id)
+    .bind(trimmed)
+    .bind(sequence)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    let records = work::enqueue_from_group_message_in_transaction(
+        &mut tx,
         owner,
         request_id,
         bot_id,
-        Some(conversation_id),
-        message,
+        conversation_id,
+        &message_id,
+        trimmed,
     )
+    .await?;
+    tx.commit().await.map_err(db_error)?;
+    Ok(records)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendGroupMessageRequest {
+    pub body: String,
+    pub recipient_bot_ids: Option<Vec<String>>,
+    pub mention_mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendGroupMessageResponse {
+    pub message: TranscriptMessage,
+    pub recipients: Vec<MessageRecipient>,
+}
+
+fn resolve_group_recipients(
+    mention_mode: Option<&str>,
+    recipient_bot_ids: Option<&[String]>,
+    active_bot_ids: &[String],
+) -> Result<Vec<(String, String)>, ApiError> {
+    let everyone = mention_mode.map(|m| m.eq_ignore_ascii_case("everyone")).unwrap_or(false);
+    let mut resolved: Vec<String> = Vec::new();
+    if everyone {
+        resolved.extend(active_bot_ids.iter().cloned());
+    }
+    if let Some(ids) = recipient_bot_ids {
+        for raw in ids {
+            let id = raw.trim();
+            if id.is_empty() {
+                continue;
+            }
+            if !resolved.iter().any(|existing| existing == id) {
+                resolved.push(id.to_string());
+            }
+        }
+    }
+    if resolved.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for bot_id in resolved {
+        if !active_bot_ids.iter().any(|active| active == &bot_id) {
+            return Err(ApiError::NotFound);
+        }
+        let kind = if everyone && active_bot_ids.contains(&bot_id) {
+            "everyone"
+        } else {
+            "mention"
+        };
+        out.push((bot_id, kind.to_string()));
+    }
+    Ok(out)
+}
+
+pub async fn send_group_message(
+    pool: &PgPool,
+    owner: &str,
+    conversation_id: &str,
+    idempotency_key: &str,
+    body: SendGroupMessageRequest,
+) -> Result<SendGroupMessageResponse, ApiError> {
+    if idempotency_key.len() > 200 {
+        return Err(ApiError::Validation("Idempotency key is too long".into()));
+    }
+    let detail = get_conversation_for_owner(pool, owner, conversation_id).await?;
+    if detail.conversation_type != "group" {
+        return Err(ApiError::Validation("not a group conversation".into()));
+    }
+    let trimmed = body.body.trim();
+    if trimmed.is_empty() || trimmed.len() > 100_000 {
+        return Err(ApiError::Validation(
+            "message must be between 1 and 100,000 bytes".into(),
+        ));
+    }
+
+    if let Some(existing) = sqlx::query(
+        "SELECT message_id FROM group_message_sends WHERE owner_id = $1 AND idempotency_key = $2",
+    )
+    .bind(owner)
+    .bind(idempotency_key)
+    .fetch_optional(pool)
     .await
+    .map_err(db_error)?
+    {
+        let message_id: String = existing.get("message_id");
+        let messages = list_messages(pool, owner, conversation_id).await?;
+        let message = messages
+            .into_iter()
+            .find(|m| m.id == message_id)
+            .ok_or(ApiError::Internal("idempotent send missing message".into()))?;
+        let recipients = message.recipients.clone().unwrap_or_default();
+        return Ok(SendGroupMessageResponse {
+            message,
+            recipients,
+        });
+    }
+
+    let active_bot_ids: Vec<String> = detail
+        .participants
+        .iter()
+        .filter(|p| p.left_at.is_none())
+        .map(|p| p.bot_id.clone())
+        .collect();
+
+    for raw in body.recipient_bot_ids.as_deref().unwrap_or(&[]) {
+        let id = raw.trim();
+        if id.is_empty() {
+            continue;
+        }
+        let owned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
+        )
+        .bind(id)
+        .bind(owner)
+        .fetch_one(pool)
+        .await
+        .map_err(db_error)?;
+        if !owned {
+            return Err(ApiError::NotFound);
+        }
+    }
+
+    let routing = resolve_group_recipients(
+        body.mention_mode.as_deref(),
+        body.recipient_bot_ids.as_deref(),
+        &active_bot_ids,
+    )?;
+
+    let send_id = Uuid::new_v4().to_string();
+    let message_id = Uuid::new_v4().to_string();
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("group-send:{owner}:{idempotency_key}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    if let Some(existing) = sqlx::query(
+        "SELECT message_id FROM group_message_sends WHERE owner_id = $1 AND idempotency_key = $2",
+    )
+    .bind(owner)
+    .bind(idempotency_key)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_error)?
+    {
+        let message_id: String = existing.get("message_id");
+        tx.commit().await.map_err(db_error)?;
+        let messages = list_messages(pool, owner, conversation_id).await?;
+        let message = messages
+            .into_iter()
+            .find(|m| m.id == message_id)
+            .ok_or(ApiError::Internal("idempotent send missing message".into()))?;
+        let recipients = message.recipients.clone().unwrap_or_default();
+        return Ok(SendGroupMessageResponse {
+            message,
+            recipients,
+        });
+    }
+
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("conversation-seq:{conversation_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+    let sequence: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM messages WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    sqlx::query(
+        r#"
+        INSERT INTO messages (id, conversation_id, role, body, status, sequence, author_kind)
+        VALUES ($1, $2, 'user', $3, 'complete', $4, 'human')
+        "#,
+    )
+    .bind(&message_id)
+    .bind(conversation_id)
+    .bind(trimmed)
+    .bind(sequence)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO group_message_sends (id, owner_id, conversation_id, idempotency_key, message_id)
+        VALUES ($1, $2, $3, $4, $5)
+        "#,
+    )
+    .bind(&send_id)
+    .bind(owner)
+    .bind(conversation_id)
+    .bind(idempotency_key)
+    .bind(&message_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    let mut recipients_out = Vec::new();
+    for (bot_id, routing_kind) in routing {
+        let run_request_id = format!("{idempotency_key}:{bot_id}");
+        let records = work::enqueue_from_group_message_in_transaction(
+            &mut tx,
+            owner,
+            &run_request_id,
+            &bot_id,
+            conversation_id,
+            &message_id,
+            trimmed,
+        )
+        .await?;
+        sqlx::query(
+            r#"
+            INSERT INTO group_message_recipients (message_id, conversation_id, bot_id, run_id, routing_kind, status)
+            VALUES ($1, $2, $3, $4, $5, 'queued')
+            ON CONFLICT (message_id, bot_id) DO NOTHING
+            "#,
+        )
+        .bind(&message_id)
+        .bind(conversation_id)
+        .bind(&bot_id)
+        .bind(&records.run_id)
+        .bind(&routing_kind)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+        let participant = detail
+            .participants
+            .iter()
+            .find(|p| p.bot_id == bot_id)
+            .ok_or(ApiError::NotFound)?;
+        recipients_out.push(MessageRecipient {
+            bot_id: bot_id.clone(),
+            bot_name: participant.name.clone(),
+            avatar_id: participant.avatar_id.clone(),
+            routing_kind,
+            status: "queued".into(),
+            run_id: Some(records.run_id),
+        });
+    }
+
+    sqlx::query("UPDATE conversations SET updated_at = NOW() WHERE id = $1")
+        .bind(conversation_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
+
+    Ok(SendGroupMessageResponse {
+        message: TranscriptMessage {
+            id: message_id,
+            sequence,
+            role: "user".into(),
+            body: trimmed.to_string(),
+            status: "complete".into(),
+            author_kind: "human".into(),
+            author_bot_id: None,
+            author_bot_name: None,
+            author_avatar_id: None,
+            created_at: Utc::now(),
+            run_id: None,
+            recipients: Some(recipients_out.clone()),
+        },
+        recipients: recipients_out,
+    })
 }
 
 pub async fn assert_bot_may_use_conversation(

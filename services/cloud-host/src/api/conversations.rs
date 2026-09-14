@@ -8,9 +8,10 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::groups::{
-    append_human_message, add_participant, create_group, enqueue_group_bot_run,
-    get_conversation_for_owner, list_messages, remove_participant, CreateGroupRequest,
-    GroupConversationDetail, TranscriptMessage,
+    add_participant, append_human_message, create_group, enqueue_group_bot_run,
+    get_conversation_for_owner, list_groups, list_messages, remove_participant, send_group_message,
+    CreateGroupRequest, GroupConversationDetail, GroupListItem, SendGroupMessageRequest,
+    SendGroupMessageResponse, TranscriptMessage,
 };
 
 pub async fn get_conversation(
@@ -46,14 +47,44 @@ pub async fn create_group_conversation(
 #[serde(rename_all = "camelCase")]
 pub struct AppendHumanMessageRequest {
     pub body: String,
+    pub recipient_bot_ids: Option<Vec<String>>,
+    pub mention_mode: Option<String>,
 }
 
 pub async fn append_human_message_handler(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
     Path(conversation_id): Path<String>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<AppendHumanMessageRequest>,
-) -> Result<(StatusCode, Json<TranscriptMessage>), ApiError> {
+) -> Result<(StatusCode, Json<SendGroupMessageResponse>), ApiError> {
+    let has_routing = body.mention_mode.is_some()
+        || body
+            .recipient_bot_ids
+            .as_ref()
+            .is_some_and(|ids| ids.iter().any(|id| !id.trim().is_empty()));
+    if has_routing {
+        let idempotency_key = headers
+            .get("Idempotency-Key")
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let response = send_group_message(
+            &state.pool,
+            principal.owner_id(),
+            &conversation_id,
+            &idempotency_key,
+            SendGroupMessageRequest {
+                body: body.body,
+                recipient_bot_ids: body.recipient_bot_ids,
+                mention_mode: body.mention_mode,
+            },
+        )
+        .await?;
+        return Ok((StatusCode::CREATED, Json(response)));
+    }
     let message = append_human_message(
         &state.pool,
         principal.owner_id(),
@@ -61,7 +92,21 @@ pub async fn append_human_message_handler(
         &body.body,
     )
     .await?;
-    Ok((StatusCode::CREATED, Json(message)))
+    Ok((
+        StatusCode::CREATED,
+        Json(SendGroupMessageResponse {
+            message,
+            recipients: Vec::new(),
+        }),
+    ))
+}
+
+pub async fn list_group_conversations(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+) -> Result<Json<Vec<GroupListItem>>, ApiError> {
+    let groups = list_groups(&state.pool, principal.owner_id(), 50).await?;
+    Ok(Json(groups))
 }
 
 #[derive(Debug, Deserialize)]

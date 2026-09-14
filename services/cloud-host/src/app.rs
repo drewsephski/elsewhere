@@ -60,7 +60,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/v1/computers/{id}/workspace/file",
-            get(api::computers::workspace_read),
+            get(api::computers::workspace_read)
+                .delete(api::computers::workspace_delete)
+                .patch(api::computers::workspace_rename),
         )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
@@ -85,7 +87,8 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/v1/conversations/groups",
-            post(api::conversations::create_group_conversation),
+            get(api::conversations::list_group_conversations)
+                .post(api::conversations::create_group_conversation),
         )
         .route(
             "/v1/conversations/{id}",

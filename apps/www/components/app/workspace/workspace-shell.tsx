@@ -1,6 +1,6 @@
 "use client";
 
-import type { BotSummary, RunSummary } from "@/lib/api-types";
+import type { BotSummary, GroupListItem, RunSummary } from "@/lib/api-types";
 import { useWorkspaceOverview } from "@/hooks/use-workspace-overview";
 import { siteConfig } from "@elsewhere/brand";
 import { cn } from "cn";
@@ -78,8 +78,33 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runActivityAt, setRunActivityAt] = useState<Record<string, string>>({});
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
+  const [groups, setGroups] = useState<GroupListItem[]>([]);
 
   const bots = workspace?.bots ?? [];
+
+  useEffect(() => {
+    let stopped = false;
+    async function loadGroups() {
+      try {
+        const response = await cloudHostFetch("/v1/conversations/groups");
+        if (!response.ok) {
+          return;
+        }
+        const next: GroupListItem[] = await response.json();
+        if (!stopped) {
+          setGroups(next);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    void loadGroups();
+    const timer = setInterval(() => void loadGroups(), 12000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -288,7 +313,9 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           </div>
           <BotListSidebar
             bots={bots}
+            groups={groups}
             selectedBotId={selectedBotId}
+            selectedGroupId={selectedGroupId}
             runActivityAt={runActivityAt}
             workspacePhase={workspacePhase}
             workspaceError={workspaceError}
@@ -315,7 +342,13 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         open={createGroupOpen}
         bots={bots}
         onClose={() => setCreateGroupOpen(false)}
-        onCreated={(groupId) => router.push(`/app/groups/${groupId}`)}
+        onCreated={(groupId) => {
+          void cloudHostFetch("/v1/conversations/groups")
+            .then((r) => (r.ok ? r.json() : []))
+            .then((next: GroupListItem[]) => setGroups(next))
+            .catch(() => undefined);
+          router.push(`/app/groups/${groupId}`);
+        }}
       />
 
       <MobileSheet

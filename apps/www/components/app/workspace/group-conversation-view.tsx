@@ -10,19 +10,41 @@ import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  buildGroupSendPayload,
+  GroupMentionComposer,
+  type MentionToken,
+} from "./group-mention-composer";
 
 interface GroupConversationViewProps {
   groupId: string;
   bots: WorkspaceBotPresence[];
 }
 
+function recipientStatusLabel(status: string): string {
+  switch (status) {
+    case "queued":
+      return "queued";
+    case "running":
+      return "working";
+    case "completed":
+      return "finished";
+    case "cancelled":
+      return "cancelled";
+    default:
+      return status;
+  }
+}
+
 export function GroupConversationView({ groupId, bots }: GroupConversationViewProps) {
   const [group, setGroup] = useState<GroupConversationDetail | null>(null);
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [message, setMessage] = useState("");
+  const [mentions, setMentions] = useState<MentionToken[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const idempotencyRef = useRef<string | null>(null);
 
   const activeParticipants = useMemo(
     () => group?.participants.filter((p) => !p.leftAt) ?? [],
@@ -59,28 +81,37 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   useEffect(() => {
     const timer = setInterval(() => {
       void loadMessages().catch(() => undefined);
-    }, 5000);
+    }, 2500);
     return () => clearInterval(timer);
   }, [loadMessages]);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function handleSubmit() {
     if (!message.trim() || pending) {
       return;
     }
     setPending(true);
     setError(null);
     const trimmed = message.trim();
+    const payload = buildGroupSendPayload(trimmed, mentions, group?.participants ?? []);
+    const idempotencyKey = idempotencyRef.current ?? crypto.randomUUID();
+    idempotencyRef.current = idempotencyKey;
     setMessage("");
+    setMentions([]);
     try {
       const response = await cloudHostFetch(`/v1/conversations/${groupId}/messages`, {
         method: "POST",
-        body: JSON.stringify({ body: trimmed }),
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({
+          body: trimmed,
+          recipientBotIds: payload.recipientBotIds,
+          mentionMode: payload.mentionMode,
+        }),
       });
       const body = await response.json();
       if (!response.ok) {
         throw new Error(body.error ?? "Could not send message");
       }
+      idempotencyRef.current = null;
       await loadMessages();
     } catch (err) {
       setMessage(trimmed);
@@ -157,9 +188,29 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           {messages.map((item) =>
             item.authorKind === "human" ? (
-              <UserPromptBubble key={item.id} sentAt={item.createdAt}>
-                {item.body}
-              </UserPromptBubble>
+              <div key={item.id} className="flex flex-col items-end gap-1">
+                <UserPromptBubble sentAt={item.createdAt}>{item.body}</UserPromptBubble>
+                {item.recipients && item.recipients.length > 0 ? (
+                  <ul className="flex flex-wrap justify-end gap-1.5 text-[11px] text-muted-foreground">
+                    {item.recipients.map((recipient) => (
+                      <li key={recipient.botId}>
+                        {recipient.runId && recipient.status === "completed" ? (
+                          <Link
+                            href={`/app/work/${recipient.runId}`}
+                            className="rounded-full border border-border/80 bg-white px-2 py-0.5 hover:bg-muted"
+                          >
+                            {recipient.botName} — {recipientStatusLabel(recipient.status)}
+                          </Link>
+                        ) : (
+                          <span className="rounded-full border border-border/80 bg-white px-2 py-0.5">
+                            {recipient.botName} — {recipientStatusLabel(recipient.status)}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             ) : (
               <div key={item.id} className="flex justify-start">
                 <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
@@ -215,17 +266,22 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           ) : null}
         </div>
         <form
-          onSubmit={(event) => void handleSubmit(event)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void handleSubmit();
+          }}
           className="mx-auto flex max-w-2xl items-end gap-2"
         >
-          <textarea
+          <GroupMentionComposer
+            participants={group?.participants ?? []}
             value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(next, nextMentions) => {
+              setMessage(next);
+              setMentions(nextMentions);
+            }}
+            onSubmit={() => void handleSubmit()}
             disabled={pending}
-            rows={1}
-            placeholder="Message the group"
-            className="max-h-32 min-h-[2.25rem] flex-1 resize-none rounded-full border border-border/80 bg-[#f5f3f8] px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-            aria-label="Group message"
+            pending={pending}
           />
           <Button type="submit" disabled={pending || !message.trim()}>
             {pending ? "Sending…" : "Send"}

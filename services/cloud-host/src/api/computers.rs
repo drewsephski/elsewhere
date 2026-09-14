@@ -1,4 +1,7 @@
-use agent_core::{filter_workspace_listing, AgentComputer, ComputerError};
+use agent_core::{
+    filter_workspace_listing, validate_workspace_mutation_path, workspace_rename_target,
+    AgentComputer, ComputerError,
+};
 use serde_json::json;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -235,6 +238,33 @@ pub struct WorkspaceFileResponse {
     pub text: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct WorkspaceRenameRequest {
+    pub path: String,
+    #[serde(rename = "newName")]
+    pub new_name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceMutationResponse {
+    pub path: String,
+    pub revision: u64,
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn map_workspace_validation(err: &'static str) -> ApiError {
+    ApiError::Validation(err.into())
+}
+
+fn bump_workspace_revision(computer: &dyn AgentComputer) -> u64 {
+    computer.record_workspace_mutation("workspace_write", &json!({ "ok": true }));
+    computer.workspace_revision()
+}
+
 fn map_computer_error(err: ComputerError) -> ApiError {
     match err {
         ComputerError::NotProvisioned => ApiError::Validation(
@@ -387,6 +417,82 @@ pub async fn workspace_read(
         is_binary,
         text,
     }))
+}
+
+pub async fn workspace_delete(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Query(query): Query<WorkspacePathQuery>,
+) -> Result<Json<WorkspaceMutationResponse>, ApiError> {
+    let path = workspace_list_path(&query)?;
+    let path = validate_workspace_mutation_path(&path).map_err(map_workspace_validation)?;
+
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    let command = format!("rm -rf -- {}", shell_single_quote(&path));
+    let result = computer.exec(&command).await.map_err(map_computer_error)?;
+    if !result.ok {
+        let message = if result.stderr.trim().is_empty() {
+            "Could not delete path".to_string()
+        } else {
+            result.stderr.trim().to_string()
+        };
+        return Err(ApiError::Validation(message));
+    }
+
+    let revision = bump_workspace_revision(computer.as_ref());
+    Ok(Json(WorkspaceMutationResponse { path, revision }))
+}
+
+pub async fn workspace_rename(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<WorkspaceRenameRequest>,
+) -> Result<Json<WorkspaceMutationResponse>, ApiError> {
+    let from = validate_workspace_mutation_path(body.path.trim()).map_err(map_workspace_validation)?;
+    let to = workspace_rename_target(&from, &body.new_name).map_err(map_workspace_validation)?;
+
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    if from != to {
+        let command = format!(
+            "mv -- {} {}",
+            shell_single_quote(&from),
+            shell_single_quote(&to)
+        );
+        let result = computer.exec(&command).await.map_err(map_computer_error)?;
+        if !result.ok {
+            let message = if result.stderr.trim().is_empty() {
+                "Could not rename path".to_string()
+            } else {
+                result.stderr.trim().to_string()
+            };
+            return Err(ApiError::Validation(message));
+        }
+    }
+
+    let revision = bump_workspace_revision(computer.as_ref());
+    Ok(Json(WorkspaceMutationResponse { path: to, revision }))
 }
 
 pub async fn delete(

@@ -86,6 +86,15 @@ export interface GroupConversationDetail {
   participants: GroupParticipantSummary[];
 }
 
+export interface MessageRecipient {
+  botId: string;
+  botName: string;
+  avatarId: string;
+  routingKind: string;
+  status: string;
+  runId?: string | null;
+}
+
 export interface TranscriptMessage {
   id: string;
   sequence: number;
@@ -98,6 +107,21 @@ export interface TranscriptMessage {
   authorAvatarId?: string | null;
   createdAt: string;
   runId?: string | null;
+  recipients?: MessageRecipient[];
+}
+
+export interface GroupListItem {
+  id: string;
+  name: string;
+  updatedAt: string;
+  participants: GroupParticipantSummary[];
+  queuedRuns: number;
+  workingRuns: number;
+}
+
+export interface SendGroupMessageResponse {
+  message: TranscriptMessage;
+  recipients: MessageRecipient[];
 }
 
 export interface CreateConversationResponse {

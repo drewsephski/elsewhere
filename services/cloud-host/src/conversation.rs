@@ -90,7 +90,7 @@ pub async fn create_conversation_for_bot(
     Ok(id)
 }
 
-async fn ensure_bot_thread_row(
+pub(crate) async fn ensure_bot_thread_row(
     pool: &PgPool,
     conversation_id: &str,
     bot_id: &str,
@@ -268,6 +268,35 @@ struct HistoryRow {
     body: String,
 }
 
+pub async fn conversation_type(
+    pool: &PgPool,
+    conversation_id: &str,
+) -> Result<Option<String>, String> {
+    sqlx::query_scalar("SELECT conversation_type FROM conversations WHERE id = $1")
+        .bind(conversation_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn source_message_sequence_for_run(
+    pool: &PgPool,
+    assistant_message_id: &str,
+) -> Result<Option<i64>, String> {
+    sqlx::query_scalar(
+        r#"
+        SELECT m.sequence
+        FROM agent_runs r
+        JOIN messages m ON m.id = r.source_message_id
+        WHERE r.assistant_message_id = $1
+        "#,
+    )
+    .bind(assistant_message_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// Input items for a run. Codex uses `thread/resume` for prior context and accepts only the
 /// current user turn here; Responses loads bounded Postgres history plus this turn.
 pub async fn build_run_input_messages(
@@ -282,8 +311,30 @@ pub async fn build_run_input_messages(
         "role": "user",
         "content": user_message,
     });
+
+    let group_context = if conversation_type(pool, conversation_id).await?.as_deref() == Some("group")
+    {
+        if let Some(source_sequence) =
+            source_message_sequence_for_run(pool, assistant_message_id).await?
+        {
+            crate::group_context::build_group_context_messages(
+                pool,
+                conversation_id,
+                bot_id,
+                source_sequence,
+            )
+            .await?
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+
     if !include_prior_turns {
-        return Ok(vec![user_turn]);
+        let mut out = group_context;
+        out.push(user_turn);
+        return Ok(out);
     }
     let mut messages = load_bounded_responses_history(
         pool,
@@ -292,8 +343,26 @@ pub async fn build_run_input_messages(
         assistant_message_id,
     )
     .await?;
+    messages.extend(group_context);
     messages.push(user_turn);
     Ok(messages)
+}
+
+pub async fn advance_group_context_cursor_for_run(
+    pool: &PgPool,
+    conversation_id: &str,
+    bot_id: &str,
+    assistant_message_id: &str,
+) -> Result<(), String> {
+    if conversation_type(pool, conversation_id).await?.as_deref() != Some("group") {
+        return Ok(());
+    }
+    let sequence = source_message_sequence_for_run(pool, assistant_message_id).await?;
+    if let Some(seq) = sequence {
+        crate::group_context::advance_last_seen_group_sequence(pool, conversation_id, bot_id, seq)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Prior turns for the Responses engine, oldest first, bounded by count and total bytes.

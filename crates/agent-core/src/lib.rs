@@ -40,7 +40,10 @@ pub use model::{
 pub use fake_computer::FakeAgentComputer;
 pub use readiness_cache::ReadinessCachedComputer;
 pub use runtime_identity::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
-pub use workspace_entries::{filter_workspace_listing, is_internal_workspace_entry};
+pub use workspace_entries::{
+    filter_workspace_listing, is_internal_workspace_entry, normalize_workspace_path,
+    validate_workspace_mutation_path, workspace_rename_target,
+};
 pub use run_engine::{
     legacy_local_loop_deps, responses_loop_deps, ResponsesRunEngine, RunEngine, RunEngineKind,
     SharedRunDeps,

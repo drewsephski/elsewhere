@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Search } from "@/components/icons/lucide";
+import type { GroupListItem } from "@/lib/api-types";
 import type { WorkspaceLoadPhase } from "@/hooks/use-workspace-overview";
 import { workspaceBotsEmptyMessage } from "@/lib/workspace-load-state";
 import Link from "next/link";
@@ -31,7 +32,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface BotListSidebarProps {
   bots: WorkspaceBotPresence[];
+  groups?: GroupListItem[];
   selectedBotId: string | null;
+  selectedGroupId?: string | null;
   runActivityAt: Record<string, string>;
   workspacePhase?: WorkspaceLoadPhase;
   workspaceError?: string | null;
@@ -54,7 +57,9 @@ const menuItemClass =
 
 export function BotListSidebar({
   bots,
+  groups = [],
   selectedBotId,
+  selectedGroupId = null,
   runActivityAt,
   workspacePhase = "ready",
   workspaceError = null,
@@ -216,7 +221,69 @@ export function BotListSidebar({
         ) : null}
       </div>
 
-      <ul className="mt-1.5 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 pb-2 sm:mt-2 sm:px-2" aria-label="Bots">
+      <div className="mt-1.5 min-h-0 flex-1 space-y-3 overflow-y-auto px-1.5 pb-2 sm:mt-2 sm:px-2">
+        {groups.length > 0 ? (
+          <section aria-label="Groups">
+            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Groups
+            </p>
+            <ul className="space-y-0.5">
+              {groups.map((group) => {
+                const selected = group.id === selectedGroupId;
+                const active = group.workingRuns > 0 || group.queuedRuns > 0;
+                return (
+                  <li key={group.id}>
+                    <Link
+                      href={`/app/groups/${group.id}`}
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl border px-2 py-1.5 transition-colors",
+                        selected
+                          ? "border-primary/12 bg-white/95 shadow-sm"
+                          : "border-transparent hover:border-border/60 hover:bg-white/80",
+                      )}
+                      aria-current={selected ? "page" : undefined}
+                    >
+                      <div className="flex -space-x-1.5">
+                        {group.participants
+                          .filter((p) => !p.leftAt)
+                          .slice(0, 3)
+                          .map((participant) => (
+                            <BotCreatureAvatar
+                              key={participant.botId}
+                              name={participant.name}
+                              avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                              size="sm"
+                              className="ring-1 ring-white"
+                            />
+                          ))}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="truncate text-[13px] font-semibold">{group.name}</span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                            {formatMessageTime(group.updatedAt)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {active
+                            ? group.workingRuns > 0
+                              ? "Working…"
+                              : "Queued…"
+                            : `${group.participants.filter((p) => !p.leftAt).length} participants`}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
+        <section aria-label="Bots">
+          <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Bots
+          </p>
+          <ul className="space-y-0.5" aria-label="Bots">
         {filtered.map((bot) => {
           const selected = bot.id === selectedBotId;
           const attention = presenceNeedsAttention(bot.presence);
@@ -288,7 +355,9 @@ export function BotListSidebar({
             })}
           </li>
         ) : null}
-      </ul>
+          </ul>
+        </section>
+      </div>
 
       <div className="shrink-0 border-t border-border/70 bg-white/50 px-2.5 py-2.5 sm:px-3 sm:py-3">{footer}</div>
 

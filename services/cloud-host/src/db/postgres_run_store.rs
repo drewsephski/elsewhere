@@ -205,6 +205,30 @@ impl RunStore for PostgresRunStore {
                     "could not sync delegation lifecycle"
                 );
             }
+            let recipient_status = match status {
+                "completed" => "completed",
+                "cancelled" => "cancelled",
+                _ => "failed",
+            };
+            if let Err(err) = sqlx::query(
+                r#"
+                UPDATE group_message_recipients g
+                SET status = $2, updated_at = NOW()
+                FROM agent_runs r
+                WHERE g.run_id = r.id AND r.request_id = $1
+                "#,
+            )
+            .bind(request_id)
+            .bind(recipient_status)
+            .execute(&self.pool)
+            .await
+            {
+                tracing::warn!(
+                    request_id = %request_id,
+                    error = %err,
+                    "could not sync group recipient status"
+                );
+            }
         }
         Ok(())
     }
