@@ -13,8 +13,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth::{require_internal_token, AuthKind, Principal};
 use crate::db::queries::{
-    assistant_message_body, bootstrap_run_from_bot, bootstrap_run_legacy, find_run_for_owner,
-    list_run_events_after,
+    assistant_message_body, bootstrap_run_legacy, find_run_for_owner, list_run_events_after,
 };
 use crate::error::ApiError;
 use crate::runner::{spawn_agent_run, RunExecutionInput};
@@ -59,6 +58,7 @@ pub struct CreateRunResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunDetailResponse {
+    pub task: Option<String>,
     pub run_id: String,
     pub request_id: String,
     pub status: String,
@@ -112,28 +112,7 @@ async fn create_product_run(
         return Err(ApiError::Validation("botId is required".into()));
     }
 
-    let existing_before = crate::db::queries::find_run_by_request_id(&state.pool, &request_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-    if let Some(existing) = &existing_before {
-        let owned = find_run_for_owner(&state.pool, principal.owner_id(), &existing.id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-        if owned.is_none() {
-            return Err(ApiError::NotFound);
-        }
-    }
-
-    let permit = if existing_before.is_none() {
-        match state.run_semaphore.clone().try_acquire_owned() {
-            Ok(permit) => Some(permit),
-            Err(_) => return Err(ApiError::TooManyRequests),
-        }
-    } else {
-        None
-    };
-
-    let records = bootstrap_run_from_bot(
+    let records = crate::work::enqueue(
         &state.pool,
         principal.owner_id(),
         &request_id,
@@ -142,8 +121,21 @@ async fn create_product_run(
         body.message.trim(),
     )
     .await?;
-
-    finish_create_run(state, records, body.bot_id.trim().to_string(), body.message, permit).await
+    let run = find_run_for_owner(&state.pool, principal.owner_id(), &records.run_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(CreateRunResponse {
+            run_id: records.run_id,
+            request_id: records.request_id,
+            conversation_id: records.conversation_id,
+            computer_id: records.computer_id,
+            model: records.model,
+            status: run.status,
+        }),
+    ))
 }
 
 async fn create_legacy_run(
@@ -155,7 +147,9 @@ async fn create_legacy_run(
         return Err(ApiError::Validation("message cannot be empty".into()));
     }
     if body.bot.id.trim().is_empty() || body.bot.computer_id.trim().is_empty() {
-        return Err(ApiError::Validation("bot.id and bot.computerId are required".into()));
+        return Err(ApiError::Validation(
+            "bot.id and bot.computerId are required".into(),
+        ));
     }
 
     let existing_before = crate::db::queries::find_run_by_request_id(&state.pool, &request_id)
@@ -184,14 +178,7 @@ async fn create_legacy_run(
     )
     .await?;
 
-    finish_create_run(
-        state,
-        records,
-        body.bot.id,
-        body.message,
-        permit,
-    )
-    .await
+    finish_create_run(state, records, body.bot.id, body.message, permit).await
 }
 
 async fn finish_create_run(
@@ -241,6 +228,7 @@ async fn finish_create_run(
             records,
             bot_id,
             user_message: user_message.trim().to_string(),
+            engine_mode: None,
         },
         permit,
     );
@@ -266,7 +254,15 @@ pub async fn get_run(
         None
     };
 
+    let task: Option<String> =
+        sqlx::query_scalar("SELECT user_message FROM work_queue WHERE run_id = $1")
+            .bind(&run.id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     Ok(Json(RunDetailResponse {
+        task,
         run_id: run.id,
         request_id: run.request_id,
         status: run.status,
@@ -292,6 +288,7 @@ pub async fn cancel_run(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
 
+    crate::work::request_cancel(&state.pool, principal.owner_id(), &run_id).await?;
     if run.status == "running" {
         state.registry.cancel(&run_id);
         let _ = state
@@ -323,42 +320,39 @@ pub async fn run_events_sse(
 
     let pool = state.pool.clone();
     let request_id = run.request_id.clone();
-    let live = state.registry.subscribe_live(&run_id);
-    let terminal_status = run.status.clone();
-    let terminal_error = run.error_code.clone();
-
     let stream = async_stream::stream! {
-        let durable = list_run_events_after(&pool, &request_id, after_id, 10_000)
-            .await
-            .unwrap_or_default();
         let mut last_id = after_id;
-        for row in durable {
-            last_id = row.id;
-            let data = row.payload_json.to_string();
-            yield Ok(Event::default().id(row.id.to_string()).event(row.event_type).data(data));
-        }
-
-        if let Some(mut rx) = live {
-            loop {
-                match rx.recv().await {
-                    Ok(event) => {
-                        if event.id <= last_id {
-                            continue;
-                        }
-                        last_id = event.id;
-                        let data = event.payload.to_string();
-                        yield Ok(Event::default()
-                            .id(event.id.to_string())
-                            .event(event.event_type)
-                            .data(data));
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        loop {
+            // The database is the event source. This also works before dispatch,
+            // after reconnect, and when a subscriber falls behind.
+            let durable = match list_run_events_after(&pool, &request_id, last_id, 500).await {
+                Ok(rows) => rows,
+                Err(_) => {
+                    yield Ok(Event::default().event("stream_error").data("{\"detail\":\"Progress temporarily unavailable. Reconnecting is safe.\"}"));
+                    break;
                 }
+            };
+            let batch_full = durable.len() == 500;
+            for row in durable {
+                last_id = row.id;
+                yield Ok(Event::default().id(row.id.to_string()).event(row.event_type).data(row.payload_json.to_string()));
             }
-        } else if !matches!(terminal_status.as_str(), "running") {
-            let terminal = serde_json::json!({"status": terminal_status, "errorCode": terminal_error});
-            yield Ok(Event::default().event("terminal").data(terminal.to_string()));
+            if batch_full { continue; }
+            let current = match crate::db::queries::find_run_by_id(&pool, &run_id).await {
+                Ok(Some(run)) => run,
+                _ => break,
+            };
+            if !matches!(current.status.as_str(), "queued" | "running") {
+                // Drain again after observing terminal state to close the commit race.
+                match list_run_events_after(&pool, &request_id, last_id, 500).await {
+                    Ok(rows) if !rows.is_empty() => { continue; }
+                    Err(_) => break,
+                    _ => {}
+                }
+                yield Ok(Event::default().event("terminal").data(serde_json::json!({"status":current.status,"errorCode":current.error_code}).to_string()));
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     };
 

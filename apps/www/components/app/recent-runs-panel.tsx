@@ -2,45 +2,48 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { RunSummary } from "@/lib/api-types";
+import { workStatus } from "@/lib/work-events";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-export function RecentRunsPanel() {
+export function RecentRunsPanel({ botId, limit = 10 }: { botId?: string; limit?: number }) {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
-
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    void cloudHostFetch("/v1/runs?limit=10")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`Runs list failed (${response.status})`);
-        }
-        setRuns((await response.json()) as RunSummary[]);
-      })
-      .catch((err: Error) => setError(err.message));
-  }, []);
-
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function load() {
+      try {
+        const response = await cloudHostFetch(`/v1/runs?limit=${limit}${botId ? `&bot_id=${encodeURIComponent(botId)}` : ""}`);
+        if (!response.ok) throw new Error("Could not load your work");
+        const rows: RunSummary[] = await response.json();
+        if (!stopped) { setRuns(rows); setError(null); }
+      } catch (err) { if (!stopped) setError(err instanceof Error ? err.message : "Work unavailable"); }
+      finally { if (!stopped) { setLoading(false); timer = setTimeout(() => void load(), 5000); } }
+    }
+    void load();
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [botId, limit]);
   return (
     <section className="surface-card">
-      <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
-      {error ? (
-        <p className="mt-3 text-sm text-red-700" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <ul className="mt-4 space-y-2">
-        {runs.map((run) => (
-          <li key={run.runId} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-            <Link href={`/app/bots/${run.botId}`} className="underline-offset-4 hover:underline">
-              {run.status} · {run.model}
+      <h2 className="text-base font-semibold">Recent work</h2>
+      {error ? <p className="mt-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      <ul className="mt-4 divide-y divide-border">
+        {runs.map(run => (
+          <li key={run.runId}>
+            <Link href={`/app/work/${run.runId}`} className="group flex items-start justify-between gap-4 rounded-lg py-4 transition-colors hover:bg-muted/50">
+              <div className="min-w-0">
+                <p className="line-clamp-2 text-sm font-medium group-hover:underline">{run.task}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{run.botName} · {new Date(run.createdAt).toLocaleString()}</p>
+              </div>
+              <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs">{workStatus(run.status)}</span>
             </Link>
-            <span className="text-xs text-brand-dark/50">{run.runId.slice(0, 8)}…</span>
           </li>
         ))}
-        {runs.length === 0 && !error ? (
-          <li className="text-sm text-brand-dark/50">No runs yet.</li>
-        ) : null}
       </ul>
+      {loading ? <p className="mt-4 text-sm text-muted-foreground">Loading your work…</p> : null}
+      {!loading && !runs.length && !error ? <p className="mt-4 text-sm text-muted-foreground">Delegate a task to a bot. Its progress and finished work will appear here.</p> : null}
     </section>
   );
 }

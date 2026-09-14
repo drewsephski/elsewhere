@@ -29,3 +29,14 @@ Browser interaction will follow once these single-bot guarantees are dependable.
 - Provider validation precedes computer provisioning. Owner lookup failures no longer fall back to the trusted local principal.
 
 Live device authorization requires the user's participation and has not been performed. A persistent runner deployment and volume are still required to remain available while the development laptop is off.
+
+### 2 — Durable work and progress
+
+- Product admission commits the assignment, immutable execution settings, conversation, and initial event in one transaction. Owner-scoped idempotency prevents duplicate tasks and rejects key reuse for different requests.
+- A supervised single runner claims queued work from Postgres and serializes bots/computers. A dedicated database lock prevents another runner from interrupting live work during startup. Loss of that connection stops the host.
+- Queued work survives restart; potentially executed work becomes interrupted and is not retried automatically. User cancellation is durable, including before dispatch. Active or queued computers cannot be archived.
+- Progress streams read paginated durable events, support reconnect cursors, and remain open while work waits in the queue. They no longer depend on a live subscriber registry or silently drop overflow.
+- Work has its own addressable page, persisted result, readable progress, inline approvals, cancellation, and bot history. Transport details and resource IDs are removed from the primary delegation flow.
+- A bot settings update no longer accidentally clears its computer assignment when the field is omitted.
+
+Milestone 2 verification: cloud-host regression tests pass against local Postgres, including isolated queue/approval tests and 1,001-event cursor replay. Web and desktop type checks and desktop tests pass. Browser QA confirmed sign-in, computer/bot creation, durable work submission, an explicit disconnected-provider failure, and history after refresh. Live providers were deliberately disabled for browser QA.

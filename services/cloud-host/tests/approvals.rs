@@ -80,17 +80,6 @@ impl ResponsesModel for ScriptedModel {
     }
 }
 
-async fn try_test_pool() -> Option<PgPool> {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
-        .await
-        .ok()?
-        .ok()?;
-    sqlx::migrate!("./migrations").run(&pool).await.ok()?;
-    Some(pool)
-}
-
 fn jwt_state(pool: PgPool) -> AppState {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
@@ -132,11 +121,8 @@ fn token(sub: &str) -> String {
     test_signing::user_token(sub, "http://localhost:3000", "elsewhere-cloud-host", 300)
 }
 
-#[tokio::test]
-async fn read_tools_auto_allowed_without_approval_row() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
@@ -183,7 +169,7 @@ async fn read_tools_auto_allowed_without_approval_row() {
     .await
     .unwrap();
 
-    let app = build_router(state);
+    let app = build_router(state.clone());
     let body = json!({
         "botId": bot.id,
         "message": "read"
@@ -203,6 +189,9 @@ async fn read_tools_auto_allowed_without_approval_row() {
         .await
         .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::ACCEPTED);
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
 
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     let pending: (i64,) = sqlx::query_as(
@@ -216,11 +205,8 @@ async fn read_tools_auto_allowed_without_approval_row() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn write_waits_for_approval_before_computer_call() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
@@ -267,7 +253,7 @@ async fn write_waits_for_approval_before_computer_call() {
     .await
     .unwrap();
 
-    let app = build_router(state);
+    let app = build_router(state.clone());
     let body = json!({ "botId": bot.id, "message": "write" });
     let _ = app
         .clone()
@@ -281,6 +267,10 @@ async fn write_waits_for_approval_before_computer_call() {
                 .body(axum::body::Body::from(body.to_string()))
                 .unwrap(),
         )
+        .await
+        .unwrap();
+
+    cloud_host::worker::dispatch_available(&state)
         .await
         .unwrap();
 
@@ -305,11 +295,8 @@ async fn write_waits_for_approval_before_computer_call() {
     panic!("expected pending approval without write");
 }
 
-#[tokio::test]
-async fn user_b_cannot_resolve_user_a_approval() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
     let computer_row = insert_computer_placeholder(&pool, "user-a", "c")

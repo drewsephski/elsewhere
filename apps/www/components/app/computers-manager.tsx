@@ -41,7 +41,7 @@ export function ComputersManager() {
   }
 
   async function handleArchive(id: string) {
-    if (!window.confirm("Archive this computer? (Sprite is not destroyed in Phase 3C.1.)")) {
+    if (!window.confirm("Archive this computer? Its files will be preserved. Finish or stop its work first.")) {
       return;
     }
     setError(null);
@@ -58,7 +58,7 @@ export function ComputersManager() {
       <section className="surface-card">
         <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Computers</h2>
         <p className="mt-2 text-xs text-brand-dark/55">
-          Fly Sprites provision lazily on first run. Provider resource IDs are assigned server-side.
+          Each computer keeps its files between assignments. It will be prepared when your bot first needs it.
         </p>
         <ul className="mt-4 space-y-3">
           {computers.map((computer) => (
@@ -66,9 +66,8 @@ export function ComputersManager() {
               <div>
                 <p className="font-medium">{computer.displayName}</p>
                 <p className="mt-1 text-xs text-brand-dark/55">
-                  {computer.state} · {computer.providerMetadata.provisioned ? "provisioned" : "pending"}
+                  {computer.providerMetadata.provisioned ? "Ready for work" : "Ready to set up"}
                 </p>
-                <p className="mt-1 font-mono text-[10px] text-brand-dark/40">{computer.id}</p>
               </div>
               <button
                 type="button"

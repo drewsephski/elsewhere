@@ -1,5 +1,7 @@
 # Elsewhere — Architecture
 
+Current cloud product: [authenticated pairing](PHASE_3C1.md), [background work](BACKGROUND_WORK.md), and [product progress](PRODUCT_PROGRESS.md). The phase diagrams below preserve the original local-runtime design; Codex execution, ownership, and approvals are now implemented.
+
 ## Repository layout
 
 | Package | Path | Role |

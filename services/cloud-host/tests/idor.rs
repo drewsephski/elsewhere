@@ -312,3 +312,63 @@ async fn jwt_cannot_impersonate_trusted_local_runner() {
         .unwrap();
     assert_eq!(response.status(), http::StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn progress_replay_drains_every_page_and_respects_cursor() {
+    let pool = try_test_pool()
+        .await
+        .expect("test Postgres must be running");
+    let owner = format!("replay-{}", Uuid::new_v4());
+    let computer = insert_computer_placeholder(&pool, &owner, "Computer")
+        .await
+        .unwrap();
+    let bot = cloud_host::db::resources::insert_bot(
+        &pool,
+        &owner,
+        "Scout",
+        "",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "codex",
+    )
+    .await
+    .unwrap();
+    let run = cloud_host::work::enqueue(
+        &pool,
+        &owner,
+        &Uuid::new_v4().to_string(),
+        &bot.id,
+        None,
+        "Summarize",
+    )
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO run_events (request_id,event_type,payload_json) SELECT $1, 'progress', jsonb_build_object('step', n) FROM generate_series(1,1001) n")
+        .bind(&run.request_id).execute(&pool).await.unwrap();
+    cloud_host::work::request_cancel(&pool, &owner, &run.run_id)
+        .await
+        .unwrap();
+    let cursor: i64 = sqlx::query_scalar("SELECT MIN(id) FROM run_events WHERE request_id=$1")
+        .bind(&run.request_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let response = build_router(jwt_state(pool))
+        .oneshot(
+            http::Request::builder()
+                .uri(format!("/v1/runs/{}/events", run.run_id))
+                .header("authorization", format!("Bearer {}", token(&owner)))
+                .header("last-event-id", cursor.to_string())
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert_eq!(body.matches("event: progress").count(), 1001);
+    assert!(!body.contains("event: queued"));
+    assert!(body.contains("event: terminal"));
+}

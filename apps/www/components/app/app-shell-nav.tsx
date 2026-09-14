@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "cn";
 import {
   Bot,
+  BriefcaseBusiness,
   CheckCircle2,
   LayoutDashboard,
   Monitor,
@@ -15,6 +16,7 @@ import { usePathname, useRouter } from "next/navigation";
 const links = [
   { href: "/app", label: "Overview", icon: LayoutDashboard },
   { href: "/app/bots", label: "Bots", icon: Bot },
+  { href: "/app/work", label: "Work", icon: BriefcaseBusiness },
   { href: "/app/computers", label: "Computers", icon: Monitor },
   { href: "/app/approvals", label: "Approvals", icon: CheckCircle2 },
 ] as const;
@@ -51,7 +53,7 @@ export function AppShellNav({ layout = "sidebar" }: AppShellNavProps) {
 
       {links.map((link) => {
         const active =
-          pathname === link.href || pathname.startsWith(`${link.href}/`);
+          pathname === link.href || (link.href !== "/app" && pathname.startsWith(`${link.href}/`));
         const Icon = link.icon;
 
         return (

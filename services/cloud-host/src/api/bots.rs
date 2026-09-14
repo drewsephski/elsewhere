@@ -140,7 +140,9 @@ pub async fn patch(
         body.name.as_deref(),
         body.instructions.as_deref(),
         body.model.as_deref(),
-        Some(body.computer_id.as_deref()),
+        body.computer_id
+            .as_deref()
+            .map(|id| if id.is_empty() { None } else { Some(id) }),
         engine,
     )
     .await?

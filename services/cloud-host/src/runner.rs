@@ -10,6 +10,7 @@ use agent_core::{
 use crate::approval::RunScopedApprovalGate;
 use crate::auth::LEGACY_LOCAL_OWNER;
 use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
+use futures_util::FutureExt;
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
 use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
@@ -34,6 +35,7 @@ pub struct RunExecutionInput {
     pub records: BootstrapRunRecords,
     pub bot_id: String,
     pub user_message: String,
+    pub engine_mode: Option<RunEngineMode>,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -52,6 +54,13 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
         let pool = state.pool.clone();
         let store: Arc<dyn RunStore> = Arc::new(PostgresRunStore::new(pool.clone()));
 
+        let finalizer = HostFinalizer::new(
+            store.clone(),
+            events.clone(),
+            input.records.request_id.clone(),
+            input.records.assistant_message_id.clone(),
+        );
+
         let owner_id: String = match sqlx::query_scalar(
             "SELECT owner_id FROM agent_runs WHERE id = $1",
         )
@@ -62,19 +71,22 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
             Ok(owner_id) => owner_id,
             Err(err) => {
                 tracing::error!(run_id = %input.records.run_id, error = %err, "cannot resolve run owner; refusing execution");
+                if let Err(error) = finalizer
+                    .finalize_host_failure(
+                        "owner_lookup_failed",
+                        "Could not verify work ownership",
+                        0,
+                    )
+                    .await
+                {
+                    tracing::error!(error = %error, "could not finalize work");
+                }
                 return;
             }
         };
 
         let enforce_approvals =
             owner_id != LEGACY_LOCAL_OWNER || state.config.enforce_tool_approvals_internal;
-
-        let finalizer = HostFinalizer::new(
-            store.clone(),
-            events.clone(),
-            input.records.request_id.clone(),
-            input.records.assistant_message_id.clone(),
-        );
 
         if !state.registry.try_begin_run(
             &input.records.run_id,
@@ -96,7 +108,7 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
 
         let result = timeout(
             Duration::from_secs(timeout_secs),
-            execute_run(
+            std::panic::AssertUnwindSafe(execute_run(
                 config,
                 pool.clone(),
                 store.clone(),
@@ -106,28 +118,51 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
                 events.clone(),
                 owner_id,
                 enforce_approvals,
-            ),
+            ))
+            .catch_unwind(),
         )
         .await;
 
-        match result {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
-                tracing::error!(run_id = %run_id, error = %err, "agent run failed");
-                let message = sanitize_host_error(&err);
-                let code = if err.contains("ensure_ready") || err.contains("Sprite") {
-                    "sprite_unavailable"
-                } else if err.contains("SpriteComputer") {
-                    "sprite_config_error"
-                } else {
-                    "host_execution_failed"
-                };
-                let _ = finalizer.finalize_host_failure(code, &message, 0).await;
-            }
-            Err(_) => {
-                cancel.store(true, Ordering::Relaxed);
-                let _ = finalizer.finalize_run_timeout(0).await;
-            }
+        let finalized =
+            match result {
+                Ok(Ok(Ok(()))) => Ok(()),
+                Ok(Ok(Err(err))) => {
+                    tracing::error!(run_id = %run_id, error = %err, "agent run failed");
+                    let message = sanitize_host_error(&err);
+                    let code = if err.contains("ensure_ready") || err.contains("Sprite") {
+                        "sprite_unavailable"
+                    } else if err.contains("SpriteComputer") {
+                        "sprite_config_error"
+                    } else {
+                        "host_execution_failed"
+                    };
+                    if cancel.load(Ordering::Relaxed) {
+                        finalizer.finalize_host_cancelled().await
+                    } else {
+                        finalizer.finalize_host_failure(code, &message, 0).await
+                    }
+                }
+                Ok(Err(_)) => finalizer
+                    .finalize_host_interrupted(
+                        "worker_panicked",
+                        "Work stopped unexpectedly. Review completed actions before continuing.",
+                        0,
+                    )
+                    .await,
+                Err(_) => {
+                    cancel.store(true, Ordering::Relaxed);
+                    finalizer.finalize_run_timeout(0).await
+                }
+            };
+        if let Err(error) = finalized {
+            tracing::error!(run_id = %run_id, error = %error, "could not finalize work");
+        }
+        if let Err(error) = state
+            .approvals
+            .cancel_pending_for_run(&run_id, "work_finished")
+            .await
+        {
+            tracing::error!(run_id = %run_id, error = %error, "could not close remaining approvals");
         }
 
         drop(permit);
@@ -146,6 +181,16 @@ async fn execute_run(
     owner_id: String,
     enforce_approvals: bool,
 ) -> Result<(), String> {
+    let cancelled: bool =
+        sqlx::query_scalar("SELECT cancel_requested FROM agent_runs WHERE id = $1")
+            .bind(&input.records.run_id)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| e.to_string())?;
+    if cancelled {
+        cancel.store(true, Ordering::Relaxed);
+        return Err("Work cancelled before execution".into());
+    }
     let ctx = AgentLoopContext {
         request_id: input.records.request_id.clone(),
         conversation_id: input.records.conversation_id.clone(),
@@ -157,7 +202,10 @@ async fn execute_run(
 
     let input_messages = vec![json!({"role":"user","content": input.user_message})];
 
-    let engine_mode = effective_engine_mode(&pool, &input.bot_id, config.run_engine).await;
+    let engine_mode = match input.engine_mode {
+        Some(mode) => mode,
+        None => effective_engine_mode(&pool, &input.bot_id, config.run_engine).await,
+    };
     let profile_home = if engine_mode == RunEngineMode::Responses {
         None
     } else {
@@ -183,12 +231,20 @@ async fn execute_run(
         Err(err) => return Err(resolve_error_to_host(err)),
     };
 
+    let permitted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agent_runs r JOIN sandboxes s ON s.id = r.computer_id AND s.owner_id = r.owner_id WHERE r.id = $1 AND r.owner_id = $2 AND NOT r.cancel_requested AND s.state <> 'archived')")
+        .bind(&input.records.run_id).bind(&owner_id).fetch_one(&pool).await.map_err(|e| e.to_string())?;
+    if !permitted {
+        return Err("Work was cancelled or its computer is no longer available".into());
+    }
     let computer = build_computer(&config, &pool, &input).await?;
 
     computer
         .ensure_ready()
         .await
         .map_err(|e| format!("ensure_ready: {e}"))?;
+
+    sqlx::query("UPDATE sandboxes SET state = 'active', last_used_at = NOW(), updated_at = NOW() WHERE id = $1 AND owner_id = $2 AND state <> 'archived'")
+        .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
 
     let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
         Arc::new(RunScopedApprovalGate::new(

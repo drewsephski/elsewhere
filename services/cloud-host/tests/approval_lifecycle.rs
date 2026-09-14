@@ -81,17 +81,6 @@ impl ResponsesModel for ScriptedModel {
     }
 }
 
-async fn try_test_pool() -> Option<PgPool> {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(Duration::from_secs(2), PgPool::connect(&url))
-        .await
-        .ok()?
-        .ok()?;
-    sqlx::migrate!("./migrations").run(&pool).await.ok()?;
-    Some(pool)
-}
-
 fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
@@ -150,6 +139,7 @@ async fn setup_bot(pool: &PgPool, owner: &str) -> cloud_host::db::resources::Bot
 
 async fn start_run(
     app: &axum::Router,
+    state: &AppState,
     owner: &str,
     bot_id: &str,
     request_id: &str,
@@ -177,6 +167,7 @@ async fn start_run(
         .await
         .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::ACCEPTED);
+    cloud_host::worker::dispatch_available(state).await.unwrap();
 }
 
 async fn wait_pending_approval_id(pool: &PgPool, owner: &str) -> String {
@@ -253,21 +244,20 @@ fn exec_then_done_model() -> Arc<ScriptedModel> {
     })
 }
 
-#[tokio::test]
-async fn approve_executes_write_once() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn approve_executes_write_once(pool: PgPool) {
     let owner = format!("appr-write-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -303,21 +293,20 @@ async fn approve_executes_write_once() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn fast_immediate_approval_does_not_lose_wakeup() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
     let owner = format!("fast-appr-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -362,21 +351,20 @@ async fn fast_immediate_approval_does_not_lose_wakeup() {
     panic!("write never executed after immediate approve (approval_id={approval_id})");
 }
 
-#[tokio::test]
-async fn deny_executes_zero_writes() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn deny_executes_zero_writes(pool: PgPool) {
     let owner = format!("deny-write-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -407,20 +395,19 @@ async fn deny_executes_zero_writes() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn exec_approval_required_like_write() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn exec_approval_required_like_write(pool: PgPool) {
     let owner = format!("exec-appr-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &Uuid::new_v4().to_string(),
@@ -458,21 +445,20 @@ async fn exec_approval_required_like_write() {
     panic!("exec never ran after approval");
 }
 
-#[tokio::test]
-async fn timeout_executes_zero_writes() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn timeout_executes_zero_writes(pool: PgPool) {
     let owner = format!("timeout-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 2));
+    let state = jwt_state(pool.clone(), 2);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -497,21 +483,20 @@ async fn timeout_executes_zero_writes() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn cancel_while_pending_executes_zero_writes() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn cancel_while_pending_executes_zero_writes(pool: PgPool) {
     let owner = format!("cancel-run-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -549,21 +534,20 @@ async fn cancel_while_pending_executes_zero_writes() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn double_approve_single_winner_and_one_resolved_event() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn double_approve_single_winner_and_one_resolved_event(pool: PgPool) {
     let owner = format!("dbl-appr-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,
@@ -614,20 +598,19 @@ async fn double_approve_single_winner_and_one_resolved_event() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn approve_vs_deny_race_has_single_terminal_status() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn approve_vs_deny_race_has_single_terminal_status(pool: PgPool) {
     let owner = format!("race-ad-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &Uuid::new_v4().to_string(),
@@ -689,11 +672,8 @@ async fn approve_vs_deny_race_has_single_terminal_status() {
     set_test_run_overrides(None);
 }
 
-#[tokio::test]
-async fn late_approve_after_expiry_does_not_execute() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
     let owner = "user-a";
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
@@ -766,11 +746,8 @@ async fn late_approve_after_expiry_does_not_execute() {
     assert_eq!(status.0, "expired");
 }
 
-#[tokio::test]
-async fn host_restart_cancels_stale_pending() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn host_restart_cancels_stale_pending(pool: PgPool) {
     let owner = format!("host-restart-{}", Uuid::new_v4());
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
@@ -861,21 +838,20 @@ async fn host_restart_cancels_stale_pending() {
     assert_eq!(audit.0, 1);
 }
 
-#[tokio::test]
-async fn approval_sse_events_ordered_and_replay_once() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+#[sqlx::test(migrations = "./migrations")]
+async fn approval_sse_events_ordered_and_replay_once(pool: PgPool) {
     let owner = format!("sse-appr-{}", Uuid::new_v4());
     let bot = setup_bot(&pool, &owner).await;
     let computer = Arc::new(CountingComputer {
         writes: AtomicUsize::new(0),
         execs: AtomicUsize::new(0),
     });
-    let app = build_router(jwt_state(pool.clone(), 300));
+    let state = jwt_state(pool.clone(), 300);
+    let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
         &app,
+        &state,
         &owner,
         &bot.id,
         &request_id,

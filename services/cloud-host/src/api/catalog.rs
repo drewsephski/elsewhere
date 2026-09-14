@@ -5,17 +5,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::app_state::AppState;
 use crate::auth::Principal;
-use crate::db::resources::{list_conversations_for_owner, list_runs_for_owner};
+use crate::db::resources::list_conversations_for_owner;
 use crate::error::ApiError;
 
 #[derive(Debug, Deserialize)]
 pub struct ListRunsQuery {
+    pub bot_id: Option<String>,
     pub limit: Option<i64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct RunSummaryResponse {
+    pub task: String,
+    pub bot_name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
     pub run_id: String,
     pub request_id: String,
     pub bot_id: String,
@@ -33,24 +37,10 @@ pub async fn list_runs(
     Query(query): Query<ListRunsQuery>,
 ) -> Result<Json<Vec<RunSummaryResponse>>, ApiError> {
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
-    let rows = list_runs_for_owner(&state.pool, principal.owner_id(), limit)
-        .await
+    let rows = sqlx::query_as::<_,RunSummaryResponse>("SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task FROM agent_runs r JOIN bots b ON b.id = r.bot_id LEFT JOIN work_queue q ON q.run_id = r.id WHERE r.owner_id = $1 AND ($3::text IS NULL OR r.bot_id = $3) ORDER BY r.created_at DESC LIMIT $2")
+        .bind(principal.owner_id()).bind(limit).bind(query.bot_id).fetch_all(&state.pool).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|run| RunSummaryResponse {
-                run_id: run.id,
-                request_id: run.request_id,
-                bot_id: run.bot_id,
-                conversation_id: run.conversation_id,
-                status: run.status,
-                model: run.model,
-                computer_id: run.computer_id,
-                started_at: run.started_at,
-                finished_at: run.finished_at,
-            })
-            .collect(),
-    ))
+    Ok(Json(rows))
 }
 
 #[derive(Debug, Deserialize)]

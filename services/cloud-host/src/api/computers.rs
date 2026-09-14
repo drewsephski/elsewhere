@@ -36,10 +36,10 @@ fn to_response(row: crate::db::resources::SandboxRow) -> ComputerResponse {
             row.display_name
         },
         provider: row.provider,
-        state: row.state,
+        state: row.state.clone(),
         last_used_at: row.last_used_at,
         provider_metadata: ProviderMetadata {
-            provisioned: !row.provider_resource_id.is_empty(),
+            provisioned: row.state == "active",
         },
     }
 }
@@ -68,12 +68,9 @@ pub async fn create(
     if body.display_name.trim().is_empty() {
         return Err(ApiError::Validation("displayName is required".into()));
     }
-    let row = insert_computer_placeholder(
-        &state.pool,
-        principal.owner_id(),
-        body.display_name.trim(),
-    )
-    .await?;
+    let row =
+        insert_computer_placeholder(&state.pool, principal.owner_id(), body.display_name.trim())
+            .await?;
     Ok(Json(to_response(row)))
 }
 

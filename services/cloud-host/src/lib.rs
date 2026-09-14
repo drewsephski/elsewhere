@@ -21,3 +21,6 @@ pub use config::Config;
 pub use auth::jwt_test::test_signing;
 #[cfg(any(test, feature = "test-utils"))]
 pub use runner::{set_test_run_overrides, TestRunOverrides};
+
+pub mod work;
+pub mod worker;

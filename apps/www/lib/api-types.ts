@@ -27,6 +27,9 @@ export interface ComputerSummary {
 }
 
 export interface RunSummary {
+  task: string;
+  botName: string;
+  createdAt: string;
   runId: string;
   requestId: string;
   botId: string;
@@ -38,7 +41,8 @@ export interface RunSummary {
   finishedAt: string | null;
 }
 
-export interface RunDetail extends RunSummary {
+export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "createdAt"> {
+  task: string | null;
   stepCount: number;
   errorCode: string | null;
   assistantResult: string | null;

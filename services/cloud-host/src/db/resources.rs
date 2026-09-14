@@ -167,10 +167,7 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn list_computers(
-    pool: &PgPool,
-    owner_id: &str,
-) -> Result<Vec<SandboxRow>, sqlx::Error> {
+pub async fn list_computers(pool: &PgPool, owner_id: &str) -> Result<Vec<SandboxRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
         SELECT id, owner_id, display_name, provider, provider_resource_id, state,
@@ -271,18 +268,31 @@ pub async fn archive_computer(
     owner_id: &str,
     computer_id: &str,
 ) -> Result<bool, ApiError> {
-    let result = sqlx::query(
-        r#"
-        UPDATE sandboxes SET state = 'archived', updated_at = NOW()
-        WHERE id = $1 AND owner_id = $2 AND state <> 'archived'
-        "#,
-    )
-    .bind(computer_id)
-    .bind(owner_id)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(result.rows_affected() > 0)
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let existing: Option<(String,)> = sqlx::query_as("SELECT id FROM sandboxes WHERE id = $1 AND owner_id = $2 AND state <> 'archived' FOR UPDATE")
+        .bind(computer_id).bind(owner_id).fetch_optional(&mut *tx).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    if existing.is_none() {
+        return Ok(false);
+    }
+    let busy: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agent_runs WHERE computer_id = $1 AND status IN ('queued','running'))")
+        .bind(computer_id).fetch_one(&mut *tx).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    if busy {
+        return Err(ApiError::Conflict(
+            "Cancel or finish this computer's work before archiving it".into(),
+        ));
+    }
+    sqlx::query("UPDATE sandboxes SET state = 'archived', updated_at = NOW() WHERE id = $1")
+        .bind(computer_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(true)
 }
 
 pub async fn list_runs_for_owner(

@@ -109,7 +109,12 @@ impl HostFinalizer {
             .map_err(|e| e.to_string())?;
 
         self.store
-            .update_run(&self.request_id, "interrupted", Some(error_code), step_count)
+            .update_run(
+                &self.request_id,
+                "interrupted",
+                Some(error_code),
+                step_count,
+            )
             .await
             .map_err(|e| e.to_string())?;
 
@@ -137,6 +142,29 @@ impl HostFinalizer {
             })
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub async fn finalize_host_cancelled(&self) -> Result<(), String> {
+        let partial = self
+            .store
+            .get_assistant_message_body(&self.assistant_message_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        self.store
+            .update_assistant_message(
+                &self.assistant_message_id,
+                &partial,
+                MessageStatus::Cancelled,
+                None,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        self.store
+            .update_run(&self.request_id, "cancelled", None, 0)
+            .await
+            .map_err(|e| e.to_string())?;
+        self.persist_and_emit("cancelled", &json!({"status":"cancelled"}))
+            .await
     }
 
     pub async fn finalize_run_timeout(&self, step_count: i64) -> Result<(), String> {
