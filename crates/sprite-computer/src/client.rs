@@ -105,6 +105,7 @@ impl SpriteClient {
 
     pub async fn ensure_sprite(&self) -> Result<SpriteInfo, SpriteError> {
         if self.sprite_exists().await? {
+            self.set_network_policy(&self.config.network_policy).await?;
             return self.get_sprite().await;
         }
         if !self.config.auto_create {

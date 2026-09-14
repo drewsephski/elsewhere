@@ -19,6 +19,14 @@ BASE="http://${ELSEWHERE_BIND/0.0.0.0/127.0.0.1}"
 AUTH="Authorization: Bearer ${ELSEWHERE_CLOUD_API_TOKEN}"
 COMPUTER_ID="elsewhere-cloud-e2e"
 
+redact_secrets() {
+  local line=$1
+  line="${line//${ELSEWHERE_CLOUD_API_TOKEN}/[REDACTED_TOKEN]}"
+  line="${line//${SPRITE_TOKEN}/[REDACTED_SPRITE_TOKEN]}"
+  line="${line//${OPENAI_API_KEY}/[REDACTED_OPENAI_KEY]}"
+  printf '%s\n' "${line}"
+}
+
 echo "==> starting cloud-host on ${ELSEWHERE_BIND}"
 cargo run -q -p cloud-host > /tmp/elsewhere-cloud-host.log 2>&1 &
 HOST_PID=$!
@@ -65,6 +73,82 @@ post_run() {
       }')"
 }
 
+verify_sse_monotonic_ids() {
+  local file=$1
+  local prev=""
+  while IFS= read -r line; do
+    case "${line}" in
+      id:*)
+        local id="${line#id: }"
+        id="${id// /}"
+        if ! [[ "${id}" =~ ^[0-9]+$ ]]; then
+          echo "SSE id is not numeric: ${id}" >&2
+          return 1
+        fi
+        if [ -n "${prev}" ] && [ "${id}" -le "${prev}" ]; then
+          echo "SSE ids not strictly increasing: ${prev} then ${id}" >&2
+          return 1
+        fi
+        prev="${id}"
+        ;;
+    esac
+  done < "${file}"
+  if [ -z "${prev}" ]; then
+    echo "SSE stream had no durable ids" >&2
+    return 1
+  fi
+}
+
+verify_sse_event_types() {
+  local file=$1
+  grep -q '^event: run_started$' "${file}" || {
+    echo "SSE missing run_started" >&2
+    return 1
+  }
+  grep -q '^event: status$' "${file}" || {
+    echo "SSE missing status" >&2
+    return 1
+  }
+  grep -q '^event: tool_call$' "${file}" || {
+    echo "SSE missing tool_call" >&2
+    return 1
+  }
+  grep -q '^event: tool_result$' "${file}" || {
+    echo "SSE missing tool_result" >&2
+    return 1
+  }
+  grep -q '^event: terminal$' "${file}" || {
+    echo "SSE missing terminal" >&2
+    return 1
+  }
+  grep 'workspace_write\|workspace_read' "${file}" >/dev/null || {
+    echo "SSE missing workspace tool activity" >&2
+    return 1
+  }
+}
+
+last_sse_durable_id() {
+  local file=$1
+  awk '/^id: / { sub(/^id: /,""); gsub(/ /,""); print }' "${file}" | tail -1
+}
+
+verify_sse_no_replay_below() {
+  local file=$1
+  local floor=$2
+  while IFS= read -r line; do
+    case "${line}" in
+      id:*)
+        local id="${line#id: }"
+        id="${id// /}"
+        if [ "${id}" -le "${floor}" ]; then
+          echo "SSE reconnect replayed durable id ${id} (floor ${floor})" >&2
+          return 1
+        fi
+        ;;
+    esac
+  done < "${file}"
+}
+
 echo "==> run 1: write hello.txt"
 RUN1_JSON=$(post_run "e2e-live-1-$(date +%s)" "Create /workspace/hello.txt containing exactly:
 hello from Elsewhere cloud
@@ -75,13 +159,45 @@ MODEL=$(echo "${RUN1_JSON}" | jq -r '.model')
 echo "run1 id=${RUN1_ID} model=${MODEL}"
 [ "${MODEL}" = "gpt-5.6-luna" ] || { echo "unexpected model"; exit 1; }
 
+SSE_FILE=$(mktemp)
+trap 'kill ${HOST_PID} 2>/dev/null || true; rm -f "${SSE_FILE}" "${SSE_RECONNECT_FILE:-}"' EXIT
+
+curl -sfN -H "${AUTH}" "${BASE}/v1/runs/${RUN1_ID}/events" > "${SSE_FILE}" &
+SSE_PID=$!
+
 STATUS1=$(wait_for_run "${RUN1_ID}")
 echo "run1 status=${STATUS1}"
-[ "${STATUS1}" = "completed" ] || { curl -sf -H "${AUTH}" "${BASE}/v1/runs/${RUN1_ID}" | jq .; exit 1; }
+
+kill "${SSE_PID}" 2>/dev/null || true
+wait "${SSE_PID}" 2>/dev/null || true
+
+[ "${STATUS1}" = "completed" ] || {
+  redact_secrets "$(curl -sf -H "${AUTH}" "${BASE}/v1/runs/${RUN1_ID}" | jq -c .)" >&2
+  exit 1
+}
+
+verify_sse_monotonic_ids "${SSE_FILE}"
+verify_sse_event_types "${SSE_FILE}"
+LAST_SSE_ID=$(last_sse_durable_id "${SSE_FILE}")
+echo "run1 sse last durable id=${LAST_SSE_ID}"
+
+SSE_RECONNECT_FILE=$(mktemp)
+curl -sfN -H "${AUTH}" -H "Last-Event-ID: ${LAST_SSE_ID}" \
+  "${BASE}/v1/runs/${RUN1_ID}/events" > "${SSE_RECONNECT_FILE}" &
+SSE_RECONNECT_PID=$!
+sleep 3
+kill "${SSE_RECONNECT_PID}" 2>/dev/null || true
+wait "${SSE_RECONNECT_PID}" 2>/dev/null || true
+verify_sse_no_replay_below "${SSE_RECONNECT_FILE}" "${LAST_SSE_ID}"
+echo "run1 sse reconnect ok (no replay below ${LAST_SSE_ID})"
 
 EVENT_COUNT=$(curl -sf -H "${AUTH}" "${BASE}/v1/runs/${RUN1_ID}" | jq -r '.requestId' | xargs -I{} psql "${DATABASE_URL}" -tAc "SELECT COUNT(*) FROM run_events WHERE request_id='{}'")
 echo "run1 durable events=${EVENT_COUNT}"
 [ "${EVENT_COUNT}" -ge 3 ] || exit 1
+
+if [ -n "${ELSEWHERE_TEST_SPRITE:-}" ]; then
+  echo "run1 sprite resource=${ELSEWHERE_TEST_SPRITE}"
+fi
 
 echo "==> run 2: read persistence"
 RUN2_JSON=$(post_run "e2e-live-2-$(date +%s)" "Read /workspace/hello.txt and tell me exactly what it contains.")

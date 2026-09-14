@@ -38,6 +38,36 @@ async fn lifecycle_existing_sprite() {
 }
 
 #[tokio::test]
+async fn lifecycle_existing_sprite_reconciles_network_policy() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/sprites/existing-policy"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "id-existing",
+            "name": "existing-policy",
+            "organization": "org",
+            "status": "ready"
+        })))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/sprites/existing-policy/policy/network"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "rules": [{"action": "deny", "domain": "*"}]
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = SpriteClient::new(test_config(&server.uri(), "existing-policy")).unwrap();
+    let info = client.ensure_sprite().await.unwrap();
+    assert_eq!(info.name, "existing-policy");
+    assert_eq!(info.status, "ready");
+}
+
+#[tokio::test]
 async fn lifecycle_missing_auto_create() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
