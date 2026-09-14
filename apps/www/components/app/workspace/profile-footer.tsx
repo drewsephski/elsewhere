@@ -36,7 +36,7 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
     <div className={cn("space-y-2", compact && "space-y-1")}>
       <div className="flex items-center gap-2 rounded-xl px-1 py-1">
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground sm:size-9 sm:text-sm"
           aria-hidden
         >
           {initial}

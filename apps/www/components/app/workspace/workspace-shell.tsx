@@ -243,12 +243,13 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         {/* Left: bot list — desktop always; mobile when no bot selected */}
         <aside
           className={cn(
-            "flex w-full max-w-md flex-col border-r border-border/70 bg-white/55 backdrop-blur-md lg:w-[min(100%,20rem)] lg:max-w-none lg:shrink-0",
+            "flex w-full flex-col border-r border-border/70 bg-white/55 backdrop-blur-md",
+            "md:max-w-[min(100%,15rem)] lg:w-56 lg:max-w-none lg:shrink-0 xl:w-60",
             showConversation ? "hidden lg:flex" : "flex",
           )}
           aria-label="Bots"
         >
-          <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border/60 px-4">
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/60 px-3">
             <Link href="/app" className="flex items-center gap-2">
               <ProductLogo size="md" />
               <span className="text-sm font-semibold tracking-tight">

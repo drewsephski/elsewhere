@@ -151,7 +151,7 @@ export function BotListSidebar({
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
-      <div className="shrink-0 space-y-3 px-3 pt-3">
+      <div className="shrink-0 space-y-2.5 px-2.5 pt-2.5 sm:px-3 sm:pt-3 sm:space-y-3">
         <div className="relative">
           <Search
             className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
@@ -162,7 +162,7 @@ export function BotListSidebar({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
-            className="h-10 rounded-xl border-border/80 bg-white/80 py-2 pr-3 pl-9"
+            className="h-9 rounded-xl border-border/80 bg-white/80 py-2 pr-2.5 pl-9 text-sm sm:h-10 sm:pr-3"
             aria-label="Search bots"
           />
         </div>
@@ -198,7 +198,7 @@ export function BotListSidebar({
         ) : null}
       </div>
 
-      <ul className="mt-2 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2" aria-label="Bots">
+      <ul className="mt-1.5 min-h-0 flex-1 space-y-0.5 overflow-y-auto px-1.5 pb-2 sm:mt-2 sm:px-2" aria-label="Bots">
         {filtered.map((bot) => {
           const selected = bot.id === selectedBotId;
           const attention = presenceNeedsAttention(bot.presence);
@@ -269,7 +269,7 @@ export function BotListSidebar({
         ) : null}
       </ul>
 
-      <div className="shrink-0 border-t border-border/70 bg-white/50 px-3 py-3">{footer}</div>
+      <div className="shrink-0 border-t border-border/70 bg-white/50 px-2.5 py-2.5 sm:px-3 sm:py-3">{footer}</div>
 
       {contextMenu ? (
         <div
