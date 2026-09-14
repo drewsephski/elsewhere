@@ -49,7 +49,17 @@ Volumes are encrypted by default; never add `--no-encryption`. Stage each servic
 | App | Secrets |
 | --- | --- |
 | Runner | `DATABASE_URL`, `SPRITE_TOKEN`, `ELSEWHERE_CLOUD_API_TOKEN` |
-| Web | `BETTER_AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET`, `ELSEWHERE_ALPHA_INVITE_CODE`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (optional), `ELSEWHERE_CLOUD_HOST_INTERNAL_URL` (`http://elsewhere-alpha-runner.internal:8080`) |
+| Web | `BETTER_AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET`, `ELSEWHERE_ALPHA_INVITE_CODE`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (optional) |
+
+The Fly web-to-runner address is deployment topology, **not a secret**. `infra/fly/web.toml` sets the canonical server-only BFF upstream:
+
+```dotenv
+ELSEWHERE_CLOUD_HOST_URL=http://elsewhere-alpha-runner.internal:8080
+```
+
+`ELSEWHERE_CLOUD_HOST_INTERNAL_URL` is retained only for backwards compatibility. The BFF probes `/health`, remembers a healthy upstream briefly, and can use the public build-time compatibility endpoint for safe GET/HEAD transport fallback while public runner ingress still exists. Do not treat that fallback as a substitute for proving Fly 6PN. Before removing public runner ingress, verify successful BFF responses include `X-Elsewhere-Upstream: server`; that proves the canonical `.internal` path is carrying requests.
+
+For other hosted or self-hosted environments, set `ELSEWHERE_CLOUD_HOST_URL` at web runtime to the service URL reachable **from the web server**, not from the end user's browser. Local development defaults to `http://127.0.0.1:8080` only when no explicit endpoint is configured and `NODE_ENV` is not production.
 
 The web invite code is only for initial account creation; existing sessions/sign-in do not need it. Missing hosted invite configuration fails closed. The public build/runtime flag only controls whether the signup form displays that field; it never contains the secret. The database user-creation hook covers every account-creation path, and the email endpoint rejects bad invitations before password hashing. Disable unused social providers. Keep `.env.hosted` and the separate `.env.alpha-invitation` operator handoff file ignored and mode 0600.
 
@@ -60,7 +70,11 @@ fly deploy -c infra/fly/web.toml --image registry.fly.io/elsewhere-alpha-web@sha
 fly deploy -c infra/fly/runner.toml --image registry.fly.io/elsewhere-alpha-runner@sha256:RUNNER_DIGEST --ha=false --strategy immediate
 ```
 
-These commands use prebuilt images and must not provision a remote builder. Use **exactly one Machine per app**; never deploy a canary/second runner. Runner updates cause a brief maintenance interruption. Verify actual Machine restart policy `always`, 300-second kill timeout, volume attachment, and instance count after deployment. Inspect `/ready`, JWT rejection for anonymous API requests, auth/JWKS availability, and invitation denial before handing the URL to a user.
+These commands use prebuilt images and must not provision a remote builder. Use **exactly one Machine per app**; never deploy a canary/second runner. Runner updates cause a brief maintenance interruption. Verify actual Machine restart policy `always`, 300-second kill timeout, volume attachment, and instance count after deployment. Inspect `/ready`, JWT rejection for anonymous API requests, auth/JWKS availability, invitation denial, and one signed-in `/api/cloud/v1/workspace` request before handing the URL to a user.
+
+### What Fly health means
+
+The web health check (`/api/auth/ok`) proves the Next.js/auth process is alive. The runner health/readiness checks prove the Rust process, database, and dispatcher are alive. **Neither independently proves that the web Machine can reach the runner.** A deployment can therefore show both Fly apps as healthy while every workspace request fails at the BFF-to-runner hop. Always include one same-origin BFF smoke request in deployment acceptance and inspect `X-Elsewhere-Upstream`.
 
 ## Recovery and evidence
 
