@@ -27,6 +27,9 @@ kill_timeout = 300
   snapshot_retention = 7
   scheduled_snapshots = true
 
+# Browser clients reach cloud-host through the web BFF (`/api/cloud/*`). After the web app
+# uses ELSEWHERE_CLOUD_HOST_INTERNAL_URL, you can remove public runner ingress and rely on
+# Fly 6PN (`elsewhere-alpha-runner.internal:8080`) for the BFF only.
 [http_service]
   internal_port = 8080
   force_https = true

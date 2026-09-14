@@ -49,7 +49,7 @@ Volumes are encrypted by default; never add `--no-encryption`. Stage each servic
 | App | Secrets |
 | --- | --- |
 | Runner | `DATABASE_URL`, `SPRITE_TOKEN`, `ELSEWHERE_CLOUD_API_TOKEN` |
-| Web | `BETTER_AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET`, `ELSEWHERE_ALPHA_INVITE_CODE` |
+| Web | `BETTER_AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET`, `ELSEWHERE_ALPHA_INVITE_CODE`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (optional), `ELSEWHERE_CLOUD_HOST_INTERNAL_URL` (`http://elsewhere-alpha-runner.internal:8080`) |
 
 The web invite code is only for initial account creation; existing sessions/sign-in do not need it. Missing hosted invite configuration fails closed. The public build/runtime flag only controls whether the signup form displays that field; it never contains the secret. The database user-creation hook covers every account-creation path, and the email endpoint rejects bad invitations before password hashing. Disable unused social providers. Keep `.env.hosted` and the separate `.env.alpha-invitation` operator handoff file ignored and mode 0600.
 

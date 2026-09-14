@@ -232,7 +232,15 @@ async fn execute_run(
         instructions: input.records.instructions.clone(),
     };
 
-    let input_messages = vec![json!({"role":"user","content": input.user_message})];
+    let mut input_messages =
+        crate::conversation::load_bounded_responses_history(
+            &pool,
+            &input.records.conversation_id,
+            &input.records.assistant_message_id,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    input_messages.push(json!({"role":"user","content": input.user_message}));
 
     let engine_mode = match input.engine_mode {
         Some(mode) => mode,
@@ -335,6 +343,7 @@ async fn run_codex_engine(
     let engine = CodexRunEngine::new(CodexRunEngineConfig {
         executable: config.codex_executable.clone(),
         profile_home,
+        compact_after_completed_turns: crate::conversation::CODEX_COMPACT_COMPLETED_TURN_INTERVAL,
         ..CodexRunEngineConfig::default()
     });
     engine

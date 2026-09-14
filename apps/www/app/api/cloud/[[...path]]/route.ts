@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
-import { cloudHostBaseUrl } from "@/lib/auth.shared";
+import { buildCloudBffForwardHeaders } from "@/lib/bff-forwarded-headers";
+import { cloudHostUpstreamBaseUrl } from "@/lib/cloud-host-upstream";
 
 export const dynamic = "force-dynamic";
 
@@ -25,12 +26,10 @@ async function proxyToCloudHost(request: Request, context: RouteContext): Promis
 
   const incoming = new URL(request.url);
   const upstreamPath = path.map((segment) => encodeURIComponent(segment)).join("/");
-  const target = `${cloudHostBaseUrl()}/${upstreamPath}${incoming.search}`;
+  const target = `${cloudHostUpstreamBaseUrl()}/${upstreamPath}${incoming.search}`;
 
-  const headers = new Headers(request.headers);
+  const headers = buildCloudBffForwardHeaders(request.headers);
   headers.set("Authorization", `Bearer ${token}`);
-  headers.delete("host");
-  headers.delete("connection");
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
@@ -45,10 +44,13 @@ async function proxyToCloudHost(request: Request, context: RouteContext): Promis
       cache: "no-store",
     } as RequestInit);
 
+    const responseHeaders = new Headers(upstream.headers);
+    responseHeaders.delete("set-cookie");
+
     return new Response(upstream.body, {
       status: upstream.status,
       statusText: upstream.statusText,
-      headers: upstream.headers,
+      headers: responseHeaders,
     });
   } catch {
     return new Response("Workspace API is unreachable. Is cloud-host running?", { status: 503 });

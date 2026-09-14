@@ -100,6 +100,21 @@ pub fn build_elsewhere_thread_start_params(
     Ok(payload)
 }
 
+pub fn build_elsewhere_thread_resume_params(
+    thread_id: &str,
+    config: &ElsewhereThreadConfig,
+) -> Result<Value, CodexProviderError> {
+    let mut payload = build_elsewhere_thread_start_params(config)?;
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("threadId".into(), json!(thread_id));
+    }
+    Ok(payload)
+}
+
+pub fn parse_thread_resume_response(value: Value) -> Result<String, CodexProviderError> {
+    parse_thread_start_response(value)
+}
+
 pub fn parse_thread_start_response(value: Value) -> Result<String, CodexProviderError> {
     value
         .get("threadId")

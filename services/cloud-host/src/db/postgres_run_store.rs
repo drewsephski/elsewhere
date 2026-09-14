@@ -229,6 +229,59 @@ impl RunStore for PostgresRunStore {
             .map_err(|e| RuntimeError::Store(e.to_string()))?;
         Ok(row.0)
     }
+
+    async fn get_codex_thread_id(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Option<String>, RuntimeError> {
+        crate::conversation::get_codex_thread_id(&self.pool, conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn set_codex_thread_id(
+        &self,
+        conversation_id: &str,
+        thread_id: &str,
+    ) -> Result<(), RuntimeError> {
+        crate::conversation::set_codex_thread_id(&self.pool, conversation_id, thread_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn clear_codex_thread_id(&self, conversation_id: &str) -> Result<(), RuntimeError> {
+        crate::conversation::clear_codex_thread_id(&self.pool, conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn count_completed_assistant_turns(
+        &self,
+        conversation_id: &str,
+    ) -> Result<i64, RuntimeError> {
+        crate::conversation::count_completed_assistant_turns(&self.pool, conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn get_codex_compacted_through_turns(
+        &self,
+        conversation_id: &str,
+    ) -> Result<i64, RuntimeError> {
+        crate::conversation::get_codex_compacted_through_turns(&self.pool, conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
+
+    async fn set_codex_compacted_through_turns(
+        &self,
+        conversation_id: &str,
+        turns: i64,
+    ) -> Result<(), RuntimeError> {
+        crate::conversation::set_codex_compacted_through_turns(&self.pool, conversation_id, turns)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))
+    }
 }
 
 fn role_to_str(role: MessageRole) -> &'static str {

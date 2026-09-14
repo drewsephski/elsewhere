@@ -22,6 +22,8 @@ Approved scope is two Fly Machines, one encrypted 3 GB volume, and at most one n
 
 - Final Linux runner image passed both the protocol/configuration and device-schema/app-server checks. Local container preflight rejected a missing mount and a competing runner, reached readiness twice, exited cleanly on SIGTERM without OOM, and preserved a non-credential sentinel on its mounted directory across restart.
 - Verification: 30 Codex-provider Rust tests, 12 frontend tests, both TypeScript/lint commands, Clippy (existing warnings), and Fly configuration validation passed. Remote GitHub CI has not been run.
+- Conversational continuity: primary conversation per bot, Codex `thread/resume` with persisted `conversations.codex_thread_id`, bounded Responses history, and BFF header allow-listing (no Better Auth cookie forwarded to cloud-host). Set web `ELSEWHERE_CLOUD_HOST_INTERNAL_URL` to `http://elsewhere-alpha-runner.internal:8080` before removing public runner ingress.
+- Password reset: production requires `RESEND_API_KEY`; reset email send is awaited and reset links are not logged in production.
 
 - Hosted runner restarted successfully with its original volume after pairing. Fly CLI restart caps its explicit timeout at 60 seconds; a 300-second request was rejected before stopping the Machine, then the idle runner restarted with 60 seconds. The deployed Machine stop configuration remains SIGTERM/300 seconds. Active-work drain on Fly remains unproven.
 

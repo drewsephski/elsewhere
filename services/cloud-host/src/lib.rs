@@ -30,4 +30,5 @@ pub mod routines;
 
 pub mod bot_avatar;
 pub mod bot_context;
+pub mod conversation;
 pub mod results;

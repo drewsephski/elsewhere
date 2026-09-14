@@ -45,6 +45,8 @@ pub struct CodexRunEngineConfig {
     pub shutdown_timeout: Duration,
     pub temp_cwd_root: Option<PathBuf>,
     pub model: String,
+    /// When > 0, call `thread/compact/start` after this many completed assistant turns in the conversation.
+    pub compact_after_completed_turns: i64,
 }
 
 impl Default for CodexRunEngineConfig {
@@ -60,6 +62,7 @@ impl Default for CodexRunEngineConfig {
             shutdown_timeout: Duration::from_secs(30),
             temp_cwd_root: None,
             model: DEFAULT_MODEL.to_string(),
+            compact_after_completed_turns: 0,
         }
     }
 }
@@ -281,31 +284,37 @@ impl CodexRunEngine {
             developer_instructions: Some(instructions.developer),
         };
 
-        let thread_id = match tokio::time::timeout(
+        let thread_id = match open_elsewhere_codex_thread(
+            &client,
+            &shared,
+            &ctx,
+            &thread_config,
             self.config.thread_start_timeout,
-            client.thread_start_elsewhere(&thread_config),
         )
         .await
         {
-            Ok(Ok(id)) => id,
-            Ok(Err(err)) => {
+            Ok(id) => id,
+            Err(()) => {
                 cleanup_run(client, mcp).await;
-                return map_boot_failure(&shared, &ctx, err).await;
-            }
-            Err(_) => {
-                cleanup_run(client, mcp).await;
-                fail_run(
-                    &shared,
-                    &ctx,
-                    "codex_thread_timeout",
-                    "Codex thread/start timed out",
-                    "",
-                    0,
-                )
-                .await?;
                 return Ok(());
             }
         };
+
+        if self.config.compact_after_completed_turns > 0 {
+            if maybe_compact_codex_thread(
+                &client,
+                &shared,
+                &ctx,
+                &thread_id,
+                self.config.compact_after_completed_turns,
+            )
+            .await
+            .is_err()
+            {
+                cleanup_run(client, mcp).await;
+                return Ok(());
+            }
+        }
 
         let tools = match client
             .list_mcp_server_tools_named(&thread_id, Some(MCP_SERVER_NAME))
@@ -530,6 +539,183 @@ fn compose_instructions(user_instructions: &str) -> InstructionBundle {
     InstructionBundle {
         base: EXECUTION_POLICY.to_string(),
         developer,
+    }
+}
+
+async fn open_elsewhere_codex_thread(
+    client: &CodexAppServerClient,
+    shared: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    thread_config: &ElsewhereThreadConfig,
+    timeout: Duration,
+) -> Result<String, ()> {
+    let stored_thread = match shared.store.get_codex_thread_id(&ctx.conversation_id).await {
+        Ok(value) => value,
+        Err(err) => {
+            tracing::error!(error = %err, "could not load codex thread id");
+            let _ = fail_run(
+                shared,
+                ctx,
+                "store_read_failed",
+                "Could not load conversation thread state",
+                "",
+                0,
+            )
+            .await;
+            return Err(());
+        }
+    };
+
+    if let Some(existing) = stored_thread {
+        match tokio::time::timeout(
+            timeout,
+            client.thread_resume_elsewhere(&existing, thread_config),
+        )
+        .await
+        {
+            Ok(Ok(id)) => return Ok(id),
+            Ok(Err(err)) => {
+                if is_stale_codex_thread_resume_error(&err) {
+                    tracing::warn!(
+                        conversation_id = %ctx.conversation_id,
+                        error = %err,
+                        "codex thread missing or stale; starting a new thread"
+                    );
+                    let _ = shared
+                        .store
+                        .clear_codex_thread_id(&ctx.conversation_id)
+                        .await;
+                } else {
+                    let _ = map_boot_failure(shared, ctx, err).await;
+                    return Err(());
+                }
+            }
+            Err(_) => {
+                let _ = fail_run(
+                    shared,
+                    ctx,
+                    "codex_thread_timeout",
+                    "Codex thread/resume timed out",
+                    "",
+                    0,
+                )
+                .await;
+                return Err(());
+            }
+        }
+    }
+
+    match tokio::time::timeout(timeout, client.thread_start_elsewhere(thread_config)).await {
+        Ok(Ok(id)) => {
+            if let Err(err) = shared
+                .store
+                .set_codex_thread_id(&ctx.conversation_id, &id)
+                .await
+            {
+                tracing::warn!(error = %err, "could not persist codex thread id");
+            }
+            Ok(id)
+        }
+        Ok(Err(err)) => {
+            let _ = map_boot_failure(shared, ctx, err).await;
+            return Err(());
+        }
+        Err(_) => {
+            let _ = fail_run(
+                shared,
+                ctx,
+                "codex_thread_timeout",
+                "Codex thread/start timed out",
+                "",
+                0,
+            )
+            .await;
+            Err(())
+        }
+    }
+}
+
+fn codex_compact_milestone_due(
+    completed_turns: i64,
+    compacted_through_turns: i64,
+    interval: i64,
+) -> Option<i64> {
+    if interval <= 0 || completed_turns < interval {
+        return None;
+    }
+    let milestone = (completed_turns / interval) * interval;
+    if milestone > compacted_through_turns {
+        Some(milestone)
+    } else {
+        None
+    }
+}
+
+fn is_stale_codex_thread_resume_error(err: &CodexProviderError) -> bool {
+    let message = match err {
+        CodexProviderError::Protocol(msg) | CodexProviderError::Process(msg) => msg.to_lowercase(),
+        _ => return false,
+    };
+    message.contains("thread not found")
+        || message.contains("unknown thread")
+        || message.contains("thread does not exist")
+        || message.contains("no such thread")
+}
+
+async fn maybe_compact_codex_thread(
+    client: &CodexAppServerClient,
+    shared: &SharedRunDeps,
+    ctx: &AgentLoopContext,
+    thread_id: &str,
+    interval: i64,
+) -> Result<(), ()> {
+    let completed = shared
+        .store
+        .count_completed_assistant_turns(&ctx.conversation_id)
+        .await
+        .map_err(|_| ())?;
+    let compacted_through = shared
+        .store
+        .get_codex_compacted_through_turns(&ctx.conversation_id)
+        .await
+        .map_err(|_| ())?;
+    let milestone = codex_compact_milestone_due(completed, compacted_through, interval);
+    if milestone.is_none() {
+        return Ok(());
+    }
+    let milestone = milestone.unwrap();
+    match tokio::time::timeout(Duration::from_secs(120), client.thread_compact_start(thread_id))
+        .await
+    {
+        Ok(Ok(())) => {
+            if let Err(err) = shared
+                .store
+                .set_codex_compacted_through_turns(&ctx.conversation_id, milestone)
+                .await
+            {
+                tracing::warn!(
+                    conversation_id = %ctx.conversation_id,
+                    error = %err,
+                    "could not record codex compaction milestone"
+                );
+            }
+            Ok(())
+        }
+        Ok(Err(err)) => {
+            tracing::warn!(
+                conversation_id = %ctx.conversation_id,
+                error = %err,
+                "codex thread compaction failed; continuing without compaction"
+            );
+            Ok(())
+        }
+        Err(_) => {
+            tracing::warn!(
+                conversation_id = %ctx.conversation_id,
+                "codex thread compaction timed out; continuing"
+            );
+            Ok(())
+        }
     }
 }
 
@@ -859,5 +1045,36 @@ async fn parse_turn_outcome(
         other => Ok(TurnOutcome::ProtocolError(format!(
             "unknown turn status: {other}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod continuity_tests {
+    use super::*;
+
+    #[test]
+    fn stale_thread_errors_are_detected() {
+        assert!(is_stale_codex_thread_resume_error(
+            &CodexProviderError::Protocol("thread not found".into())
+        ));
+        assert!(is_stale_codex_thread_resume_error(
+            &CodexProviderError::Process("unknown thread id".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Protocol("thread/resume missing threadId".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Config("bad mcp url".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Timeout("thread/resume".into())
+        ));
+    }
+
+    #[test]
+    fn compaction_milestones_are_periodic() {
+        assert_eq!(codex_compact_milestone_due(24, 0, 24), Some(24));
+        assert_eq!(codex_compact_milestone_due(25, 24, 24), None);
+        assert_eq!(codex_compact_milestone_due(48, 24, 24), Some(48));
     }
 }
