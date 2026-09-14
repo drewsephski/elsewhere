@@ -113,7 +113,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="gap-3 p-4 sm:max-w-lg">
+      <DialogContent className="gap-3 overflow-visible p-4 sm:max-w-lg">
         <form onSubmit={(event) => void handleSubmit(event)}>
           <DialogHeader className="gap-1">
             <DialogTitle className="text-base">New bot</DialogTitle>
@@ -121,12 +121,13 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
               Give it a name, a role, and a computer to work on.
             </DialogDescription>
           </DialogHeader>
-          <FormFields className="mt-2 gap-2.5">
+          <FormFields className="mt-2 gap-3">
             <BotAvatarPicker
               value={avatarId}
               onChange={handleAvatarChange}
               disabled={busy}
               compact
+              className="min-w-0"
             />
             <FormItem>
               <Label htmlFor="create-bot-name">Name</Label>
