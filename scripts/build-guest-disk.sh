@@ -102,7 +102,7 @@ docker run --rm --privileged \
 
     install -m 755 /scripts/gptbot-guest-init.sh /mnt/sbin/gptbot-init
     install -m 755 /scripts/gptbot-guest-init.sh /mnt/sbin/init
-    echo gptbot-disk-v2 >/mnt/.gptbot-disk-version
+    echo ${GUEST_DISK_GENERATION} >/mnt/.gptbot-disk-version
     printf '%s\n' 'rc_interactive="NO"' 'rc_depend_strict="NO"' >>/mnt/etc/rc.conf
 
     sync
