@@ -116,11 +116,7 @@ fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError> {
     match name {
         "browser_navigate" => {
             let url = required_str(args, "url")?;
-            if !url.starts_with("http://") && !url.starts_with("https://") {
-                return Err(ToolError::MalformedArguments(
-                    "url must be http or https".into(),
-                ));
-            }
+            validate_public_http_url(url)?;
         }
         "browser_click" | "browser_type" => {
             required_str(args, "ref")?;
@@ -133,11 +129,7 @@ fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError> {
             require_workspace_path(path)?;
             if name == "browser_download" {
                 let url = required_str(args, "url")?;
-                if !url.starts_with("http://") && !url.starts_with("https://") {
-                    return Err(ToolError::MalformedArguments(
-                        "url must be http or https".into(),
-                    ));
-                }
+                validate_public_http_url(url)?;
             }
         }
         "browser_snapshot" => {}
@@ -145,6 +137,63 @@ fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError> {
             return Err(ToolError::MalformedArguments(format!(
                 "unknown browser tool: {other}"
             )));
+        }
+    }
+    Ok(())
+}
+
+fn validate_public_http_url(raw_url: &str) -> Result<(), ToolError> {
+    if raw_url.len() > crate::approval::MAX_BROWSER_URL_CHARS {
+        return Err(ToolError::MalformedArguments("url is too long".into()));
+    }
+    let parsed = url::Url::parse(raw_url).map_err(|_| {
+        ToolError::MalformedArguments("url is not a valid http(s) URL".into())
+    })?;
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        return Err(ToolError::MalformedArguments(
+            "url must be http or https".into(),
+        ));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| ToolError::MalformedArguments("url is missing a host".into()))?
+        .to_ascii_lowercase();
+    if host == "localhost" || host.ends_with(".localhost") {
+        return Err(ToolError::MalformedArguments(
+            "url targets a blocked host".into(),
+        ));
+    }
+    if host == "169.254.169.254"
+        || host == "metadata.google.internal"
+        || host == "metadata.goog"
+    {
+        return Err(ToolError::MalformedArguments(
+            "url targets a blocked host".into(),
+        ));
+    }
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        let blocked = match ip {
+            std::net::IpAddr::V4(v4) => {
+                v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
+                    || v4.is_unspecified()
+                    || v4.is_multicast()
+            }
+            std::net::IpAddr::V6(v6) => {
+                v6.is_loopback()
+                    || v6.is_unspecified()
+                    || v6.is_multicast()
+                    || v6.octets()[0] == 0xfc
+                    || v6.octets()[0] == 0xfd
+                    || (v6.octets()[0] == 0xfe && (v6.octets()[1] & 0xc0) == 0x80)
+            }
+        };
+        if blocked {
+            return Err(ToolError::MalformedArguments(
+                "url targets a private or link-local address".into(),
+            ));
         }
     }
     Ok(())
@@ -230,6 +279,15 @@ mod tests {
             &computer,
             "browser_navigate",
             &json!({"url":"file:///etc/passwd"}),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, ToolError::MalformedArguments(_)));
+
+        let err = dispatch_browser_tool(
+            &computer,
+            "browser_navigate",
+            &json!({"url":"http://127.0.0.1/"}),
         )
         .await
         .unwrap_err();

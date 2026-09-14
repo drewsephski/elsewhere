@@ -48,6 +48,7 @@ fn jwt_test_config() -> Config {
         codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
+        browser_enabled: false,
     }
 }
 

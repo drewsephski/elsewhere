@@ -8,7 +8,7 @@ mod types;
 
 pub use client::{SpriteClient, SpriteClientConfig};
 pub use computer::{SpriteComputer, SpriteComputerConfig};
-pub use browser::{ensure_browser_guest, BROWSER_CLI, BROWSER_DIR};
+pub use browser::{ensure_browser_guest, BROWSER_ROOT};
 pub use policy::{
     browser_workload_network_policy, default_deny_network_policy, NetworkPolicyConfig,
 };

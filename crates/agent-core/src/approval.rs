@@ -86,11 +86,9 @@ impl ToolApprovalGate for AllowAllApprovalGate {
 pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
-        "browser_snapshot" | "browser_screenshot" => ToolOperationKind::Read,
+        "browser_snapshot" => ToolOperationKind::Read,
         "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
-        name if is_browser_tool(name) && name != "browser_snapshot" && name != "browser_screenshot" => {
-            ToolOperationKind::Mutation
-        }
+        name if is_browser_tool(name) && name != "browser_snapshot" => ToolOperationKind::Mutation,
         _ => ToolOperationKind::Mutation,
     }
 }
@@ -214,7 +212,7 @@ mod tests {
         );
         assert_eq!(
             operation_kind_for_tool("browser_screenshot"),
-            ToolOperationKind::Read
+            ToolOperationKind::Mutation
         );
     }
 

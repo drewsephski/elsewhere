@@ -6,9 +6,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::browser::{
-    ensure_browser_guest, map_browser_exec_error, BROWSER_CLI, BROWSER_DIR, BROWSER_REQUEST,
-};
+use crate::browser::{ensure_browser_guest, invoke_browser_daemon};
 use crate::client::{SpriteClient, SpriteClientConfig};
 use crate::policy::NetworkPolicyConfig;
 use crate::types::{Checkpoint, SpriteError};
@@ -47,6 +45,7 @@ pub struct SpriteComputer {
     exec_timeout: Duration,
     browser_enabled: bool,
     browser_exec_timeout: Duration,
+    network_policy: NetworkPolicyConfig,
 }
 
 impl SpriteComputer {
@@ -54,6 +53,7 @@ impl SpriteComputer {
         let exec_timeout = config.exec_timeout;
         let browser_exec_timeout = config.browser_exec_timeout;
         let browser_enabled = config.browser_enabled;
+        let network_policy = config.network_policy.clone();
         let workspace_root = config.workspace_root.clone();
         let client = Arc::new(SpriteClient::new(config.into_client_config())?);
         Ok(Self {
@@ -62,6 +62,7 @@ impl SpriteComputer {
             exec_timeout,
             browser_enabled,
             browser_exec_timeout,
+            network_policy,
         })
     }
 
@@ -130,7 +131,12 @@ impl AgentComputer for SpriteComputer {
         }
 
         if self.browser_enabled {
-            ensure_browser_guest(&self.client, self.browser_exec_timeout).await?;
+            ensure_browser_guest(
+                &self.client,
+                &self.network_policy,
+                self.browser_exec_timeout,
+            )
+            .await?;
         }
 
         Ok(ComputerInfo {
@@ -191,7 +197,12 @@ impl AgentComputer for SpriteComputer {
             ));
         }
 
-        ensure_browser_guest(&self.client, self.browser_exec_timeout).await?;
+        ensure_browser_guest(
+            &self.client,
+            &self.network_policy,
+            self.browser_exec_timeout,
+        )
+        .await?;
 
         let mut request = args.clone();
         if let Some(obj) = request.as_object_mut() {
@@ -200,29 +211,18 @@ impl AgentComputer for SpriteComputer {
         let payload = serde_json::to_string(&request).map_err(|e| {
             ComputerError::MalformedArguments(format!("browser request JSON: {e}"))
         })?;
-        self.client
-            .fs_write(BROWSER_REQUEST, payload.as_bytes(), true)
-            .await
-            .map_err(map_sprite_error)?;
 
-        let command = format!(
-            "export PLAYWRIGHT_BROWSERS_PATH={BROWSER_DIR}/browsers; \
-             export PATH={BROWSER_DIR}/node-runtime/bin:$PATH; \
-             node {BROWSER_CLI} --request {BROWSER_REQUEST}"
-        );
-        let (stdout, stderr, exit_code) = self
-            .client
-            .exec_http(&command, &self.workspace_root, self.browser_exec_timeout)
-            .await
-            .map_err(map_sprite_error)?;
-
-        if exit_code != 0 {
-            return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
-        }
+        let stdout = invoke_browser_daemon(
+            &self.client,
+            &self.network_policy,
+            &payload,
+            self.browser_exec_timeout,
+        )
+        .await?;
 
         let line = stdout.lines().last().unwrap_or(stdout.trim());
         serde_json::from_str(line).map_err(|e| {
-            ComputerError::ExecutionFailed(format!("browser CLI returned invalid JSON: {e}"))
+            ComputerError::ExecutionFailed(format!("browser daemon returned invalid JSON: {e}"))
         })
     }
 }

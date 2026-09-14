@@ -13,10 +13,7 @@ use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use futures_util::FutureExt;
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
-use sprite_computer::{
-    browser_workload_network_policy, default_deny_network_policy, SpriteComputer,
-    SpriteComputerConfig,
-};
+use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
@@ -419,11 +416,8 @@ async fn build_computer(
     }
 
     let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
-    let network_policy = if config.browser_enabled {
-        browser_workload_network_policy()
-    } else {
-        default_deny_network_policy()
-    };
+    // Sprites stay default-deny; browser ops temporarily widen egress inside SpriteComputer.
+    let network_policy = default_deny_network_policy();
     let computer = SpriteComputer::new(SpriteComputerConfig {
         base_url: config.sprites_api_base.clone(),
         token: config.sprite_token.clone(),

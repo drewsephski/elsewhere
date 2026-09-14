@@ -7,16 +7,19 @@ import {
   dataGridFeatures,
   type DataGridFeatures,
 } from "@/components/reui/data-grid/data-grid";
-import { Button } from "@/components/ui/button";
 import {
   ColumnDef,
   PaginationState,
   SortingState,
   useTable,
 } from "@tanstack/react-table";
-import { Download, FileText } from "@/components/icons/lucide";
+import {
+  ResultContentDialog,
+  resultItemTitle,
+} from "@/components/app/workspace/result-content-dialog";
+import { Download, ExternalLink, FileText } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type ResultItem = {
   id: string;
@@ -43,6 +46,13 @@ export function ResultsPanel({ runId }: { runId?: string }) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "createdAt", desc: true },
   ]);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [activeItem, setActiveItem] = useState<ResultItem | null>(null);
+
+  const handleOpenResult = useCallback((item: ResultItem) => {
+    setActiveItem(item);
+    setViewerOpen(true);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -90,9 +100,7 @@ export function ResultsPanel({ runId }: { runId?: string }) {
             <FileText className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
             <div className="min-w-0">
               <p className="break-words text-sm font-medium">
-                {row.original.kind === "summary"
-                  ? "Assignment summary"
-                  : row.original.name}
+                {resultItemTitle(row.original.kind, row.original.name)}
               </p>
               {!runId ? (
                 <Link
@@ -138,23 +146,33 @@ export function ResultsPanel({ runId }: { runId?: string }) {
         size: 80,
       },
       {
-        id: "download",
+        id: "actions",
         header: "",
         cell: ({ row }) => (
-          <a
-            href={`/api/results/${row.original.id}/download`}
-            download={row.original.name}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/40"
-          >
-            <Download className="size-4" aria-hidden />
-            Download
-          </a>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => handleOpenResult(row.original)}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            >
+              <ExternalLink className="size-4" aria-hidden />
+              Open
+            </button>
+            <a
+              href={`/api/results/${row.original.id}/download`}
+              download={row.original.name}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/40"
+            >
+              <Download className="size-4" aria-hidden />
+              Download
+            </a>
+          </div>
         ),
-        size: 120,
+        size: 200,
         enableSorting: false,
       },
     ],
-    [runId],
+    [runId, handleOpenResult],
   );
 
   const table = useTable({
@@ -200,6 +218,19 @@ export function ResultsPanel({ runId }: { runId?: string }) {
       {items.length > 0 && collecting ? (
         <p className="text-xs text-muted-foreground">Still collecting results…</p>
       ) : null}
+      <ResultContentDialog
+        open={viewerOpen}
+        onOpenChange={setViewerOpen}
+        result={
+          activeItem
+            ? {
+                id: activeItem.id,
+                title: resultItemTitle(activeItem.kind, activeItem.name),
+                size: activeItem.size,
+              }
+            : null
+        }
+      />
     </section>
   );
 }

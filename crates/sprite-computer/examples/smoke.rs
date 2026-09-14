@@ -10,14 +10,14 @@
 //! Run twice to prove persistence across processes:
 //! `cargo run -p sprite-computer --example smoke`
 //!
+//! Browser flows (stateful daemon):
+//! `ELSEWHERE_BROWSER_SMOKE=1 cargo run -p sprite-computer --example smoke`
+//!
 //! For CI-safe checks without Fly credentials, use `agent_cloud_proof` (mock path).
 
 use agent_core::AgentComputer;
-use serde_json::json;
-use sprite_computer::{
-    browser_workload_network_policy, default_deny_network_policy, SpriteComputer,
-    SpriteComputerConfig,
-};
+use serde_json::{json, Value};
+use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -90,6 +90,106 @@ fn load_live_credentials() -> Result<(String, String), String> {
 const PROOF_PATH: &str = "/workspace/elsewhere-cloud-proof.txt";
 const PROOF_CONTENT: &str = "hello from Elsewhere cloud";
 
+fn first_ref_matching(snapshot: &str, tag: &str) -> Option<String> {
+    for line in snapshot.lines() {
+        if line.contains(&format!("[{tag}]")) {
+            if let Some(rest) = line.strip_prefix("- ") {
+                if let Some(ref_id) = rest.split_whitespace().next() {
+                    return Some(ref_id.to_string());
+                }
+            }
+        }
+    }
+    first_ref(snapshot)
+}
+
+fn first_ref(snapshot: &str) -> Option<String> {
+    for line in snapshot.lines() {
+        if let Some(rest) = line.strip_prefix("- ") {
+            if let Some(ref_id) = rest.split_whitespace().next() {
+                if ref_id.starts_with('e') {
+                    return Some(ref_id.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn snapshot_text(value: &Value) -> &str {
+    value
+        .get("snapshot")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+}
+
+async fn run_browser_smoke(computer: &SpriteComputer) -> Result<(), Box<dyn std::error::Error>> {
+    let navigate = computer
+        .browser_invoke(
+            "navigate",
+            &json!({ "url": "https://example.com" }),
+        )
+        .await?;
+    println!("browser navigate: {navigate}");
+    let start_url = navigate
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+
+    let snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
+    println!("browser snapshot: {snapshot}");
+    let snap_text = snapshot_text(&snapshot);
+    let link_ref = first_ref_matching(snap_text, "a")
+        .or_else(|| first_ref(snap_text))
+        .ok_or("example.com snapshot missing clickable ref")?;
+
+    let after_click = computer
+        .browser_invoke("click", &json!({ "ref": link_ref }))
+        .await?;
+    println!("browser click: {after_click}");
+    let after_url = after_click
+        .get("url")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    if after_url == start_url {
+        return Err("click did not change page URL".into());
+    }
+
+    let snapshot2 = computer.browser_invoke("snapshot", &json!({})).await?;
+    println!("browser snapshot after click: {snapshot2}");
+
+    computer
+        .browser_invoke(
+            "navigate",
+            &json!({ "url": "https://httpbin.org/forms/post" }),
+        )
+        .await?;
+
+    let form_snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
+    let form_text = snapshot_text(&form_snapshot);
+    let input_ref = first_ref_matching(form_text, "input")
+        .or_else(|| first_ref(form_text))
+        .ok_or("httpbin form snapshot missing input ref")?;
+
+    let typed = "elsewhere-smoke-typed";
+    computer
+        .browser_invoke(
+            "type",
+            &json!({ "ref": input_ref, "text": typed, "submit": false }),
+        )
+        .await?;
+
+    let verify_snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
+    let verify_text = snapshot_text(&verify_snapshot);
+    if !verify_text.contains(typed) {
+        return Err("typed text not visible in follow-up snapshot".into());
+    }
+    println!("browser type persistence verified");
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     load_dotenv_files();
@@ -110,11 +210,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         workspace_root: "/workspace".into(),
         request_timeout: Duration::from_secs(120),
         auto_create: true,
-        network_policy: if browser_smoke {
-            browser_workload_network_policy()
-        } else {
-            default_deny_network_policy()
-        },
+        network_policy: default_deny_network_policy(),
         exec_timeout: Duration::from_secs(60),
         browser_enabled: browser_smoke,
         browser_exec_timeout: Duration::from_secs(120),
@@ -159,15 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("checkpoint created: {}", checkpoint.id);
 
     if browser_smoke {
-        let navigate = computer
-            .browser_invoke(
-                "navigate",
-                &json!({ "url": "https://example.com" }),
-            )
-            .await?;
-        println!("browser navigate: {navigate}");
-        let snapshot = computer.browser_invoke("snapshot", &json!({})).await?;
-        println!("browser snapshot: {snapshot}");
+        run_browser_smoke(&computer).await?;
     }
 
     println!("smoke test passed (sprite left running)");
