@@ -656,15 +656,10 @@ fn is_stale_codex_thread_resume_error(err: &CodexProviderError) -> bool {
         CodexProviderError::Protocol(msg) | CodexProviderError::Process(msg) => msg.to_lowercase(),
         _ => return false,
     };
-    if !message.contains("thread") {
-        return false;
-    }
-    message.contains("not found")
-        || message.contains("unknown")
-        || message.contains("missing")
-        || message.contains("does not exist")
-        || message.contains("no such")
-        || message.contains("not exist")
+    message.contains("thread not found")
+        || message.contains("unknown thread")
+        || message.contains("thread does not exist")
+        || message.contains("no such thread")
 }
 
 async fn maybe_compact_codex_thread(
@@ -1061,6 +1056,12 @@ mod continuity_tests {
     fn stale_thread_errors_are_detected() {
         assert!(is_stale_codex_thread_resume_error(
             &CodexProviderError::Protocol("thread not found".into())
+        ));
+        assert!(is_stale_codex_thread_resume_error(
+            &CodexProviderError::Process("unknown thread id".into())
+        ));
+        assert!(!is_stale_codex_thread_resume_error(
+            &CodexProviderError::Protocol("thread/resume missing threadId".into())
         ));
         assert!(!is_stale_codex_thread_resume_error(
             &CodexProviderError::Config("bad mcp url".into())
