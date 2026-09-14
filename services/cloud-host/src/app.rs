@@ -46,6 +46,14 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/computers/{id}/browser-preview",
             get(api::computers::browser_preview),
         )
+        .route(
+            "/v1/computers/{id}/workspace",
+            get(api::computers::workspace_list),
+        )
+        .route(
+            "/v1/computers/{id}/workspace/file",
+            get(api::computers::workspace_read),
+        )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
             "/v1/providers/codex/login/start",

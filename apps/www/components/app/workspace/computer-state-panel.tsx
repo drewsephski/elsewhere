@@ -2,7 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, ComputerSummary, RunSummary } from "@/lib/api-types";
-import { useRunEventStream } from "@/hooks/use-run-event-stream";
+import { useActiveRun } from "@/contexts/active-run-context";
 import { workStatus } from "@/lib/work-events";
 import { cn } from "cn";
 import { Monitor } from "@/components/icons/lucide";
@@ -26,13 +26,7 @@ export function ComputerStatePanel({
   const [computer, setComputer] = useState<ComputerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const streamRunId =
-    variant !== "minimal" &&
-    activeRun &&
-    (activeRun.status === "queued" || activeRun.status === "running")
-      ? activeRun.runId
-      : null;
-  const { timeline } = useRunEventStream(streamRunId);
+  const { timeline } = useActiveRun();
   const latestActivity = useMemo(() => {
     if (variant === "minimal") {
       return null;

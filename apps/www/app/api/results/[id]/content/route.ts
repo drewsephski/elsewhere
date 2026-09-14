@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { cloudHostBaseUrl } from "@/lib/auth.shared";
+import { cloudHostUpstreamBaseUrl } from "@/lib/cloud-host-upstream";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return Response.json({ error: "unauthorized" }, { status: 401, headers });
     }
     const { token } = await auth.api.getToken({ headers: request.headers });
-    const response = await fetch(`${cloudHostBaseUrl()}/v1/results/${id}/download`, {
+    const response = await fetch(`${cloudHostUpstreamBaseUrl()}/v1/results/${id}/download`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: "no-store",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(15000)]),

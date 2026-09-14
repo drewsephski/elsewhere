@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use crate::computer::{
     AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
@@ -19,6 +20,8 @@ pub struct FakeAgentComputer {
 struct FakeState {
     ready: bool,
     ensure_ready_calls: usize,
+    transient_failures_remaining: usize,
+    ensure_ready_delay: Option<Duration>,
     files: HashMap<String, Vec<u8>>,
     listings: HashMap<String, Vec<WorkspaceEntry>>,
     exec_results: HashMap<String, ExecResult>,
@@ -58,6 +61,19 @@ impl FakeAgentComputer {
             .insert(command.to_string(), result);
         self
     }
+
+    pub fn with_transient_readiness_failures(mut self, count: usize) -> Self {
+        self.inner
+            .get_mut()
+            .unwrap()
+            .transient_failures_remaining = count;
+        self
+    }
+
+    pub fn with_ensure_ready_delay(mut self, delay: Duration) -> Self {
+        self.inner.get_mut().unwrap().ensure_ready_delay = Some(delay);
+        self
+    }
 }
 
 fn ensure_workspace_path(path: &str, enforce: bool) -> Result<(), ComputerError> {
@@ -75,8 +91,16 @@ fn ensure_workspace_path(path: &str, enforce: bool) -> Result<(), ComputerError>
 #[async_trait]
 impl AgentComputer for FakeAgentComputer {
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
+        let delay = self.inner.lock().unwrap().ensure_ready_delay;
+        if let Some(delay) = delay {
+            tokio::time::sleep(delay).await;
+        }
         let mut state = self.inner.lock().unwrap();
         state.ensure_ready_calls += 1;
+        if state.transient_failures_remaining > 0 {
+            state.transient_failures_remaining -= 1;
+            return Err(ComputerError::GuestUnavailable("transient readiness failure".into()));
+        }
         if !state.ready {
             return Err(ComputerError::NotProvisioned);
         }

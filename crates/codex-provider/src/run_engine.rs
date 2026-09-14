@@ -129,6 +129,7 @@ impl CodexRunEngine {
 
         let user_text = user_text_from_run_input(&input)?;
         let mut phases = RunPhaseRecorder::new();
+        phases.mark_claimed();
 
         let tool_run = ToolRunContext {
             run_id: shared.run_id.clone(),
@@ -438,6 +439,7 @@ impl CodexRunEngine {
                         &chunks,
                         &visible,
                         &mut active.checkpoint,
+                        Some(&mut phases),
                     )
                     .await;
                     active.assistant.partial_output()
@@ -458,6 +460,7 @@ impl CodexRunEngine {
                 &chunks,
                 &visible,
                 &mut active.checkpoint,
+                Some(&mut phases),
             )
             .await;
         }
@@ -1001,6 +1004,7 @@ async fn consume_turn_notifications(
                     &chunks,
                     &visible,
                     &mut active.checkpoint,
+                    Some(phases),
                 )
                 .await;
                 continue;
@@ -1044,7 +1048,7 @@ async fn consume_turn_notifications(
                 }
                 "item/completed" => {
                     if let Some(item) = item_from_notification(&params) {
-                        handle_item_completed(shared, ctx, &state, item).await?;
+                        handle_item_completed(shared, ctx, &state, item, phases).await?;
                     }
                 }
                 "item/agentMessage/delta" => {
@@ -1156,6 +1160,7 @@ async fn handle_item_completed(
     ctx: &AgentLoopContext,
     state: &Arc<Mutex<TurnRunState>>,
     item: &Value,
+    phases: &mut RunPhaseRecorder,
 ) -> Result<(), RuntimeError> {
     let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
     if is_disallowed_host_item(item_type) {
@@ -1167,7 +1172,14 @@ async fn handle_item_completed(
         active.assistant.on_agent_message_completed(item);
         let chunks = active.stream.flush_all();
         let visible = active.assistant.streaming_answer_text();
-        let _ = flush_assistant_stream(shared, ctx, &chunks, &visible, &mut active.checkpoint)
+        let _ = flush_assistant_stream(
+            shared,
+            ctx,
+            &chunks,
+            &visible,
+            &mut active.checkpoint,
+            Some(phases),
+        )
             .await;
         return Ok(());
     }
@@ -1244,11 +1256,19 @@ async fn handle_agent_delta(
     active.assistant.on_agent_message_delta(params);
     let phase = active.assistant.phase_for_item(item_id);
     active.stream.ingest(item_id, phase, delta);
-    phases.mark_first_assistant_delta();
+    phases.mark_first_model_delta();
     let now = std::time::Instant::now();
     let chunks = active.stream.take_if_due(now);
     let visible = active.assistant.streaming_answer_text();
-    let _ = flush_assistant_stream(shared, ctx, &chunks, &visible, &mut active.checkpoint).await;
+    let _ = flush_assistant_stream(
+        shared,
+        ctx,
+        &chunks,
+        &visible,
+        &mut active.checkpoint,
+        Some(phases),
+    )
+    .await;
     Ok(())
 }
 

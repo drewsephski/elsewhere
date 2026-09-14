@@ -10,6 +10,7 @@ export interface BrowserPreviewFrame {
   contentType: string | null;
   imageDataUrl: string | null;
   capturedAt: string | null;
+  version: number | null;
 }
 
 interface BrowserPreviewJson {
@@ -19,16 +20,22 @@ interface BrowserPreviewJson {
   contentType?: string | null;
   imageBase64?: string | null;
   capturedAt?: string | null;
+  version?: number | null;
 }
 
-const POLL_MS = 2_000;
+const RECOVERY_POLL_MS = 30_000;
 
-export function useBrowserPreview(computerId: string | null, enabled: boolean) {
+export function useBrowserPreview(
+  computerId: string | null,
+  enabled: boolean,
+  refreshGeneration = 0,
+) {
   const [frame, setFrame] = useState<BrowserPreviewFrame | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const hasFrame = useRef(false);
+  const etagRef = useRef<string | null>(null);
 
   const fetchFrame = useCallback(async () => {
     if (!computerId || !enabled) {
@@ -42,12 +49,25 @@ export function useBrowserPreview(computerId: string | null, enabled: boolean) {
       setLoading(true);
     }
     try {
+      const headers: HeadersInit = {};
+      if (etagRef.current) {
+        headers["If-None-Match"] = etagRef.current;
+      }
       const response = await cloudHostFetch(
         `/v1/computers/${encodeURIComponent(computerId)}/browser-preview`,
+        { headers },
       );
+      if (response.status === 304) {
+        setError(null);
+        return;
+      }
       if (!response.ok) {
         const body = await response.text();
         throw new Error(body || "Could not load browser preview");
+      }
+      const nextEtag = response.headers.get("ETag");
+      if (nextEtag) {
+        etagRef.current = nextEtag;
       }
       const data: BrowserPreviewJson = await response.json();
       const contentType = data.contentType ?? "image/jpeg";
@@ -63,6 +83,7 @@ export function useBrowserPreview(computerId: string | null, enabled: boolean) {
         contentType: data.contentType ?? null,
         imageDataUrl,
         capturedAt: data.capturedAt ?? null,
+        version: data.version ?? null,
       });
       setError(null);
     } catch (err) {
@@ -76,6 +97,7 @@ export function useBrowserPreview(computerId: string | null, enabled: boolean) {
   useEffect(() => {
     if (!computerId || !enabled) {
       hasFrame.current = false;
+      etagRef.current = null;
       setFrame(null);
       setError(null);
       setLoading(false);
@@ -83,9 +105,15 @@ export function useBrowserPreview(computerId: string | null, enabled: boolean) {
     }
 
     void fetchFrame();
+  }, [computerId, enabled, refreshGeneration, fetchFrame]);
+
+  useEffect(() => {
+    if (!computerId || !enabled) {
+      return;
+    }
     const timer = window.setInterval(() => {
       void fetchFrame();
-    }, POLL_MS);
+    }, RECOVERY_POLL_MS);
     return () => window.clearInterval(timer);
   }, [computerId, enabled, fetchFrame]);
 

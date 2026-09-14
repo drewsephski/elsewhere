@@ -8,7 +8,7 @@ import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { workStatus } from "@/lib/work-events";
-import { useRunEventStream } from "@/hooks/use-run-event-stream";
+import { useActiveRun } from "@/contexts/active-run-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
@@ -28,6 +28,7 @@ interface BotConversationViewProps {
   onOpenContext?: () => void;
   onBotLoaded?: (bot: BotSummary) => void;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
+  onStreamRunIdChange?: (runId: string | null) => void;
 }
 
 export function BotConversationView({
@@ -35,6 +36,7 @@ export function BotConversationView({
   onOpenContext,
   onBotLoaded,
   onRenameBot,
+  onStreamRunIdChange,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -43,7 +45,9 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [optimisticUserMessage, setOptimisticUserMessage] = useState<string | null>(null);
+  const [pendingTurn, setPendingTurn] = useState<{ idempotencyKey: string; message: string } | null>(
+    null,
+  );
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
   const requestRef = useRef<{ message: string; key: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,7 +61,11 @@ export function BotConversationView({
 
   const streamRunId = activeRun && runIsActive(activeRun.status) ? activeRun.runId : null;
   const { detail: liveDetail, timeline, assistantStream, error: streamError, connection } =
-    useRunEventStream(streamRunId);
+    useActiveRun();
+
+  useEffect(() => {
+    onStreamRunIdChange?.(streamRunId);
+  }, [onStreamRunIdChange, streamRunId]);
   const browserPreview = useOptionalBrowserPreviewContext();
 
   useEffect(() => {
@@ -222,14 +230,16 @@ export function BotConversationView({
     if (pending || !message.trim() || !bot?.computerId) {
       return;
     }
-    setPending(true);
     setError(null);
     const trimmed = message.trim();
-    setOptimisticUserMessage(trimmed);
+    const idempotencyKey =
+      requestRef.current?.message === trimmed
+        ? requestRef.current.key
+        : crypto.randomUUID();
+    requestRef.current = { message: trimmed, key: idempotencyKey };
+    setPendingTurn({ idempotencyKey, message: trimmed });
     setMessage("");
-    if (requestRef.current?.message !== trimmed) {
-      requestRef.current = { message: trimmed, key: crypto.randomUUID() };
-    }
+    setPending(true);
     try {
       const payload: { botId: string; message: string; conversationId?: string } = {
         botId,
@@ -240,7 +250,7 @@ export function BotConversationView({
       }
       const response = await cloudHostFetch("/v1/runs", {
         method: "POST",
-        headers: { "Idempotency-Key": requestRef.current.key },
+        headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(payload),
       });
       const body = await response.json();
@@ -251,10 +261,11 @@ export function BotConversationView({
       setConversationId(created.conversationId);
       setLiveRunId(created.runId);
       requestRef.current = null;
-      setOptimisticUserMessage(null);
+      setPendingTurn(null);
       await loadRuns(created.conversationId);
     } catch (err) {
-      setOptimisticUserMessage(null);
+      setMessage(trimmed);
+      setPendingTurn(null);
       setError(err instanceof Error ? err.message : "Could not delegate work");
     } finally {
       setPending(false);
@@ -346,15 +357,14 @@ export function BotConversationView({
                 (assistantStream.streaming ? "" : liveDetail?.assistantResult)
               : undefined;
             const showOptimisticUser =
-              isLive &&
-              optimisticUserMessage &&
-              run.runId === liveRunId &&
-              !run.task?.trim();
+              pendingTurn &&
+              (isLive || !run.task?.trim()) &&
+              run.runId === liveRunId;
 
             return (
               <div key={run.runId} className="space-y-3">
                 <UserPromptBubble sentAt={run.createdAt}>
-                  {showOptimisticUser ? optimisticUserMessage : run.task}
+                  {showOptimisticUser ? pendingTurn.message : run.task}
                 </UserPromptBubble>
 
                 {(isLive ? timeline : []).map((item) =>
@@ -435,7 +445,19 @@ export function BotConversationView({
             );
           })}
 
-          {!chronologicalRuns.length ? (
+          {pendingTurn &&
+          !chronologicalRuns.some(
+            (run) => runIsActive(run.status) && run.task?.trim() === pendingTurn.message,
+          ) ? (
+            <div className="space-y-3">
+              <UserPromptBubble sentAt={new Date().toISOString()}>
+                {pendingTurn.message}
+              </UserPromptBubble>
+              <p className="text-center text-xs text-muted-foreground">Sending…</p>
+            </div>
+          ) : null}
+
+          {!chronologicalRuns.length && !pendingTurn ? (
             <div className="rounded-2xl border border-dashed border-border bg-white/50 px-6 py-10 text-center">
               <p className="text-sm font-medium">Start a conversation</p>
               <p className="mt-2 text-sm text-muted-foreground">

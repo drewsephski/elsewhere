@@ -13,7 +13,7 @@ use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use futures_util::FutureExt;
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
-use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
+use sprite_computer::SpriteComputer;
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
@@ -110,7 +110,8 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
 
         let result = timeout(
             Duration::from_secs(timeout_secs),
-            std::panic::AssertUnwindSafe(execute_run(
+            std::panic::AssertUnwindSafe(            execute_run(
+                state.clone(),
                 config,
                 pool.clone(),
                 store.clone(),
@@ -201,6 +202,7 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
 }
 
 async fn execute_run(
+    host_state: AppState,
     config: Arc<Config>,
     pool: sqlx::PgPool,
     store: Arc<dyn RunStore>,
@@ -211,6 +213,24 @@ async fn execute_run(
     owner_id: String,
     enforce_approvals: bool,
 ) -> Result<Arc<dyn AgentComputer>, String> {
+    if let Ok(created_at) = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+        "SELECT created_at FROM agent_runs WHERE id = $1",
+    )
+    .bind(&input.records.run_id)
+    .fetch_one(&pool)
+    .await
+    {
+        let admission_to_execution_ms =
+            (chrono::Utc::now() - created_at).num_milliseconds().max(0);
+        tracing::info!(
+            target: "elsewhere_run_phases",
+            run_id = %input.records.run_id,
+            request_id = %input.records.request_id,
+            admission_to_execution_ms,
+            "run execution started after durable admission"
+        );
+    }
+
     let cancelled: bool =
         sqlx::query_scalar("SELECT cancel_requested FROM agent_runs WHERE id = $1")
             .bind(&input.records.run_id)
@@ -277,7 +297,8 @@ async fn execute_run(
     if !permitted {
         return Err("Work was cancelled or its computer is no longer available".into());
     }
-    let computer = build_computer(&config, &pool, &input).await?;
+    let computer =
+        build_computer(&host_state.computer_registry, &config, &pool, &input, &owner_id).await?;
 
     sqlx::query("UPDATE sandboxes SET state = 'active', last_used_at = NOW(), updated_at = NOW() WHERE id = $1 AND owner_id = $2 AND state <> 'archived'")
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
@@ -403,33 +424,29 @@ async fn effective_engine_mode(
 }
 
 async fn build_computer(
+    registry: &crate::computer_registry::ComputerRegistry,
     config: &Config,
     pool: &sqlx::PgPool,
     input: &RunExecutionInput,
+    owner_id: &str,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     #[cfg(any(test, feature = "test-utils"))]
     if let Some(o) = test_overrides() {
         return Ok(Arc::new(ReadinessCachedComputer::new(o.computer)));
     }
 
-    let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
-    // Sprites stay default-deny; browser ops temporarily widen egress inside SpriteComputer.
-    let network_policy = default_deny_network_policy();
-    let computer = SpriteComputer::new(SpriteComputerConfig {
-        base_url: config.sprites_api_base.clone(),
-        token: config.sprite_token.clone(),
-        sprite_name,
-        workspace_root: "/workspace".into(),
-        request_timeout: Duration::from_secs(120),
-        auto_create: true,
-        network_policy,
-        exec_timeout: Duration::from_secs(60),
-        browser_enabled: config.browser_enabled,
-        browser_exec_timeout: Duration::from_secs(120),
-    })
-    .map_err(|e| format!("SpriteComputer: {e}"))?;
+    let sprite = registry
+        .connect_sprite(
+            config,
+            pool,
+            owner_id,
+            &input.records.computer_id,
+            config.browser_enabled,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
 
-    Ok(Arc::new(ReadinessCachedComputer::new(Arc::new(computer))))
+    Ok(Arc::new(ReadinessCachedComputer::new(sprite)))
 }
 
 pub(crate) async fn sprite_resource_for_computer(

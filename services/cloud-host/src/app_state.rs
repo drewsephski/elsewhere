@@ -7,6 +7,7 @@ use tokio::sync::{Mutex, Semaphore};
 
 use crate::approval::ApprovalService;
 use crate::auth::JwtVerifier;
+use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
 use crate::events::registry::RunRegistry;
 
@@ -31,6 +32,7 @@ pub struct AppState {
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub runner_heartbeat: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
+    pub computer_registry: ComputerRegistry,
 }
 
 impl AppState {
@@ -66,6 +68,7 @@ impl AppState {
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             runner_heartbeat: Arc::new(std::sync::Mutex::new(None)),
+            computer_registry: ComputerRegistry::default(),
         }
     }
 }

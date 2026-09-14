@@ -6,7 +6,7 @@ import { siteConfig } from "@elsewhere/brand";
 import { cn } from "cn";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BotContextRail } from "./bot-context-rail";
 import { BotConversationView } from "./bot-conversation-view";
 import { BotListSidebar } from "./bot-list-sidebar";
@@ -17,6 +17,7 @@ import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { ProductLogo } from "@/components/product-logo";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 
 interface WorkspaceShellProps {
@@ -41,6 +42,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runActivityAt, setRunActivityAt] = useState<Record<string, string>>({});
+  const [streamRunId, setStreamRunId] = useState<string | null>(null);
 
   const bots = workspace?.bots ?? [];
 
@@ -162,11 +164,19 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       (activeRun.status === "queued" || activeRun.status === "running"),
   );
 
-  const previewProviderProps = {
-    computerId: bot?.computerId ?? null,
-    enabled: previewEnabled,
-    sessionKey: activeRun?.runId ?? null,
-  };
+  function PreviewLayer({ children }: { children: ReactNode }) {
+    const { browserPreviewGeneration } = useActiveRun();
+    return (
+      <BrowserPreviewProvider
+        computerId={bot?.computerId ?? null}
+        enabled={previewEnabled}
+        sessionKey={activeRun?.runId ?? streamRunId}
+        refreshGeneration={browserPreviewGeneration}
+      >
+        {children}
+      </BrowserPreviewProvider>
+    );
+  }
 
   const conversationMain = (
     <main
@@ -191,6 +201,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           onOpenContext={() => setContextSheetOpen(true)}
           onBotLoaded={handleBotLoaded}
           onRenameBot={handleRenameBot}
+          onStreamRunIdChange={setStreamRunId}
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
@@ -300,9 +311,9 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   return (
     <div className="app-shell-bg flex h-[100dvh] flex-col overflow-hidden text-foreground">
       {selectedBotId ? (
-        <BrowserPreviewProvider {...previewProviderProps}>
-          {workspaceBody}
-        </BrowserPreviewProvider>
+        <ActiveRunProvider runId={streamRunId}>
+          <PreviewLayer>{workspaceBody}</PreviewLayer>
+        </ActiveRunProvider>
       ) : (
         workspaceBody
       )}

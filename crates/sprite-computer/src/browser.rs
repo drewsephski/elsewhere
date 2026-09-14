@@ -13,6 +13,9 @@ pub const BROWSER_COMMON: &str = "/var/elsewhere/browser/browser-common.mjs";
 pub const BROWSER_REQUEST: &str = "/var/elsewhere/browser/.last-request.json";
 pub const BROWSER_BOOTSTRAP_MARKER: &str = "/var/elsewhere/browser/.bootstrapped";
 pub const BROWSER_DAEMON_PID: &str = "/var/elsewhere/browser/daemon.pid";
+pub const BROWSER_PREVIEW_DIR: &str = "/var/elsewhere/browser/preview";
+pub const BROWSER_PREVIEW_META: &str = "/var/elsewhere/browser/preview/meta.json";
+pub const BROWSER_PREVIEW_IMAGE: &str = "/var/elsewhere/browser/preview/latest.jpg";
 
 const CLIENT_SOURCE: &str = include_str!("../guest/browser-client.mjs");
 const DAEMON_SOURCE: &str = include_str!("../guest/browser-daemon.mjs");
@@ -363,6 +366,71 @@ where
         (Err(inner), Ok(())) => Err(inner),
         (_, Err(restore_err)) => Err(restore_err),
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct BrowserPreviewCache {
+    pub available: bool,
+    pub version: u64,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub content_type: String,
+    pub image_jpeg: Option<Vec<u8>>,
+    pub captured_at: Option<String>,
+}
+
+/// Read the daemon-maintained preview cache (no browser RPC, no network egress).
+pub async fn read_browser_preview_cache(
+    client: &SpriteClient,
+) -> Result<BrowserPreviewCache, ComputerError> {
+    let meta_bytes = match client.fs_read(BROWSER_PREVIEW_META).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return Ok(BrowserPreviewCache {
+                available: false,
+                version: 0,
+                url: None,
+                title: None,
+                content_type: "image/jpeg".into(),
+                image_jpeg: None,
+                captured_at: None,
+            });
+        }
+    };
+    let meta: serde_json::Value = serde_json::from_slice(&meta_bytes).map_err(|e| {
+        ComputerError::ExecutionFailed(format!("invalid browser preview meta: {e}"))
+    })?;
+    let version = meta.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let available = meta.get("available").and_then(|v| v.as_bool()).unwrap_or(false);
+    let url = meta.get("url").and_then(|v| v.as_str()).map(str::to_string);
+    let title = meta.get("title").and_then(|v| v.as_str()).map(str::to_string);
+    let content_type = meta
+        .get("contentType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("image/jpeg")
+        .to_string();
+    let captured_at = meta
+        .get("capturedAt")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let image_jpeg = if available {
+        client
+            .fs_read(BROWSER_PREVIEW_IMAGE)
+            .await
+            .map_err(map_err)
+            .ok()
+    } else {
+        None
+    };
+    Ok(BrowserPreviewCache {
+        available: available && image_jpeg.is_some(),
+        version,
+        url,
+        title,
+        content_type,
+        image_jpeg,
+        captured_at,
+    })
 }
 
 pub fn map_browser_exec_error(stdout: &str, stderr: &str, exit_code: i32) -> ComputerError {

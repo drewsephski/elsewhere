@@ -19,6 +19,63 @@ import {
 
 let contextPromise;
 let shuttingDown = false;
+let previewVersion = 0;
+
+const PREVIEW_DIR = path.join(BROWSER_ROOT, "preview");
+const PREVIEW_META = path.join(PREVIEW_DIR, "meta.json");
+const PREVIEW_IMAGE = path.join(PREVIEW_DIR, "latest.jpg");
+
+async function refreshPreviewCache(page) {
+  const currentUrl = page.url();
+  if (!currentUrl || currentUrl === "about:blank") {
+    previewVersion += 1;
+    try {
+      fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(
+        PREVIEW_META,
+        JSON.stringify({
+          version: previewVersion,
+          available: false,
+          url: currentUrl || null,
+          title: null,
+          contentType: "image/jpeg",
+          capturedAt: new Date().toISOString(),
+        }),
+      );
+      try {
+        fs.unlinkSync(PREVIEW_IMAGE);
+      } catch {
+        // ignore missing image
+      }
+    } catch {
+      // best-effort cache update
+    }
+    return;
+  }
+  const buffer = await page.screenshot({
+    type: "jpeg",
+    quality: 62,
+    fullPage: false,
+    timeout: MAX_ACTION_TIMEOUT_MS,
+  });
+  if (buffer.length > MAX_PREVIEW_BYTES) {
+    throw new Error("preview frame exceeds size limit");
+  }
+  previewVersion += 1;
+  fs.mkdirSync(PREVIEW_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(PREVIEW_IMAGE, buffer);
+  fs.writeFileSync(
+    PREVIEW_META,
+    JSON.stringify({
+      version: previewVersion,
+      available: true,
+      url: currentUrl,
+      title: await page.title(),
+      contentType: "image/jpeg",
+      capturedAt: new Date().toISOString(),
+    }),
+  );
+}
 
 /** Serialize all daemon RPCs so concurrent MCP calls cannot race page/refs. */
 let requestTail = Promise.resolve();
@@ -78,6 +135,7 @@ async function handleRequest(req) {
         waitUntil: "domcontentloaded",
         timeout: MAX_NAVIGATION_TIMEOUT_MS,
       });
+      await refreshPreviewCache(page);
       return {
         ok: true,
         url: page.url(),
@@ -86,11 +144,13 @@ async function handleRequest(req) {
     }
     case "snapshot": {
       const snap = await buildSnapshot(page);
+      await refreshPreviewCache(page);
       return { ok: true, ...snap };
     }
     case "click": {
       const target = await resolveRef(page, req.ref);
       await target.click({ timeout: MAX_ACTION_TIMEOUT_MS });
+      await refreshPreviewCache(page);
       return {
         ok: true,
         url: page.url(),
@@ -107,34 +167,39 @@ async function handleRequest(req) {
       if (req.submit) {
         await target.press("Enter");
       }
+      await refreshPreviewCache(page);
       return { ok: true, url: page.url() };
     }
     case "preview": {
-      const pages = context.pages();
-      if (!pages.length) {
+      let meta = null;
+      try {
+        meta = JSON.parse(fs.readFileSync(PREVIEW_META, "utf8"));
+      } catch {
         return { ok: true, available: false };
       }
-      const active = pages[0];
-      const currentUrl = active.url();
-      if (!currentUrl || currentUrl === "about:blank") {
-        return { ok: true, available: false, url: currentUrl || null };
+      if (!meta?.available) {
+        return {
+          ok: true,
+          available: false,
+          url: meta.url ?? null,
+          version: meta.version ?? previewVersion,
+        };
       }
-      const buffer = await active.screenshot({
-        type: "jpeg",
-        quality: 62,
-        fullPage: false,
-        timeout: MAX_ACTION_TIMEOUT_MS,
-      });
-      if (buffer.length > MAX_PREVIEW_BYTES) {
-        throw new Error("preview frame exceeds size limit");
+      let imageBase64 = null;
+      try {
+        imageBase64 = fs.readFileSync(PREVIEW_IMAGE).toString("base64");
+      } catch {
+        return { ok: true, available: false, url: meta.url ?? null };
       }
       return {
         ok: true,
         available: true,
-        url: currentUrl,
-        title: await active.title(),
-        contentType: "image/jpeg",
-        imageBase64: buffer.toString("base64"),
+        url: meta.url ?? null,
+        title: meta.title ?? null,
+        contentType: meta.contentType ?? "image/jpeg",
+        imageBase64,
+        version: meta.version ?? previewVersion,
+        capturedAt: meta.capturedAt ?? null,
       };
     }
     case "screenshot": {

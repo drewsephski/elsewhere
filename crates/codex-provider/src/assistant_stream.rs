@@ -13,14 +13,17 @@ pub struct CoalescedAssistantDelta {
     pub item_id: String,
     pub phase: MessagePhase,
     pub delta: String,
-    pub cumulative_length: usize,
+    /// Inclusive start byte offset for this chunk within the item stream.
+    pub start_offset: usize,
+    /// Exclusive end byte offset (monotonic for the lifetime of the item).
+    pub end_offset: usize,
 }
 
 #[derive(Debug)]
 struct ItemBuffer {
     phase: MessagePhase,
     pending: String,
-    cumulative_length: usize,
+    flushed_end_offset: usize,
 }
 
 #[derive(Debug)]
@@ -53,11 +56,10 @@ impl AssistantDeltaCoalescer {
             .or_insert_with(|| ItemBuffer {
                 phase,
                 pending: String::new(),
-                cumulative_length: 0,
+                flushed_end_offset: 0,
             });
         entry.phase = phase;
         entry.pending.push_str(delta);
-        entry.cumulative_length += delta.len();
     }
 
     pub fn pending_bytes(&self) -> usize {
@@ -85,16 +87,21 @@ impl AssistantDeltaCoalescer {
         }
         self.last_flush_at = Instant::now();
         let mut out = Vec::new();
-        for (item_id, item) in self.items.drain() {
+        for (item_id, item) in self.items.iter_mut() {
             if item.pending.is_empty() {
                 continue;
             }
+            let start_offset = item.flushed_end_offset;
+            let end_offset = start_offset + item.pending.len();
             out.push(CoalescedAssistantDelta {
-                item_id,
+                item_id: item_id.clone(),
                 phase: item.phase,
-                delta: item.pending,
-                cumulative_length: item.cumulative_length,
+                delta: item.pending.clone(),
+                start_offset,
+                end_offset,
             });
+            item.flushed_end_offset = end_offset;
+            item.pending.clear();
         }
         out
     }
@@ -112,6 +119,55 @@ mod tests {
         let flushed = coalescer.take_if_due(Instant::now());
         assert_eq!(flushed.len(), 1);
         assert!(flushed[0].delta.len() >= 400);
+    }
+
+    #[test]
+    fn multiple_flushes_preserve_monotonic_offsets_and_replay() {
+        let mut coalescer = AssistantDeltaCoalescer::new();
+        let item = "m1";
+        coalescer.ingest(item, MessagePhase::FinalAnswer, "hel");
+        let first = coalescer.flush_all();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].start_offset, 0);
+        assert_eq!(first[0].end_offset, 3);
+        assert_eq!(first[0].delta, "hel");
+
+        coalescer.ingest(item, MessagePhase::FinalAnswer, "lo ");
+        let second = coalescer.flush_all();
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].start_offset, 3);
+        assert_eq!(second[0].end_offset, 6);
+        assert_eq!(second[0].delta, "lo ");
+
+        coalescer.ingest(item, MessagePhase::FinalAnswer, "world");
+        let third = coalescer.flush_all();
+        assert_eq!(third.len(), 1);
+        assert_eq!(third[0].start_offset, 6);
+        assert_eq!(third[0].end_offset, 11);
+        assert_eq!(third[0].delta, "world");
+
+        let chunks = [first, second, third].concat();
+        let replay_text = |events: &[CoalescedAssistantDelta]| {
+            let mut progress = std::collections::HashMap::new();
+            let mut text = String::new();
+            for chunk in events {
+                let previous = progress.get(&chunk.item_id).copied().unwrap_or(0);
+                if chunk.end_offset <= previous {
+                    continue;
+                }
+                if chunk.start_offset < previous {
+                    continue;
+                }
+                text.push_str(&chunk.delta);
+                progress.insert(chunk.item_id.clone(), chunk.end_offset);
+            }
+            text
+        };
+
+        let once = replay_text(&chunks);
+        assert_eq!(once, "hello world");
+        let twice = replay_text(&chunks.iter().chain(chunks.iter()).cloned().collect::<Vec<_>>());
+        assert_eq!(twice, "hello world");
     }
 }
 

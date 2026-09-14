@@ -70,12 +70,18 @@ pub(crate) async fn persist_assistant_delta(
     deps: &SharedRunDeps,
     ctx: &AgentLoopContext,
     chunk: &CoalescedAssistantDelta,
+    phases: Option<&mut crate::run_phases::RunPhaseRecorder>,
 ) -> Result<(), RuntimeError> {
+    if let Some(phases) = phases {
+        phases.mark_first_assistant_delta();
+    }
     let payload = json!({
         "itemId": chunk.item_id,
         "phase": phase_to_event_str(chunk.phase),
         "delta": chunk.delta,
-        "cumulativeLength": chunk.cumulative_length,
+        "startOffset": chunk.start_offset,
+        "endOffset": chunk.end_offset,
+        "cumulativeLength": chunk.end_offset,
     });
     let receipt = deps
         .store
@@ -139,9 +145,10 @@ pub(crate) async fn flush_assistant_stream(
     chunks: &[CoalescedAssistantDelta],
     visible_body: &str,
     checkpoint: &mut AssistantCheckpointState,
+    mut phases: Option<&mut crate::run_phases::RunPhaseRecorder>,
 ) -> Result<(), RuntimeError> {
     for chunk in chunks {
-        persist_assistant_delta(deps, ctx, chunk).await?;
+        persist_assistant_delta(deps, ctx, chunk, phases.as_deref_mut()).await?;
     }
     if !visible_body.is_empty() {
         maybe_checkpoint_assistant_stream(deps, ctx, visible_body, checkpoint).await?;

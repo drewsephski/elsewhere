@@ -5,9 +5,11 @@ use std::time::Instant;
 #[derive(Debug)]
 pub struct RunPhaseRecorder {
     run_started: Instant,
+    claimed_at: Option<Instant>,
     codex_launch: Option<Instant>,
     thread_open: Option<Instant>,
     turn_start: Option<Instant>,
+    first_model_delta: Option<Instant>,
     first_assistant_delta: Option<Instant>,
     first_tool: Option<Instant>,
     completed: Option<Instant>,
@@ -17,13 +19,19 @@ impl RunPhaseRecorder {
     pub fn new() -> Self {
         Self {
             run_started: Instant::now(),
+            claimed_at: None,
             codex_launch: None,
             thread_open: None,
             turn_start: None,
+            first_model_delta: None,
             first_assistant_delta: None,
             first_tool: None,
             completed: None,
         }
+    }
+
+    pub fn mark_claimed(&mut self) {
+        self.claimed_at.get_or_insert(Instant::now());
     }
 
     pub fn mark_codex_launch(&mut self) {
@@ -36,6 +44,10 @@ impl RunPhaseRecorder {
 
     pub fn mark_turn_start(&mut self) {
         self.turn_start.get_or_insert(Instant::now());
+    }
+
+    pub fn mark_first_model_delta(&mut self) {
+        self.first_model_delta.get_or_insert(Instant::now());
     }
 
     pub fn mark_first_assistant_delta(&mut self) {
@@ -57,7 +69,11 @@ impl RunPhaseRecorder {
         tracing::info!(
             target: "elsewhere_run_phases",
             request_id = %request_id,
-            queue_to_codex_launch_ms = ?ms(self.run_started, self.codex_launch),
+            admission_to_claim_ms = ?ms(self.run_started, self.claimed_at),
+            claim_to_codex_launch_ms = ?self
+                .claimed_at
+                .zip(self.codex_launch)
+                .map(|(a, b)| b.duration_since(a).as_millis()),
             codex_launch_to_thread_open_ms = ?self
                 .codex_launch
                 .zip(self.thread_open)
@@ -66,8 +82,12 @@ impl RunPhaseRecorder {
                 .thread_open
                 .zip(self.turn_start)
                 .map(|(a, b)| b.duration_since(a).as_millis()),
-            turn_start_to_first_assistant_delta_ms = ?self
+            turn_start_to_first_model_delta_ms = ?self
                 .turn_start
+                .zip(self.first_model_delta)
+                .map(|(a, b)| b.duration_since(a).as_millis()),
+            first_model_delta_to_first_durable_assistant_delta_ms = ?self
+                .first_model_delta
                 .zip(self.first_assistant_delta)
                 .map(|(a, b)| b.duration_since(a).as_millis()),
             turn_start_to_first_tool_ms = ?self
@@ -78,7 +98,7 @@ impl RunPhaseRecorder {
                 .turn_start
                 .zip(self.completed)
                 .map(|(a, b)| b.duration_since(a).as_millis()),
-            run_start_to_first_assistant_delta_ms = ?ms(self.run_started, self.first_assistant_delta),
+            run_start_to_first_durable_assistant_delta_ms = ?ms(self.run_started, self.first_assistant_delta),
         );
     }
 }

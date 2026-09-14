@@ -36,15 +36,22 @@ export function BrowserPreviewProvider({
   computerId,
   enabled,
   sessionKey,
+  refreshGeneration = 0,
   children,
 }: {
   computerId: string | null;
   enabled: boolean;
   /** Changes when a new run starts so PiP can auto-appear again after dismiss. */
   sessionKey?: string | null;
+  /** Bumped when browser tool activity is observed on the active run SSE stream. */
+  refreshGeneration?: number;
   children: ReactNode;
 }) {
-  const { frame, loading, error, refresh } = useBrowserPreview(computerId, enabled);
+  const { frame, loading, error, refresh } = useBrowserPreview(
+    computerId,
+    enabled,
+    refreshGeneration,
+  );
   const [pipOpen, setPipOpen] = useState(false);
   const [pipDismissed, setPipDismissed] = useState(false);
   const lastSessionKey = useRef<string | null | undefined>(sessionKey);

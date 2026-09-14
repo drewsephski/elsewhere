@@ -7,7 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
-use crate::browser::{ensure_browser_guest, invoke_browser_daemon};
+use crate::browser::{
+    ensure_browser_guest, invoke_browser_daemon, read_browser_preview_cache, BrowserPreviewCache,
+};
 use crate::client::{SpriteClient, SpriteClientConfig};
 use crate::policy::NetworkPolicyConfig;
 use crate::types::{Checkpoint, SpriteError};
@@ -87,6 +89,11 @@ impl SpriteComputer {
 
     pub async fn restore_checkpoint(&self, checkpoint_id: &str) -> Result<(), SpriteError> {
         self.client.restore_checkpoint(checkpoint_id).await
+    }
+
+    /// Observability-only read of the guest preview cache (no browser lifecycle work).
+    pub async fn read_browser_preview_cache(&self) -> Result<BrowserPreviewCache, ComputerError> {
+        read_browser_preview_cache(&self.client).await
     }
 
     fn normalize_path(&self, path: &str) -> Result<String, ComputerError> {

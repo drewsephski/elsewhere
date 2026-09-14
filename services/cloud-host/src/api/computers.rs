@@ -1,13 +1,14 @@
-use axum::extract::{Path, State};
+use agent_core::ComputerError;
+use axum::extract::{Path, Query, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Extension;
 use axum::Json;
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-
 use crate::app_state::AppState;
 use crate::auth::Principal;
-use crate::computer_session::connect_sprite_computer;
 use crate::db::resources::{
     archive_computer, get_computer_for_owner, insert_computer_placeholder, list_computers,
 };
@@ -98,48 +99,226 @@ pub struct BrowserPreviewResponse {
     pub content_type: Option<String>,
     pub image_base64: Option<String>,
     pub captured_at: String,
+    pub version: u64,
+}
+
+fn preview_etag(version: u64) -> String {
+    format!("\"preview-v{version}\"")
 }
 
 pub async fn browser_preview(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
     Path(computer_id): Path<String>,
-) -> Result<Json<BrowserPreviewResponse>, ApiError> {
-    let computer =
-        connect_sprite_computer(&state.config, &state.pool, principal.owner_id(), &computer_id)
-            .await?;
-    computer
-        .ensure_ready()
+    headers: HeaderMap,
+) -> Result<Response, ApiError> {
+    let sprite = state
+        .computer_registry
+        .connect_sprite(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    let cache = sprite
+        .read_browser_preview_cache()
         .await
-        .map_err(|e| ApiError::Internal(format!("computer not ready: {e}")))?;
+        .map_err(|e| ApiError::Internal(format!("browser preview cache read failed: {e}")))?;
 
-    let value = computer
-        .browser_invoke("preview", &json!({}))
-        .await
-        .map_err(|e| ApiError::Internal(format!("browser preview failed: {e}")))?;
+    let etag = preview_etag(cache.version);
+    if headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|value| value == etag)
+    {
+        return Ok(StatusCode::NOT_MODIFIED.into_response());
+    }
 
-    let available = value
-        .get("available")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    let url = value.get("url").and_then(|v| v.as_str()).map(str::to_string);
-    let title = value.get("title").and_then(|v| v.as_str()).map(str::to_string);
-    let content_type = value
-        .get("contentType")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
-    let image_base64 = value
-        .get("imageBase64")
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+    let image_base64 = cache
+        .image_jpeg
+        .as_ref()
+        .map(|bytes| BASE64.encode(bytes));
 
-    Ok(Json(BrowserPreviewResponse {
-        available,
-        url,
-        title,
-        content_type,
+    let body = BrowserPreviewResponse {
+        available: cache.available,
+        url: cache.url,
+        title: cache.title,
+        content_type: if cache.available {
+            Some(cache.content_type)
+        } else {
+            None
+        },
         image_base64,
-        captured_at: Utc::now().to_rfc3339(),
+        captured_at: cache
+            .captured_at
+            .unwrap_or_else(|| Utc::now().to_rfc3339()),
+        version: cache.version,
+    };
+
+    Ok((
+        StatusCode::OK,
+        [
+            (header::ETAG, etag),
+            (header::CACHE_CONTROL, "private, no-cache".to_string()),
+        ],
+        Json(body),
+    )
+        .into_response())
+}
+
+const WORKSPACE_FILE_MAX_BYTES: usize = 1024 * 1024;
+
+#[derive(Debug, Deserialize)]
+pub struct WorkspacePathQuery {
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceListResponse {
+    pub path: String,
+    pub entries: Vec<agent_core::WorkspaceEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceFileResponse {
+    pub path: String,
+    pub size: usize,
+    pub is_binary: bool,
+    pub text: Option<String>,
+}
+
+fn map_computer_error(err: ComputerError) -> ApiError {
+    match err {
+        ComputerError::NotProvisioned => ApiError::Validation("computer not provisioned yet".into()),
+        ComputerError::SandboxRejected(m) | ComputerError::MalformedArguments(m) => {
+            ApiError::Validation(m)
+        }
+        ComputerError::GuestUnavailable(m) => ApiError::Internal(m),
+        ComputerError::BootFailed(m) | ComputerError::ExecutionFailed(m) => ApiError::Internal(m),
+        ComputerError::Cancelled => ApiError::Internal("cancelled".into()),
+    }
+}
+
+fn workspace_list_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
+    let path = query.path.as_deref().unwrap_or("/workspace").trim();
+    if path.is_empty() {
+        return Err(ApiError::Validation("path is required".into()));
+    }
+    if !path.starts_with('/') {
+        return Err(ApiError::Validation("path must be absolute".into()));
+    }
+    Ok(path.to_string())
+}
+
+fn sort_workspace_entries(entries: Vec<agent_core::WorkspaceEntry>) -> Vec<agent_core::WorkspaceEntry> {
+    let mut entries = entries;
+    entries.retain(|entry| entry.name != ".elsewhere-ready");
+    entries.sort_by(|a, b| {
+        match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
+    entries
+}
+
+fn is_likely_text(bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
+        return true;
+    }
+    let mut control = 0usize;
+    for byte in bytes {
+        if *byte == 0 {
+            return false;
+        }
+        if *byte < 9 || (*byte > 13 && *byte < 32) {
+            control += 1;
+        }
+    }
+    control * 100 / bytes.len() < 2
+}
+
+pub async fn workspace_list(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Query(query): Query<WorkspacePathQuery>,
+) -> Result<Json<WorkspaceListResponse>, ApiError> {
+    let path = workspace_list_path(&query)?;
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    let entries = computer
+        .list_dir(&path)
+        .await
+        .map_err(map_computer_error)?;
+
+    Ok(Json(WorkspaceListResponse {
+        path,
+        entries: sort_workspace_entries(entries),
+    }))
+}
+
+pub async fn workspace_read(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Query(query): Query<WorkspacePathQuery>,
+) -> Result<Json<WorkspaceFileResponse>, ApiError> {
+    let path = workspace_list_path(&query)?;
+    if path.ends_with('/') {
+        return Err(ApiError::Validation("path must be a file, not a directory".into()));
+    }
+
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+
+    let bytes = computer
+        .read_file(&path)
+        .await
+        .map_err(map_computer_error)?;
+
+    if bytes.len() > WORKSPACE_FILE_MAX_BYTES {
+        return Err(ApiError::Validation(format!(
+            "file exceeds preview limit of {} bytes",
+            WORKSPACE_FILE_MAX_BYTES
+        )));
+    }
+
+    let is_binary = !is_likely_text(&bytes);
+    let text = if is_binary {
+        None
+    } else {
+        Some(String::from_utf8_lossy(&bytes).into_owned())
+    };
+
+    Ok(Json(WorkspaceFileResponse {
+        path,
+        size: bytes.len(),
+        is_binary,
+        text,
     }))
 }
 
