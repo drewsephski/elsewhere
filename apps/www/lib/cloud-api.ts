@@ -10,6 +10,14 @@ export type CloudHostFetchInit = RequestInit & {
   timeoutMs?: number;
 };
 
+export type CloudApiErrorBody = {
+  code?: string;
+  error?: string;
+  message?: string;
+  retryable?: boolean;
+  requestId?: string;
+};
+
 function cloudRequestUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
   return `${CLOUD_BROWSER_PREFIX}${normalized}`;
@@ -18,13 +26,37 @@ function cloudRequestUrl(path: string): string {
 function wrapNetworkError(error: unknown): Error {
   if (error instanceof TypeError) {
     return new Error(
-      "Workspace API is unreachable. Start cloud-host (cargo run -p cloud-host) and refresh.",
+      "Could not reach the Elsewhere workspace service. Check the runner connection and try again.",
     );
   }
   if (error instanceof Error) {
     return error;
   }
-  return new Error("Workspace API is unreachable");
+  return new Error("Could not reach the Elsewhere workspace service");
+}
+
+/** Read a structured BFF/cloud-host error without exposing deployment internals. */
+export async function cloudHostErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  const text = await response.text().catch(() => "");
+  if (text) {
+    try {
+      const body = JSON.parse(text) as CloudApiErrorBody;
+      if (typeof body.error === "string" && body.error.trim()) {
+        return body.error;
+      }
+      if (typeof body.message === "string" && body.message.trim()) {
+        return body.message;
+      }
+    } catch {
+      if (text.trim()) {
+        return text.trim();
+      }
+    }
+  }
+  return `${fallback} (${response.status})`;
 }
 
 export async function cloudHostFetch(
@@ -57,7 +89,7 @@ export async function cloudHostFetch(
     if (error instanceof DOMException && error.name === "TimeoutError") {
       return Promise.reject(
         new Error(
-          "Connection check timed out. The runner may be starting Codex—try again in a moment.",
+          "Connection check timed out. The hosted runner may be starting or temporarily unavailable.",
         ),
       );
     }
@@ -94,7 +126,7 @@ export async function cloudHostEventStream(
     throw wrapNetworkError(error);
   }
   if (!response.ok || !response.body) {
-    throw new Error(`SSE request failed: ${response.status}`);
+    throw new Error(await cloudHostErrorMessage(response, "Progress stream unavailable"));
   }
 
   const reader = response.body.getReader();
