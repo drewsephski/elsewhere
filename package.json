@@ -1,13 +1,13 @@
 {
-  "name": "@gptbot/desktop",
+  "name": "@elsewhere/desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:www": "pnpm --filter @gptbot/www dev",
+    "dev:www": "pnpm --filter @elsewhere/www dev",
     "build": "tsc && vite build",
-    "build:www": "pnpm --filter @gptbot/www build",
+    "build:www": "pnpm --filter @elsewhere/www build",
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest run",

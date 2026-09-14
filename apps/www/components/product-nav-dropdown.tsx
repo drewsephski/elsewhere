@@ -1,6 +1,6 @@
 "use client";
 
-import { marketingFeatures, siteConfig } from "@gptbot/brand";
+import { marketingFeatures, siteConfig } from "@elsewhere/brand";
 import { ArrowUpRight, ChevronDown } from "lucide-react";
 import { useCallback, useId, useState } from "react";
 

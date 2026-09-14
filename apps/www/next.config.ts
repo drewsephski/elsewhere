@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 const wwwRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@gptbot/brand"],
+  transpilePackages: ["@elsewhere/brand"],
   outputFileTracingRoot: path.join(wwwRoot, "../.."),
 };
 

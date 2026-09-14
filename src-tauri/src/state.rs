@@ -7,7 +7,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 pub struct AppState {
-    pub db: Mutex<Database>,
+    pub db: Arc<Mutex<Database>>,
     pub secrets: Arc<dyn SecretStore>,
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     #[cfg(target_os = "macos")]

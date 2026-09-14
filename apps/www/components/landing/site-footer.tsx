@@ -1,4 +1,4 @@
-import { siteConfig } from "@gptbot/brand";
+import { siteConfig } from "@elsewhere/brand";
 
 export function SiteFooter() {
   const year = new Date().getFullYear();

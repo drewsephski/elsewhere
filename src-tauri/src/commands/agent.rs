@@ -1,9 +1,13 @@
-use crate::agent::{build_responses_input_from_messages, run_agent_chat, AgentRunContext};
+use crate::agent::{
+    build_responses_input_from_messages, run_agent_chat, AgentLoopContext, AgentLoopDeps,
+    LocalMacComputer, OpenAiResponsesModel, SqliteRunStore, TauriEventSink,
+};
 use crate::error::AppError;
 use crate::models::{MessageRole, MessageStatus, StartChatInput, StartChatResult};
 use crate::openai::model_supports_responses_tools;
 use crate::state::AppState;
-use serde_json::json;
+use agent_core::{CreateRunParams, RunStore};
+use std::sync::Arc;
 use tauri::{AppHandle, Manager, State};
 use tracing::{error, info};
 use uuid::Uuid;
@@ -32,6 +36,11 @@ pub async fn start_agent_chat(
     let prep = {
         let db = state.db.lock();
         let bot = db.get_bot(&input.bot_id)?;
+        if !bot.computer_enabled {
+            return Err(AppError::Validation(
+                "This bot is chat-only and cannot use the agent computer runtime.".into(),
+            ));
+        }
         if !model_supports_responses_tools(&bot.model) {
             return Err(AppError::ModelUnavailable(format!(
                 "Model {} does not support Elsewhere local tools (OpenAI Responses function calling)",
@@ -59,8 +68,6 @@ pub async fn start_agent_chat(
             Some(&bot.model),
         )?;
 
-        db.create_agent_run(&conversation.id, &request_id)?;
-
         let history = db.list_messages(&conversation.id)?;
         let input_items = build_responses_input_from_messages(&history)?;
 
@@ -86,6 +93,16 @@ pub async fn start_agent_chat(
     ) = prep;
 
     let cancel_token = state.register_cancel_token(&request_id);
+    let store = SqliteRunStore::new(state.db.clone());
+    store
+        .create_run(CreateRunParams {
+            conversation_id: conversation_id.clone(),
+            request_id: request_id.clone(),
+            bot_id: bot_id.clone(),
+            model: model.clone(),
+            computer_id: Some("local-mac".into()),
+        })
+        .map_err(|e| AppError::Other(e.to_string()))?;
 
     info!(
         request_id = %request_id,
@@ -103,22 +120,32 @@ pub async fn start_agent_chat(
 
     let app_handle = app.clone();
     let vm = state.vm.clone();
+    let db = state.db.clone();
 
     tauri::async_runtime::spawn(async move {
-        let ctx = AgentRunContext {
-            app: app_handle.clone(),
-            vm,
-            api_key,
+        let ctx = AgentLoopContext {
             request_id: request_id.clone(),
             conversation_id,
             assistant_message_id,
             bot_id,
             model,
             instructions: system_prompt,
+        };
+
+        let deps = AgentLoopDeps {
+            computer: Arc::new(LocalMacComputer::new(vm)),
+            store: Arc::new(SqliteRunStore::new(db)),
+            events: Arc::new(TauriEventSink::new(
+                app_handle.clone(),
+                request_id.clone(),
+                ctx.conversation_id.clone(),
+                ctx.assistant_message_id.clone(),
+            )),
+            model: Arc::new(OpenAiResponsesModel::new(api_key, cancel_token.clone())),
             cancel: cancel_token.clone(),
         };
 
-        if let Err(err) = run_agent_chat(ctx, input_items).await {
+        if let Err(err) = run_agent_chat(deps, ctx, input_items).await {
             error!(request_id = %request_id, error = %err, "agent run task failed");
         }
 

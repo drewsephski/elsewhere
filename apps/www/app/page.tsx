@@ -1,6 +1,6 @@
 "use client";
 
-import { siteConfig } from "@gptbot/brand";
+import { siteConfig } from "@elsewhere/brand";
 import { ArrowRight, Triangle } from "lucide-react";
 import {
   ProductMobileSection,

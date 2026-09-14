@@ -1,4 +1,4 @@
-import { marketingFeatures } from "@gptbot/brand";
+import { marketingFeatures } from "@elsewhere/brand";
 import { cn } from "cn";
 
 const bentoLayout = [

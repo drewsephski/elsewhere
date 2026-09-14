@@ -49,7 +49,7 @@ pnpm dev:www
 Structured Rust logs (no secrets):
 
 ```bash
-RUST_LOG=gptbot=info pnpm tauri dev
+RUST_LOG=elsewhere=info pnpm tauri dev
 ```
 
 ## Running the application

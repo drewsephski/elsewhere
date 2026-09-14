@@ -12,6 +12,8 @@ pub struct Bot {
     pub system_prompt: String,
     pub provider: String,
     pub model: String,
+    /// When true, chat uses the Luna Responses tool loop and `LocalMacComputer`.
+    pub computer_enabled: bool,
     pub created_at: i64,
     pub updated_at: i64,
     pub archived_at: Option<i64>,
@@ -25,6 +27,7 @@ pub struct CreateBotInput {
     pub system_prompt: Option<String>,
     pub provider: Option<String>,
     pub model: String,
+    pub computer_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +38,7 @@ pub struct UpdateBotInput {
     pub description: Option<String>,
     pub system_prompt: Option<String>,
     pub model: Option<String>,
+    pub computer_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

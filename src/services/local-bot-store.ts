@@ -37,6 +37,7 @@ function createBotRecord(input: CreateBotInput): Bot {
     systemPrompt: input.systemPrompt ?? "",
     provider: input.provider ?? "openai",
     model: input.model.trim(),
+    computerEnabled: input.computerEnabled ?? true,
     createdAt: timestamp,
     updatedAt: timestamp,
     archivedAt: null,

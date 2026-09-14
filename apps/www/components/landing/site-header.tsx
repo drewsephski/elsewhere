@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { siteConfig } from "@gptbot/brand";
+import { siteConfig } from "@elsewhere/brand";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 

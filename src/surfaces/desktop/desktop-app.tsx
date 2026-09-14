@@ -353,7 +353,7 @@ export default function DesktopApp() {
         conversationId: conversationId ?? undefined,
         content,
         requestId,
-        useAgent: !isDemoAgent(selectedBot),
+        useAgent: selectedBot.computerEnabled,
       });
       const preAckEvents = drainPreAckStreamEvents(
         preAckStreamBufferRef.current,

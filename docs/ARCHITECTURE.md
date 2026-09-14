@@ -4,106 +4,74 @@
 
 | Package | Path | Role |
 |---------|------|------|
-| `@gptbot/desktop` | repo root (`src/`, `src-tauri/`) | Tauri + Vite chat shell |
-| `@gptbot/www` | `apps/www/` | Next.js App Router marketing site (cloud positioning, SEO) |
-| `@gptbot/brand` | `packages/brand/` | Shared product copy and URLs |
+| `@elsewhere/desktop` | repo root (`src/`, `src-tauri/`) | Tauri + Vite chat shell |
+| `@elsewhere/www` | `apps/www/` | Next.js marketing site |
+| `@elsewhere/brand` | `packages/brand/` | Shared product copy and URLs |
+| `agent-core` | `crates/agent-core/` | Host-independent Luna agent loop |
 
-Desktop and web are separate bundles: the desktop app does not ship the landing page. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
+Desktop and web are separate bundles. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
 
-## Process boundary
-
-- **Tauri webview**: React UI (TypeScript) — `src/surfaces/desktop/`.
-- **Rust host**: SQLite, Keychain, OpenAI HTTP, streaming, Tauri commands and events.
-- **Swift VMM helper** (macOS only): `gptbot-vmm` — Virtualization.framework Linux VM + Virtio socket bridge.
-
-The UI never talks to OpenAI directly. All provider traffic runs in Rust.
-
-## Frontend responsibilities
-
-- Layout: sidebar, bot settings strip, conversation, composer, modals.
-- **Application services** (`src/services/*`): orchestrate bots, chat, and (Phase 2A) VM diagnostics.
-- **ModelProvider** (`src/providers/*`): thin abstraction over Tauri; OpenAI is the only implementation today.
-- Subscribe to `gptbot://chat-stream` for incremental assistant tokens.
-- Zod-validated types in `src/lib/definitions.ts` and `src/services/vm-service.ts`.
-- **VM diagnostics panel** (`src/ui/vm-diagnostics-panel.tsx`): developer spike UI — not the final Agent Computer viewer.
-
-## Rust responsibilities
-
-- **Database** (`src-tauri/src/db`): bots, conversations, messages (with `kind` for future non-text events).
-- **Secrets** (`src-tauri/src/secrets`): Keychain-backed OpenAI API key.
-- **OpenAI** (`src-tauri/src/openai`): list models, SSE chat completions stream.
-- **Commands** (`src-tauri/src/commands`): CRUD + `start_chat` / `cancel_chat` + `vm_*` (macOS).
-- **Virtual machine** (`src-tauri/src/vm`): `VirtualMachineManager`, provisioning, guest RPC.
-- **Logging**: `tracing` with structured fields — never API keys.
-
-SQLite path: app data directory / `gptbot.sqlite3`.
-
-## Phase 2A — Local Computer (spike)
+## Runtime boundary (portable core)
 
 ```text
-React
-  ↓ invoke(vm_*)
-Rust VirtualMachineManager
-  ↓ Unix socket (JSON)
-gptbot-vmm (Swift)
-  ↓ Virtualization.framework
-Linux guest (Alpine on root.raw)
-  ↓ Virtio socket / AF_VSOCK
-gptbot-guest-agent
+AgentRuntime (agent-core::run_agent_loop)
+ ├── ResponsesModel      (OpenAI Responses API — host-provided)
+ ├── RunStore            (SQLite today, Postgres later)
+ ├── EventSink           (Tauri events today, SSE/WebSocket later)
+ └── AgentComputer
+      ├── LocalMacComputer   (desktop)
+      └── CloudComputer      (future — Fly Sprites, etc.)
 ```
 
-### VM process boundary
+The core loop does **not** depend on Tauri, macOS, SQLite, or Virtualization.framework. The desktop app wires concrete adapters in `src-tauri/src/agent/`.
 
-- Rust **spawns** `gptbot-vmm serve --config … --socket …` and speaks JSON over `vm/runtime/vmm.sock`.
-- Swift process owns the `VZVirtualMachine` instance and `VZVirtioSocketDevice.connect(toPort:)` for guest RPC.
+### Luna default
 
-### VM storage layout
+Authoritative default model: `gpt-5.6-luna` (`agent_core::DEFAULT_MODEL`). New bots and demos use Luna; if the account does not list Luna, the UI should surface that — not silently pick another model.
 
-See `docs/VIRTUALIZATION_SPIKE.md`. All persistent state lives under `app_data/vm/`.
+### Execution configuration
 
-### Guest boot strategy
+Bots store `computer_enabled` (not bot name):
 
-Alpine `vmlinuz-virt` + `initramfs-virt`, kernel cmdline `root=/dev/vda`, writable virtio block disk.
+- `false` — streaming chat completions only (e.g. demo Scout)
+- `true` — Luna Responses tool loop + `LocalMacComputer`
 
-### Host ↔ guest protocol
+## Process boundary (desktop)
 
-Newline-delimited JSON; methods `ping`, `exec`, `read_file`, `write_file`; `protocolVersion: 1`.
+- **Tauri webview**: React UI — `src/surfaces/desktop/`.
+- **Rust host**: SQLite, Keychain, OpenAI HTTP, streaming, Tauri commands.
+- **Swift VMM helper**: `gptbot-vmm` — Virtualization.framework + Virtio socket (legacy binary name).
 
-### Lifecycle
+## Local Computer stack
 
-`VirtualMachineManager` tracks `notCreated | stopped | starting | running | stopping | error` and surfaces VMM/guest errors to the UI.
+```text
+React → vm_* commands
+Rust VirtualMachineManager
+  ↓ Unix socket JSON
+gptbot-vmm (Swift)
+  ↓ Virtualization.framework
+Linux guest
+  ↓ Virtio / vsock
+gptbot-guest-agent (JSON RPC, protocol v1)
+```
 
-### Security assumptions (spike)
+`LocalMacComputer` maps `AgentComputer` ops to guest methods: `list_dir`, `read_file`, `write_file`, `exec`.
 
-- Single-user local app; guest agent runs as root in VM (Alpine default) — **not** production hardening.
-- No secrets in guest image; no hardcoded passwords.
-- VM entitlement required on host; failures are explicit.
+## Persistence
 
-## Provider abstraction
-
-| Layer | Role |
-|--------|------|
-| `ModelProvider` (TS) | UI-facing; swap providers without rewriting chat UI |
-| Tauri commands | Stable IPC surface |
-| `OpenAiClient` + `stream_chat_completion` (Rust) | First provider |
+- SQLite: `gptbot.sqlite3` under app data (**legacy filename**).
+- `messages` — conversation content + legacy structured tool/status rows (`kind`).
+- `agent_runs` — execution observability (`bot_id`, `model`, `computer_id`, `started_at`, `finished_at`, …).
+- `run_events` — append-only runtime events (dual-written during UI migration).
 
 ## Secret storage
 
-- Interface: `SecretStore` in Rust.
-- Production: `KeychainSecretStore` via the `keyring` crate.
-- Keys are not logged, not stored in the DB, not passed to the webview except on save.
+Keychain service `com.drewsepeczi.gptbot` (**legacy compatibility id**). Keys are not stored in SQLite or logged.
 
-## Conversation flow
+## Streaming events
 
-1. User sends message → `start_chat`.
-2. Rust persists user message + empty assistant row (`streaming`).
-3. Background task streams OpenAI SSE; appends body in SQLite; emits `delta` events.
-4. On success → `complete` + `done` event; on failure → `error` row + `error` event.
-5. `cancel_chat` sets an atomic flag checked during SSE read.
+Tauri event: `gptbot://chat-stream` (**legacy compatibility id**). `TauriEventSink` maps `AgentEvent` variants to the existing `StreamEventPayload` shape.
 
-## Extensibility hooks
+## Cloud
 
-- `messages.kind` for tool/runtime events later.
-- `provider` column on bots for additional model backends.
-- Rust `SecretStore` + TS `ModelProvider` for new auth mechanisms.
-- Guest RPC protocol version field for Phase 2B tool surface.
+See `docs/CLOUD_ARCHITECTURE.md`. Next adapter: `SpriteComputer : AgentComputer` without changing `agent-core`.

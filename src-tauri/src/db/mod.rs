@@ -79,7 +79,7 @@ impl Database {
             return Ok(());
         }
 
-        let system_prompt = "You are Scout, a calm and capable research assistant inside GPTBot.\n\n\
+        let system_prompt = "You are Scout, a calm and capable research assistant inside Elsewhere.\n\n\
 Help the user explore ideas, compare options, and turn curiosity into clear next steps. \
 Be concise unless they ask for depth. Prefer structured answers with short headings and bullet points when useful.\n\n\
 When information might be outdated, say what you know and what you would verify. Never invent sources.";
@@ -90,15 +90,16 @@ When information might be outdated, say what you know and what you would verify.
             system_prompt: Some(system_prompt.to_string()),
             provider: None,
             model: DEFAULT_MODEL.to_string(),
+            computer_enabled: Some(false),
         })?;
         Ok(())
     }
 
     pub fn list_bots(&self, include_archived: bool) -> Result<Vec<Bot>, AppError> {
         let sql = if include_archived {
-            "SELECT id, name, description, system_prompt, provider, model, created_at, updated_at, archived_at FROM bots ORDER BY updated_at DESC"
+            "SELECT id, name, description, system_prompt, provider, model, computer_enabled, created_at, updated_at, archived_at FROM bots ORDER BY updated_at DESC"
         } else {
-            "SELECT id, name, description, system_prompt, provider, model, created_at, updated_at, archived_at FROM bots WHERE archived_at IS NULL ORDER BY updated_at DESC"
+            "SELECT id, name, description, system_prompt, provider, model, computer_enabled, created_at, updated_at, archived_at FROM bots WHERE archived_at IS NULL ORDER BY updated_at DESC"
         };
         let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map([], |row| {
@@ -109,9 +110,10 @@ When information might be outdated, say what you know and what you would verify.
                 system_prompt: row.get(3)?,
                 provider: row.get(4)?,
                 model: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-                archived_at: row.get(8)?,
+                computer_enabled: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+                archived_at: row.get(9)?,
             })
         })?;
         let mut bots = Vec::new();
@@ -123,7 +125,7 @@ When information might be outdated, say what you know and what you would verify.
 
     pub fn get_bot(&self, id: &str) -> Result<Bot, AppError> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, description, system_prompt, provider, model, created_at, updated_at, archived_at FROM bots WHERE id = ?1",
+            "SELECT id, name, description, system_prompt, provider, model, computer_enabled, created_at, updated_at, archived_at FROM bots WHERE id = ?1",
         )?;
         stmt.query_row(params![id], |row| {
             Ok(Bot {
@@ -133,9 +135,10 @@ When information might be outdated, say what you know and what you would verify.
                 system_prompt: row.get(3)?,
                 provider: row.get(4)?,
                 model: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-                archived_at: row.get(8)?,
+                computer_enabled: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+                archived_at: row.get(9)?,
             })
         })
         .map_err(|e| match e {
@@ -158,8 +161,9 @@ When information might be outdated, say what you know and what you would verify.
             .provider
             .unwrap_or_else(|| "openai".to_string());
         let system_prompt = input.system_prompt.unwrap_or_default();
+        let computer_enabled = if input.computer_enabled.unwrap_or(true) { 1 } else { 0 };
         self.conn.execute(
-            "INSERT INTO bots (id, name, description, system_prompt, provider, model, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO bots (id, name, description, system_prompt, provider, model, computer_enabled, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 id,
                 name,
@@ -167,6 +171,7 @@ When information might be outdated, say what you know and what you would verify.
                 system_prompt,
                 provider,
                 input.model.trim(),
+                computer_enabled,
                 now,
                 now
             ],
@@ -190,10 +195,14 @@ When information might be outdated, say what you know and what you would verify.
             .map(|m| m.trim().to_string())
             .filter(|m| !m.is_empty())
             .unwrap_or(existing.model);
+        let computer_enabled = input
+            .computer_enabled
+            .unwrap_or(existing.computer_enabled);
+        let computer_enabled_int = if computer_enabled { 1 } else { 0 };
         let now = Self::now_ms();
         self.conn.execute(
-            "UPDATE bots SET name = ?1, description = ?2, system_prompt = ?3, model = ?4, updated_at = ?5 WHERE id = ?6",
-            params![name, description, system_prompt, model, now, input.id],
+            "UPDATE bots SET name = ?1, description = ?2, system_prompt = ?3, model = ?4, computer_enabled = ?5, updated_at = ?6 WHERE id = ?7",
+            params![name, description, system_prompt, model, computer_enabled_int, now, input.id],
         )?;
         self.get_bot(&input.id)
     }
@@ -433,14 +442,56 @@ When information might be outdated, say what you know and what you would verify.
         &self,
         conversation_id: &str,
         request_id: &str,
+        bot_id: &str,
+        model: &str,
+        computer_id: Option<&str>,
     ) -> Result<String, AppError> {
         let id = Uuid::new_v4().to_string();
         let now = Self::now_ms();
         self.conn.execute(
-            "INSERT INTO agent_runs (id, conversation_id, request_id, status, step_count, created_at, updated_at) VALUES (?1, ?2, ?3, 'running', 0, ?4, ?4)",
-            params![id, conversation_id, request_id, now],
+            "INSERT INTO agent_runs (id, conversation_id, request_id, bot_id, model, computer_id, status, step_count, started_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'running', 0, ?7, ?7, ?7)",
+            params![id, conversation_id, request_id, bot_id, model, computer_id, now],
         )?;
         Ok(id)
+    }
+
+    pub fn append_run_event(
+        &self,
+        request_id: &str,
+        event_type: &str,
+        payload: &serde_json::Value,
+    ) -> Result<(), AppError> {
+        let run_id: String = self
+            .conn
+            .query_row(
+                "SELECT id FROM agent_runs WHERE request_id = ?1",
+                params![request_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => {
+                    AppError::NotFound(format!("agent run {}", request_id))
+                }
+                other => AppError::Database(other),
+            })?;
+
+        let sequence: i64 = self
+            .conn
+            .query_row(
+                "SELECT COALESCE(MAX(sequence), -1) + 1 FROM run_events WHERE run_id = ?1",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .map_err(AppError::Database)?;
+
+        let now = Self::now_ms();
+        let id = Uuid::new_v4().to_string();
+        let payload_json = payload.to_string();
+        self.conn.execute(
+            "INSERT INTO run_events (id, run_id, sequence, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, run_id, sequence, event_type, payload_json, now],
+        )?;
+        Ok(())
     }
 
     pub fn update_agent_run(
@@ -451,9 +502,14 @@ When information might be outdated, say what you know and what you would verify.
         step_count: i64,
     ) -> Result<(), AppError> {
         let now = Self::now_ms();
+        let finished_at: Option<i64> = if matches!(status, "completed" | "failed" | "cancelled") {
+            Some(now)
+        } else {
+            None
+        };
         let updated = self.conn.execute(
-            "UPDATE agent_runs SET status = ?1, error_code = ?2, step_count = ?3, updated_at = ?4 WHERE request_id = ?5",
-            params![status, error_code, step_count, now, request_id],
+            "UPDATE agent_runs SET status = ?1, error_code = ?2, step_count = ?3, updated_at = ?4, finished_at = COALESCE(?5, finished_at) WHERE request_id = ?6",
+            params![status, error_code, step_count, now, finished_at, request_id],
         )?;
         if updated == 0 {
             return Err(AppError::NotFound(format!("agent run {}", request_id)));
@@ -535,6 +591,7 @@ mod tests {
                 system_prompt: Some("You are helpful.".into()),
                 provider: Some("openai".into()),
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         let loaded = db.get_bot(&bot.id).expect("get");
@@ -546,6 +603,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 model: Some("gpt-4o".into()),
+                computer_enabled: None,
             })
             .expect("update");
         assert_eq!(updated.name, "Renamed");
@@ -562,6 +620,7 @@ mod tests {
                 system_prompt: Some("You are helpful.".into()),
                 provider: Some("openai".into()),
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         let updated = db
@@ -571,6 +630,7 @@ mod tests {
                 description: None,
                 system_prompt: None,
                 model: None,
+                computer_enabled: None,
             })
             .expect("update");
         assert_eq!(updated.name, "Researcher");
@@ -589,6 +649,7 @@ mod tests {
                 system_prompt: Some("Stay.".into()),
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         db.touch_bot(&bot.id).expect("touch");
@@ -609,6 +670,7 @@ mod tests {
                 system_prompt: None,
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -655,6 +717,7 @@ mod tests {
                 system_prompt: None,
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -683,6 +746,31 @@ mod tests {
     }
 
     #[test]
+    fn new_bots_default_to_computer_enabled_scout_is_chat_only() {
+        let db = Database::open_in_memory().expect("db");
+        db.ensure_demo_agent().expect("demo");
+        let scout = db
+            .list_bots(false)
+            .expect("list")
+            .into_iter()
+            .find(|b| b.name == "Scout")
+            .expect("scout");
+        assert!(!scout.computer_enabled);
+
+        let worker = db
+            .create_bot(CreateBotInput {
+                name: "Worker".into(),
+                description: None,
+                system_prompt: None,
+                provider: None,
+                model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
+            })
+            .expect("create");
+        assert!(worker.computer_enabled);
+    }
+
+    #[test]
     fn ensure_demo_agent_creates_scout_on_open() {
         let db = Database::open_in_memory().expect("db");
         let bots = db.list_bots(false).expect("list");
@@ -702,6 +790,7 @@ mod tests {
                 system_prompt: None,
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("create");
         let conv = db.create_conversation(&bot.id, None).expect("conv");
@@ -729,6 +818,7 @@ mod tests {
                 system_prompt: None,
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("bot a");
         let bot_b = db
@@ -738,6 +828,7 @@ mod tests {
                 system_prompt: None,
                 provider: None,
                 model: DEFAULT_MODEL.into(),
+                computer_enabled: None,
             })
             .expect("bot b");
         let conv_a = db.create_conversation(&bot_a.id, None).expect("conv");

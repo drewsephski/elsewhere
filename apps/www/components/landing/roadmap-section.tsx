@@ -1,4 +1,4 @@
-import { cloudRoadmapPhases } from "@gptbot/brand";
+import { cloudRoadmapPhases } from "@elsewhere/brand";
 import { cn } from "cn";
 
 export function RoadmapSection() {

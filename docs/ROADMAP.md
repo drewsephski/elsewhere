@@ -18,8 +18,10 @@
 
 ## 3. Agent Runtime
 
+- [x] Portable `agent-core` (Luna Responses tool loop, `AgentComputer`, `RunStore`, `EventSink`)
+- [x] Terminal / filesystem tools via guest RPC (`workspace_*` tools + `LocalMacComputer`)
+- [x] `run_events` table (dual-write with structured `messages` during migration)
 - [ ] Browser automation
-- [ ] Terminal / filesystem tools
 - [ ] Approvals and activity timeline
 
 ## 4. Persistence / Memory

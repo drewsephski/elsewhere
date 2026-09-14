@@ -3,6 +3,17 @@ import { z } from "zod";
 /** Default OpenAI chat model for new bots and demos. */
 export const DEFAULT_MODEL_ID = "gpt-5.6-luna";
 
+export function isLunaModelAvailable(
+  models: readonly { id: string }[],
+): boolean {
+  return models.some(
+    (m) =>
+      m.id.toLowerCase() === DEFAULT_MODEL_ID ||
+      m.id.toLowerCase().includes("luna"),
+  );
+}
+
+/** Prefer Luna when the account lists it; otherwise keep the canonical default id (UI should show unavailability). */
 export function resolveDefaultModelId(
   models: readonly { id: string }[],
 ): string {
@@ -11,7 +22,7 @@ export function resolveDefaultModelId(
       m.id.toLowerCase() === DEFAULT_MODEL_ID ||
       m.id.toLowerCase().includes("luna"),
   );
-  return preferred?.id ?? models[0]?.id ?? DEFAULT_MODEL_ID;
+  return preferred?.id ?? DEFAULT_MODEL_ID;
 }
 
 export const messageRoleSchema = z.enum(["system", "user", "assistant"]);
@@ -42,6 +53,7 @@ export const botSchema = z.object({
   systemPrompt: z.string(),
   provider: z.string(),
   model: z.string(),
+  computerEnabled: z.boolean(),
   createdAt: z.number(),
   updatedAt: z.number(),
   archivedAt: z.number().nullable(),

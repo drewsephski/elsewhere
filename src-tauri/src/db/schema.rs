@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -20,6 +20,9 @@ pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
     if current_version(conn)? < 3 {
         run_migration(conn, 3, migrate_to_v3)?;
+    }
+    if current_version(conn)? < 4 {
+        run_migration(conn, 4, migrate_to_v4)?;
     }
 
     let final_version = current_version(conn)?;
@@ -157,6 +160,48 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
         "
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_sequence
             ON messages(conversation_id, sequence ASC);
+        ",
+    )?;
+
+    Ok(())
+}
+
+fn migrate_to_v4(conn: &Connection) -> Result<(), rusqlite::Error> {
+    if !column_exists(conn, "bots", "computer_enabled")? {
+        conn.execute_batch(
+            "
+            ALTER TABLE bots ADD COLUMN computer_enabled INTEGER NOT NULL DEFAULT 0;
+            UPDATE bots SET computer_enabled = 1;
+            UPDATE bots SET computer_enabled = 0 WHERE name = 'Scout';
+            ",
+        )?;
+    }
+
+    if !column_exists(conn, "agent_runs", "bot_id")? {
+        conn.execute_batch(
+            "
+            ALTER TABLE agent_runs ADD COLUMN bot_id TEXT REFERENCES bots(id);
+            ALTER TABLE agent_runs ADD COLUMN model TEXT;
+            ALTER TABLE agent_runs ADD COLUMN computer_id TEXT;
+            ALTER TABLE agent_runs ADD COLUMN started_at INTEGER;
+            ALTER TABLE agent_runs ADD COLUMN finished_at INTEGER;
+            ",
+        )?;
+    }
+
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS run_events (
+            id TEXT PRIMARY KEY NOT NULL,
+            run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+            sequence INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_run_events_run
+            ON run_events(run_id, sequence ASC);
         ",
     )?;
 

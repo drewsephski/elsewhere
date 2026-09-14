@@ -12,6 +12,7 @@ export interface CreateBotInput {
   systemPrompt?: string;
   provider?: string;
   model: string;
+  computerEnabled?: boolean;
 }
 
 export interface UpdateBotInput {
@@ -20,6 +21,7 @@ export interface UpdateBotInput {
   description?: string | null;
   systemPrompt?: string;
   model?: string;
+  computerEnabled?: boolean;
 }
 
 export interface StartChatInput {

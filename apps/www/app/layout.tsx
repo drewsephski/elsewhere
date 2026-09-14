@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { siteConfig } from "@gptbot/brand";
+import { siteConfig } from "@elsewhere/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {

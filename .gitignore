@@ -30,3 +30,5 @@ macos/gptbot-vmm/.build/
 # Rust / guest-agent build artifacts
 guest-agent/target/
 src-tauri/target/
+tsconfig.tsbuildinfo
+**/tsconfig.tsbuildinfo

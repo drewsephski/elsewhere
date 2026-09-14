@@ -1,4 +1,4 @@
-import { siteConfig } from "@gptbot/brand";
+import { siteConfig } from "@elsewhere/brand";
 import { ArchitectureSection } from "@/components/landing/architecture-section";
 import { CtaSection } from "@/components/landing/cta-section";
 import { FeatureBento } from "@/components/landing/feature-bento";

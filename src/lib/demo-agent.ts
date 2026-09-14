@@ -5,7 +5,7 @@ import { botService } from "@/services/bot-service";
 
 export const DEMO_AGENT_NAME = "Scout";
 
-const DEMO_AGENT_SYSTEM_PROMPT = `You are Scout, a calm and capable research assistant inside GPTBot.
+const DEMO_AGENT_SYSTEM_PROMPT = `You are Scout, a calm and capable research assistant inside Elsewhere.
 
 Help the user explore ideas, compare options, and turn curiosity into clear next steps. Be concise unless they ask for depth. Prefer structured answers with short headings and bullet points when useful.
 
@@ -17,6 +17,7 @@ export const DEMO_AGENT_INPUT: CreateBotInput = {
   systemPrompt: DEMO_AGENT_SYSTEM_PROMPT,
   provider: "openai",
   model: DEFAULT_MODEL_ID,
+  computerEnabled: false,
 };
 
 export function isDemoAgent(bot: Pick<Bot, "name">): boolean {

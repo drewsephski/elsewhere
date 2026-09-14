@@ -20,7 +20,11 @@ use tracing_subscriber::EnvFilter;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("gptbot=info".parse().unwrap()))
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive("elsewhere=info".parse().unwrap())
+                .add_directive("gptbot=info".parse().unwrap()),
+        )
         .try_init();
 
     tauri::Builder::default()
@@ -38,7 +42,7 @@ pub fn run() {
             let vm = Arc::new(crate::vm::VirtualMachineManager::new(&data_dir));
 
             app.manage(AppState {
-                db: parking_lot::Mutex::new(database),
+                db: Arc::new(parking_lot::Mutex::new(database)),
                 secrets,
                 active_streams: parking_lot::Mutex::new(std::collections::HashMap::new()),
                 #[cfg(target_os = "macos")]

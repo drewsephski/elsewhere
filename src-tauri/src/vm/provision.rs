@@ -48,14 +48,20 @@ pub fn provision_vm(layout: &VmLayout) -> Result<(), String> {
 
 fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
     let disk_path = layout.disk_path();
-    if disk_path.exists() && validate_ext4_disk(&disk_path)? {
+    let force_rebuild = std::env::var("GPTBOT_FORCE_DISK_REBUILD")
+        .ok()
+        .as_deref()
+        == Some("1");
+
+    if disk_path.exists() && validate_ext4_disk(&disk_path)? && !force_rebuild {
         return Ok(());
     }
 
     if disk_path.exists() {
         tracing::warn!(
             path = %disk_path.display(),
-            "removing invalid guest disk (expected ext4 root)"
+            force = force_rebuild,
+            "removing guest disk for rebuild or invalid ext4 root"
         );
         fs::remove_file(&disk_path).map_err(|e| e.to_string())?;
     }
