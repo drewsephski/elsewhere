@@ -5,13 +5,14 @@ use axum::extract::State;
 use axum::Extension;
 use axum::Json;
 use codex_provider::{
-    probe_codex_subscription_availability_with_profile, CodexAppServerClient, CodexProcessLaunch,
+    probe_codex_subscription_availability_on_client, CodexAppServerClient, CodexProcessLaunch,
     CodexSubscriptionAvailability,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::app_state::AppState;
 use crate::auth::Principal;
+use crate::codex_ops::{CodexOperationKind, CODEX_BUSY_REASON};
 use crate::error::ApiError;
 
 /// Bound how long status checks block on Codex app-server probes (launch + account read).
@@ -94,13 +95,20 @@ fn map_availability(availability: CodexSubscriptionAvailability) -> Availability
             connection_state: "not_connected",
             detail: Some("not_chatgpt"),
         },
-        CodexSubscriptionAvailability::Unavailable(_) => AvailabilityView {
-            codex_installed: true,
-            connected: false,
-            plan_type: None,
-            connection_state: "unavailable",
-            detail: Some("codex_probe_unavailable"),
-        },
+        CodexSubscriptionAvailability::Unavailable(reason) => {
+            let detail = if reason == CODEX_BUSY_REASON {
+                "codex_busy"
+            } else {
+                "codex_probe_unavailable"
+            };
+            AvailabilityView {
+                codex_installed: true,
+                connected: false,
+                plan_type: None,
+                connection_state: "unavailable",
+                detail: Some(detail),
+            }
+        }
     }
 }
 
@@ -152,10 +160,9 @@ pub async fn codex_login_start(
             "ChatGPT sign-in is busy. Please try again shortly.".into(),
         ));
     }
-    let _permit = state
-        .codex_ops_semaphore
-        .acquire()
-        .await
+    let codex_permit = state
+        .codex_ops
+        .try_acquire(CodexOperationKind::Login)
         .map_err(|_| ApiError::Conflict("Codex is busy. Please try again shortly.".into()))?;
     let mut launch = CodexProcessLaunch::from_path(executable).subscription_child();
     if let Some(profile) = profile {
@@ -164,6 +171,7 @@ pub async fn codex_login_start(
     let client = CodexAppServerClient::launch(launch)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    codex_permit.log_child_started();
     let handle = client
         .start_chatgpt_device_login()
         .await
@@ -175,6 +183,7 @@ pub async fn codex_login_start(
         user_code: handle.user_code.clone(),
         expires_at: std::time::Instant::now() + std::time::Duration::from_secs(600),
         client: Arc::new(client),
+        codex_permit,
     });
     let pending_logins = state.codex_login_client.clone();
     let expiring_id = handle.login_id.clone();
@@ -206,7 +215,19 @@ pub async fn codex_login_status(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<CodexLoginStatusResponse>, ApiError> {
-    let availability = owner_availability(&state, principal.owner_id()).await?;
+    let pending_client = {
+        let pending = state.codex_login_client.lock().await;
+        pending
+            .as_ref()
+            .filter(|login| login.owner_id == principal.owner_id())
+            .map(|login| login.client.clone())
+    };
+
+    let availability = if let Some(client) = pending_client {
+        probe_codex_subscription_availability_on_client(&client).await
+    } else {
+        owner_availability(&state, principal.owner_id()).await?
+    };
     let view = map_availability(availability);
     if view.connected {
         let mut pending = state.codex_login_client.lock().await;
@@ -268,7 +289,7 @@ async fn owner_availability_for_status(
     }
     match tokio::time::timeout(
         PROVIDER_STATUS_PROBE_TIMEOUT,
-        owner_availability(state, owner_id),
+        owner_availability_for_status_probe(state, owner_id),
     )
     .await
     {
@@ -277,6 +298,27 @@ async fn owner_availability_for_status(
             "Codex availability check timed out".into(),
         )),
     }
+}
+
+async fn owner_availability_for_status_probe(
+    state: &AppState,
+    owner_id: &str,
+) -> Result<CodexSubscriptionAvailability, ApiError> {
+    if owner_id != crate::auth::LEGACY_LOCAL_OWNER && state.config.codex_profiles_dir.is_none() {
+        return Ok(CodexSubscriptionAvailability::NotAuthenticated);
+    }
+    let profile =
+        crate::provider_profile::profile_for_owner(&state.pool, &state.config, owner_id).await?;
+    let permit = match state.codex_ops.try_acquire(CodexOperationKind::Probe) {
+        Ok(permit) => permit,
+        Err(()) => return Ok(CodexSubscriptionAvailability::Unavailable(CODEX_BUSY_REASON.into())),
+    };
+    Ok(crate::codex_ops::probe_subscription_with_profile(
+        state.config.codex_executable.clone(),
+        profile,
+        &permit,
+    )
+    .await)
 }
 
 async fn owner_availability(
@@ -288,14 +330,15 @@ async fn owner_availability(
     }
     let profile =
         crate::provider_profile::profile_for_owner(&state.pool, &state.config, owner_id).await?;
-    let _permit = state
-        .codex_ops_semaphore
-        .acquire()
+    let permit = state
+        .codex_ops
+        .acquire(CodexOperationKind::Probe)
         .await
         .map_err(|_| ApiError::Internal("Codex is busy on this host".into()))?;
-    Ok(probe_codex_subscription_availability_with_profile(
+    Ok(crate::codex_ops::probe_subscription_with_profile(
         state.config.codex_executable.clone(),
         profile,
+        &permit,
     )
     .await)
 }
@@ -310,6 +353,15 @@ mod tests {
         assert!(!view.connected);
         assert_eq!(view.connection_state, "unavailable");
         assert_eq!(view.detail, Some("codex_probe_unavailable"));
+    }
+
+    #[test]
+    fn codex_busy_is_reported_without_spawning() {
+        let view =
+            map_availability(CodexSubscriptionAvailability::Unavailable(CODEX_BUSY_REASON.into()));
+        assert!(!view.connected);
+        assert_eq!(view.connection_state, "unavailable");
+        assert_eq!(view.detail, Some("codex_busy"));
     }
 
     #[test]

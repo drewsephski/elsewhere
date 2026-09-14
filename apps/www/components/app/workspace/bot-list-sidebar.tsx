@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Search } from "@/components/icons/lucide";
 import type { WorkspaceLoadPhase } from "@/hooks/use-workspace-overview";
+import { workspaceBotsEmptyMessage } from "@/lib/workspace-load-state";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -269,15 +270,10 @@ export function BotListSidebar({
         })}
         {!filtered.length ? (
           <li className="px-3 py-8 text-center text-sm text-muted-foreground">
-            {workspacePhase === "initial" || workspacePhase === "loading" ? (
-              "Loading your bots…"
-            ) : workspacePhase === "unavailable" || workspacePhase === "stale" ? (
-              workspaceError ?? "Workspace runner is temporarily unavailable."
-            ) : query ? (
-              "No bots match your search."
-            ) : (
-              "No bots yet."
-            )}
+            {workspaceBotsEmptyMessage(workspacePhase, {
+              query,
+              workspaceError,
+            })}
           </li>
         ) : null}
       </ul>

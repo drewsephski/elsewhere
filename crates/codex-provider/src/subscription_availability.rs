@@ -96,7 +96,6 @@ fn map_account_probe_error(err: CodexProviderError) -> CodexSubscriptionAvailabi
     }
 }
 
-#[cfg(any(test, feature = "test-utils"))]
 pub async fn probe_codex_subscription_availability_on_client(
     client: &CodexAppServerClient,
 ) -> CodexSubscriptionAvailability {

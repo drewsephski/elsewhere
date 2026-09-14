@@ -570,6 +570,9 @@ async fn draining_preserves_queue_and_waits_for_execution_release(pool: PgPool) 
     )
     .await
     .unwrap();
+    state
+        .dispatcher_alive
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now());
     assert!(cloud_host::api::health::runner_ready(&state));
     // This permit models execution through artifact collection, before/after live registry use.

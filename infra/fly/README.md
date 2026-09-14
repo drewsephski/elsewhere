@@ -79,6 +79,17 @@ The web health check (`/api/auth/ok`) proves the Next.js/auth process is alive. 
 
 ## Recovery and evidence
 
+### September 14 runner HTTP stall (investigation notes)
+
+Production evidence from the acceptance runner:
+
+- Fly **6PN DNS resolved** and **TCP connected** to the runner.
+- **Both** private `.internal:8080` and **localhost** HTTP on the runner Machine **stopped responding** while the process still appeared alive briefly.
+- The runner became unhealthy shortly after **Codex app-server activity**.
+- The pre-fix host allowed **overlapping Codex app-server child lifetimes** (status probe, device login, and runs could each launch their own child).
+
+**Working hypothesis / likely root cause:** resource or process contention or runtime starvation from overlapping Codex children—not a DNS or TCP failure, and not because “Tokio is single-threaded” (the cloud-host runtime uses a normal multi-thread Tokio pool). Treat **serialized Codex child ownership** as the mitigation; only call concurrency the **confirmed** root cause after the serialized build survives the production stress test below.
+
 The runner holds one database session advisory lock before migrations/recovery. Graceful shutdown stops new claims and allows active work up to 240 seconds, then aborts/joins local execution before releasing leadership. A restart marks potentially executed work interrupted; it must not replay external commands. Untouched queued work survives. A five-second failure of the leadership heartbeat stops the host. `/ready` reports stale dispatch and database availability; further stalled-process watchdog behavior remains a separate operating proof.
 
 Before upgrades, record image, volume, snapshot, and migration IDs. Quiesce pairing/work and take an opaque encrypted volume snapshot; do not inspect individual credential files. Restore into a separate volume only with the required resource/recovery approval, fence the old runner, then verify through Codex account status. Restored refresh credentials may require normal re-pairing. Supabase Free still requires the separately documented logical-backup job and restore drill before inviting additional users.

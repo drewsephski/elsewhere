@@ -9,6 +9,7 @@ use crate::approval::ApprovalService;
 use crate::auth::JwtVerifier;
 use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
+use crate::codex_ops::CodexOpsPermit;
 use crate::events::registry::RunRegistry;
 
 pub struct PendingCodexLogin {
@@ -18,6 +19,7 @@ pub struct PendingCodexLogin {
     pub user_code: String,
     pub expires_at: std::time::Instant,
     pub client: Arc<CodexAppServerClient>,
+    pub codex_permit: CodexOpsPermit,
 }
 
 #[derive(Clone)]
@@ -34,7 +36,8 @@ pub struct AppState {
     pub runner_heartbeat: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
     pub computer_registry: ComputerRegistry,
     /// One Codex app-server child at a time (probe, login, runs) on this host.
-    pub codex_ops_semaphore: Arc<Semaphore>,
+    pub codex_ops: crate::codex_ops::CodexOpsGate,
+    pub dispatcher_alive: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AppState {
@@ -71,7 +74,8 @@ impl AppState {
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             runner_heartbeat: Arc::new(std::sync::Mutex::new(None)),
             computer_registry: ComputerRegistry::default(),
-            codex_ops_semaphore: Arc::new(Semaphore::new(1)),
+            codex_ops: crate::codex_ops::CodexOpsGate::from_permits(1),
+            dispatcher_alive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 }

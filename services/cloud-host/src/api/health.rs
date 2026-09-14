@@ -16,7 +16,10 @@ pub async fn health() -> Json<HealthResponse> {
 
 /// Liveness is separate from readiness: the queue must have a recently healthy dispatcher.
 pub fn runner_ready(state: &crate::AppState) -> bool {
-    !state.draining.load(std::sync::atomic::Ordering::SeqCst)
+    state
+        .dispatcher_alive
+        .load(std::sync::atomic::Ordering::SeqCst)
+        && !state.draining.load(std::sync::atomic::Ordering::SeqCst)
         && state
             .runner_heartbeat
             .lock()

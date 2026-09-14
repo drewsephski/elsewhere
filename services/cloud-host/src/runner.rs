@@ -18,6 +18,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
 use crate::app_state::AppState;
+use crate::codex_ops::{CodexOperationKind, CodexOpsPermit};
 use crate::config::Config;
 use crate::db::postgres_run_store::PostgresRunStore;
 use crate::db::queries::BootstrapRunRecords;
@@ -261,22 +262,26 @@ async fn execute_run(
             .await
             .map_err(|e| e.to_string())?
     };
+    let mut codex_run_permit: Option<CodexOpsPermit> = None;
     let codex_availability = match engine_mode {
         RunEngineMode::Responses => codex_provider::CodexSubscriptionAvailability::NotInstalled,
         RunEngineMode::Codex => codex_provider::CodexSubscriptionAvailability::Available {
             plan_type: None,
         },
         RunEngineMode::Auto => {
-            let _permit = host_state
-                .codex_ops_semaphore
-                .acquire()
+            let permit = host_state
+                .codex_ops
+                .acquire(CodexOperationKind::Probe)
                 .await
                 .map_err(|_| "Codex is busy on this host".to_string())?;
-            codex_provider::probe_codex_subscription_availability_with_profile(
+            let availability = crate::codex_ops::probe_subscription_with_profile(
                 config.codex_executable.clone(),
                 profile_home.clone(),
+                &permit,
             )
-            .await
+            .await;
+            codex_run_permit = Some(permit);
+            availability
         }
     };
     let selected = match resolve_run_engine(
@@ -337,9 +342,18 @@ async fn execute_run(
                 engine = "codex_subscription",
                 "cloud-host selected Codex engine"
             );
-            run_codex_engine(&config, profile_home, ctx, shared, input_messages).await
+            let permit = match codex_run_permit {
+                Some(permit) => permit,
+                None => host_state
+                    .codex_ops
+                    .acquire(CodexOperationKind::Run)
+                    .await
+                    .map_err(|_| "Codex is busy on this host".to_string())?,
+            };
+            run_codex_engine(&config, profile_home, ctx, shared, input_messages, permit).await
         }
         SelectedRunEngine::ResponsesApi => {
+            drop(codex_run_permit);
             run_responses_engine(&config, ctx, shared, input_messages).await
         }
     };
@@ -361,17 +375,21 @@ async fn run_codex_engine(
     ctx: AgentLoopContext,
     shared: SharedRunDeps,
     input: Vec<serde_json::Value>,
+    permit: CodexOpsPermit,
 ) -> Result<(), String> {
+    permit.log_child_started();
     let engine = CodexRunEngine::new(CodexRunEngineConfig {
         executable: config.codex_executable.clone(),
         profile_home,
         compact_after_completed_turns: crate::conversation::CODEX_COMPACT_COMPLETED_TURN_INTERVAL,
         ..CodexRunEngineConfig::default()
     });
-    engine
+    let result = engine
         .run(ctx, shared, input)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+    drop(permit);
+    result
 }
 
 async fn run_responses_engine(

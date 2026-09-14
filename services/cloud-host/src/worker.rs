@@ -18,6 +18,9 @@ pub async fn acquire_runner(database_url: &str) -> Result<PgConnection, String> 
 }
 
 pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), String> {
+    state
+        .dispatcher_alive
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {

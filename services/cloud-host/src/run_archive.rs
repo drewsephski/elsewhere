@@ -2,18 +2,19 @@ use sqlx::{PgPool, Row};
 
 use codex_provider::{CodexAppServerClient, CodexProcessLaunch};
 
-use crate::config::Config;
+use crate::app_state::AppState;
+use crate::codex_ops::CodexOperationKind;
 use crate::error::ApiError;
 use crate::provider_profile;
 
 const ACTIVE_STATUSES: &[&str] = &["queued", "running"];
 
 pub async fn archive_run(
-    pool: &PgPool,
-    config: &Config,
+    state: &AppState,
     owner_id: &str,
     run_id: &str,
 ) -> Result<(), ApiError> {
+    let pool = &state.pool;
     let row = sqlx::query(
         "SELECT request_id, status, archived_at FROM agent_runs WHERE id = $1 AND owner_id = $2",
     )
@@ -39,7 +40,7 @@ pub async fn archive_run(
     }
 
     if let Some(thread_id) = codex_thread_id_for_request(pool, &request_id).await? {
-        archive_codex_thread_best_effort(pool, config, owner_id, &thread_id).await;
+        archive_codex_thread_best_effort(state, owner_id, &thread_id).await;
     }
 
     let updated = sqlx::query(
@@ -77,20 +78,25 @@ async fn codex_thread_id_for_request(
     Ok(thread_id.filter(|value| !value.trim().is_empty()))
 }
 
-async fn archive_codex_thread_best_effort(
-    pool: &PgPool,
-    config: &Config,
-    owner_id: &str,
-    thread_id: &str,
-) {
+async fn archive_codex_thread_best_effort(state: &AppState, owner_id: &str, thread_id: &str) {
+    let config = state.config.as_ref();
     let Some(executable) = config.codex_executable.clone() else {
         return;
     };
 
-    let profile = match provider_profile::profile_for_owner(pool, config, owner_id).await {
-        Ok(profile) => profile,
-        Err(err) => {
-            tracing::debug!(error = %err, "skipping Codex thread archive; profile unavailable");
+    let profile =
+        match provider_profile::profile_for_owner(&state.pool, config, owner_id).await {
+            Ok(profile) => profile,
+            Err(err) => {
+                tracing::debug!(error = %err, "skipping Codex thread archive; profile unavailable");
+                return;
+            }
+        };
+
+    let permit = match state.codex_ops.try_acquire(CodexOperationKind::Archive) {
+        Ok(permit) => permit,
+        Err(()) => {
+            tracing::info!(thread_id, "skipping Codex thread archive; codex busy");
             return;
         }
     };
@@ -107,6 +113,7 @@ async fn archive_codex_thread_best_effort(
             return;
         }
     };
+    permit.log_child_started();
 
     if let Err(err) = client.thread_archive(thread_id).await {
         tracing::warn!(error = %err, thread_id, "Codex thread/archive failed; run still archived locally");
@@ -115,4 +122,5 @@ async fn archive_codex_thread_best_effort(
     if let Err(err) = client.shutdown().await {
         tracing::debug!(error = %err, "Codex client shutdown after thread archive");
     }
+    drop(permit);
 }

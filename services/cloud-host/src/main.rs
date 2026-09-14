@@ -37,28 +37,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let app = build_router(state.clone());
 
-    // Keep HTTP serving even if the dispatcher loop errors; liveness must not depend on queue work.
     let worker_state = state.clone();
-    tokio::spawn(async move {
+    let dispatcher = tokio::spawn(async move {
         let mut leadership = leadership;
-        if let Err(err) = cloud_host::worker::run(worker_state, &mut leadership).await {
-            tracing::error!(error = %err, "runner dispatcher exited");
-        }
+        cloud_host::worker::run(worker_state, &mut leadership).await
     });
 
     let listener = tokio::net::TcpListener::bind(&config.bind_addr).await?;
     tracing::info!(addr = %config.bind_addr, "Elsewhere cloud-host listening");
+
+    let shutdown = async {
+        shutdown_signal().await?;
+        cloud_host::worker::drain(&state, std::time::Duration::from_secs(240)).await;
+        Ok(())
+    };
+
     let outcome: Result<(), String> = tokio::select! {
         result = axum::serve(listener, app) => result.map_err(|e| e.to_string()),
-        result = async {
-            shutdown_signal().await?;
-            cloud_host::worker::drain(&state, std::time::Duration::from_secs(240)).await;
-            Ok(())
-        } => result,
+        result = shutdown => result,
+        dispatcher_result = dispatcher => match dispatcher_result {
+            Ok(Ok(())) => Err("runner dispatcher exited unexpectedly".into()),
+            Ok(Err(err)) => {
+                state
+                    .draining
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                Err(err)
+            }
+            Err(err) => {
+                state
+                    .draining
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+                Err(err.to_string())
+            }
+        },
     };
+
     cloud_host::worker::stop_executions(&state).await;
-    // Recovery runs on next startup only, after this process has stopped executing.
-    outcome.map_err(Into::into)
+    match outcome {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            tracing::error!(error = %err, "cloud-host exiting after failure");
+            std::process::exit(1);
+        }
+    }
 }
 
 async fn shutdown_signal() -> Result<(), String> {

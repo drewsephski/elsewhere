@@ -47,7 +47,6 @@ pub use protocol::{
     MCP_SERVER_NAME,
 };
 pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};
-#[cfg(any(test, feature = "test-utils"))]
 pub use subscription_availability::probe_codex_subscription_availability_on_client;
 pub use subscription_availability::{
     probe_codex_subscription_availability, probe_codex_subscription_availability_with_profile,

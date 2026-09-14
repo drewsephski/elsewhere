@@ -316,6 +316,7 @@ async fn provider_profiles_are_persistent_private_and_owner_scoped() {
 #[tokio::test]
 async fn user_cannot_cancel_another_users_chatgpt_login() {
     use cloud_host::app_state::PendingCodexLogin;
+    use cloud_host::codex_ops::CodexOperationKind;
     let pool = try_test_pool()
         .await
         .expect("test Postgres must be running");
@@ -328,6 +329,10 @@ async fn user_cannot_cancel_another_users_chatgpt_login() {
     )
     .await
     .unwrap();
+    let codex_permit = state
+        .codex_ops
+        .try_acquire(CodexOperationKind::Login)
+        .expect("test login permit");
     *state.codex_login_client.lock().await = Some(PendingCodexLogin {
         owner_id: "user-a".into(),
         login_id: "private-login".into(),
@@ -335,6 +340,7 @@ async fn user_cannot_cancel_another_users_chatgpt_login() {
         user_code: "secret-code".into(),
         expires_at: std::time::Instant::now() + std::time::Duration::from_secs(600),
         client: std::sync::Arc::new(client),
+        codex_permit,
     });
     let response = build_router(state.clone())
         .oneshot(
@@ -507,6 +513,9 @@ async fn readiness_requires_a_recent_dispatcher_heartbeat(pool: PgPool) {
         app.oneshot(http::Request::builder().uri("/ready").body(axum::body::Body::empty()).unwrap()).await.unwrap().status()
     }
     assert_eq!(ready(app.clone()).await, http::StatusCode::SERVICE_UNAVAILABLE);
+    state
+        .dispatcher_alive
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now());
     assert_eq!(ready(app.clone()).await, http::StatusCode::OK);
     *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now() - std::time::Duration::from_secs(11));
