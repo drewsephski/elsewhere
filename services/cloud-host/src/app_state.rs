@@ -28,6 +28,8 @@ pub struct AppState {
     pub jwt_verifier: Option<Arc<JwtVerifier>>,
     pub codex_login_client: Arc<Mutex<Option<PendingCodexLogin>>>,
     pub approvals: ApprovalService,
+    pub draining: Arc<std::sync::atomic::AtomicBool>,
+    pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub runner_heartbeat: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
 }
 
@@ -61,6 +63,8 @@ impl AppState {
             jwt_verifier,
             codex_login_client: Arc::new(Mutex::new(None)),
             approvals,
+            draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             runner_heartbeat: Arc::new(std::sync::Mutex::new(None)),
         }
     }

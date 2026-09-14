@@ -16,12 +16,13 @@ pub async fn health() -> Json<HealthResponse> {
 
 /// Liveness is separate from readiness: the queue must have a recently healthy dispatcher.
 pub fn runner_ready(state: &crate::AppState) -> bool {
-    state
-        .runner_heartbeat
-        .lock()
-        .ok()
-        .and_then(|tick| *tick)
-        .is_some_and(|tick| tick.elapsed() < std::time::Duration::from_secs(10))
+    !state.draining.load(std::sync::atomic::Ordering::SeqCst)
+        && state
+            .runner_heartbeat
+            .lock()
+            .ok()
+            .and_then(|tick| *tick)
+            .is_some_and(|tick| tick.elapsed() < std::time::Duration::from_secs(10))
 }
 pub async fn ready(
     axum::extract::State(state): axum::extract::State<crate::AppState>,
@@ -41,6 +42,8 @@ pub async fn ready(
         } else {
             axum::http::StatusCode::SERVICE_UNAVAILABLE
         },
-        Json(serde_json::json!({"ready": ready})),
+        Json(
+            serde_json::json!({"ready": ready, "database": database, "draining": state.draining.load(std::sync::atomic::Ordering::SeqCst), "dispatcher": runner_ready(&state)}),
+        ),
     )
 }

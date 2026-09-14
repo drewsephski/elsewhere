@@ -17,7 +17,7 @@ pub async fn acquire_runner(database_url: &str) -> Result<PgConnection, String> 
     Ok(connection)
 }
 
-pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), String> {
+pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), String> {
     let mut interval = tokio::time::interval(Duration::from_secs(1));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
@@ -25,7 +25,7 @@ pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), St
         // Loss of the dedicated lock connection stops the process, never silently rejoins.
         tokio::time::timeout(
             Duration::from_secs(5),
-            sqlx::query("SELECT 1").execute(&mut leadership),
+            sqlx::query("SELECT 1").execute(&mut *leadership),
         )
         .await
         .map_err(|_| "Runner database heartbeat timed out".to_string())?
@@ -44,9 +44,11 @@ pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), St
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        crate::routines::tick(&state.pool, chrono::Utc::now())
-            .await
-            .map_err(|e| e.to_string())?;
+        if !state.draining.load(std::sync::atomic::Ordering::SeqCst) {
+            crate::routines::tick(&state.pool, chrono::Utc::now())
+                .await
+                .map_err(|e| e.to_string())?;
+        }
         dispatch_available(&state)
             .await
             .map_err(|e| e.to_string())?;
@@ -59,12 +61,60 @@ pub async fn run(state: AppState, mut leadership: PgConnection) -> Result<(), St
 
 pub async fn dispatch_available(state: &AppState) -> Result<usize, sqlx::Error> {
     let mut started = 0;
-    while let Ok(permit) = state.run_semaphore.clone().try_acquire_owned() {
+    while !state.draining.load(std::sync::atomic::Ordering::SeqCst) {
+        let Ok(permit) = state.run_semaphore.clone().try_acquire_owned() else {
+            break;
+        };
         let Some(input) = crate::work::claim_next(&state.pool).await? else {
             break;
         };
         crate::runner::spawn_agent_run(state.clone(), input, permit);
         started += 1;
     }
+    if started > 0 {
+        tracing::info!(started, "queued work dispatched");
+    }
     Ok(started)
+}
+
+/// Abort and join executions before relinquishing leadership. Do not replay side effects.
+pub async fn stop_executions(state: &AppState) {
+    state
+        .draining
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut tasks =
+        std::mem::take(&mut *state.run_tasks.lock().expect("run task registry poisoned"));
+    tasks.shutdown().await;
+    state.codex_login_client.lock().await.take();
+}
+
+/// Includes tasks still starting and tasks collecting artifacts, unlike the live registry.
+pub fn active_executions(state: &AppState) -> usize {
+    state.config.max_concurrent_runs - state.run_semaphore.available_permits()
+}
+
+pub async fn drain(state: &AppState, grace: Duration) {
+    state
+        .draining
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    tracing::info!(
+        active = active_executions(state),
+        grace_secs = grace.as_secs(),
+        "runner draining"
+    );
+    let completed = tokio::time::timeout(grace, async {
+        loop {
+            if active_executions(state) == 0 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .is_ok();
+    tracing::info!(
+        completed,
+        active = active_executions(state),
+        "runner drain finished"
+    );
 }

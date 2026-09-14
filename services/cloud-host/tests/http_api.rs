@@ -539,3 +539,76 @@ async fn sse_reconnect_uses_monotonic_durable_ids() {
 
     set_test_run_overrides(None);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn draining_preserves_queue_and_waits_for_execution_release(pool: PgPool) {
+    use cloud_host::{db::resources, worker};
+    let state = AppState::new(pool.clone(), test_config());
+    let computer = resources::insert_computer_placeholder(&pool, "drain-owner", "Computer")
+        .await
+        .unwrap();
+    let bot = resources::insert_bot(
+        &pool,
+        "drain-owner",
+        "Bot",
+        "",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "codex",
+    )
+    .await
+    .unwrap();
+    let queued = cloud_host::work::enqueue(
+        &pool,
+        "drain-owner",
+        "drain",
+        &bot.id,
+        None,
+        "Remain queued",
+    )
+    .await
+    .unwrap();
+    *state.runner_heartbeat.lock().unwrap() = Some(std::time::Instant::now());
+    assert!(cloud_host::api::health::runner_ready(&state));
+    // This permit models execution through artifact collection, before/after live registry use.
+    let permit = state.run_semaphore.clone().acquire_owned().await.unwrap();
+    let drain_state = state.clone();
+    let drain =
+        tokio::spawn(async move { worker::drain(&drain_state, Duration::from_secs(2)).await });
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    assert!(!drain.is_finished());
+    assert!(!cloud_host::api::health::runner_ready(&state));
+    assert_eq!(worker::dispatch_available(&state).await.unwrap(), 0);
+    drop(permit);
+    drain.await.unwrap();
+    let status: String = sqlx::query_scalar("SELECT status FROM agent_runs WHERE id=$1")
+        .bind(&queued.run_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "queued");
+    let ready = build_router(state)
+        .oneshot(
+            http::Request::builder()
+                .uri("/ready")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ready.status(), http::StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn shutdown_joins_aborted_executions_before_returning(pool: PgPool) {
+    let state = AppState::new(pool, test_config());
+    let permit = state.run_semaphore.clone().acquire_owned().await.unwrap();
+    state.run_tasks.lock().unwrap().spawn(async move {
+        let _permit = permit;
+        std::future::pending::<()>().await;
+    });
+    cloud_host::worker::drain(&state, Duration::from_millis(10)).await;
+    assert_eq!(cloud_host::worker::active_executions(&state), 1);
+    cloud_host::worker::stop_executions(&state).await;
+    assert_eq!(cloud_host::worker::active_executions(&state), 0);
+}

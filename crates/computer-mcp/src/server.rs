@@ -95,9 +95,17 @@ impl ComputerMcpServer {
         MCP_BEARER_ENV_VAR
     }
 
-    pub async fn shutdown(self) {
+    pub async fn shutdown(mut self) {
         self.cancel.cancel();
-        let _ = self.join.await;
+        let _ = (&mut self.join).await;
+    }
+}
+
+// Timeout/abort paths also revoke the per-run computer endpoint.
+impl Drop for ComputerMcpServer {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+        self.join.abort();
     }
 }
 

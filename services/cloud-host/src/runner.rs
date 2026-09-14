@@ -46,7 +46,11 @@ pub struct TestRunOverrides {
 }
 
 pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedSemaphorePermit) {
-    tokio::spawn(async move {
+    let mut tasks = state.run_tasks.lock().expect("run task registry poisoned");
+    while tasks.try_join_next().is_some() {}
+    let execution_state = state.clone();
+    tasks.spawn(async move {
+        let state = execution_state;
         let cancel = Arc::new(AtomicBool::new(false));
         let (events, _rx) = CloudEventSink::new();
         let events = Arc::new(events);

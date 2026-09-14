@@ -71,3 +71,29 @@ async fn fake_computer_rejects_outside_workspace_via_mcp_session() {
     assert!(server.url().starts_with("http://127.0.0.1:"));
     server.shutdown().await;
 }
+
+#[tokio::test]
+async fn dropping_run_revokes_its_computer_endpoint() {
+    let server = ComputerMcpServer::start(
+        Arc::new(FakeAgentComputer::new()),
+        Arc::new(AllowAllApprovalGate),
+        test_run(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap();
+    let client = reqwest::Client::new();
+    let url = server.url().to_string();
+    assert!(client.post(&url).send().await.is_ok());
+    drop(server);
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            if client.post(&url).send().await.is_err() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("aborted run must close its listener");
+}

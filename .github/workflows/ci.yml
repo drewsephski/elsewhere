@@ -19,6 +19,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: pnpm --filter @elsewhere/www exec next typegen
+      - run: pnpm --filter @elsewhere/www lint
       - run: pnpm test
       - run: pnpm build
 
@@ -40,6 +42,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test -p agent-core
+      - run: cargo test -p computer-mcp
+      - run: cargo test -p codex-provider
       - run: cargo test -p sprite-computer
       - run: cargo test -p cloud-host --features test-utils
 
