@@ -2,7 +2,7 @@
 
 import { ApprovalCard } from "@/components/app/approval-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import type { BotSummary, CreateRunResponse, RunSummary } from "@/lib/api-types";
+import type { BotSummary, ConversationSummary, CreateConversationResponse, CreateRunResponse, RunSummary } from "@/lib/api-types";
 import { formatMessageTime } from "@/lib/format";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
@@ -11,7 +11,7 @@ import { workStatus } from "@/lib/work-events";
 import { useRunEventStream } from "@/hooks/use-run-event-stream";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-import { ChevronLeft, Info, Monitor, PanelRight } from "@/components/icons/lucide";
+import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatResultCards } from "./chat-result-cards";
@@ -36,6 +36,8 @@ export function BotConversationView({
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [startingNewChat, setStartingNewChat] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -54,9 +56,13 @@ export function BotConversationView({
   const { detail: liveDetail, timeline, error: streamError, connection } =
     useRunEventStream(streamRunId);
 
-  const loadRuns = useCallback(async () => {
+  const loadRuns = useCallback(async (activeConversationId: string | null) => {
+    if (!activeConversationId) {
+      setRuns([]);
+      return;
+    }
     const response = await cloudHostFetch(
-      `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}`,
+      `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
     );
     if (!response.ok) {
       throw new Error("Could not load conversation history");
@@ -66,7 +72,20 @@ export function BotConversationView({
     const active = rows.find((run) => runIsActive(run.status));
     if (active) {
       setLiveRunId(active.runId);
+    } else {
+      setLiveRunId(null);
     }
+  }, [botId]);
+
+  const resolveConversationId = useCallback(async () => {
+    const response = await cloudHostFetch(
+      `/v1/conversations?limit=1&bot_id=${encodeURIComponent(botId)}`,
+    );
+    if (!response.ok) {
+      throw new Error("Could not load conversation");
+    }
+    const rows: ConversationSummary[] = await response.json();
+    return rows[0]?.id ?? null;
   }, [botId]);
 
   useEffect(() => {
@@ -89,10 +108,39 @@ export function BotConversationView({
   }, [botId, onBotLoaded]);
 
   useEffect(() => {
+    let cancelled = false;
+    setConversationId(null);
+    setRuns([]);
+    setLiveRunId(null);
+    setMessage("");
+    setError(null);
+    void (async () => {
+      try {
+        const id = await resolveConversationId();
+        if (cancelled) {
+          return;
+        }
+        setConversationId(id);
+        await loadRuns(id);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not load conversation");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [botId, loadRuns, resolveConversationId]);
+
+  useEffect(() => {
+    if (!conversationId) {
+      return;
+    }
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
-        await loadRuns();
+        await loadRuns(conversationId);
       } catch {
         /* ignore transient errors */
       }
@@ -100,11 +148,39 @@ export function BotConversationView({
     }
     void poll();
     return () => clearTimeout(timer);
-  }, [loadRuns]);
+  }, [conversationId, loadRuns]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [runs.length, timeline.length, liveDetail?.assistantResult]);
+
+  async function handleStartNewChat() {
+    if (startingNewChat || pending) {
+      return;
+    }
+    setStartingNewChat(true);
+    setError(null);
+    try {
+      const response = await cloudHostFetch("/v1/conversations", {
+        method: "POST",
+        body: JSON.stringify({ botId }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not start a new chat");
+      }
+      const created = body as CreateConversationResponse;
+      setConversationId(created.id);
+      setRuns([]);
+      setLiveRunId(null);
+      setMessage("");
+      requestRef.current = null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start a new chat");
+    } finally {
+      setStartingNewChat(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -118,20 +194,28 @@ export function BotConversationView({
       requestRef.current = { message: trimmed, key: crypto.randomUUID() };
     }
     try {
+      const payload: { botId: string; message: string; conversationId?: string } = {
+        botId,
+        message: trimmed,
+      };
+      if (conversationId) {
+        payload.conversationId = conversationId;
+      }
       const response = await cloudHostFetch("/v1/runs", {
         method: "POST",
         headers: { "Idempotency-Key": requestRef.current.key },
-        body: JSON.stringify({ botId, message: trimmed }),
+        body: JSON.stringify(payload),
       });
       const body = await response.json();
       if (!response.ok) {
         throw new Error(body.error ?? "Could not delegate work");
       }
       const created = body as CreateRunResponse;
+      setConversationId(created.conversationId);
       setLiveRunId(created.runId);
       setMessage("");
       requestRef.current = null;
-      await loadRuns();
+      await loadRuns(created.conversationId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delegate work");
     } finally {
@@ -178,6 +262,25 @@ export function BotConversationView({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="hidden rounded-full sm:inline-flex"
+            disabled={startingNewChat || pending}
+            onClick={() => void handleStartNewChat()}
+          >
+            New chat
+          </Button>
+          <button
+            type="button"
+            onClick={() => void handleStartNewChat()}
+            disabled={startingNewChat || pending}
+            className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-50 sm:hidden"
+            aria-label="Start new chat"
+          >
+            <MessageSquare className="size-5" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={onOpenContext}

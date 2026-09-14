@@ -59,6 +59,33 @@ pub async fn get_or_create_primary_conversation_id_in_tx(
     Ok(id)
 }
 
+pub async fn create_conversation_for_bot(
+    pool: &PgPool,
+    owner: &str,
+    bot_id: &str,
+) -> Result<String, ApiError> {
+    let bot_exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
+    )
+    .bind(bot_id)
+    .bind(owner)
+    .fetch_one(pool)
+    .await
+    .map_err(db_error)?;
+    if !bot_exists {
+        return Err(ApiError::NotFound);
+    }
+    let id = Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, $2, $3)")
+        .bind(&id)
+        .bind(owner)
+        .bind(bot_id)
+        .execute(pool)
+        .await
+        .map_err(db_error)?;
+    Ok(id)
+}
+
 pub async fn get_codex_thread_id(
     pool: &PgPool,
     conversation_id: &str,

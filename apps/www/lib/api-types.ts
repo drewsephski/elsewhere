@@ -59,6 +59,17 @@ export interface CreateRunResponse {
   status: string;
 }
 
+export interface ConversationSummary {
+  id: string;
+  botId: string;
+  updatedAt: string;
+}
+
+export interface CreateConversationResponse {
+  id: string;
+  botId: string;
+}
+
 export interface Routine {
   id: string;
   botId: string;

@@ -59,7 +59,10 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/runs",
             post(api::runs::create_run).get(api::catalog::list_runs),
         )
-        .route("/v1/conversations", get(api::catalog::list_conversations))
+        .route(
+            "/v1/conversations",
+            get(api::catalog::list_conversations).post(api::catalog::create_conversation),
+        )
         .route("/v1/runs/{id}", get(api::runs::get_run))
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
         .route("/v1/runs/{id}/archive", post(api::runs::archive_run))

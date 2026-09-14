@@ -11,6 +11,7 @@ use crate::error::ApiError;
 #[derive(Debug, Deserialize)]
 pub struct ListRunsQuery {
     pub bot_id: Option<String>,
+    pub conversation_id: Option<String>,
     pub limit: Option<i64>,
     /// When true, return only archived runs. When false or omitted, return active runs only.
     pub archived: Option<bool>,
@@ -48,10 +49,17 @@ pub async fn list_runs(
          LEFT JOIN work_queue q ON q.run_id = r.id \
          WHERE r.owner_id = $1 \
          AND ($3::text IS NULL OR r.bot_id = $3) \
+         AND ($5::text IS NULL OR r.conversation_id = $5) \
          AND (($4::bool AND r.archived_at IS NOT NULL) OR (NOT $4::bool AND r.archived_at IS NULL)) \
          ORDER BY r.created_at DESC LIMIT $2",
     )
-        .bind(principal.owner_id()).bind(limit).bind(query.bot_id).bind(archived_only).fetch_all(&state.pool).await
+        .bind(principal.owner_id())
+        .bind(limit)
+        .bind(query.bot_id)
+        .bind(archived_only)
+        .bind(query.conversation_id)
+        .fetch_all(&state.pool)
+        .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(rows))
 }
@@ -92,5 +100,42 @@ pub async fn list_conversations(
                 updated_at: row.updated_at,
             })
             .collect(),
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateConversationRequest {
+    pub bot_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateConversationResponse {
+    pub id: String,
+    pub bot_id: String,
+}
+
+pub async fn create_conversation(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Json(body): Json<CreateConversationRequest>,
+) -> Result<(axum::http::StatusCode, Json<CreateConversationResponse>), ApiError> {
+    let bot_id = body.bot_id.trim();
+    if bot_id.is_empty() {
+        return Err(ApiError::Validation("botId is required".into()));
+    }
+    let id = crate::conversation::create_conversation_for_bot(
+        &state.pool,
+        principal.owner_id(),
+        bot_id,
+    )
+    .await?;
+    Ok((
+        axum::http::StatusCode::CREATED,
+        Json(CreateConversationResponse {
+            id,
+            bot_id: bot_id.to_string(),
+        }),
     ))
 }
