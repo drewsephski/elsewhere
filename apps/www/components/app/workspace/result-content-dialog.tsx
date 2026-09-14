@@ -10,6 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { ExternalLink, FileText } from "@/components/icons/lucide";
+import {
+  isPreviewableImageFileName,
+  RESULT_PREVIEW_MAX_BYTES,
+  resultDownloadUrl,
+} from "@/lib/result-preview";
 import { useEffect, useState } from "react";
 
 export function resultItemTitle(kind: string, name: string): string {
@@ -19,12 +24,14 @@ export function resultItemTitle(kind: string, name: string): string {
 type OpenResult = {
   id: string;
   title: string;
+  fileName: string;
   size: number;
 };
 
 type ContentState =
   | { status: "loading" }
   | { status: "ready"; text: string }
+  | { status: "image"; url: string }
   | { status: "binary" }
   | { status: "too_large" }
   | { status: "error"; message: string };
@@ -46,6 +53,14 @@ export function ResultContentDialog({
     }
     const controller = new AbortController();
     setContent({ status: "loading" });
+
+    const canPreviewImage =
+      isPreviewableImageFileName(result.fileName) && result.size <= RESULT_PREVIEW_MAX_BYTES;
+    if (canPreviewImage) {
+      setContent({ status: "image", url: resultDownloadUrl(result.id, true) });
+      return () => controller.abort();
+    }
+
     fetch(`/api/results/${result.id}/content`, { signal: controller.signal })
       .then(async (response) => {
         const body = await response.json();
@@ -64,6 +79,10 @@ export function ResultContentDialog({
           return;
         }
         if (body.isBinary) {
+          if (isPreviewableImageFileName(result.fileName) && result.size <= RESULT_PREVIEW_MAX_BYTES) {
+            setContent({ status: "image", url: resultDownloadUrl(result.id, true) });
+            return;
+          }
           setContent({ status: "binary" });
           return;
         }
@@ -79,7 +98,7 @@ export function ResultContentDialog({
         });
       });
     return () => controller.abort();
-  }, [open, result?.id]);
+  }, [open, result?.fileName, result?.id, result?.size]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -115,6 +134,22 @@ export function ResultContentDialog({
             >
               {content.text || "(Empty file)"}
             </pre>
+          ) : null}
+
+          {content.status === "image" ? (
+            <div className="flex min-h-[12rem] items-center justify-center py-4">
+              <img
+                src={content.url}
+                alt={result?.title ?? "Image preview"}
+                className="max-h-[min(60vh,32rem)] max-w-full rounded-lg object-contain shadow-sm"
+                onError={() =>
+                  setContent({
+                    status: "error",
+                    message: "This image could not be loaded. Try downloading it instead.",
+                  })
+                }
+              />
+            </div>
           ) : null}
 
           {content.status === "binary" ? (

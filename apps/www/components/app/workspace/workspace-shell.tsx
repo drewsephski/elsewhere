@@ -17,6 +17,7 @@ import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { ProductLogo } from "@/components/product-logo";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 
 interface WorkspaceShellProps {
   userEmail: string;
@@ -155,8 +156,82 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   const showConversation = Boolean(selectedBotId);
 
-  return (
-    <div className="app-shell-bg flex h-[100dvh] flex-col overflow-hidden text-foreground">
+  const previewEnabled = Boolean(
+    bot?.computerId &&
+      activeRun &&
+      (activeRun.status === "queued" || activeRun.status === "running"),
+  );
+
+  const previewProviderProps = {
+    computerId: bot?.computerId ?? null,
+    enabled: previewEnabled,
+    sessionKey: activeRun?.runId ?? null,
+  };
+
+  const conversationMain = (
+    <main
+      className={cn(
+        "flex min-w-0 flex-1 flex-col bg-[#f8f6fc]",
+        !showConversation && "hidden lg:flex",
+      )}
+    >
+      {workspaceError ? (
+        <p className="shrink-0 px-4 py-2 text-xs text-amber-800" role="status">
+          {workspaceError}. Activity may be out of date.
+        </p>
+      ) : null}
+      {workspace && !workspace.runnerReady ? (
+        <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          Background work is temporarily unavailable. Queued assignments stay saved.
+        </p>
+      ) : null}
+      {selectedBotId ? (
+        <BotConversationView
+          botId={selectedBotId}
+          onOpenContext={() => setContextSheetOpen(true)}
+          onBotLoaded={handleBotLoaded}
+          onRenameBot={handleRenameBot}
+        />
+      ) : (
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
+          {children}
+          <ProviderStatusCard variant="featured" />
+          <div className="max-w-md space-y-3">
+            <p className="text-sm text-muted-foreground">
+              After ChatGPT is connected, create a bot to start chatting and running work.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              onClick={() => setCreateOpen(true)}
+            >
+              Create your first bot
+            </Button>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+
+  const contextRail = selectedBotId ? (
+    <aside
+      className={cn(
+        "hidden w-[min(100%,20rem)] shrink-0 border-l border-border/70 bg-white/55 backdrop-blur-md lg:flex lg:flex-col",
+      )}
+      aria-label="Bot context"
+    >
+      <BotContextRail
+        bot={bot}
+        activeRun={activeRun}
+        showConnectionSettings={false}
+        onBotSaved={setBot}
+      />
+    </aside>
+  ) : null;
+
+  const workspaceBody = (
+    <>
       <div className="flex min-h-0 flex-1">
         {/* Left: bot list — desktop always; mobile when no bot selected */}
         <aside
@@ -191,68 +266,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           />
         </aside>
 
-        {/* Center: conversation */}
-        <main
-          className={cn(
-            "flex min-w-0 flex-1 flex-col bg-[#f8f6fc]",
-            !showConversation && "hidden lg:flex",
-          )}
-        >
-          {workspaceError ? (
-            <p className="shrink-0 px-4 py-2 text-xs text-amber-800" role="status">
-              {workspaceError}. Activity may be out of date.
-            </p>
-          ) : null}
-          {workspace && !workspace.runnerReady ? (
-            <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
-              Background work is temporarily unavailable. Queued assignments stay saved.
-            </p>
-          ) : null}
-          {selectedBotId ? (
-            <BotConversationView
-              botId={selectedBotId}
-              onOpenContext={() => setContextSheetOpen(true)}
-              onBotLoaded={handleBotLoaded}
-              onRenameBot={handleRenameBot}
-            />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
-              {children}
-              <ProviderStatusCard variant="featured" />
-              <div className="max-w-md space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  After ChatGPT is connected, create a bot to start chatting and running work.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  Create your first bot
-                </Button>
-              </div>
-            </div>
-          )}
-        </main>
-
-        {/* Right: context rail — desktop */}
-        <aside
-          className={cn(
-            "hidden w-[min(100%,20rem)] shrink-0 border-l border-border/70 bg-white/55 backdrop-blur-md lg:flex lg:flex-col",
-            !selectedBotId && "lg:hidden",
-          )}
-          aria-label="Bot context"
-        >
-          {selectedBotId ? (
-            <BotContextRail
-              bot={bot}
-              activeRun={activeRun}
-              showConnectionSettings={false}
-              onBotSaved={setBot}
-            />
-          ) : null}
-        </aside>
+        {conversationMain}
+        {contextRail}
       </div>
 
       <CreateBotDialog open={createOpen} onClose={() => setCreateOpen(false)} />
@@ -279,6 +294,18 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       >
         <ProviderStatusCard />
       </MobileSheet>
+    </>
+  );
+
+  return (
+    <div className="app-shell-bg flex h-[100dvh] flex-col overflow-hidden text-foreground">
+      {selectedBotId ? (
+        <BrowserPreviewProvider {...previewProviderProps}>
+          {workspaceBody}
+        </BrowserPreviewProvider>
+      ) : (
+        workspaceBody
+      )}
     </div>
   );
 }

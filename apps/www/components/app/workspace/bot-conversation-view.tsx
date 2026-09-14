@@ -3,7 +3,7 @@
 import { ApprovalCard } from "@/components/app/approval-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotSummary, ConversationSummary, CreateConversationResponse, CreateRunResponse, RunSummary } from "@/lib/api-types";
-import { formatMessageTime } from "@/lib/format";
+import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
@@ -16,6 +16,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
+import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
+import { BrowserPreviewView } from "./browser-preview-view";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -55,6 +57,38 @@ export function BotConversationView({
   const streamRunId = activeRun && runIsActive(activeRun.status) ? activeRun.runId : null;
   const { detail: liveDetail, timeline, error: streamError, connection } =
     useRunEventStream(streamRunId);
+  const browserPreview = useOptionalBrowserPreviewContext();
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element || !browserPreview) {
+      return;
+    }
+    const preview = browserPreview;
+    const scrollRoot = element;
+    function handleScroll() {
+      if (scrollRoot.scrollTop < 72) {
+        return;
+      }
+      if (
+        !preview.frame?.available ||
+        !preview.frame.imageDataUrl ||
+        preview.pipDismissed ||
+        preview.pipOpen
+      ) {
+        return;
+      }
+      preview.openPip();
+    }
+    element.addEventListener("scroll", handleScroll, { passive: true });
+    return () => element.removeEventListener("scroll", handleScroll);
+  }, [
+    browserPreview,
+    browserPreview?.frame?.available,
+    browserPreview?.frame?.imageDataUrl,
+    browserPreview?.pipDismissed,
+    browserPreview?.pipOpen,
+  ]);
 
   const loadRuns = useCallback(async (activeConversationId: string | null) => {
     if (!activeConversationId) {
@@ -226,7 +260,7 @@ export function BotConversationView({
   const chronologicalRuns = [...runs].reverse();
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-md">
         <div className="flex min-w-0 items-center gap-2.5">
           <Link
@@ -310,14 +344,7 @@ export function BotConversationView({
 
             return (
               <div key={run.runId} className="space-y-3">
-                <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-3xl rounded-br-md bg-foreground px-4 py-2.5 text-sm text-primary-foreground shadow-sm">
-                    <p className="whitespace-pre-wrap break-words">{run.task}</p>
-                    <p className="mt-1 text-[10px] text-white/60">
-                      {formatMessageTime(run.createdAt)}
-                    </p>
-                  </div>
-                </div>
+                <UserPromptBubble sentAt={run.createdAt}>{run.task}</UserPromptBubble>
 
                 {(isLive ? timeline : []).map((item) =>
                   item.kind === "approval" ? (
@@ -394,6 +421,15 @@ export function BotConversationView({
           ) : null}
         </div>
       </div>
+
+      {browserPreview?.pipOpen ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-[5.75rem] z-20 flex justify-end px-3 sm:bottom-[6rem] sm:px-5"
+          aria-hidden={false}
+        >
+          <BrowserPreviewView variant="pip" />
+        </div>
+      ) : null}
 
       <footer className="shrink-0 border-t border-border/70 bg-white/90 px-4 py-3 backdrop-blur-md">
         <form

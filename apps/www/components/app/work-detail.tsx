@@ -30,7 +30,10 @@ import {
   TimelineTitle,
 } from "@/components/reui/timeline";
 import { Button } from "@/components/ui/button";
+import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { ListTree } from "lucide-react";
+import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
+import { BrowserPreviewView } from "@/components/app/workspace/browser-preview-view";
 
 type Activity = {
   id: string;
@@ -184,34 +187,50 @@ export function WorkDetail({ runId }: { runId: string }) {
     }
   }
 
+  const previewEnabled = Boolean(detail?.computerId && detail && active(detail.status));
+
   return (
+    <BrowserPreviewProvider
+      computerId={detail?.computerId ?? null}
+      enabled={previewEnabled}
+      sessionKey={runId}
+    >
     <section className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 max-w-3xl">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Assignment
+      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Your message
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground" role="status">
+              {connection}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant={statusBadgeVariant(detail?.status)}>
+              {detail ? workStatus(detail.status) : "Loading…"}
+            </Badge>
+            {detail && active(detail.status) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={stopping}
+                onClick={() => void stop()}
+              >
+                {stopping ? "Stopping…" : "Stop work"}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        {detail?.task ? (
+          <UserPromptBubble>{detail.task}</UserPromptBubble>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {detail ? "No assignment text saved for this work." : "Loading assignment…"}
           </p>
-          <h1 className="mt-2 whitespace-pre-wrap break-words text-xl font-semibold">
-            {detail?.task ?? "Delegated work"}
-          </h1>
-          <p className="mt-3 text-sm text-muted-foreground" role="status">{connection}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant={statusBadgeVariant(detail?.status)}>
-            {detail ? workStatus(detail.status) : "Loading…"}
-          </Badge>
-          {detail && active(detail.status) ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={stopping}
-              onClick={() => void stop()}
-            >
-              {stopping ? "Stopping…" : "Stop work"}
-            </Button>
-          ) : null}
-        </div>
+        )}
       </div>
 
       {error ? (
@@ -242,6 +261,12 @@ export function WorkDetail({ runId }: { runId: string }) {
             send a follow-up.
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {detail?.computerId ? (
+        <div className="mx-auto max-w-2xl">
+          <BrowserPreviewView variant="work" />
+        </div>
       ) : null}
 
       {detail?.assistantResult ? (
@@ -302,5 +327,6 @@ export function WorkDetail({ runId }: { runId: string }) {
         </Link>
       ) : null}
     </section>
+    </BrowserPreviewProvider>
   );
 }

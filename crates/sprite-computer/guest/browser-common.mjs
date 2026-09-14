@@ -16,6 +16,7 @@ export const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_TYPE_TEXT_CHARS = 8_192;
 export const MAX_NAVIGATION_TIMEOUT_MS = 120_000;
 export const MAX_ACTION_TIMEOUT_MS = 30_000;
+export const MAX_PREVIEW_BYTES = 512 * 1024;
 export const MAX_DOWNLOAD_REDIRECTS = 10;
 
 const BLOCKED_HOSTNAMES = new Set([

@@ -435,7 +435,7 @@ async fn build_computer(
     Ok(Arc::new(computer))
 }
 
-async fn sprite_resource_for_computer(
+pub(crate) async fn sprite_resource_for_computer(
     pool: &sqlx::PgPool,
     computer_id: &str,
 ) -> Result<String, String> {

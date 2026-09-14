@@ -40,6 +40,12 @@ Refs stay valid while the browser daemon keeps the same page open. A new `browse
 
 Durable `tool_call` / `tool_result` events use the same pipeline as workspace tools. The workspace Computer panel maps browser tools via `apps/www/lib/work-events.ts`.
 
+### Live preview (workspace UI)
+
+While a run is active, the Computer rail polls `GET /v1/computers/{id}/browser-preview` every ~2s. The host calls the guest daemon `preview` action (viewport JPEG, base64, no workspace write, no tool approval). Preview frames skip temporary egress widening; only `navigate` and `download` open the network gate.
+
+The workspace UI shares one poll via `BrowserPreviewProvider`: embedded preview in the Computer rail, a floating picture-in-picture over the chat (manual **Pop out** or auto when you scroll), expand dialog, and native **Fullscreen** (`requestFullscreen`). The work detail page (`/app/work/[id]`) uses the same preview while a run is active.
+
 ## Verified smoke
 
 With Fly credentials and `ELSEWHERE_BROWSER_SMOKE=1`:

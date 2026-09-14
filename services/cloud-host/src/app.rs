@@ -42,6 +42,10 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/computers/{id}",
             get(api::computers::get).delete(api::computers::delete),
         )
+        .route(
+            "/v1/computers/{id}/browser-preview",
+            get(api::computers::browser_preview),
+        )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
             "/v1/providers/codex/login/start",

@@ -8,6 +8,7 @@ import { cn } from "cn";
 import { Monitor } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ComputerBrowserPreview } from "./computer-browser-preview";
 
 interface ComputerStatePanelProps {
   bot: BotSummary | null;
@@ -67,7 +68,6 @@ export function ComputerStatePanel({
   const readyLabel = computer?.providerMetadata.provisioned
     ? "Ready for work"
     : "Provisions on first use";
-
   if (variant === "minimal") {
     return (
       <section
@@ -117,6 +117,7 @@ export function ComputerStatePanel({
             ) : (
               <p className="text-xs text-muted-foreground">Idle — waiting for your next message.</p>
             )}
+            {bot.computerId ? <ComputerBrowserPreview /> : null}
           </div>
         )}
 
@@ -177,6 +178,9 @@ export function ComputerStatePanel({
               ) : (
                 <p className="text-sm text-white/65">Idle — waiting for your next message.</p>
               )}
+              {bot.computerId ? (
+                <ComputerBrowserPreview className="!mt-0" />
+              ) : null}
             </>
           )}
         </div>

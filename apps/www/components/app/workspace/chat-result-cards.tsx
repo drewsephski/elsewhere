@@ -81,6 +81,7 @@ export function ChatResultCards({ runId }: { runId: string }) {
             ? {
                 id: activeItem.id,
                 title: resultItemTitle(activeItem.kind, activeItem.name),
+                fileName: activeItem.name,
                 size: activeItem.size,
               }
             : null

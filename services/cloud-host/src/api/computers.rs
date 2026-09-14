@@ -1,10 +1,13 @@
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum::Json;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::app_state::AppState;
 use crate::auth::Principal;
+use crate::computer_session::connect_sprite_computer;
 use crate::db::resources::{
     archive_computer, get_computer_for_owner, insert_computer_placeholder, list_computers,
 };
@@ -84,6 +87,60 @@ pub async fn get(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
     Ok(Json(to_response(row)))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserPreviewResponse {
+    pub available: bool,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub content_type: Option<String>,
+    pub image_base64: Option<String>,
+    pub captured_at: String,
+}
+
+pub async fn browser_preview(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<BrowserPreviewResponse>, ApiError> {
+    let computer =
+        connect_sprite_computer(&state.config, &state.pool, principal.owner_id(), &computer_id)
+            .await?;
+    computer
+        .ensure_ready()
+        .await
+        .map_err(|e| ApiError::Internal(format!("computer not ready: {e}")))?;
+
+    let value = computer
+        .browser_invoke("preview", &json!({}))
+        .await
+        .map_err(|e| ApiError::Internal(format!("browser preview failed: {e}")))?;
+
+    let available = value
+        .get("available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let url = value.get("url").and_then(|v| v.as_str()).map(str::to_string);
+    let title = value.get("title").and_then(|v| v.as_str()).map(str::to_string);
+    let content_type = value
+        .get("contentType")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let image_base64 = value
+        .get("imageBase64")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    Ok(Json(BrowserPreviewResponse {
+        available,
+        url,
+        title,
+        content_type,
+        image_base64,
+        captured_at: Utc::now().to_rfc3339(),
+    }))
 }
 
 pub async fn delete(

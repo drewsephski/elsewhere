@@ -222,11 +222,13 @@ impl AgentComputer for SpriteComputer {
             ComputerError::MalformedArguments(format!("browser request JSON: {e}"))
         })?;
 
+        let require_egress = matches!(action, "navigate" | "download");
         let stdout = invoke_browser_daemon(
             &self.client,
             &self.network_policy,
             &payload,
             self.browser_exec_timeout,
+            require_egress,
         )
         .await?;
 

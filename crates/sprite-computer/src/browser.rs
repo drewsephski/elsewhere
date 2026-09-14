@@ -220,6 +220,7 @@ pub async fn invoke_browser_daemon(
     baseline_policy: &NetworkPolicyConfig,
     payload: &str,
     exec_timeout: Duration,
+    require_egress: bool,
 ) -> Result<String, ComputerError> {
     client
         .fs_write(BROWSER_REQUEST, payload.as_bytes(), true)
@@ -232,20 +233,32 @@ pub async fn invoke_browser_daemon(
          node {BROWSER_CLIENT} --request {BROWSER_REQUEST}"
     );
 
+    async fn run_client(
+        client: &SpriteClient,
+        command: &str,
+        exec_timeout: Duration,
+    ) -> Result<String, ComputerError> {
+        let (stdout, stderr, exit_code) = client
+            .exec_http(command, "/workspace", exec_timeout)
+            .await
+            .map_err(map_err)?;
+        if exit_code != 0 {
+            return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
+        }
+        Ok(stdout)
+    }
+
     let mut last_err = None;
     for attempt in 0..2 {
         ensure_browser_daemon(client, baseline_policy, exec_timeout).await?;
-        let stdout = with_temporary_egress(client, baseline_policy, async {
-            let (stdout, stderr, exit_code) = client
-                .exec_http(&command, "/workspace", exec_timeout)
-                .await
-                .map_err(map_err)?;
-            if exit_code != 0 {
-                return Err(map_browser_exec_error(&stdout, &stderr, exit_code));
-            }
-            Ok(stdout)
-        })
-        .await;
+        let stdout = if require_egress {
+            with_temporary_egress(client, baseline_policy, async {
+                run_client(client, &command, exec_timeout).await
+            })
+            .await
+        } else {
+            run_client(client, &command, exec_timeout).await
+        };
 
         match stdout {
             Ok(out) => return Ok(out),

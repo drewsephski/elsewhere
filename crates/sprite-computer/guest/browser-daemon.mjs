@@ -8,6 +8,7 @@ import {
   MAX_DOWNLOAD_BYTES,
   MAX_NAVIGATION_TIMEOUT_MS,
   MAX_TYPE_TEXT_CHARS,
+  MAX_PREVIEW_BYTES,
   assertPublicHttpUrl,
   buildSnapshot,
   downloadHttpWithRedirects,
@@ -107,6 +108,34 @@ async function handleRequest(req) {
         await target.press("Enter");
       }
       return { ok: true, url: page.url() };
+    }
+    case "preview": {
+      const pages = context.pages();
+      if (!pages.length) {
+        return { ok: true, available: false };
+      }
+      const active = pages[0];
+      const currentUrl = active.url();
+      if (!currentUrl || currentUrl === "about:blank") {
+        return { ok: true, available: false, url: currentUrl || null };
+      }
+      const buffer = await active.screenshot({
+        type: "jpeg",
+        quality: 62,
+        fullPage: false,
+        timeout: MAX_ACTION_TIMEOUT_MS,
+      });
+      if (buffer.length > MAX_PREVIEW_BYTES) {
+        throw new Error("preview frame exceeds size limit");
+      }
+      return {
+        ok: true,
+        available: true,
+        url: currentUrl,
+        title: await active.title(),
+        contentType: "image/jpeg",
+        imageBase64: buffer.toString("base64"),
+      };
     }
     case "screenshot": {
       const outPath = requireWorkspacePath(String(req.path ?? ""));
