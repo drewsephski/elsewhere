@@ -44,6 +44,7 @@ export function ComputersManager() {
     if (!window.confirm("Archive this computer? (Sprite is not destroyed in Phase 3C.1.)")) {
       return;
     }
+    setError(null);
     const response = await cloudHostFetch(`/v1/computers/${id}`, { method: "DELETE" });
     if (!response.ok) {
       setError("Archive failed");
