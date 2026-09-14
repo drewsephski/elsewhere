@@ -36,6 +36,7 @@ interface BotListSidebarProps {
   workspacePhase?: WorkspaceLoadPhase;
   workspaceError?: string | null;
   onCreateBot: () => void;
+  onCreateGroup?: () => void;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
   onDeleteBot?: (botId: string) => Promise<void>;
   footer: React.ReactNode;
@@ -58,6 +59,7 @@ export function BotListSidebar({
   workspacePhase = "ready",
   workspaceError = null,
   onCreateBot,
+  onCreateGroup,
   onRenameBot,
   onDeleteBot,
   footer,
@@ -181,6 +183,16 @@ export function BotListSidebar({
           <Plus className="size-4" aria-hidden />
           New bot
         </Button>
+        {onCreateGroup ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCreateGroup}
+            className="w-full gap-2 rounded-xl border-border/80 bg-white/80"
+          >
+            New group
+          </Button>
+        ) : null}
         {bots.length > 0 ? (
           <div className="flex gap-3 overflow-x-auto pb-1 lg:hidden" aria-label="Quick access">
             {bots.slice(0, 5).map((bot) => (

@@ -296,6 +296,7 @@ async fn execute_run(
     let input_messages = crate::conversation::build_run_input_messages(
         &pool,
         &input.records.conversation_id,
+        &input.bot_id,
         &input.records.assistant_message_id,
         &input.user_message,
         matches!(selected, SelectedRunEngine::ResponsesApi),

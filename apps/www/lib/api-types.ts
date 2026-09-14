@@ -63,8 +63,41 @@ export interface CreateRunResponse {
 
 export interface ConversationSummary {
   id: string;
-  botId: string;
+  botId: string | null;
+  conversationType: "direct" | "group" | string;
+  name?: string | null;
   updatedAt: string;
+}
+
+export interface GroupParticipantSummary {
+  botId: string;
+  name: string;
+  avatarId: string;
+  ordinal: number;
+  joinedAt: string;
+  leftAt?: string | null;
+}
+
+export interface GroupConversationDetail {
+  id: string;
+  name: string;
+  conversationType: string;
+  updatedAt: string;
+  participants: GroupParticipantSummary[];
+}
+
+export interface TranscriptMessage {
+  id: string;
+  sequence: number;
+  role: string;
+  body: string;
+  status: string;
+  authorKind: "human" | "bot" | "system" | string;
+  authorBotId?: string | null;
+  authorBotName?: string | null;
+  authorAvatarId?: string | null;
+  createdAt: string;
+  runId?: string | null;
 }
 
 export interface CreateConversationResponse {
@@ -82,6 +115,7 @@ export interface DelegationSummary {
   sourceBotName: string;
   targetBotId: string;
   targetBotName: string;
+  targetBotAvatarId?: string;
   sourceRunId: string;
   targetRunId?: string | null;
   targetRunStatus?: string | null;

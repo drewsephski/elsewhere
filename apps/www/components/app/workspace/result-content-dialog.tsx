@@ -17,6 +17,7 @@ import {
   RESULT_PREVIEW_MAX_BYTES,
   resultDownloadUrl,
 } from "@/lib/result-preview";
+import { cn } from "cn";
 import { useEffect, useState } from "react";
 
 export function resultItemTitle(kind: string, name: string): string {
@@ -189,15 +190,20 @@ export function ResultContentDialog({
 export function ResultOpenButton({
   label = "Open",
   onClick,
+  className,
 }: {
   label?: string;
   onClick: () => void;
+  className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        className,
+      )}
       aria-label={`${label} file`}
     >
       {label}

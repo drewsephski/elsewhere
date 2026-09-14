@@ -88,6 +88,31 @@ pub fn build_router(state: AppState) -> Router {
             get(api::catalog::list_conversations).post(api::catalog::create_conversation),
         )
         .route(
+            "/v1/conversations/groups",
+            post(api::conversations::create_group_conversation),
+        )
+        .route(
+            "/v1/conversations/{id}",
+            get(api::conversations::get_conversation),
+        )
+        .route(
+            "/v1/conversations/{id}/messages",
+            get(api::conversations::list_conversation_messages)
+                .post(api::conversations::append_human_message_handler),
+        )
+        .route(
+            "/v1/conversations/{id}/participants",
+            post(api::conversations::add_participant_handler),
+        )
+        .route(
+            "/v1/conversations/{id}/participants/{bot_id}",
+            delete(api::conversations::remove_participant_handler),
+        )
+        .route(
+            "/v1/conversations/{id}/runs",
+            post(api::conversations::enqueue_group_run),
+        )
+        .route(
             "/v1/runs/{id}/delegations",
             get(api::delegations::list_run_delegations),
         )

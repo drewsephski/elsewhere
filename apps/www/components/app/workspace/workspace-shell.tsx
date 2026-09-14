@@ -9,6 +9,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BotContextRail } from "./bot-context-rail";
 import { BotConversationView } from "./bot-conversation-view";
+import { GroupConversationView } from "./group-conversation-view";
+import { CreateGroupDialog } from "./create-group-dialog";
 import { BotListSidebar } from "./bot-list-sidebar";
 import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
@@ -55,6 +57,11 @@ function parseBotId(pathname: string): string | null {
   return match?.[1] ?? null;
 }
 
+function parseGroupId(pathname: string): string | null {
+  const match = pathname.match(/^\/app\/groups\/([^/]+)$/);
+  return match?.[1] ?? null;
+}
+
 export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -63,7 +70,9 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     useWorkspaceOverview();
 
   const selectedBotId = parseBotId(pathname);
+  const selectedGroupId = parseGroupId(pathname);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [bot, setBot] = useState<BotSummary | null>(null);
@@ -186,7 +195,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     [bot?.id, refresh],
   );
 
-  const showConversation = Boolean(selectedBotId);
+  const showConversation = Boolean(selectedBotId || selectedGroupId);
 
   const previewEnabled = Boolean(bot?.computerId);
   const previewComputerId = bot?.computerId ?? null;
@@ -209,7 +218,9 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           Background work is temporarily unavailable. Queued assignments stay saved.
         </p>
       ) : null}
-      {selectedBotId ? (
+      {selectedGroupId ? (
+        <GroupConversationView groupId={selectedGroupId} bots={bots} />
+      ) : selectedBotId ? (
         <BotConversationView
           botId={selectedBotId}
           onOpenContext={() => setContextSheetOpen(true)}
@@ -282,6 +293,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             workspacePhase={workspacePhase}
             workspaceError={workspaceError}
             onCreateBot={() => setCreateOpen(true)}
+            onCreateGroup={() => setCreateGroupOpen(true)}
             onRenameBot={handleRenameBot}
             onDeleteBot={handleDeleteBot}
             footer={
@@ -299,6 +311,12 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       </div>
 
       <CreateBotDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreateGroupDialog
+        open={createGroupOpen}
+        bots={bots}
+        onClose={() => setCreateGroupOpen(false)}
+        onCreated={(groupId) => router.push(`/app/groups/${groupId}`)}
+      />
 
       <MobileSheet
         open={contextSheetOpen}

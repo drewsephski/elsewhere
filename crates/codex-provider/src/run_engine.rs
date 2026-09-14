@@ -606,7 +606,11 @@ async fn open_elsewhere_codex_thread(
     thread_config: &ElsewhereThreadConfig,
     timeout: Duration,
 ) -> Result<String, ()> {
-    let stored_thread = match shared.store.get_codex_thread_id(&ctx.conversation_id).await {
+    let stored_thread = match shared
+        .store
+        .get_codex_thread_id(&ctx.conversation_id, &ctx.bot_id)
+        .await
+    {
         Ok(value) => value,
         Err(err) => {
             tracing::error!(error = %err, "could not load codex thread id");
@@ -640,7 +644,7 @@ async fn open_elsewhere_codex_thread(
                     );
                     let _ = shared
                         .store
-                        .clear_codex_thread_id(&ctx.conversation_id)
+                        .clear_codex_thread_id(&ctx.conversation_id, &ctx.bot_id)
                         .await;
                 } else if is_codex_active_writer_error(&err) {
                     tracing::warn!(
@@ -665,7 +669,7 @@ async fn open_elsewhere_codex_thread(
                             );
                             let _ = shared
                                 .store
-                                .clear_codex_thread_id(&ctx.conversation_id)
+                                .clear_codex_thread_id(&ctx.conversation_id, &ctx.bot_id)
                                 .await;
                         }
                         Err(_) => {
@@ -705,7 +709,7 @@ async fn open_elsewhere_codex_thread(
         Ok(Ok(id)) => {
             if let Err(err) = shared
                 .store
-                .set_codex_thread_id(&ctx.conversation_id, &id)
+                .set_codex_thread_id(&ctx.conversation_id, &ctx.bot_id, &id)
                 .await
             {
                 tracing::warn!(error = %err, "could not persist codex thread id");
@@ -857,7 +861,10 @@ async fn start_codex_turn(
             thread_id = %thread_id,
             "codex thread still locked after archive; starting a fresh thread"
         );
-        let _ = shared.store.clear_codex_thread_id(&ctx.conversation_id).await;
+        let _ = shared
+            .store
+            .clear_codex_thread_id(&ctx.conversation_id, &ctx.bot_id)
+            .await;
         *thread_id = match open_elsewhere_codex_thread(
             client,
             shared,
@@ -919,12 +926,12 @@ async fn maybe_compact_codex_thread(
 ) -> Result<(), ()> {
     let completed = shared
         .store
-        .count_completed_assistant_turns(&ctx.conversation_id)
+        .count_completed_assistant_turns(&ctx.conversation_id, &ctx.bot_id)
         .await
         .map_err(|_| ())?;
     let compacted_through = shared
         .store
-        .get_codex_compacted_through_turns(&ctx.conversation_id)
+        .get_codex_compacted_through_turns(&ctx.conversation_id, &ctx.bot_id)
         .await
         .map_err(|_| ())?;
     let milestone = codex_compact_milestone_due(completed, compacted_through, interval);
@@ -938,7 +945,7 @@ async fn maybe_compact_codex_thread(
         Ok(Ok(())) => {
             if let Err(err) = shared
                 .store
-                .set_codex_compacted_through_turns(&ctx.conversation_id, milestone)
+                .set_codex_compacted_through_turns(&ctx.conversation_id, &ctx.bot_id, milestone)
                 .await
             {
                 tracing::warn!(

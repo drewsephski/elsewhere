@@ -1,5 +1,6 @@
 "use client";
 
+import { MarkdownContent } from "@/components/app/markdown-content";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { useEffect, useState } from "react";
 
@@ -41,8 +42,8 @@ export function RunAssistantSnippet({
   }
 
   return (
-    <p className="mt-2 line-clamp-6 whitespace-pre-wrap break-words leading-relaxed text-foreground/90">
-      {text}
-    </p>
+    <div className="mt-2 text-foreground/90">
+      <MarkdownContent text={text} />
+    </div>
   );
 }

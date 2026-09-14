@@ -250,8 +250,9 @@ impl RunStore for PostgresRunStore {
     async fn get_codex_thread_id(
         &self,
         conversation_id: &str,
+        bot_id: &str,
     ) -> Result<Option<String>, RuntimeError> {
-        crate::conversation::get_codex_thread_id(&self.pool, conversation_id)
+        crate::conversation::get_codex_thread_id(&self.pool, conversation_id, bot_id)
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
@@ -259,15 +260,20 @@ impl RunStore for PostgresRunStore {
     async fn set_codex_thread_id(
         &self,
         conversation_id: &str,
+        bot_id: &str,
         thread_id: &str,
     ) -> Result<(), RuntimeError> {
-        crate::conversation::set_codex_thread_id(&self.pool, conversation_id, thread_id)
+        crate::conversation::set_codex_thread_id(&self.pool, conversation_id, bot_id, thread_id)
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
 
-    async fn clear_codex_thread_id(&self, conversation_id: &str) -> Result<(), RuntimeError> {
-        crate::conversation::clear_codex_thread_id(&self.pool, conversation_id)
+    async fn clear_codex_thread_id(
+        &self,
+        conversation_id: &str,
+        bot_id: &str,
+    ) -> Result<(), RuntimeError> {
+        crate::conversation::clear_codex_thread_id(&self.pool, conversation_id, bot_id)
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
@@ -275,8 +281,9 @@ impl RunStore for PostgresRunStore {
     async fn count_completed_assistant_turns(
         &self,
         conversation_id: &str,
+        bot_id: &str,
     ) -> Result<i64, RuntimeError> {
-        crate::conversation::count_completed_assistant_turns(&self.pool, conversation_id)
+        crate::conversation::count_completed_assistant_turns(&self.pool, conversation_id, bot_id)
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
@@ -284,8 +291,9 @@ impl RunStore for PostgresRunStore {
     async fn get_codex_compacted_through_turns(
         &self,
         conversation_id: &str,
+        bot_id: &str,
     ) -> Result<i64, RuntimeError> {
-        crate::conversation::get_codex_compacted_through_turns(&self.pool, conversation_id)
+        crate::conversation::get_codex_compacted_through_turns(&self.pool, conversation_id, bot_id)
             .await
             .map_err(|e| RuntimeError::Store(e.to_string()))
     }
@@ -293,11 +301,17 @@ impl RunStore for PostgresRunStore {
     async fn set_codex_compacted_through_turns(
         &self,
         conversation_id: &str,
+        bot_id: &str,
         turns: i64,
     ) -> Result<(), RuntimeError> {
-        crate::conversation::set_codex_compacted_through_turns(&self.pool, conversation_id, turns)
-            .await
-            .map_err(|e| RuntimeError::Store(e.to_string()))
+        crate::conversation::set_codex_compacted_through_turns(
+            &self.pool,
+            conversation_id,
+            bot_id,
+            turns,
+        )
+        .await
+        .map_err(|e| RuntimeError::Store(e.to_string()))
     }
 }
 

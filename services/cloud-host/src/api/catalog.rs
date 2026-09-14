@@ -74,7 +74,9 @@ pub struct ListConversationsQuery {
 #[serde(rename_all = "camelCase")]
 pub struct ConversationSummaryResponse {
     pub id: String,
-    pub bot_id: String,
+    pub bot_id: Option<String>,
+    pub conversation_type: String,
+    pub name: Option<String>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -97,6 +99,8 @@ pub async fn list_conversations(
             .map(|row| ConversationSummaryResponse {
                 id: row.id,
                 bot_id: row.bot_id,
+                conversation_type: row.conversation_type,
+                name: row.name,
                 updated_at: row.updated_at,
             })
             .collect(),

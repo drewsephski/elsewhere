@@ -38,7 +38,7 @@ pub async fn get_or_create_primary_conversation_id_in_tx(
     bot_id: &str,
 ) -> Result<String, ApiError> {
     if let Some(id) = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2 ORDER BY updated_at DESC LIMIT 1",
+        "SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2 AND conversation_type = 'direct' ORDER BY updated_at DESC LIMIT 1",
     )
     .bind(bot_id)
     .bind(owner)
@@ -49,7 +49,9 @@ pub async fn get_or_create_primary_conversation_id_in_tx(
         return Ok(id);
     }
     let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, $2, $3)")
+    sqlx::query(
+        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type) VALUES ($1, $2, $3, 'direct')",
+    )
         .bind(&id)
         .bind(owner)
         .bind(bot_id)
@@ -76,7 +78,9 @@ pub async fn create_conversation_for_bot(
         return Err(ApiError::NotFound);
     }
     let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, $2, $3)")
+    sqlx::query(
+        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type) VALUES ($1, $2, $3, 'direct')",
+    )
         .bind(&id)
         .bind(owner)
         .bind(bot_id)
@@ -86,28 +90,76 @@ pub async fn create_conversation_for_bot(
     Ok(id)
 }
 
+async fn ensure_bot_thread_row(
+    pool: &PgPool,
+    conversation_id: &str,
+    bot_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO conversation_bot_threads (conversation_id, bot_id, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (conversation_id, bot_id) DO NOTHING
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn get_codex_thread_id(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    let value: Option<Option<String>> =
-        sqlx::query_scalar("SELECT codex_thread_id FROM conversations WHERE id = $1")
-            .bind(conversation_id)
-            .fetch_optional(pool)
-            .await?;
-    Ok(value.and_then(|inner| inner))
+    let value: Option<Option<String>> = sqlx::query_scalar(
+        "SELECT codex_thread_id FROM conversation_bot_threads WHERE conversation_id = $1 AND bot_id = $2",
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
+    .fetch_optional(pool)
+    .await?;
+    if value.is_some() {
+        return Ok(value.and_then(|inner| inner));
+    }
+    let legacy: Option<Option<String>> =
+        sqlx::query_scalar(
+            "SELECT codex_thread_id FROM conversations WHERE id = $1 AND bot_id = $2",
+        )
+        .bind(conversation_id)
+        .bind(bot_id)
+        .fetch_optional(pool)
+        .await?;
+    Ok(legacy.and_then(|inner| inner))
 }
 
 pub async fn set_codex_thread_id(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
     thread_id: &str,
 ) -> Result<(), sqlx::Error> {
+    ensure_bot_thread_row(pool, conversation_id, bot_id).await?;
     sqlx::query(
-        "UPDATE conversations SET codex_thread_id = $2, updated_at = NOW() WHERE id = $1",
+        r#"
+        UPDATE conversation_bot_threads
+        SET codex_thread_id = $3, updated_at = NOW()
+        WHERE conversation_id = $1 AND bot_id = $2
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
+    .bind(thread_id)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE conversations SET codex_thread_id = $2, updated_at = NOW() WHERE id = $1 AND bot_id = $3",
     )
     .bind(conversation_id)
     .bind(thread_id)
+    .bind(bot_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -116,11 +168,23 @@ pub async fn set_codex_thread_id(
 pub async fn get_codex_compacted_through_turns(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
 ) -> Result<i64, sqlx::Error> {
-    sqlx::query_scalar(
-        "SELECT codex_compacted_through_turns FROM conversations WHERE id = $1",
+    let per_bot: Option<i64> = sqlx::query_scalar(
+        "SELECT codex_compacted_through_turns FROM conversation_bot_threads WHERE conversation_id = $1 AND bot_id = $2",
     )
     .bind(conversation_id)
+    .bind(bot_id)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(value) = per_bot {
+        return Ok(value);
+    }
+    sqlx::query_scalar(
+        "SELECT codex_compacted_through_turns FROM conversations WHERE id = $1 AND bot_id = $2",
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| sqlx::Error::RowNotFound)
@@ -129,23 +193,50 @@ pub async fn get_codex_compacted_through_turns(
 pub async fn set_codex_compacted_through_turns(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
     turns: i64,
 ) -> Result<(), sqlx::Error> {
+    ensure_bot_thread_row(pool, conversation_id, bot_id).await?;
     sqlx::query(
-        "UPDATE conversations SET codex_compacted_through_turns = $2, updated_at = NOW() WHERE id = $1",
+        r#"
+        UPDATE conversation_bot_threads
+        SET codex_compacted_through_turns = $3, updated_at = NOW()
+        WHERE conversation_id = $1 AND bot_id = $2
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
+    .bind(turns)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE conversations SET codex_compacted_through_turns = $2, updated_at = NOW() WHERE id = $1 AND bot_id = $3",
     )
     .bind(conversation_id)
     .bind(turns)
+    .bind(bot_id)
     .execute(pool)
     .await?;
     Ok(())
 }
 
-pub async fn clear_codex_thread_id(pool: &PgPool, conversation_id: &str) -> Result<(), sqlx::Error> {
+pub async fn clear_codex_thread_id(
+    pool: &PgPool,
+    conversation_id: &str,
+    bot_id: &str,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE conversations SET codex_thread_id = NULL, updated_at = NOW() WHERE id = $1",
+        "UPDATE conversation_bot_threads SET codex_thread_id = NULL, updated_at = NOW() WHERE conversation_id = $1 AND bot_id = $2",
     )
     .bind(conversation_id)
+    .bind(bot_id)
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "UPDATE conversations SET codex_thread_id = NULL, updated_at = NOW() WHERE id = $1 AND bot_id = $2",
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
     .execute(pool)
     .await?;
     Ok(())
@@ -154,11 +245,19 @@ pub async fn clear_codex_thread_id(pool: &PgPool, conversation_id: &str) -> Resu
 pub async fn count_completed_assistant_turns(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
 ) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar(
-        "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 AND role = 'assistant' AND status = 'complete'",
+        r#"
+        SELECT COUNT(*) FROM messages
+        WHERE conversation_id = $1
+          AND author_kind = 'bot'
+          AND author_bot_id = $2
+          AND status = 'complete'
+        "#,
     )
     .bind(conversation_id)
+    .bind(bot_id)
     .fetch_one(pool)
     .await
 }
@@ -174,6 +273,7 @@ struct HistoryRow {
 pub async fn build_run_input_messages(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
     assistant_message_id: &str,
     user_message: &str,
     include_prior_turns: bool,
@@ -185,8 +285,13 @@ pub async fn build_run_input_messages(
     if !include_prior_turns {
         return Ok(vec![user_turn]);
     }
-    let mut messages =
-        load_bounded_responses_history(pool, conversation_id, assistant_message_id).await?;
+    let mut messages = load_bounded_responses_history(
+        pool,
+        conversation_id,
+        bot_id,
+        assistant_message_id,
+    )
+    .await?;
     messages.push(user_turn);
     Ok(messages)
 }
@@ -195,6 +300,7 @@ pub async fn build_run_input_messages(
 pub async fn load_bounded_responses_history(
     pool: &PgPool,
     conversation_id: &str,
+    bot_id: &str,
     exclude_message_id: &str,
 ) -> Result<Vec<Value>, String> {
     let rows = sqlx::query(
@@ -211,11 +317,17 @@ pub async fn load_bounded_responses_history(
           )
           AND role IN ('user', 'assistant')
           AND status IN ('complete', 'cancelled', 'interrupted', 'error')
+          AND (
+            role = 'user'
+            OR author_bot_id IS NULL
+            OR author_bot_id = $3
+          )
         ORDER BY sequence ASC
         "#,
     )
     .bind(conversation_id)
     .bind(exclude_message_id)
+    .bind(bot_id)
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;
@@ -328,7 +440,7 @@ mod tests {
         .unwrap();
 
         let history =
-            load_bounded_responses_history(&pool, &conv_id, &asst_current)
+            load_bounded_responses_history(&pool, &conv_id, &bot_id, &asst_current)
                 .await
                 .unwrap();
         let bodies: Vec<String> = history

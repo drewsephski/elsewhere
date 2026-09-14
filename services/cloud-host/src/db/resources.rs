@@ -38,7 +38,9 @@ pub struct SandboxRow {
 pub struct ConversationRow {
     pub id: String,
     pub owner_id: String,
-    pub bot_id: String,
+    pub bot_id: Option<String>,
+    pub conversation_type: String,
+    pub name: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -446,10 +448,17 @@ pub async fn list_conversations_for_owner(
     if let Some(bot_id) = bot_id {
         sqlx::query_as(
             r#"
-            SELECT id, owner_id, bot_id, created_at, updated_at
-            FROM conversations
-            WHERE owner_id = $1 AND bot_id = $2
-            ORDER BY updated_at DESC
+            SELECT c.id, c.owner_id, c.bot_id, c.conversation_type, c.name, c.created_at, c.updated_at
+            FROM conversations c
+            WHERE c.owner_id = $1
+              AND (
+                (c.conversation_type = 'direct' AND c.bot_id = $2)
+                OR EXISTS (
+                  SELECT 1 FROM conversation_participants p
+                  WHERE p.conversation_id = c.id AND p.bot_id = $2 AND p.left_at IS NULL
+                )
+              )
+            ORDER BY c.updated_at DESC
             LIMIT $3
             "#,
         )
@@ -461,7 +470,7 @@ pub async fn list_conversations_for_owner(
     } else {
         sqlx::query_as(
             r#"
-            SELECT id, owner_id, bot_id, created_at, updated_at
+            SELECT id, owner_id, bot_id, conversation_type, name, created_at, updated_at
             FROM conversations
             WHERE owner_id = $1
             ORDER BY updated_at DESC

@@ -101,11 +101,7 @@ pub async fn enqueue_in_transaction(
     let computer_id: String = bot.get("computer_id");
     let engine: String = bot.get("engine_preference");
     let conversation_id = if let Some(id) = conversation_id {
-        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND bot_id = $2 AND owner_id = $3)")
-            .bind(id).bind(bot_id).bind(owner).fetch_one(&mut **tx).await.map_err(db_error)?;
-        if !exists {
-            return Err(ApiError::NotFound);
-        }
+        crate::groups::assert_bot_may_use_conversation(tx, owner, bot_id, id).await?;
         id.to_string()
     } else {
         get_or_create_primary_conversation_id_in_tx(tx, owner, bot_id).await?
@@ -123,9 +119,29 @@ pub async fn enqueue_in_transaction(
     .await
     .map_err(db_error)?;
     let assistant_message_id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO messages (id, conversation_id, role, body, status, sequence, model) VALUES ($1, $2, 'user', $3, 'complete', $4, $5), ($6, $2, 'assistant', '', 'pending', $4 + 1, $5)")
-        .bind(Uuid::new_v4().to_string()).bind(&conversation_id).bind(message.trim()).bind(sequence).bind(&model).bind(&assistant_message_id)
-        .execute(&mut **tx).await.map_err(db_error)?;
+    let user_message_id = Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"
+        INSERT INTO messages (id, conversation_id, role, body, status, sequence, model, author_kind)
+        VALUES ($1, $2, 'user', $3, 'complete', $4, $5, 'human'),
+               ($6, $2, 'assistant', '', 'pending', $4 + 1, $5, 'bot')
+        "#,
+    )
+    .bind(&user_message_id)
+    .bind(&conversation_id)
+    .bind(message.trim())
+    .bind(sequence)
+    .bind(&model)
+    .bind(&assistant_message_id)
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
+    sqlx::query("UPDATE messages SET author_bot_id = $2 WHERE id = $1")
+        .bind(&assistant_message_id)
+        .bind(bot_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_error)?;
     let run_id = Uuid::new_v4().to_string();
     sqlx::query("INSERT INTO agent_runs (id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status, assistant_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',$8)")
         .bind(&run_id).bind(owner).bind(request_id).bind(bot_id).bind(&conversation_id).bind(&computer_id).bind(&model).bind(&assistant_message_id)

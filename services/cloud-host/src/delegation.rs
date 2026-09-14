@@ -127,34 +127,12 @@ pub async fn create_delegation(
 
     let mut tx = pool.begin().await.map_err(db_error)?;
 
-    if let Some(existing) = sqlx::query(
-        "SELECT id, target_bot_id, target_run_id, status FROM bot_delegations WHERE source_run_id = $1 AND tool_invocation_id = $2",
-    )
-    .bind(&ctx.source_run_id)
-    .bind(&ctx.tool_invocation_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(db_error)?
+    if let Some(result) =
+        load_delegation_by_invocation(&mut tx, &ctx.source_run_id, &ctx.tool_invocation_id, &ctx.owner_id)
+            .await?
     {
-        let delegation_id: String = existing.get("id");
-        let target_run_id: Option<String> = existing.get("target_run_id");
-        let status: String = existing.get("status");
-        let target_bot_id_stored: String = existing.get("target_bot_id");
-        let target_name: String = sqlx::query_scalar("SELECT name FROM bots WHERE id = $1 AND owner_id = $2")
-            .bind(&target_bot_id_stored)
-            .bind(&ctx.owner_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(db_error)?
-            .unwrap_or_else(|| "Bot".into());
         tx.commit().await.map_err(db_error)?;
-        return Ok(DelegationEnqueueResult {
-            delegation_id,
-            target_bot_id: target_bot_id_stored,
-            target_bot_name: target_name,
-            target_run_id: target_run_id.unwrap_or_default(),
-            status,
-        });
+        return Ok(result);
     }
 
     let source_row = sqlx::query(
@@ -175,6 +153,20 @@ pub async fn create_delegation(
 
     let (root_run_id, parent_delegation_id, depth) =
         resolve_delegation_chain(&mut tx, &ctx.source_run_id).await?;
+
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(format!("delegation-root:{root_run_id}"))
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    if let Some(result) =
+        load_delegation_by_invocation(&mut tx, &ctx.source_run_id, &ctx.tool_invocation_id, &ctx.owner_id)
+            .await?
+    {
+        tx.commit().await.map_err(db_error)?;
+        return Ok(result);
+    }
 
     if depth >= MAX_DELEGATION_DEPTH {
         return Err(CollaborationError::LimitExceeded(format!(
@@ -226,7 +218,7 @@ pub async fn create_delegation(
 
     let target_request_id = format!("delegation-{delegation_id}");
 
-    sqlx::query(
+    let delegation_insert = sqlx::query(
         r#"
         INSERT INTO bot_delegations (
             id, owner_id, source_bot_id, target_bot_id, source_run_id, source_conversation_id,
@@ -249,8 +241,24 @@ pub async fn create_delegation(
     .bind(context)
     .bind(&ctx.tool_invocation_id)
     .execute(&mut *tx)
-    .await
-    .map_err(db_error)?;
+    .await;
+
+    if let Err(err) = delegation_insert {
+        if is_unique_violation(&err) {
+            if let Some(result) = load_delegation_by_invocation(
+                &mut tx,
+                &ctx.source_run_id,
+                &ctx.tool_invocation_id,
+                &ctx.owner_id,
+            )
+            .await?
+            {
+                tx.commit().await.map_err(db_error)?;
+                return Ok(result);
+            }
+        }
+        return Err(db_error(err));
+    }
 
     let records = work::enqueue_delegated_in_transaction(
         &mut tx,
@@ -322,6 +330,54 @@ async fn resolve_delegation_chain(
     } else {
         Ok((source_run_id.to_string(), None, 0))
     }
+}
+
+fn is_unique_violation(err: &sqlx::Error) -> bool {
+    matches!(
+        err,
+        sqlx::Error::Database(db) if db.code().as_deref() == Some("23505")
+    )
+}
+
+async fn load_delegation_by_invocation(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    source_run_id: &str,
+    tool_invocation_id: &str,
+    owner_id: &str,
+) -> Result<Option<DelegationEnqueueResult>, CollaborationError> {
+    let existing = sqlx::query(
+        "SELECT id, target_bot_id, target_run_id, status FROM bot_delegations WHERE source_run_id = $1 AND tool_invocation_id = $2",
+    )
+    .bind(source_run_id)
+    .bind(tool_invocation_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_error)?;
+
+    let Some(existing) = existing else {
+        return Ok(None);
+    };
+
+    let delegation_id: String = existing.get("id");
+    let target_run_id: Option<String> = existing.get("target_run_id");
+    let status: String = existing.get("status");
+    let target_bot_id_stored: String = existing.get("target_bot_id");
+    let target_name: String =
+        sqlx::query_scalar("SELECT name FROM bots WHERE id = $1 AND owner_id = $2")
+            .bind(&target_bot_id_stored)
+            .bind(owner_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_error)?
+            .unwrap_or_else(|| "Bot".into());
+
+    Ok(Some(DelegationEnqueueResult {
+        delegation_id,
+        target_bot_id: target_bot_id_stored,
+        target_bot_name: target_name,
+        target_run_id: target_run_id.unwrap_or_default(),
+        status,
+    }))
 }
 
 fn map_work_error(err: ApiError) -> CollaborationError {
@@ -470,6 +526,7 @@ pub struct DelegationDetail {
     pub source_bot_name: String,
     pub target_bot_id: String,
     pub target_bot_name: String,
+    pub target_bot_avatar_id: String,
     pub source_run_id: String,
     pub target_run_id: Option<String>,
     pub target_run_status: Option<String>,
@@ -502,6 +559,7 @@ pub async fn list_for_run(
         SELECT d.*,
                sb.name AS source_bot_name,
                tb.name AS target_bot_name,
+               tb.avatar_id AS target_bot_avatar_id,
                tr.status AS target_run_status
         FROM bot_delegations d
         JOIN bots sb ON sb.id = d.source_bot_id
@@ -530,6 +588,7 @@ pub async fn get_delegation(
         SELECT d.*,
                sb.name AS source_bot_name,
                tb.name AS target_bot_name,
+               tb.avatar_id AS target_bot_avatar_id,
                tr.status AS target_run_status
         FROM bot_delegations d
         JOIN bots sb ON sb.id = d.source_bot_id
@@ -559,6 +618,7 @@ fn map_delegation_row(row: sqlx::postgres::PgRow) -> DelegationDetail {
         source_bot_name: row.get("source_bot_name"),
         target_bot_id: row.get("target_bot_id"),
         target_bot_name: row.get("target_bot_name"),
+        target_bot_avatar_id: row.get("target_bot_avatar_id"),
         source_run_id: row.get("source_run_id"),
         target_run_id: row.get("target_run_id"),
         target_run_status: row.get("target_run_status"),

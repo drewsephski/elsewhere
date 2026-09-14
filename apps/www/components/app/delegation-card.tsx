@@ -38,7 +38,7 @@ export function DelegationCard({ delegation }: DelegationCardProps) {
     >
       <div className="flex min-w-0 items-start gap-3">
         <BotCreatureAvatar
-          avatarId={DEFAULT_BOT_AVATAR_ID}
+          avatarId={delegation.targetBotAvatarId ?? DEFAULT_BOT_AVATAR_ID}
           name={delegation.targetBotName}
           size="sm"
         />

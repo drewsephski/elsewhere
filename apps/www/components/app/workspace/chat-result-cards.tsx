@@ -2,6 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { formatBytes } from "@/lib/format";
+import { cn } from "cn";
 import { FileText } from "@/components/icons/lucide";
 import { useEffect, useState } from "react";
 import {
@@ -17,7 +18,13 @@ type ResultItem = {
   size: number;
 };
 
-export function ChatResultCards({ runId }: { runId: string }) {
+export function ChatResultCards({
+  runId,
+  className,
+}: {
+  runId: string;
+  className?: string;
+}) {
   const [items, setItems] = useState<ResultItem[]>([]);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<ResultItem | null>(null);
@@ -47,28 +54,37 @@ export function ChatResultCards({ runId }: { runId: string }) {
 
   return (
     <>
-      <div className="mt-2 flex flex-col gap-2">
+      <div
+        className={cn(
+          "flex flex-col gap-1 border-t border-border/50 pt-2",
+          className,
+        )}
+      >
         {items.map((item) => (
           <div
             key={item.id}
-            className="flex items-center gap-3 rounded-2xl border border-border/80 bg-white px-3 py-2.5 text-sm shadow-sm"
+            className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-2 py-1"
           >
             <button
               type="button"
               onClick={() => handleOpen(item)}
-              className="flex min-w-0 flex-1 items-center gap-3 text-left transition-colors rounded-xl -m-1 p-1 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs transition-colors rounded-md -my-0.5 py-0.5 pr-1 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileText className="size-5" aria-hidden />
+              <FileText
+                className="size-3.5 shrink-0 text-primary/80"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">
+                {resultItemTitle(item.kind, item.name)}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">
-                  {resultItemTitle(item.kind, item.name)}
-                </span>
-                <span className="text-xs text-muted-foreground">{formatBytes(item.size)}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {formatBytes(item.size)}
               </span>
             </button>
-            <ResultOpenButton onClick={() => handleOpen(item)} />
+            <ResultOpenButton
+              onClick={() => handleOpen(item)}
+              className="rounded-md px-1.5 py-0.5 text-[11px]"
+            />
           </div>
         ))}
       </div>

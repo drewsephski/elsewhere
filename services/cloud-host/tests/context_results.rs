@@ -106,7 +106,11 @@ struct Files {
 #[async_trait]
 impl AgentComputer for Files {
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
-        unreachable!()
+        Ok(ComputerInfo {
+            ready: true,
+            protocol_version: 1,
+            detail: None,
+        })
     }
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let entries = if path == "/workspace" {

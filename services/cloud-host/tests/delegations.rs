@@ -1,6 +1,8 @@
-use agent_core::CollaborationContext;
+use agent_core::{CollaborationContext, MAX_CHILD_DELEGATIONS_PER_ROOT};
 use cloud_host::{db::resources, delegation, work};
 use sqlx::PgPool;
+use std::sync::Arc;
+use tokio::sync::Barrier;
 use uuid::Uuid;
 
 async fn bot_with_computer(pool: &PgPool, owner: &str, name: &str) -> resources::BotRow {
@@ -168,4 +170,122 @@ async fn depth_and_fanout_limits(pool: PgPool) {
         too_deep,
         agent_core::CollaborationError::LimitExceeded(_)
     ));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_same_invocation_returns_one_delegation(pool: PgPool) {
+    let chief = bot_with_computer(&pool, "alice", "Chief").await;
+    let researcher = bot_with_computer(&pool, "alice", "Researcher").await;
+    let source = enqueue_user_run(&pool, "alice", &chief.id, "Plan").await;
+    let ctx = CollaborationContext {
+        owner_id: "alice".into(),
+        source_bot_id: chief.id.clone(),
+        source_run_id: source.run_id.clone(),
+        source_conversation_id: source.conversation_id.clone(),
+        source_request_id: source.request_id.clone(),
+        tool_invocation_id: "invoke-race".into(),
+    };
+
+    let barrier = Arc::new(Barrier::new(2));
+    let pool_a = pool.clone();
+    let pool_b = pool.clone();
+    let ctx_a = ctx.clone();
+    let ctx_b = ctx.clone();
+    let target = researcher.id.clone();
+
+    let target_a = target.clone();
+    let barrier_b = barrier.clone();
+    let first = tokio::spawn(async move {
+        barrier.wait().await;
+        delegation::create_delegation(&pool_a, &ctx_a, &target_a, "Race", None)
+            .await
+            .unwrap()
+    });
+    let second = tokio::spawn(async move {
+        barrier_b.wait().await;
+        delegation::create_delegation(&pool_b, &ctx_b, &target, "Race", None)
+            .await
+            .unwrap()
+    });
+
+    let a = first.await.unwrap();
+    let b = second.await.unwrap();
+    assert_eq!(a.delegation_id, b.delegation_id);
+    assert_eq!(a.target_run_id, b.target_run_id);
+
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bot_delegations WHERE source_run_id = $1 AND tool_invocation_id = $2",
+    )
+    .bind(&source.run_id)
+    .bind("invoke-race")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_fanout_cannot_exceed_root_limit(pool: PgPool) {
+    let chief = bot_with_computer(&pool, "alice", "Chief").await;
+    let helper = bot_with_computer(&pool, "alice", "Helper").await;
+    let source = enqueue_user_run(&pool, "alice", &chief.id, "Fanout").await;
+    let remaining = MAX_CHILD_DELEGATIONS_PER_ROOT as usize;
+
+    for index in 0..remaining {
+        let ctx = CollaborationContext {
+            owner_id: "alice".into(),
+            source_bot_id: chief.id.clone(),
+            source_run_id: source.run_id.clone(),
+            source_conversation_id: source.conversation_id.clone(),
+            source_request_id: source.request_id.clone(),
+            tool_invocation_id: format!("fan-{index}"),
+        };
+        delegation::create_delegation(&pool, &ctx, &helper.id, "task", None)
+            .await
+            .unwrap();
+    }
+
+    let ctx_overflow = CollaborationContext {
+        owner_id: "alice".into(),
+        source_bot_id: chief.id.clone(),
+        source_run_id: source.run_id.clone(),
+        source_conversation_id: source.conversation_id.clone(),
+        source_request_id: source.request_id.clone(),
+        tool_invocation_id: "fan-overflow-a".into(),
+    };
+    let ctx_overflow_b = CollaborationContext {
+        tool_invocation_id: "fan-overflow-b".into(),
+        ..ctx_overflow.clone()
+    };
+
+    let barrier = Arc::new(Barrier::new(2));
+    let pool_a = pool.clone();
+    let pool_b = pool.clone();
+    let helper_id = helper.id.clone();
+
+    let helper_a = helper_id.clone();
+    let helper_b = helper_id.clone();
+    let barrier_b = barrier.clone();
+    let first = tokio::spawn(async move {
+        barrier.wait().await;
+        delegation::create_delegation(&pool_a, &ctx_overflow, &helper_a, "one more", None).await
+    });
+    let second = tokio::spawn(async move {
+        barrier_b.wait().await;
+        delegation::create_delegation(&pool_b, &ctx_overflow_b, &helper_b, "one more", None).await
+    });
+
+    let outcome_a = first.await.unwrap();
+    let outcome_b = second.await.unwrap();
+    assert!(outcome_a.is_err());
+    assert!(outcome_b.is_err());
+
+    let total: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bot_delegations WHERE root_run_id = $1",
+    )
+    .bind(&source.run_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(total, MAX_CHILD_DELEGATIONS_PER_ROOT);
 }

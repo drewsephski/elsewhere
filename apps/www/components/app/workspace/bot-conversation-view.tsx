@@ -11,6 +11,7 @@ import type {
   RunSummary,
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
+import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { MarkdownContent } from "@/components/app/markdown-content";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
@@ -474,6 +476,10 @@ export function BotConversationView({
                 {!isLive && run.status !== "queued" && run.status !== "running" ? (
                   <div className="flex justify-start">
                     <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
+                      <RunDelegationList
+                        runId={run.runId}
+                        enabled={!isLive && run.status !== "queued" && run.status !== "running"}
+                      />
                       <p className="text-xs font-medium text-muted-foreground">
                         {workStatus(run.status)}
                       </p>
@@ -494,7 +500,7 @@ export function BotConversationView({
                         View full progress
                         <Info className="size-3" aria-hidden />
                       </Link>
-                      <ChatResultCards runId={run.runId} />
+                      <ChatResultCards runId={run.runId} className="mt-3" />
                     </div>
                   </div>
                 ) : null}
@@ -511,15 +517,15 @@ export function BotConversationView({
                         </p>
                       ) : null}
                       {assistantText ? (
-                        <p className="mt-2 whitespace-pre-wrap break-words leading-relaxed">
-                          {assistantText}
+                        <div className="mt-2">
+                          <MarkdownContent text={assistantText} />
                           {assistantStream.streaming ? (
                             <span
                               className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
                               aria-hidden
                             />
                           ) : null}
-                        </p>
+                        </div>
                       ) : (
                         <p className="mt-2 text-muted-foreground">
                           {assistantStream.streaming
@@ -527,13 +533,13 @@ export function BotConversationView({
                             : "Your bot is working on this…"}
                         </p>
                       )}
-                      <ChatResultCards runId={run.runId} />
                       <Link
                         href={`/app/work/${run.runId}`}
                         className="mt-3 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
                       >
                         Open detailed work view
                       </Link>
+                      <ChatResultCards runId={run.runId} className="mt-2" />
                     </div>
                   </div>
                 ) : null}
