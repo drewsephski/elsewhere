@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use sqlx::PgPool;
+use serde_json::{json, Value};
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use agent_core::DEFAULT_MODEL;
@@ -34,7 +34,9 @@ pub struct RunEventRow {
 }
 
 pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
+    let mut tx = pool.begin().await?;
+
+    let restarted: Vec<(String, Option<String>)> = sqlx::query_as(
         r#"
         UPDATE agent_runs
         SET status = 'interrupted',
@@ -42,11 +44,44 @@ pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
             updated_at = NOW(),
             finished_at = COALESCE(finished_at, NOW())
         WHERE status = 'running'
+        RETURNING request_id, assistant_message_id
         "#,
     )
-    .execute(pool)
+    .fetch_all(&mut *tx)
     .await?;
-    Ok(result.rows_affected())
+
+    for (_, assistant_message_id) in &restarted {
+        if let Some(message_id) = assistant_message_id {
+            sqlx::query(
+                r#"
+                UPDATE messages
+                SET status = 'interrupted', updated_at = NOW()
+                WHERE id = $1 AND status IN ('pending', 'streaming')
+                "#,
+            )
+            .bind(message_id)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
+
+    for (request_id, _) in &restarted {
+        let payload = json!({
+            "status": "interrupted",
+            "code": "host_restart",
+            "detail": "cloud host restarted while run was active",
+        });
+        sqlx::query(
+            "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'host_restart', $2)",
+        )
+        .bind(request_id)
+        .bind(&payload)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(restarted.len() as u64)
 }
 
 pub async fn find_run_by_id(pool: &PgPool, run_id: &str) -> Result<Option<AgentRunRow>, sqlx::Error> {
@@ -78,6 +113,22 @@ pub async fn find_run_by_request_id(
     .await
 }
 
+async fn find_run_by_request_id_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    request_id: &str,
+) -> Result<Option<AgentRunRow>, sqlx::Error> {
+    sqlx::query_as(
+        r#"
+        SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
+               error_code, step_count, assistant_message_id, started_at, finished_at
+        FROM agent_runs WHERE request_id = $1
+        "#,
+    )
+    .bind(request_id)
+    .fetch_optional(&mut **tx)
+    .await
+}
+
 pub async fn list_run_events_after(
     pool: &PgPool,
     request_id: &str,
@@ -104,11 +155,10 @@ pub async fn assistant_message_body(
     pool: &PgPool,
     message_id: &str,
 ) -> Result<Option<String>, sqlx::Error> {
-    let row: Option<(String,)> =
-        sqlx::query_as("SELECT body FROM messages WHERE id = $1")
-            .bind(message_id)
-            .fetch_optional(pool)
-            .await?;
+    let row: Option<(String,)> = sqlx::query_as("SELECT body FROM messages WHERE id = $1")
+        .bind(message_id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(|r| r.0))
 }
 
@@ -121,6 +171,56 @@ pub struct BootstrapRunRecords {
     pub computer_id: String,
     pub model: String,
     pub instructions: String,
+    pub is_new_run: bool,
+}
+
+async fn advisory_lock_request(tx: &mut Transaction<'_, Postgres>, request_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(request_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn advisory_lock_conversation_sequence(
+    tx: &mut Transaction<'_, Postgres>,
+    conversation_id: &str,
+) -> Result<(), sqlx::Error> {
+    let key = format!("conversation-seq:{conversation_id}");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(&key)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn next_message_sequence_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    conversation_id: &str,
+) -> Result<i64, sqlx::Error> {
+    advisory_lock_conversation_sequence(tx, conversation_id).await?;
+    let row: (Option<i64>,) = sqlx::query_as(
+        "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(row.0.unwrap_or(0) + 1)
+}
+
+/// Dev E2E computer id: maps to `ELSEWHERE_TEST_SPRITE` when set (stable Fly Sprite reuse).
+pub const E2E_COMPUTER_ID: &str = "elsewhere-cloud-e2e";
+
+fn resolve_sprite_resource(computer_id: &str) -> String {
+    if computer_id == E2E_COMPUTER_ID {
+        if let Ok(name) = std::env::var("ELSEWHERE_TEST_SPRITE") {
+            let name = name.trim();
+            if !name.is_empty() {
+                return name.to_string();
+            }
+        }
+    }
+    sprite_name_for_sandbox(computer_id)
 }
 
 pub async fn bootstrap_run(
@@ -144,10 +244,17 @@ pub async fn bootstrap_run(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    if let Some(existing) = find_run_by_request_id(pool, request_id)
+    advisory_lock_request(&mut tx, request_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if let Some(existing) = find_run_by_request_id_tx(&mut tx, request_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
     {
+        tx.commit()
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
         return Ok(BootstrapRunRecords {
             run_id: existing.id,
             request_id: existing.request_id,
@@ -156,6 +263,7 @@ pub async fn bootstrap_run(
             computer_id: existing.computer_id.unwrap_or_else(|| computer_id.to_string()),
             model: existing.model,
             instructions: instructions.to_string(),
+            is_new_run: false,
         });
     }
 
@@ -182,7 +290,7 @@ pub async fn bootstrap_run(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let sprite_resource = sprite_name_for_sandbox(computer_id);
+    let sprite_resource = resolve_sprite_resource(computer_id);
     let sandbox_id = format!("sandbox-{computer_id}");
     sqlx::query(
         r#"
@@ -201,37 +309,69 @@ pub async fn bootstrap_run(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let conversation_id = if let Some(id) = conversation_id.filter(|c| !c.is_empty()) {
-        id.to_string()
+    let (conversation_id, conversation_exists) = if let Some(id) = conversation_id.filter(|c| !c.is_empty()) {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT bot_id FROM conversations WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+        match row {
+            Some((existing_bot,)) if existing_bot != bot_id => {
+                return Err(ApiError::Conflict(
+                    "conversation belongs to a different bot".into(),
+                ));
+            }
+            Some(_) => (id.to_string(), true),
+            None => {
+                return Err(ApiError::Validation(
+                    "conversationId does not exist".into(),
+                ));
+            }
+        }
     } else {
-        Uuid::new_v4().to_string()
+        (Uuid::new_v4().to_string(), false)
     };
 
-    sqlx::query(
-        r#"
-        INSERT INTO conversations (id, bot_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $3)
-        ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at
-        "#,
-    )
-    .bind(&conversation_id)
-    .bind(bot_id)
-    .bind(now)
-    .execute(&mut *tx)
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !conversation_exists {
+        sqlx::query(
+            r#"
+            INSERT INTO conversations (id, bot_id, created_at, updated_at)
+            VALUES ($1, $2, $3, $3)
+            "#,
+        )
+        .bind(&conversation_id)
+        .bind(bot_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    } else {
+        sqlx::query("UPDATE conversations SET updated_at = $1 WHERE id = $2")
+            .bind(now)
+            .bind(&conversation_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    }
+
+    let user_sequence = next_message_sequence_tx(&mut tx, &conversation_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let assistant_sequence = user_sequence + 1;
 
     let user_message_id = Uuid::new_v4().to_string();
     let assistant_message_id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"
         INSERT INTO messages (id, conversation_id, role, kind, body, status, sequence, created_at, updated_at)
-        VALUES ($1, $2, 'user', 'chat', $3, 'complete', 1, $4, $4)
+        VALUES ($1, $2, 'user', 'chat', $3, 'complete', $4, $5, $5)
         "#,
     )
     .bind(&user_message_id)
     .bind(&conversation_id)
     .bind(user_message)
+    .bind(user_sequence)
     .bind(now)
     .execute(&mut *tx)
     .await
@@ -240,12 +380,13 @@ pub async fn bootstrap_run(
     sqlx::query(
         r#"
         INSERT INTO messages (id, conversation_id, role, kind, body, status, model, sequence, created_at, updated_at)
-        VALUES ($1, $2, 'assistant', 'chat', '', 'streaming', $3, 2, $4, $4)
+        VALUES ($1, $2, 'assistant', 'chat', '', 'streaming', $3, $4, $5, $5)
         "#,
     )
     .bind(&assistant_message_id)
     .bind(&conversation_id)
     .bind(&model)
+    .bind(assistant_sequence)
     .bind(now)
     .execute(&mut *tx)
     .await
@@ -284,5 +425,6 @@ pub async fn bootstrap_run(
         computer_id: computer_id.to_string(),
         model,
         instructions: instructions.to_string(),
+        is_new_run: true,
     })
 }

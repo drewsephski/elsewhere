@@ -640,6 +640,7 @@ dependencies = [
  "axum",
  "chrono",
  "dashmap",
+ "dotenvy",
  "futures-util",
  "http",
  "http-body-util",

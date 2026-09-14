@@ -1,6 +1,6 @@
 use agent_core::{
     CreateRunParams, MessageRole as CoreRole, MessageStatus as CoreStatus, PersistedMessage,
-    RunStore, RuntimeError, StructuredMessageInput,
+    RunEventReceipt, RunStore, RuntimeError, StructuredMessageInput,
 };
 use async_trait::async_trait;
 use crate::db::Database;
@@ -43,15 +43,17 @@ impl RunStore for SqliteRunStore {
         request_id: &str,
         event_type: &str,
         payload: &Value,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<RunEventReceipt, RuntimeError> {
         let db = self.db.clone();
         let request_id = request_id.to_string();
         let event_type = event_type.to_string();
         let payload = payload.clone();
         tokio::task::spawn_blocking(move || {
             let db = db.lock();
-            db.append_run_event(&request_id, &event_type, &payload)
-                .map_err(|e| RuntimeError::Store(e.to_string()))
+            let id = db
+                .append_run_event(&request_id, &event_type, &payload)
+                .map_err(|e| RuntimeError::Store(e.to_string()))?;
+            Ok(RunEventReceipt { id })
         })
         .await
         .map_err(|e| RuntimeError::Store(e.to_string()))?

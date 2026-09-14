@@ -23,6 +23,6 @@ pub use model::{
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use run_store::{
-    CreateRunParams, PersistedMessage, RunStore, StructuredMessageInput,
+    CreateRunParams, PersistedMessage, RunEventReceipt, RunStore, StructuredMessageInput,
 };
 pub use tools::{dispatch_tool, openai_tool_definitions, ToolError};

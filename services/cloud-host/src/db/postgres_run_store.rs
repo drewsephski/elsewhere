@@ -1,6 +1,6 @@
 use agent_core::{
-    CreateRunParams, MessageRole, MessageStatus, PersistedMessage, RunStore, RuntimeError,
-    StructuredMessageInput,
+    CreateRunParams, MessageRole, MessageStatus, PersistedMessage, RunEventReceipt, RunStore,
+    RuntimeError, StructuredMessageInput,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -17,16 +17,24 @@ impl PostgresRunStore {
         Self { pool }
     }
 
-    async fn next_message_sequence(&self, conversation_id: &str) -> Result<i64, RuntimeError> {
-        let row: (Option<i64>,) = sqlx::query_as(
-            "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
-        )
-        .bind(conversation_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| RuntimeError::Store(e.to_string()))?;
-        Ok(row.0.unwrap_or(0) + 1)
-    }
+}
+
+async fn next_message_sequence_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conversation_id: &str,
+) -> Result<i64, sqlx::Error> {
+    let lock_key = format!("conversation-seq:{conversation_id}");
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
+        .bind(&lock_key)
+        .execute(&mut **tx)
+        .await?;
+    let row: (Option<i64>,) = sqlx::query_as(
+        "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(row.0.unwrap_or(0) + 1)
 }
 
 #[async_trait]
@@ -60,17 +68,21 @@ impl RunStore for PostgresRunStore {
         request_id: &str,
         event_type: &str,
         payload: &Value,
-    ) -> Result<(), RuntimeError> {
-        sqlx::query(
-            "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, $2, $3)",
+    ) -> Result<RunEventReceipt, RuntimeError> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            INSERT INTO run_events (request_id, event_type, payload_json)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            "#,
         )
         .bind(request_id)
         .bind(event_type)
         .bind(payload)
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await
         .map_err(|e| RuntimeError::Store(e.to_string()))?;
-        Ok(())
+        Ok(RunEventReceipt { id: row.0 })
     }
 
     async fn persist_structured_message(
@@ -78,7 +90,14 @@ impl RunStore for PostgresRunStore {
         input: StructuredMessageInput,
     ) -> Result<PersistedMessage, RuntimeError> {
         let message_id = Uuid::new_v4().to_string();
-        let sequence = self.next_message_sequence(&input.conversation_id).await?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))?;
+        let sequence = next_message_sequence_in_tx(&mut tx, &input.conversation_id)
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))?;
         let now = Utc::now();
         let role = role_to_str(input.role);
         let status = status_to_str(input.status);
@@ -98,9 +117,12 @@ impl RunStore for PostgresRunStore {
         .bind(&input.model)
         .bind(sequence)
         .bind(now)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| RuntimeError::Store(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))?;
         Ok(PersistedMessage {
             id: message_id,
             conversation_id: input.conversation_id,

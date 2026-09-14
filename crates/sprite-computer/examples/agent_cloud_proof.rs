@@ -180,8 +180,8 @@ impl RunStore for MemStore {
         _request_id: &str,
         _event_type: &str,
         _payload: &Value,
-    ) -> Result<(), RuntimeError> {
-        Ok(())
+    ) -> Result<agent_core::RunEventReceipt, RuntimeError> {
+        Ok(agent_core::RunEventReceipt { id: 1 })
     }
 
     async fn persist_structured_message(

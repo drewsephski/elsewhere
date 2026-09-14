@@ -44,6 +44,16 @@ pub async fn run_agent_loop(
     let tools = Value::Array(openai_tool_definitions());
     let mut step_count: i64 = 0;
 
+    let started_payload = serde_json::json!({ "requestId": ctx.request_id });
+    let started_receipt = deps
+        .store
+        .append_run_event(&ctx.request_id, "run_started", &started_payload)
+        .await?;
+    deps.events.emit_durable(
+        started_receipt.id,
+        "run_started",
+        &started_payload,
+    )?;
     deps.events.emit(AgentEvent::RunStarted {
         request_id: ctx.request_id.clone(),
     })?;
@@ -268,9 +278,12 @@ async fn persist_event(
     payload: &Value,
 ) -> Result<crate::run_store::PersistedMessage, RuntimeError> {
     if let Some(event_type) = run_event_type {
-        deps.store
+        let receipt = deps
+            .store
             .append_run_event(&ctx.request_id, event_type, payload)
             .await?;
+        deps.events
+            .emit_durable(receipt.id, event_type, payload)?;
     }
     deps.store
         .persist_structured_message(StructuredMessageInput {
@@ -335,6 +348,17 @@ async fn finalize_success(
         content: text.to_string(),
     })?;
     deps.events.emit(AgentEvent::RunCompleted { step_count })?;
+    let terminal_payload = serde_json::json!({
+        "eventType": "done",
+        "error": null,
+        "fullContent": text,
+        "stepCount": step_count,
+    });
+    let terminal_receipt = deps
+        .store
+        .append_run_event(&ctx.request_id, "terminal", &terminal_payload)
+        .await?;
+    deps.events.emit_durable(terminal_receipt.id, "terminal", &terminal_payload)?;
     deps.events.emit(AgentEvent::Terminal {
         event_type: "done".into(),
         error: None,
@@ -360,6 +384,17 @@ async fn finalize_cancelled(deps: &AgentLoopDeps, ctx: &AgentLoopContext) -> Res
         .update_run(&ctx.request_id, "cancelled", Some("cancelled"), 0)
         .await?;
     deps.events.emit(AgentEvent::RunCancelled)?;
+    let terminal_payload = serde_json::json!({
+        "eventType": "cancelled",
+        "error": null,
+        "fullContent": &partial,
+    });
+    let terminal_receipt = deps
+        .store
+        .append_run_event(&ctx.request_id, "terminal", &terminal_payload)
+        .await?;
+    deps.events
+        .emit_durable(terminal_receipt.id, "terminal", &terminal_payload)?;
     deps.events.emit(AgentEvent::Terminal {
         event_type: "cancelled".into(),
         error: None,
@@ -392,6 +427,19 @@ async fn fail_run(
         message: message.to_string(),
         step_count,
     })?;
+    let terminal_payload = serde_json::json!({
+        "eventType": "error",
+        "error": message,
+        "fullContent": null,
+        "code": code,
+        "stepCount": step_count,
+    });
+    let terminal_receipt = deps
+        .store
+        .append_run_event(&ctx.request_id, "terminal", &terminal_payload)
+        .await?;
+    deps.events
+        .emit_durable(terminal_receipt.id, "terminal", &terminal_payload)?;
     deps.events.emit(AgentEvent::Terminal {
         event_type: "error".into(),
         error: Some(message.to_string()),
@@ -448,8 +496,8 @@ mod tests {
             _request_id: &str,
             _event_type: &str,
             _payload: &Value,
-        ) -> Result<(), RuntimeError> {
-            Ok(())
+        ) -> Result<crate::run_store::RunEventReceipt, RuntimeError> {
+            Ok(crate::run_store::RunEventReceipt { id: 1 })
         }
 
         async fn persist_structured_message(

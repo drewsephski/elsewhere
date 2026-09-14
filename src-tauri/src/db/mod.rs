@@ -460,7 +460,7 @@ When information might be outdated, say what you know and what you would verify.
         request_id: &str,
         event_type: &str,
         payload: &serde_json::Value,
-    ) -> Result<(), AppError> {
+    ) -> Result<i64, AppError> {
         let run_id: String = self
             .conn
             .query_row(
@@ -491,7 +491,7 @@ When information might be outdated, say what you know and what you would verify.
             "INSERT INTO run_events (id, run_id, sequence, event_type, payload_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![id, run_id, sequence, event_type, payload_json, now],
         )?;
-        Ok(())
+        Ok(sequence)
     }
 
     pub fn update_agent_run(

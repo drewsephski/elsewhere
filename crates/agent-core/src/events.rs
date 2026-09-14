@@ -63,4 +63,15 @@ pub enum AgentEvent {
 
 pub trait EventSink: Send + Sync {
     fn emit(&self, event: AgentEvent) -> Result<(), RuntimeError>;
+
+    /// Invoked after a row is persisted in `run_events` (cloud SSE cursor).
+    fn emit_durable(
+        &self,
+        event_id: i64,
+        event_type: &str,
+        payload: &Value,
+    ) -> Result<(), RuntimeError> {
+        let _ = (event_id, event_type, payload);
+        Ok(())
+    }
 }

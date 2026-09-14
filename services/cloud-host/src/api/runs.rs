@@ -12,7 +12,8 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::db::queries::{
-    assistant_message_body, bootstrap_run, find_run_by_id, list_run_events_after,
+    assistant_message_body, bootstrap_run, find_run_by_id, find_run_by_request_id,
+    list_run_events_after,
 };
 use crate::error::ApiError;
 use crate::runner::{spawn_agent_run, RunExecutionInput};
@@ -83,16 +84,25 @@ pub async fn create_run(
         .map(str::to_string)
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
-    if state.run_semaphore.available_permits() == 0 {
-        return Err(ApiError::TooManyRequests);
-    }
-
     let model = body
         .bot
         .model
         .as_deref()
         .filter(|m| !m.trim().is_empty())
         .map(str::to_string);
+
+    let existing_before = find_run_by_request_id(&state.pool, &request_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let permit = if existing_before.is_none() {
+        match state.run_semaphore.clone().try_acquire_owned() {
+            Ok(permit) => Some(permit),
+            Err(_) => return Err(ApiError::TooManyRequests),
+        }
+    } else {
+        None
+    };
 
     let records = bootstrap_run(
         &state.pool,
@@ -121,7 +131,23 @@ pub async fn create_run(
         status: run_row.status.clone(),
     };
 
-    if run_row.status != "running" || state.registry.get(&records.run_id).is_some() {
+    if !records.is_new_run || run_row.status != "running" {
+        if let Some(permit) = permit {
+            drop(permit);
+        }
+        return Ok((StatusCode::ACCEPTED, Json(response)));
+    }
+
+    let permit = match permit {
+        Some(permit) => permit,
+        None => match state.run_semaphore.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => return Err(ApiError::TooManyRequests),
+        },
+    };
+
+    if state.registry.get(&records.run_id).is_some() {
+        drop(permit);
         return Ok((StatusCode::ACCEPTED, Json(response)));
     }
 
@@ -132,6 +158,7 @@ pub async fn create_run(
             bot_id: body.bot.id,
             user_message: body.message.trim().to_string(),
         },
+        permit,
     );
 
     Ok((StatusCode::ACCEPTED, Json(response)))
@@ -206,12 +233,16 @@ pub async fn run_events_sse(
     let pool = state.pool.clone();
     let request_id = run.request_id.clone();
     let live = state.registry.subscribe_live(&run_id);
+    let terminal_status = run.status.clone();
+    let terminal_error = run.error_code.clone();
 
     let stream = async_stream::stream! {
         let durable = list_run_events_after(&pool, &request_id, after_id, 10_000)
             .await
             .unwrap_or_default();
+        let mut last_id = after_id;
         for row in durable {
+            last_id = row.id;
             let data = row.payload_json.to_string();
             yield Ok(Event::default().id(row.id.to_string()).event(row.event_type).data(data));
         }
@@ -220,16 +251,22 @@ pub async fn run_events_sse(
             loop {
                 match rx.recv().await {
                     Ok(event) => {
-                        if let Ok(json) = serde_json::to_string(&event) {
-                            yield Ok(Event::default().event("agent_event").data(json));
+                        if event.id <= last_id {
+                            continue;
                         }
+                        last_id = event.id;
+                        let data = event.payload.to_string();
+                        yield Ok(Event::default()
+                            .id(event.id.to_string())
+                            .event(event.event_type)
+                            .data(data));
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
-        } else if !matches!(run.status.as_str(), "running") {
-            let terminal = serde_json::json!({"status": run.status, "errorCode": run.error_code});
+        } else if !matches!(terminal_status.as_str(), "running") {
+            let terminal = serde_json::json!({"status": terminal_status, "errorCode": terminal_error});
             yield Ok(Event::default().event("terminal").data(terminal.to_string()));
         }
     };

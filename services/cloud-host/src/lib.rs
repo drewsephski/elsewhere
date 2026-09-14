@@ -5,6 +5,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod finalizer;
 pub mod events;
 pub mod redact;
 pub mod runner;

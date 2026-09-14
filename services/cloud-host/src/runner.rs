@@ -8,6 +8,7 @@ use agent_core::{
 use openai_responses::OpenAiResponsesModel;
 use serde_json::json;
 use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
+use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 
 use crate::app_state::AppState;
@@ -15,6 +16,7 @@ use crate::db::postgres_run_store::PostgresRunStore;
 use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
+use crate::finalizer::{sanitize_host_error, HostFinalizer};
 
 #[derive(Clone)]
 pub struct RunExecutionInput {
@@ -30,28 +32,39 @@ pub struct TestRunOverrides {
     pub model: Arc<dyn ResponsesModel>,
 }
 
-pub fn spawn_agent_run(state: AppState, input: RunExecutionInput) {
+pub fn spawn_agent_run(
+    state: AppState,
+    input: RunExecutionInput,
+    permit: OwnedSemaphorePermit,
+) {
     tokio::spawn(async move {
-        let permit = match state.run_semaphore.clone().acquire_owned().await {
-            Ok(p) => p,
-            Err(_) => return,
-        };
-
         let cancel = Arc::new(AtomicBool::new(false));
         let (events, _rx) = CloudEventSink::new();
         let events = Arc::new(events);
 
-        state.registry.insert(
-            input.records.run_id.clone(),
+        let pool = state.pool.clone();
+        let store: Arc<dyn RunStore> = Arc::new(PostgresRunStore::new(pool.clone()));
+
+        let finalizer = HostFinalizer::new(
+            store.clone(),
+            events.clone(),
+            input.records.request_id.clone(),
+            input.records.assistant_message_id.clone(),
+        );
+
+        if !state.registry.try_begin_run(
+            &input.records.run_id,
             ActiveRun {
                 request_id: input.records.request_id.clone(),
                 cancel: cancel.clone(),
                 events: events.clone(),
                 started_at: std::time::Instant::now(),
             },
-        );
+        ) {
+            drop(permit);
+            return;
+        }
 
-        let pool = state.pool.clone();
         let config = state.config.clone();
         let registry = state.registry.clone();
         let run_id = input.records.run_id.clone();
@@ -60,7 +73,7 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput) {
 
         let result = timeout(
             Duration::from_secs(timeout_secs),
-            execute_run(config, pool.clone(), input, cancel.clone(), events),
+            execute_run(config, pool.clone(), store.clone(), input, cancel.clone(), events.clone()),
         )
         .await;
 
@@ -68,13 +81,19 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput) {
             Ok(Ok(())) => {}
             Ok(Err(err)) => {
                 tracing::error!(run_id = %run_id, error = %err, "agent run failed");
+                let message = sanitize_host_error(&err);
+                let code = if err.contains("ensure_ready") || err.contains("Sprite") {
+                    "sprite_unavailable"
+                } else if err.contains("SpriteComputer") {
+                    "sprite_config_error"
+                } else {
+                    "host_execution_failed"
+                };
+                let _ = finalizer.finalize_host_failure(code, &message, 0).await;
             }
             Err(_) => {
                 cancel.store(true, Ordering::Relaxed);
-                let store = PostgresRunStore::new(pool);
-                let _ = store
-                    .update_run(&request_id, "interrupted", Some("run_timeout"), 0)
-                    .await;
+                let _ = finalizer.finalize_run_timeout(0).await;
             }
         }
 
@@ -86,18 +105,17 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput) {
 async fn execute_run(
     config: Arc<crate::config::Config>,
     pool: sqlx::PgPool,
+    store: Arc<dyn RunStore>,
     input: RunExecutionInput,
     cancel: Arc<AtomicBool>,
     events: Arc<CloudEventSink>,
 ) -> Result<(), String> {
-    let store: Arc<dyn RunStore> = Arc::new(PostgresRunStore::new(pool));
-
-    let (computer, model) = build_deps(&config, &input, cancel.clone())?;
+    let (computer, model) = build_deps(&config, &pool, &input, cancel.clone()).await?;
 
     computer
         .ensure_ready()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("ensure_ready: {e}"))?;
 
     let ctx = AgentLoopContext {
         request_id: input.records.request_id.clone(),
@@ -111,7 +129,7 @@ async fn execute_run(
     let deps = AgentLoopDeps {
         computer,
         store,
-        events,
+        events: events as Arc<dyn agent_core::EventSink>,
         model,
         cancel,
     };
@@ -125,8 +143,26 @@ async fn execute_run(
     .map_err(|e| e.to_string())
 }
 
-fn build_deps(
+async fn sprite_resource_for_computer(
+    pool: &sqlx::PgPool,
+    computer_id: &str,
+) -> Result<String, String> {
+    let sandbox_id = format!("sandbox-{computer_id}");
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT provider_resource_id FROM sandboxes WHERE id = $1",
+    )
+    .bind(&sandbox_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(row
+        .map(|(name,)| name)
+        .unwrap_or_else(|| sprite_computer::sprite_name_for_sandbox(computer_id)))
+}
+
+async fn build_deps(
     config: &crate::config::Config,
+    pool: &sqlx::PgPool,
     input: &RunExecutionInput,
     cancel: Arc<AtomicBool>,
 ) -> Result<(Arc<dyn AgentComputer>, Arc<dyn ResponsesModel>), String> {
@@ -135,7 +171,7 @@ fn build_deps(
         return Ok((o.computer, o.model));
     }
 
-    let sprite_name = sprite_computer::sprite_name_for_sandbox(&input.records.computer_id);
+    let sprite_name = sprite_resource_for_computer(pool, &input.records.computer_id).await?;
     let computer = SpriteComputer::new(SpriteComputerConfig {
         base_url: config.sprites_api_base.clone(),
         token: config.sprite_token.clone(),
@@ -146,7 +182,7 @@ fn build_deps(
         network_policy: default_deny_network_policy(),
         exec_timeout: Duration::from_secs(60),
     })
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| format!("SpriteComputer: {e}"))?;
 
     let model = OpenAiResponsesModel::new(config.openai_api_key.clone(), cancel);
     Ok((Arc::new(computer), Arc::new(model)))

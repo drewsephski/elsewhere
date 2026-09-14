@@ -23,6 +23,11 @@ pub struct PersistedMessage {
     pub body: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunEventReceipt {
+    pub id: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct CreateRunParams {
     pub conversation_id: String,
@@ -41,7 +46,7 @@ pub trait RunStore: Send + Sync {
         request_id: &str,
         event_type: &str,
         payload: &Value,
-    ) -> Result<(), RuntimeError>;
+    ) -> Result<RunEventReceipt, RuntimeError>;
 
     async fn persist_structured_message(
         &self,
