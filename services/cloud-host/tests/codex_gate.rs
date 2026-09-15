@@ -93,6 +93,15 @@ async fn device_login_blocks_run_admission() {
 }
 
 #[tokio::test]
+async fn group_route_waits_behind_run_permit() {
+    let gate = CodexOpsGate::from_permits(1);
+    let run = gate.try_acquire(CodexOperationKind::Run).expect("run");
+    assert!(gate.try_acquire(CodexOperationKind::GroupRoute).is_err());
+    drop(run);
+    assert!(gate.try_acquire(CodexOperationKind::GroupRoute).is_ok());
+}
+
+#[tokio::test]
 async fn health_stays_responsive_during_slow_codex_operation() {
     let Some(pool) = try_test_pool().await else {
         eprintln!("skipping health_stays_responsive_during_slow_codex_operation: no database");

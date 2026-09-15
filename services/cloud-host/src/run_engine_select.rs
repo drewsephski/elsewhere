@@ -56,6 +56,27 @@ pub fn codex_availability_is_usable(codex: &CodexSubscriptionAvailability) -> bo
     matches!(codex, CodexSubscriptionAvailability::Available { .. })
 }
 
+/// Engine selection for background group routing (not agent runs).
+///
+/// Never uses the ephemeral provider-status cache. Codex/auto always attempt the
+/// Codex subscription path; launch/auth errors surface at execution time.
+pub fn resolve_group_route_engine(
+    mode: RunEngineMode,
+    openai_api_key: Option<&str>,
+) -> Result<SelectedRunEngine, ResolveRunEngineError> {
+    let has_api_key = openai_api_key.is_some_and(|k| !k.is_empty());
+    match mode {
+        RunEngineMode::Responses => {
+            if has_api_key {
+                Ok(SelectedRunEngine::ResponsesApi)
+            } else {
+                Err(ResolveRunEngineError::ResponsesApiKeyRequired)
+            }
+        }
+        RunEngineMode::Codex | RunEngineMode::Auto => Ok(SelectedRunEngine::CodexSubscription),
+    }
+}
+
 pub fn resolve_run_engine(
     mode: RunEngineMode,
     openai_api_key: Option<&str>,
@@ -180,5 +201,33 @@ mod tests {
     #[test]
     fn invalid_env_value() {
         assert!(parse_run_engine_mode("codexx").is_err());
+    }
+
+    #[test]
+    fn group_route_auto_uses_codex_without_cache() {
+        assert_eq!(
+            resolve_group_route_engine(RunEngineMode::Auto, Some("sk-test")).unwrap(),
+            SelectedRunEngine::CodexSubscription
+        );
+    }
+
+    #[test]
+    fn group_route_explicit_responses_requires_key() {
+        assert_eq!(
+            resolve_group_route_engine(RunEngineMode::Responses, Some("sk-test")).unwrap(),
+            SelectedRunEngine::ResponsesApi
+        );
+        assert_eq!(
+            resolve_group_route_engine(RunEngineMode::Responses, None),
+            Err(ResolveRunEngineError::ResponsesApiKeyRequired)
+        );
+    }
+
+    #[test]
+    fn group_route_never_uses_responses_for_auto() {
+        assert_eq!(
+            resolve_group_route_engine(RunEngineMode::Auto, Some("sk-test")).unwrap(),
+            SelectedRunEngine::CodexSubscription
+        );
     }
 }

@@ -94,6 +94,20 @@ pub async fn stop_executions(state: &AppState) {
     state
         .draining
         .store(true, std::sync::atomic::Ordering::SeqCst);
+    let route_active = crate::group_router::active_group_route_tasks(state);
+    if route_active > 0 {
+        tracing::info!(
+            active_group_routes = route_active,
+            "shutting down in-flight group route tasks"
+        );
+    }
+    let mut route_tasks = std::mem::take(
+        &mut *state
+            .group_route_tasks
+            .lock()
+            .expect("group route task registry poisoned"),
+    );
+    route_tasks.shutdown().await;
     let mut tasks =
         std::mem::take(&mut *state.run_tasks.lock().expect("run task registry poisoned"));
     tasks.shutdown().await;
@@ -111,12 +125,15 @@ pub async fn drain(state: &AppState, grace: Duration) {
         .store(true, std::sync::atomic::Ordering::SeqCst);
     tracing::info!(
         active = active_executions(state),
+        active_group_routes = crate::group_router::active_group_route_tasks(state),
         grace_secs = grace.as_secs(),
         "runner draining"
     );
     let completed = tokio::time::timeout(grace, async {
         loop {
-            if active_executions(state) == 0 {
+            if active_executions(state) == 0
+                && crate::group_router::active_group_route_tasks(state) == 0
+            {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -127,6 +144,7 @@ pub async fn drain(state: &AppState, grace: Duration) {
     tracing::info!(
         completed,
         active = active_executions(state),
+        active_group_routes = crate::group_router::active_group_route_tasks(state),
         "runner drain finished"
     );
 }

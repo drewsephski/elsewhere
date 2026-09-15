@@ -1,16 +1,19 @@
-use cloud_host::auth::jwt_test::test_signing::{self, TEST_KID};
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::insert_computer_placeholder;
-use cloud_host::{build_router, AppState};
+use cloud_host::{build_router, test_signing, AppState};
 use sqlx::PgPool;
+use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
+
+const TEST_JWT_ISSUER: &str = "http://localhost:3000";
+const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
 
 async fn try_test_pool() -> Option<PgPool> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
+    let pool = tokio::time::timeout(Duration::from_secs(2), PgPool::connect(&url))
         .await
         .ok()?
         .ok()?;
@@ -27,8 +30,8 @@ fn jwt_state(pool: PgPool) -> AppState {
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
         auth_mode: AuthMode::Jwt,
-        jwt_issuer: Some("http://localhost:3000".into()),
-        jwt_audience: Some("elsewhere-cloud-host".into()),
+        jwt_issuer: Some(TEST_JWT_ISSUER.into()),
+        jwt_audience: Some(TEST_JWT_AUDIENCE.into()),
         jwt_jwks_url: Some("http://127.0.0.1:9/jwks".into()),
         cors_web_origin: None,
         allow_codex_login: false,
@@ -45,19 +48,19 @@ fn jwt_state(pool: PgPool) -> AppState {
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
-        TEST_KID,
+        test_signing::TEST_KID,
         test_signing::verifier(),
         JwtVerifierConfig {
             jwks_url: "http://127.0.0.1:9/jwks".into(),
-            issuer: "http://localhost:3000".into(),
-            audience: "elsewhere-cloud-host".into(),
+            issuer: TEST_JWT_ISSUER.into(),
+            audience: TEST_JWT_AUDIENCE.into(),
         },
     ));
     state
 }
 
 fn token(sub: &str) -> String {
-    test_signing::user_token(sub, "http://localhost:3000", "elsewhere-cloud-host", 300)
+    test_signing::user_token(sub, TEST_JWT_ISSUER, TEST_JWT_AUDIENCE, 300)
 }
 
 #[tokio::test]

@@ -5,11 +5,12 @@ use agent_core::{
     ResponsesModel, WorkspaceEntry,
 };
 use async_trait::async_trait;
-use cloud_host::auth::jwt_test::test_signing::{self, TEST_KID};
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
-use cloud_host::{build_router, set_test_run_overrides, AppState, TestRunOverrides};
+use cloud_host::{
+    build_router, set_test_run_overrides, test_signing, AppState, TestRunOverrides,
+};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +18,24 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
+
+const TEST_JWT_ISSUER: &str = "http://localhost:3000";
+const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
+
+/// Clears injected run dependencies when the test finishes (including on panic).
+struct RunOverrideGuard;
+
+impl RunOverrideGuard {
+    fn install(computer: Arc<CountingComputer>, model: Arc<dyn ResponsesModel>) -> Self {
+        set_test_run_overrides(Some(TestRunOverrides { computer, model }));
+        Self
+    }
+}
+
+impl Drop for RunOverrideGuard {
+    fn drop(&mut self) {
+    }
+}
 
 struct CountingComputer {
     writes: AtomicUsize,
@@ -90,8 +109,8 @@ fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
         auth_mode: AuthMode::Jwt,
-        jwt_issuer: Some("http://localhost:3000".into()),
-        jwt_audience: Some("elsewhere-cloud-host".into()),
+        jwt_issuer: Some(TEST_JWT_ISSUER.into()),
+        jwt_audience: Some(TEST_JWT_AUDIENCE.into()),
         jwt_jwks_url: Some("http://127.0.0.1:9/jwks".into()),
         cors_web_origin: None,
         allow_codex_login: false,
@@ -108,19 +127,19 @@ fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
-        TEST_KID,
+        test_signing::TEST_KID,
         test_signing::verifier(),
         JwtVerifierConfig {
             jwks_url: "http://127.0.0.1:9/jwks".into(),
-            issuer: "http://localhost:3000".into(),
-            audience: "elsewhere-cloud-host".into(),
+            issuer: TEST_JWT_ISSUER.into(),
+            audience: TEST_JWT_AUDIENCE.into(),
         },
     ));
     state
 }
 
 fn token(sub: &str) -> String {
-    test_signing::user_token(sub, "http://localhost:3000", "elsewhere-cloud-host", 300)
+    test_signing::user_token(sub, TEST_JWT_ISSUER, TEST_JWT_AUDIENCE, 300)
 }
 
 async fn setup_bot(pool: &PgPool, owner: &str) -> cloud_host::db::resources::BotRow {
@@ -148,11 +167,8 @@ async fn start_run(
     message: &str,
     model: Arc<dyn ResponsesModel>,
     computer: Arc<CountingComputer>,
-) {
-    set_test_run_overrides(Some(TestRunOverrides {
-        computer: computer.clone(),
-        model,
-    }));
+) -> RunOverrideGuard {
+    let guard = RunOverrideGuard::install(computer, model);
     let body = json!({ "botId": bot_id, "message": message });
     let resp = app
         .clone()
@@ -170,6 +186,7 @@ async fn start_run(
         .unwrap();
     assert_eq!(resp.status(), axum::http::StatusCode::ACCEPTED);
     cloud_host::worker::dispatch_available(state).await.unwrap();
+    guard
 }
 
 async fn wait_pending_approval_id(pool: &PgPool, owner: &str) -> String {
@@ -257,7 +274,7 @@ async fn approve_executes_write_once(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -292,7 +309,6 @@ async fn approve_executes_write_once(pool: PgPool) {
     }
     assert_eq!(computer.writes.load(Ordering::SeqCst), 1);
     assert_eq!(count_resolved_events(&pool, &request_id).await, 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -306,7 +322,7 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -345,11 +361,9 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
     for _ in 0..80 {
         tokio::time::sleep(Duration::from_millis(50)).await;
         if computer.writes.load(Ordering::SeqCst) == 1 {
-            set_test_run_overrides(None);
             return;
         }
     }
-    set_test_run_overrides(None);
     panic!("write never executed after immediate approve (approval_id={approval_id})");
 }
 
@@ -364,7 +378,7 @@ async fn deny_executes_zero_writes(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -394,7 +408,6 @@ async fn deny_executes_zero_writes(pool: PgPool) {
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert_eq!(computer.writes.load(Ordering::SeqCst), 0);
     assert_eq!(count_resolved_events(&pool, &request_id).await, 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -407,7 +420,7 @@ async fn exec_approval_required_like_write(pool: PgPool) {
     });
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -439,11 +452,9 @@ async fn exec_approval_required_like_write(pool: PgPool) {
     for _ in 0..60 {
         tokio::time::sleep(Duration::from_millis(100)).await;
         if computer.execs.load(Ordering::SeqCst) == 1 {
-            set_test_run_overrides(None);
             return;
         }
     }
-    set_test_run_overrides(None);
     panic!("exec never ran after approval");
 }
 
@@ -458,7 +469,7 @@ async fn timeout_executes_zero_writes(pool: PgPool) {
     let state = jwt_state(pool.clone(), 2);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -482,7 +493,6 @@ async fn timeout_executes_zero_writes(pool: PgPool) {
     .unwrap();
     assert_eq!(status.0, "expired");
     assert_eq!(count_resolved_events(&pool, &request_id).await, 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -496,7 +506,7 @@ async fn cancel_while_pending_executes_zero_writes(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -533,7 +543,6 @@ async fn cancel_while_pending_executes_zero_writes(pool: PgPool) {
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert_eq!(computer.writes.load(Ordering::SeqCst), 0);
     assert_eq!(count_resolved_events(&pool, &request_id).await, 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -547,7 +556,7 @@ async fn double_approve_single_winner_and_one_resolved_event(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -597,7 +606,6 @@ async fn double_approve_single_winner_and_one_resolved_event(pool: PgPool) {
         .unwrap();
     assert_eq!(second.status(), axum::http::StatusCode::NOT_FOUND);
     assert_eq!(count_resolved_events(&pool, &request_id).await, 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -610,7 +618,7 @@ async fn approve_vs_deny_race_has_single_terminal_status(pool: PgPool) {
     });
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -671,20 +679,19 @@ async fn approve_vs_deny_race_has_single_terminal_status(pool: PgPool) {
             .unwrap();
     assert!(status.0 == "approved" || status.0 == "denied");
     assert!(computer.writes.load(Ordering::SeqCst) <= 1);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
-    let owner = "user-a";
+    let owner = format!("late-expiry-{}", Uuid::new_v4());
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, owner, "c")
+    let computer_row = insert_computer_placeholder(&pool, &owner, "c")
         .await
         .unwrap();
     let bot = insert_bot(
         &pool,
-        owner,
+        &owner,
         "b",
         "i",
         "gpt-5.6-luna",
@@ -699,7 +706,7 @@ async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
         "INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
     )
     .bind(&conv_id)
-    .bind(owner)
+    .bind(&owner)
     .bind(&bot.id)
     .execute(&pool)
     .await
@@ -711,7 +718,7 @@ async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
         "#,
     )
     .bind(&run_id)
-    .bind(owner)
+    .bind(&owner)
     .bind(Uuid::new_v4().to_string())
     .bind(&bot.id)
     .bind(&conv_id)
@@ -728,7 +735,7 @@ async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
     )
     .bind(&approval_id)
     .bind(&run_id)
-    .bind(owner)
+    .bind(&owner)
     .execute(&pool)
     .await
     .unwrap();
@@ -736,7 +743,7 @@ async fn late_approve_after_expiry_does_not_execute(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let ok = state
         .approvals
-        .approve(owner, &approval_id, owner)
+        .approve(&owner, &approval_id, &owner)
         .await
         .unwrap();
     assert!(!ok);
@@ -853,7 +860,7 @@ async fn approval_sse_events_ordered_and_replay_once(pool: PgPool) {
     let state = jwt_state(pool.clone(), 300);
     let app = build_router(state.clone());
     let request_id = Uuid::new_v4().to_string();
-    start_run(
+    let _run_guard = start_run(
         &app,
         &state,
         &owner,
@@ -950,5 +957,4 @@ async fn approval_sse_events_ordered_and_replay_once(pool: PgPool) {
         .unwrap();
     assert_eq!(sse2.status(), axum::http::StatusCode::OK);
 
-    set_test_run_overrides(None);
 }

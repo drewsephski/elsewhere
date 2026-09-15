@@ -34,6 +34,7 @@ pub struct AppState {
     pub approvals: ApprovalService,
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
+    pub group_route_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub runner_heartbeat: Arc<std::sync::Mutex<Option<std::time::Instant>>>,
     pub computer_registry: ComputerRegistry,
     /// One Codex app-server child at a time (probe, login, runs) on this host.
@@ -76,6 +77,7 @@ impl AppState {
             approvals,
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
+            group_route_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             runner_heartbeat: Arc::new(std::sync::Mutex::new(None)),
             computer_registry: ComputerRegistry::default(),
             codex_ops: crate::codex_ops::CodexOpsGate::from_permits(1),

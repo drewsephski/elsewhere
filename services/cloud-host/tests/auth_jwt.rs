@@ -1,24 +1,28 @@
 //! JWT verification tests using a static ES256 key pair (no network).
 
-use cloud_host::auth::jwt_test::test_signing::{self, TEST_KID};
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig, LEGACY_LOCAL_OWNER};
 use cloud_host::config::{AuthMode, Config};
-use cloud_host::{build_router, AppState};
+use cloud_host::{build_router, test_signing, AppState};
 use sqlx::PgPool;
+use std::sync::Arc;
+use std::time::Duration;
 use tower::ServiceExt;
+
+const TEST_JWT_ISSUER: &str = "http://localhost:3000";
+const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
 
 fn jwt_config() -> JwtVerifierConfig {
     JwtVerifierConfig {
         jwks_url: "http://127.0.0.1:9/jwks".into(),
-        issuer: "http://localhost:3000".into(),
-        audience: "elsewhere-cloud-host".into(),
+        issuer: TEST_JWT_ISSUER.into(),
+        audience: TEST_JWT_AUDIENCE.into(),
     }
 }
 
 async fn try_test_pool() -> Option<PgPool> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
+    let pool = tokio::time::timeout(Duration::from_secs(2), PgPool::connect(&url))
         .await
         .ok()?
         .ok()?;
@@ -34,8 +38,8 @@ fn jwt_test_config() -> Config {
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
         auth_mode: AuthMode::Jwt,
-        jwt_issuer: Some("http://localhost:3000".into()),
-        jwt_audience: Some("elsewhere-cloud-host".into()),
+        jwt_issuer: Some(TEST_JWT_ISSUER.into()),
+        jwt_audience: Some(TEST_JWT_AUDIENCE.into()),
         jwt_jwks_url: Some("http://127.0.0.1:9/jwks".into()),
         cors_web_origin: None,
         allow_codex_login: false,
@@ -52,35 +56,34 @@ fn jwt_test_config() -> Config {
     }
 }
 
-fn test_verifier() -> std::sync::Arc<JwtVerifier> {
-    JwtVerifier::from_test_decoding_key(TEST_KID, test_signing::verifier(), jwt_config())
+fn test_verifier() -> Arc<JwtVerifier> {
+    JwtVerifier::from_test_decoding_key(
+        test_signing::TEST_KID,
+        test_signing::verifier(),
+        jwt_config(),
+    )
+}
+
+fn token(sub: &str, exp_offset_secs: i64) -> String {
+    test_signing::user_token(sub, TEST_JWT_ISSUER, TEST_JWT_AUDIENCE, exp_offset_secs)
 }
 
 #[tokio::test]
 async fn jwt_verifier_accepts_valid_token() {
     let verifier = test_verifier();
-    let token = test_signing::user_token(
-        "user-a",
-        "http://localhost:3000",
-        "elsewhere-cloud-host",
-        300,
-    );
-    let sub = verifier.verify_bearer_token(&token).await.unwrap();
+    let sub = verifier
+        .verify_bearer_token(&token("user-a", 300))
+        .await
+        .unwrap();
     assert_eq!(sub, "user-a");
 }
 
 #[tokio::test]
 async fn jwt_verifier_rejects_expired_and_bad_audience() {
     let verifier = test_verifier();
-    let expired = test_signing::user_token(
-        "user-a",
-        "http://localhost:3000",
-        "elsewhere-cloud-host",
-        -3600,
-    );
-    assert!(verifier.verify_bearer_token(&expired).await.is_err());
+    assert!(verifier.verify_bearer_token(&token("user-a", -3600)).await.is_err());
     let bad_aud =
-        test_signing::user_token("user-a", "http://localhost:3000", "wrong-audience", 300);
+        test_signing::user_token("user-a", TEST_JWT_ISSUER, "wrong-audience", 300);
     assert!(verifier.verify_bearer_token(&bad_aud).await.is_err());
 }
 
@@ -106,17 +109,11 @@ async fn jwt_auth_protects_bot_listing() {
         .unwrap();
     assert_eq!(unauthorized.status(), http::StatusCode::UNAUTHORIZED);
 
-    let token = test_signing::user_token(
-        "user-a",
-        "http://localhost:3000",
-        "elsewhere-cloud-host",
-        300,
-    );
     let ok = app
         .oneshot(
             http::Request::builder()
                 .uri("/v1/bots")
-                .header("authorization", format!("Bearer {token}"))
+                .header("authorization", format!("Bearer {}", token("user-a", 300)))
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )

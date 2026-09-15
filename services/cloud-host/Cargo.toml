@@ -45,6 +45,38 @@ rcgen = { version = "0.14", optional = true }
 [features]
 test-utils = ["rcgen"]
 
+[[test]]
+name = "group_auto_routing"
+required-features = ["test-utils"]
+
+[[test]]
+name = "approval_lifecycle"
+required-features = ["test-utils"]
+
+[[test]]
+name = "approvals"
+required-features = ["test-utils"]
+
+[[test]]
+name = "assistant_stream_replay"
+required-features = ["test-utils"]
+
+[[test]]
+name = "auth_jwt"
+required-features = ["test-utils"]
+
+[[test]]
+name = "computer_registry_lifecycle"
+required-features = ["test-utils"]
+
+[[test]]
+name = "http_api"
+required-features = ["test-utils"]
+
+[[test]]
+name = "idor"
+required-features = ["test-utils"]
+
 [dev-dependencies]
 rcgen = "0.14"
 axum = { version = "0.8", features = ["macros"] }

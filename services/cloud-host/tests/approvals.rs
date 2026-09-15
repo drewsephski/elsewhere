@@ -5,17 +5,37 @@ use agent_core::{
     ResponsesModel, WorkspaceEntry,
 };
 use async_trait::async_trait;
-use cloud_host::auth::jwt_test::test_signing::{self, TEST_KID};
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
-use cloud_host::{build_router, set_test_run_overrides, AppState, TestRunOverrides};
+use cloud_host::{
+    build_router, set_test_run_overrides, test_signing, AppState, TestRunOverrides,
+};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
+
+const TEST_JWT_ISSUER: &str = "http://localhost:3000";
+const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
+
+struct RunOverrideGuard;
+
+impl RunOverrideGuard {
+    fn install(computer: Arc<CountingComputer>, model: Arc<dyn ResponsesModel>) -> Self {
+        set_test_run_overrides(Some(TestRunOverrides { computer, model }));
+        Self
+    }
+}
+
+impl Drop for RunOverrideGuard {
+    fn drop(&mut self) {
+        set_test_run_overrides(None);
+    }
+}
 
 struct CountingComputer {
     writes: AtomicUsize,
@@ -89,8 +109,8 @@ fn jwt_state(pool: PgPool) -> AppState {
         sprite_token: "test-sprite".into(),
         api_token: "test-token".into(),
         auth_mode: AuthMode::Jwt,
-        jwt_issuer: Some("http://localhost:3000".into()),
-        jwt_audience: Some("elsewhere-cloud-host".into()),
+        jwt_issuer: Some(TEST_JWT_ISSUER.into()),
+        jwt_audience: Some(TEST_JWT_AUDIENCE.into()),
         jwt_jwks_url: Some("http://127.0.0.1:9/jwks".into()),
         cors_web_origin: None,
         allow_codex_login: false,
@@ -107,19 +127,19 @@ fn jwt_state(pool: PgPool) -> AppState {
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
-        TEST_KID,
+        test_signing::TEST_KID,
         test_signing::verifier(),
         JwtVerifierConfig {
             jwks_url: "http://127.0.0.1:9/jwks".into(),
-            issuer: "http://localhost:3000".into(),
-            audience: "elsewhere-cloud-host".into(),
+            issuer: TEST_JWT_ISSUER.into(),
+            audience: TEST_JWT_AUDIENCE.into(),
         },
     ));
     state
 }
 
 fn token(sub: &str) -> String {
-    test_signing::user_token(sub, "http://localhost:3000", "elsewhere-cloud-host", 300)
+    test_signing::user_token(sub, TEST_JWT_ISSUER, TEST_JWT_AUDIENCE, 300)
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -148,10 +168,7 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
             },
         ]),
     });
-    set_test_run_overrides(Some(TestRunOverrides {
-        computer: computer.clone(),
-        model,
-    }));
+    let _run_guard = RunOverrideGuard::install(computer.clone(), model);
 
     let owner = format!("user-a-read-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
@@ -195,7 +212,7 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
         .await
         .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
     let pending: (i64,) = sqlx::query_as(
         "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
     )
@@ -204,7 +221,6 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(pending.0, 0);
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -233,10 +249,7 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
             },
         ]),
     });
-    set_test_run_overrides(Some(TestRunOverrides {
-        computer: computer.clone(),
-        model,
-    }));
+    let _run_guard = RunOverrideGuard::install(computer.clone(), model);
 
     let owner = format!("user-a-write-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
@@ -278,7 +291,7 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
         .unwrap();
 
     for _ in 0..40 {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
         if computer.writes.load(Ordering::SeqCst) == 0 {
             let pending: (i64,) = sqlx::query_as(
                 "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
@@ -289,25 +302,25 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
             .unwrap();
             if pending.0 >= 1 {
                 assert_eq!(computer.writes.load(Ordering::SeqCst), 0);
-                set_test_run_overrides(None);
                 return;
             }
         }
     }
-    set_test_run_overrides(None);
     panic!("expected pending approval without write");
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
+    let owner_a = format!("owner-a-{}", Uuid::new_v4());
+    let owner_b = format!("owner-b-{}", Uuid::new_v4());
     let approval_id = Uuid::new_v4().to_string();
     let run_id = Uuid::new_v4().to_string();
-    let computer_row = insert_computer_placeholder(&pool, "user-a", "c")
+    let computer_row = insert_computer_placeholder(&pool, &owner_a, "c")
         .await
         .unwrap();
     let bot = insert_bot(
         &pool,
-        "user-a",
+        &owner_a,
         "b",
         "i",
         "gpt-5.6-luna",
@@ -319,9 +332,10 @@ async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
     .unwrap();
     let conv_id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at) VALUES ($1, 'user-a', $2, NOW(), NOW())",
+        "INSERT INTO conversations (id, owner_id, bot_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())",
     )
     .bind(&conv_id)
+    .bind(&owner_a)
     .bind(&bot.id)
     .execute(&pool)
     .await
@@ -329,10 +343,11 @@ async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
     sqlx::query(
         r#"
         INSERT INTO agent_runs (id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status, step_count, created_at, updated_at)
-        VALUES ($1, 'user-a', $2, $3, $4, $5, 'gpt-5.6-luna', 'running', 0, NOW(), NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, 'gpt-5.6-luna', 'running', 0, NOW(), NOW())
         "#,
     )
     .bind(&run_id)
+    .bind(&owner_a)
     .bind(Uuid::new_v4().to_string())
     .bind(&bot.id)
     .bind(&conv_id)
@@ -343,11 +358,12 @@ async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
     sqlx::query(
         r#"
         INSERT INTO tool_approval_requests (id, run_id, owner_id, tool_name, tool_kind, arguments_json, status)
-        VALUES ($1, $2, 'user-a', 'workspace_write', 'mutation', '{}', 'pending')
+        VALUES ($1, $2, $3, 'workspace_write', 'mutation', '{}', 'pending')
         "#,
     )
     .bind(&approval_id)
     .bind(&run_id)
+    .bind(&owner_a)
     .execute(&pool)
     .await
     .unwrap();
@@ -358,7 +374,7 @@ async fn user_b_cannot_resolve_user_a_approval(pool: PgPool) {
             axum::http::Request::builder()
                 .method("POST")
                 .uri(format!("/v1/approvals/{approval_id}/approve"))
-                .header("Authorization", format!("Bearer {}", token("user-b")))
+                .header("Authorization", format!("Bearer {}", token(&owner_b)))
                 .body(axum::body::Body::empty())
                 .unwrap(),
         )

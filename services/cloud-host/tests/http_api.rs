@@ -11,6 +11,21 @@ use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+struct RunOverrideGuard;
+
+impl RunOverrideGuard {
+    fn install(overrides: TestRunOverrides) -> Self {
+        set_test_run_overrides(Some(overrides));
+        Self
+    }
+}
+
+impl Drop for RunOverrideGuard {
+    fn drop(&mut self) {
+        set_test_run_overrides(None);
+    }
+}
+
 struct MockComputer;
 
 #[async_trait]
@@ -91,7 +106,7 @@ impl ResponsesModel for ScriptedModel {
 async fn try_test_pool() -> Option<PgPool> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
+    let pool = tokio::time::timeout(Duration::from_secs(2), PgPool::connect(&url))
         .await
         .ok()?
         .ok()?;
@@ -163,7 +178,7 @@ async fn http_auth_and_idempotent_run() {
         .unwrap();
     assert_eq!(unauthorized.status(), http::StatusCode::UNAUTHORIZED);
 
-    set_test_run_overrides(Some(TestRunOverrides {
+    let _run_guard = RunOverrideGuard::install(TestRunOverrides {
         computer: Arc::new(MockComputer),
         model: Arc::new(ScriptedModel {
             steps: Mutex::new(vec![CreateResponseResult {
@@ -174,7 +189,7 @@ async fn http_auth_and_idempotent_run() {
                 output_text: Some("hello from elsewhere".into()),
             }]),
         }),
-    }));
+    });
 
     let body = r#"{
       "bot":{"id":"bot_demo","name":"Researcher","instructions":"test","computerId":"computer_demo"},
@@ -212,12 +227,10 @@ async fn http_auth_and_idempotent_run() {
         .await
         .unwrap();
     assert_eq!(duplicate.status(), http::StatusCode::ACCEPTED);
-
-    set_test_run_overrides(None);
 }
 
-fn install_fast_mock() {
-    set_test_run_overrides(Some(TestRunOverrides {
+fn install_fast_mock() -> RunOverrideGuard {
+    RunOverrideGuard::install(TestRunOverrides {
         computer: Arc::new(MockComputer),
         model: Arc::new(ScriptedModel {
             steps: Mutex::new(vec![CreateResponseResult {
@@ -228,7 +241,7 @@ fn install_fast_mock() {
                 output_text: Some("hello from elsewhere".into()),
             }]),
         }),
-    }));
+    })
 }
 
 async fn post_run(
@@ -270,7 +283,7 @@ async fn concurrency_cap_returns_429_when_saturated() {
     let state = AppState::new(pool, config);
     let app = build_router(state);
 
-    set_test_run_overrides(Some(TestRunOverrides {
+    let _run_guard = RunOverrideGuard::install(TestRunOverrides {
         computer: Arc::new(MockComputer),
         model: Arc::new(SlowScriptedModel {
             delay: Duration::from_secs(3),
@@ -284,7 +297,7 @@ async fn concurrency_cap_returns_429_when_saturated() {
                 }]),
             },
         }),
-    }));
+    });
 
     let suffix = Uuid::new_v4();
     let r1 = post_run(
@@ -318,8 +331,6 @@ async fn concurrency_cap_returns_429_when_saturated() {
     )
     .await;
     assert_eq!(r3.status(), http::StatusCode::TOO_MANY_REQUESTS);
-
-    set_test_run_overrides(None);
 }
 
 #[tokio::test]
@@ -331,7 +342,7 @@ async fn concurrent_idempotency_creates_single_run() {
     let config = test_config();
     let state = AppState::new(pool.clone(), config);
     let app = build_router(state);
-    install_fast_mock();
+    let _run_guard = install_fast_mock();
 
     let key = format!("idem-concurrent-{}", Uuid::new_v4());
     let bot = format!("bot_idem_{}", Uuid::new_v4());
@@ -370,8 +381,6 @@ async fn concurrent_idempotency_creates_single_run() {
         .await
         .unwrap();
     assert_eq!(runs.0, 1);
-
-    set_test_run_overrides(None);
 }
 
 #[tokio::test]
@@ -418,7 +427,7 @@ async fn message_sequences_increment_per_conversation() {
     };
     let config = test_config();
     let app = build_router(AppState::new(pool.clone(), config));
-    install_fast_mock();
+    let _run_guard = install_fast_mock();
 
     let bot = format!("bot_seq_{}", Uuid::new_v4());
     let conv = Uuid::new_v4().to_string();
@@ -489,8 +498,6 @@ async fn message_sequences_increment_per_conversation() {
     assert_eq!(roles[3].0, "assistant");
     assert!(roles[2].1 > roles[1].1);
     assert!(roles[3].1 > roles[2].1);
-
-    set_test_run_overrides(None);
 }
 
 #[tokio::test]
@@ -501,7 +508,7 @@ async fn sse_reconnect_uses_monotonic_durable_ids() {
     };
     let config = test_config();
     let app = build_router(AppState::new(pool.clone(), config));
-    install_fast_mock();
+    let _run_guard = install_fast_mock();
 
     let key = format!("sse-{}", Uuid::new_v4());
     let bot = format!("bot_sse_{}", Uuid::new_v4());
@@ -537,8 +544,6 @@ async fn sse_reconnect_uses_monotonic_durable_ids() {
         .await
         .unwrap();
     assert_eq!(sse.status(), http::StatusCode::OK);
-
-    set_test_run_overrides(None);
 }
 
 #[sqlx::test(migrations = "./migrations")]

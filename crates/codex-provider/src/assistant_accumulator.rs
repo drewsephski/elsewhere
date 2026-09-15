@@ -295,7 +295,7 @@ pub fn assistant_from_turn_items(turn_completed: &Value) -> Option<String> {
         .and_then(|t| t.get("items"))
         .and_then(|v| v.as_array())?;
 
-    let mut agent_messages: Vec<&Value> = items
+    let agent_messages: Vec<&Value> = items
         .iter()
         .filter(|item| item.get("type").and_then(|v| v.as_str()) == Some("agentMessage"))
         .collect();
