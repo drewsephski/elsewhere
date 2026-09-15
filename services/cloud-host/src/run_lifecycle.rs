@@ -411,6 +411,7 @@ pub async fn synchronize_run_terminal_in_tx(
     sync_group_recipients_for_run_in_tx(tx, run_id, run_status, &mut counters).await?;
     sync_delegation_target_in_tx(tx, run_id, run_status, error_code, &mut counters).await?;
     sync_delegation_return_run_in_tx(tx, run_id, run_status, error_code, &mut counters).await?;
+    crate::routine_runs::sync_terminal_for_run_in_tx(tx, run_id, run_status, error_code).await?;
     Ok(())
 }
 
@@ -519,6 +520,10 @@ pub async fn reconcile_collaboration_lifecycle(pool: &PgPool) -> Result<(), sqlx
     )
     .fetch_all(pool)
     .await?;
+
+    if let Err(err) = crate::routine_runs::reconcile_stale_routine_runs(pool).await {
+        tracing::warn!(error = %err, "could not reconcile routine runs");
+    }
 
     for (run_id, status, error_code) in stale_resume {
         let mut tx = pool.begin().await?;

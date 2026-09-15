@@ -26,9 +26,14 @@ async fn input(pool: &PgPool, owner: &str) -> RoutineInput {
         bot_id: bot.id,
         name: "Daily brief".into(),
         instructions: "Review project files".into(),
-        interval_minutes: 60,
+        interval_minutes: Some(60),
         next_run_at: Utc::now() - Duration::minutes(1),
         enabled: true,
+        schedule_kind: None,
+        schedule_expression: None,
+        timezone: None,
+        destination_conversation_id: None,
+        failure_policy: None,
     }
 }
 
@@ -161,12 +166,17 @@ fn fixed_interval_cadence_and_input_bounds() {
         bot_id: "bot".into(),
         name: "Routine".into(),
         instructions: "Task".into(),
-        interval_minutes: 1,
+        interval_minutes: Some(1),
         next_run_at: now,
         enabled: true,
+        schedule_kind: None,
+        schedule_expression: None,
+        timezone: None,
+        destination_conversation_id: None,
+        failure_policy: None,
     };
     assert!(input.validate().is_err());
-    input.interval_minutes = 1440;
+    input.interval_minutes = Some(1440);
     assert!(input.validate().is_ok());
     input.name = " ".into();
     assert!(input.validate().is_err());

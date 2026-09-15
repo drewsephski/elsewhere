@@ -20,13 +20,18 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/v1/routines/{id}",
-            axum::routing::put(api::routines::update),
+            get(api::routines::get)
+                .patch(api::routines::update)
+                .put(api::routines::update)
+                .delete(api::routines::delete),
         )
         .route(
             "/v1/routines/{id}/enabled",
             post(api::routines::set_enabled),
         )
+        .route("/v1/routines/{id}/test", post(api::routines::test_run))
         .route("/v1/routines/{id}/run", post(api::routines::run_now))
+        .route("/v1/routines/{id}/runs", get(api::routines::list_runs))
         .route("/v1/bots", get(api::bots::list).post(api::bots::create))
         .route(
             "/v1/bots/{id}",

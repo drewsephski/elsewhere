@@ -318,7 +318,7 @@ async fn resume_source_creates_one_source_continuation(pool: PgPool) {
     .unwrap();
 
     sqlx::query(
-        "UPDATE agent_runs SET status = 'completed' WHERE id = $1",
+        "UPDATE agent_runs SET status = 'completed', results_status = 'complete', results_finalized_at = NOW() WHERE id = $1",
     )
     .bind(&created.target_run_id)
     .execute(&pool)

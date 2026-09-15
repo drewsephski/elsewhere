@@ -28,6 +28,8 @@ pub mod work;
 pub mod worker;
 
 pub mod routines;
+pub mod schedule;
+pub mod routine_runs;
 
 pub mod codex_ops;
 pub mod bot_avatar;
