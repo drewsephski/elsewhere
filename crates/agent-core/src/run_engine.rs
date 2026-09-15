@@ -14,6 +14,7 @@ use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
 use crate::collaboration::AgentCollaboration;
 use crate::connectors::AgentConnectors;
+use crate::browser_recovery::BrowserRecoverySession;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 use agent_skills::SkillPackage;
 
@@ -52,6 +53,7 @@ pub struct SharedRunDeps {
     pub collaboration: Option<Arc<dyn AgentCollaboration>>,
     pub connectors: Option<Arc<dyn AgentConnectors>>,
     pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
+    pub browser_recovery: Option<Arc<BrowserRecoverySession>>,
     /// Immutable Agent Skill packages snapshotted at run admission.
     pub skill_packages: Arc<[SkillPackage]>,
 }
@@ -78,6 +80,7 @@ impl SharedRunDeps {
             collaboration: None,
             connectors: None,
             human_intervention: None,
+            browser_recovery: None,
             skill_packages: Arc::from([]),
         }
     }
@@ -129,6 +132,7 @@ pub fn responses_loop_deps(
         collaboration: shared.collaboration.clone(),
         connectors: shared.connectors.clone(),
         human_intervention: shared.human_intervention.clone(),
+        browser_recovery: shared.browser_recovery.clone(),
     }
 }
 

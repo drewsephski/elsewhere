@@ -2,6 +2,7 @@
 
 mod approval;
 mod browser_tools;
+mod browser_recovery;
 mod public_http_url;
 mod computer;
 mod events;
@@ -66,7 +67,7 @@ pub use collaboration::{
 };
 pub use collaboration_tools::{
     all_openai_tool_definitions, collaboration_openai_tool_definitions,
-    dispatch_agent_tool_with_gate,
+    dispatch_agent_tool_with_gate, dispatch_agent_tool_with_gate_and_recovery,
 };
 pub use human_intervention::{
     is_human_intervention_tool, sanitize_human_intervention_message,
@@ -75,6 +76,11 @@ pub use human_intervention::{
     MAX_HUMAN_INTERVENTION_MESSAGE_CHARS,
 };
 pub use human_intervention_tools::human_intervention_openai_tool_definitions;
+pub use browser_recovery::{
+    browser_recovery_policy_instructions, classify_recoverable_failure, detect_human_blocker,
+    plan_recovery_after_failure, BrowserRecoverySession, HumanBlockerHint, MAX_RECOVERY_ATTEMPTS,
+    RecoverableFailureKind, RecoveryHint,
+};
 pub use connectors::{
     bound_connector_tool_result, AgentConnectors, ConnectorError,
     MAX_CONNECTOR_TOOL_RESULT_BYTES,

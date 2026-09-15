@@ -6,9 +6,11 @@ use crate::approval::{
     AllowAllApprovalGate, ApprovalDecision, ApprovalError, ToolApprovalContext, ToolApprovalGate,
     ToolRunContext, MAX_EXEC_COMMAND_CHARS,
 };
+use crate::browser_recovery::BrowserRecoverySession;
 use crate::browser_tools::{browser_openai_tool_definitions, dispatch_browser_tool};
 use crate::computer::{AgentComputer, ComputerError};
 use crate::tool_catalog::is_browser_tool;
+use std::sync::Arc;
 
 pub const MAX_AGENT_TOOL_STEPS: usize = 25;
 
@@ -137,8 +139,35 @@ pub async fn dispatch_tool_with_gate(
     gate: &dyn ToolApprovalGate,
     run: &ToolRunContext,
 ) -> Result<Value, ToolError> {
+    dispatch_tool_with_gate_and_recovery(
+        computer,
+        name,
+        arguments,
+        cancel,
+        gate,
+        run,
+        None,
+    )
+    .await
+}
+
+pub async fn dispatch_tool_with_gate_and_recovery(
+    computer: &dyn AgentComputer,
+    name: &str,
+    arguments: &str,
+    cancel: &AtomicBool,
+    gate: &dyn ToolApprovalGate,
+    run: &ToolRunContext,
+    browser_recovery: Option<&Arc<BrowserRecoverySession>>,
+) -> Result<Value, ToolError> {
     if cancel.load(Ordering::Relaxed) {
         return Err(ToolError::Cancelled);
+    }
+
+    if let Some(session) = browser_recovery {
+        if is_browser_tool(name) {
+            session.preflight_browser_tool(name)?;
+        }
     }
 
     let args: Value = serde_json::from_str(arguments).map_err(|e| {
@@ -164,7 +193,23 @@ pub async fn dispatch_tool_with_gate(
 
     let started = Instant::now();
     let result = if is_browser_tool(name) {
-        dispatch_browser_tool(computer, name, &args).await
+        let browser_result = dispatch_browser_tool(computer, name, &args).await;
+        match browser_result {
+            Ok(value) => {
+                if let Some(session) = browser_recovery {
+                    Ok(session.on_browser_success(name, value))
+                } else {
+                    Ok(value)
+                }
+            }
+            Err(err) => {
+                if let Some(session) = browser_recovery {
+                    Err(session.on_browser_failure(name, err))
+                } else {
+                    Err(err)
+                }
+            }
+        }
     } else {
         match name {
             "workspace_list" => workspace_list(computer, &args).await,

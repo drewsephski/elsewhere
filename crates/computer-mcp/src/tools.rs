@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use agent_core::{
-    dispatch_agent_tool_with_gate,
+    dispatch_agent_tool_with_gate_and_recovery,
     human_intervention_openai_tool_definitions,
     is_browser_tool,
     is_collaboration_tool,
@@ -12,6 +12,7 @@ use agent_core::{
     AgentConnectors,
     AgentComputer,
     AgentHumanIntervention,
+    BrowserRecoverySession,
     CollaborationContext,
     connector_openai_tool_definitions,
     ToolApprovalGate,
@@ -43,6 +44,7 @@ pub struct ComputerHandler {
     collaboration: Option<Arc<dyn AgentCollaboration>>,
     connectors: Option<Arc<dyn AgentConnectors>>,
     human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
+    browser_recovery: Option<Arc<BrowserRecoverySession>>,
     source_conversation_id: String,
 }
 
@@ -55,6 +57,7 @@ impl ComputerHandler {
         collaboration: Option<Arc<dyn AgentCollaboration>>,
         connectors: Option<Arc<dyn AgentConnectors>>,
         human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
+        browser_recovery: Option<Arc<BrowserRecoverySession>>,
         source_conversation_id: String,
     ) -> Self {
         Self {
@@ -65,6 +68,7 @@ impl ComputerHandler {
             collaboration,
             connectors,
             human_intervention,
+            browser_recovery,
             source_conversation_id,
         }
     }
@@ -328,7 +332,7 @@ impl ServerHandler for ComputerHandler {
             source_request_id: self.run.request_id.clone(),
             tool_invocation_id: invocation_id,
         };
-        let dispatch = dispatch_agent_tool_with_gate(
+        let dispatch = dispatch_agent_tool_with_gate_and_recovery(
             self.computer.as_ref(),
             self.collaboration.as_ref(),
             self.connectors.as_ref(),
@@ -339,6 +343,7 @@ impl ServerHandler for ComputerHandler {
             self.gate.as_ref(),
             &tool_run,
             Some(&collaboration_ctx),
+            self.browser_recovery.as_ref(),
         )
         .await;
 

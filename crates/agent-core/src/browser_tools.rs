@@ -23,7 +23,7 @@ pub fn browser_openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "name": "browser_snapshot",
-            "description": "Capture the current page URL, title, and an accessibility-style list of interactive elements with refs (e1, e2, …) for click/type.",
+            "description": "Capture the current page URL, title, and an accessibility-style list of interactive elements with refs (e1, e2, …) for click/type. Call after navigation, failed clicks/types, unexpected redirects, and after browser_request_human handback before any other browser mutation.",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -34,7 +34,7 @@ pub fn browser_openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "name": "browser_click",
-            "description": "Click an element identified by ref from browser_snapshot.",
+            "description": "Click an element identified by ref from browser_snapshot. If the ref is stale, snapshot again and retry with a fresh ref instead of requesting human help immediately.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -48,7 +48,7 @@ pub fn browser_openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "name": "browser_type",
-            "description": "Type text into an input identified by ref from browser_snapshot.",
+            "description": "Type text into an input identified by ref from browser_snapshot. If the ref is stale, snapshot again and retry; do not type secrets meant for owner-only login flows.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -6,6 +6,7 @@ use crate::human_intervention::{
     HumanInterventionError, HUMAN_INTERVENTION_REASONS,
 };
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
+use crate::browser_recovery::BrowserRecoverySession;
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -14,7 +15,7 @@ pub fn human_intervention_openai_tool_definitions() -> Vec<Value> {
     vec![json!({
         "type": "function",
         "name": "browser_request_human",
-        "description": "Ask the owner to complete a human-only browser step (login, CAPTCHA, 2FA, passkey, credentials, consent). Pauses bot browser work until the owner returns control. Never ask for passwords or OTP values in chat.",
+        "description": "Ask the owner to complete a human-only browser step (login, CAPTCHA, 2FA, passkey, credentials, consent) after bounded autonomous recovery fails or when escalation is immediate. Pauses bot browser work until the owner returns control. Never ask for passwords or OTP values in chat.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -42,6 +43,7 @@ pub async fn dispatch_human_intervention_tool(
     cancel: &AtomicBool,
     gate: &dyn ToolApprovalGate,
     run: &ToolRunContext,
+    browser_recovery: Option<&Arc<BrowserRecoverySession>>,
 ) -> Result<Value, ToolError> {
     if !is_human_intervention_tool(name) {
         return Err(ToolError::MalformedArguments(format!("unknown tool: {name}")));
@@ -95,11 +97,15 @@ pub async fn dispatch_human_intervention_tool(
         .await
         .map_err(map_human_intervention_error)?;
 
+    if let Some(session) = browser_recovery {
+        session.mark_owner_handback();
+    }
+
     Ok(json!({
         "ok": true,
         "interventionId": outcome.intervention_id,
         "status": "resolved",
-        "detail": "The owner returned control. Call browser_snapshot before continuing browser work."
+        "detail": "The owner returned control. Call browser_snapshot before continuing browser work; reassess the page and do not assume your requested step succeeded."
     }))
 }
 

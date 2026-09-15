@@ -3,8 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    AgentComputer, AgentLoopContext, ReadinessCachedComputer, ResponsesModel,
-    ResponsesRunEngine, RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
+    browser_recovery_policy_instructions, AgentComputer, AgentLoopContext, BrowserRecoverySession,
+    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore, SharedRunDeps,
+    ToolApprovalGate,
 };
 use agent_skills::append_skills_to_instructions;
 
@@ -367,8 +368,11 @@ Bot collaboration:\n\
 Human browser intervention:\n\
 - Use browser tools for normal automation. Never ask the user for passwords, OTP codes, or other secrets in chat.\n\
 - When a page requires owner login, CAPTCHA, 2FA, passkeys, credential entry, or consent, call browser_request_human with a short safe message.\n\
-- After the owner returns control, call browser_snapshot before continuing; do not assume the human step succeeded.",
-        crate::results::output_directory(&input.records.run_id)
+- After the owner returns control, call browser_snapshot before continuing; do not assume the human step succeeded.\n\n\
+Browser recovery:\n\
+- {}",
+        crate::results::output_directory(&input.records.run_id),
+        browser_recovery_policy_instructions(),
     ));
 
     let skill_packages = crate::skills::load_run_skill_packages(&pool, &owner_id, &input.records.run_id)
@@ -408,6 +412,7 @@ Human browser intervention:\n\
             events.clone(),
             cancel.clone(),
         )),
+        browser_recovery: Some(Arc::new(BrowserRecoverySession::new())),
         skill_packages,
     };
 

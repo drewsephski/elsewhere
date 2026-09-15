@@ -10,6 +10,8 @@ use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::browser_recovery::BrowserRecoverySession;
+
 pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
     vec![
         json!({
@@ -67,6 +69,35 @@ pub async fn dispatch_agent_tool_with_gate(
     run: &ToolRunContext,
     collaboration_ctx: Option<&CollaborationContext>,
 ) -> Result<Value, ToolError> {
+    dispatch_agent_tool_with_gate_and_recovery(
+        computer,
+        collaboration,
+        connectors,
+        human_intervention,
+        name,
+        arguments,
+        cancel,
+        gate,
+        run,
+        collaboration_ctx,
+        None,
+    )
+    .await
+}
+
+pub async fn dispatch_agent_tool_with_gate_and_recovery(
+    computer: &dyn crate::computer::AgentComputer,
+    collaboration: Option<&Arc<dyn AgentCollaboration>>,
+    connectors: Option<&Arc<dyn crate::connectors::AgentConnectors>>,
+    human_intervention: Option<&Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
+    name: &str,
+    arguments: &str,
+    cancel: &AtomicBool,
+    gate: &dyn ToolApprovalGate,
+    run: &ToolRunContext,
+    collaboration_ctx: Option<&CollaborationContext>,
+    browser_recovery: Option<&Arc<BrowserRecoverySession>>,
+) -> Result<Value, ToolError> {
     if is_human_intervention_tool(name) {
         return dispatch_human_intervention_tool(
             human_intervention,
@@ -75,6 +106,7 @@ pub async fn dispatch_agent_tool_with_gate(
             cancel,
             gate,
             run,
+            browser_recovery,
         )
         .await;
     }
@@ -92,7 +124,16 @@ pub async fn dispatch_agent_tool_with_gate(
         )
         .await;
     }
-    crate::tools::dispatch_tool_with_gate(computer, name, arguments, cancel, gate, run).await
+    crate::tools::dispatch_tool_with_gate_and_recovery(
+        computer,
+        name,
+        arguments,
+        cancel,
+        gate,
+        run,
+        browser_recovery,
+    )
+    .await
 }
 
 async fn dispatch_collaboration_tool(

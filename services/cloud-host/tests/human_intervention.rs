@@ -1,9 +1,10 @@
 //! Human intervention request lifecycle, owner isolation, and handback.
 
 use agent_core::{
-    dispatch_agent_tool_with_gate, AgentComputer, AllowAllApprovalGate, ComputerError,
-    ComputerInfo, EventSink, ExecResult, HumanInterventionContext, HumanInterventionError,
-    RunEventReceipt, RunStore, ToolRunContext, WorkspaceEntry,
+    dispatch_agent_tool_with_gate, dispatch_agent_tool_with_gate_and_recovery, AgentComputer,
+    AllowAllApprovalGate, BrowserRecoverySession, ComputerError, ComputerInfo, EventSink,
+    ExecResult, HumanInterventionContext, HumanInterventionError, RunEventReceipt, RunStore,
+    ToolRunContext, WorkspaceEntry,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -570,6 +571,114 @@ async fn tool_dispatch_blocks_until_handback() {
     .await
     .expect("snapshot after handback");
     assert_eq!(counting.snapshots.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
+    let Some(pool) = try_test_pool().await else {
+        eprintln!("skipping recovery_session_blocks_mutation_until_snapshot_after_handback");
+        return;
+    };
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let computer = insert_computer_placeholder(&pool, &owner, "recovery-gate")
+        .await
+        .unwrap();
+    let (run_id, request_id) = seed_run(&pool, &owner, &computer.id).await;
+    let service = HumanInterventionService {
+        pool: pool.clone(),
+        registry: Arc::new(cloud_host::approval::ApprovalWaitRegistry::default()),
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    let backend: Arc<dyn agent_core::AgentHumanIntervention> = RunScopedHumanIntervention::new(
+        service.clone(),
+        Arc::new(RecordingStore {
+            events: std::sync::Mutex::new(vec![]),
+        }),
+        Arc::new(NoopEvents),
+        cancel.clone(),
+    );
+    let gate = AllowAllApprovalGate;
+    let counting = CountingComputer {
+        snapshots: AtomicUsize::new(0),
+    };
+    let recovery = Arc::new(BrowserRecoverySession::new());
+    let tool_run = test_run(&owner, &computer.id, &run_id, &request_id);
+
+    let owner_for_handback = owner.clone();
+    let computer_id = computer.id.clone();
+    let handback = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        service
+            .resolve_pending_for_computer_handback(&owner_for_handback, &computer_id)
+            .await
+            .unwrap();
+    });
+
+    dispatch_agent_tool_with_gate_and_recovery(
+        &counting,
+        None,
+        None,
+        Some(&backend),
+        "browser_request_human",
+        r#"{"reason":"captcha","message":"Solve the CAPTCHA in the browser"}"#,
+        &cancel,
+        &gate,
+        &tool_run,
+        None,
+        Some(&recovery),
+    )
+    .await
+    .expect("human tool resolves");
+    handback.await.unwrap();
+
+    let blocked = dispatch_agent_tool_with_gate_and_recovery(
+        &counting,
+        None,
+        None,
+        Some(&backend),
+        "browser_click",
+        r#"{"ref":"e1"}"#,
+        &cancel,
+        &gate,
+        &tool_run,
+        None,
+        Some(&recovery),
+    )
+    .await
+    .expect_err("mutation before snapshot denied");
+    assert!(blocked.message().contains("browser_snapshot"));
+
+    dispatch_agent_tool_with_gate_and_recovery(
+        &counting,
+        None,
+        None,
+        Some(&backend),
+        "browser_snapshot",
+        r#"{}"#,
+        &cancel,
+        &gate,
+        &tool_run,
+        None,
+        Some(&recovery),
+    )
+    .await
+    .expect("snapshot clears gate");
+
+    dispatch_agent_tool_with_gate_and_recovery(
+        &counting,
+        None,
+        None,
+        Some(&backend),
+        "browser_click",
+        r#"{"ref":"e1"}"#,
+        &cancel,
+        &gate,
+        &tool_run,
+        None,
+        Some(&recovery),
+    )
+    .await
+    .expect("mutation after snapshot allowed");
 }
 
 #[tokio::test]

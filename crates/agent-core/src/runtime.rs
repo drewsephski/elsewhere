@@ -12,7 +12,7 @@ use crate::model::{
 use crate::run_store::{RunStore, StructuredMessageInput};
 use crate::approval::ToolRunContext;
 use crate::collaboration::CollaborationContext;
-use crate::collaboration_tools::{all_openai_tool_definitions, dispatch_agent_tool_with_gate};
+use crate::collaboration_tools::all_openai_tool_definitions;
 use crate::tools::{ToolError, MAX_AGENT_TOOL_STEPS};
 
 pub struct AgentLoopContext {
@@ -37,6 +37,7 @@ pub struct AgentLoopDeps {
     pub collaboration: Option<Arc<dyn crate::collaboration::AgentCollaboration>>,
     pub connectors: Option<Arc<dyn crate::connectors::AgentConnectors>>,
     pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
+    pub browser_recovery: Option<Arc<crate::browser_recovery::BrowserRecoverySession>>,
 }
 
 pub async fn run_agent_loop(
@@ -178,7 +179,7 @@ pub async fn run_agent_loop(
                 source_request_id: ctx.request_id.clone(),
                 tool_invocation_id: call_id.clone(),
             };
-            let tool_result = match dispatch_agent_tool_with_gate(
+            let tool_result = match crate::collaboration_tools::dispatch_agent_tool_with_gate_and_recovery(
                 deps.computer.as_ref(),
                 deps.collaboration.as_ref(),
                 deps.connectors.as_ref(),
@@ -189,6 +190,7 @@ pub async fn run_agent_loop(
                 deps.approval_gate.as_ref(),
                 &tool_run,
                 Some(&collaboration_ctx),
+                deps.browser_recovery.as_ref(),
             )
             .await
             {
@@ -704,6 +706,7 @@ mod tests {
             collaboration: None,
             connectors: None,
             human_intervention: None,
+            browser_recovery: None,
         };
 
         let ctx = AgentLoopContext {
