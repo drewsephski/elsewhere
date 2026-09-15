@@ -33,13 +33,16 @@ const productLinks = [
 
 export function ProductNavDropdown() {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger
+        openOnHover
+        delay={80}
+        closeDelay={250}
         render={
           <Button
             type="button"
             variant="ghost"
-            className="gap-1 text-sm tracking-wide text-brand-dark uppercase hover:opacity-70"
+            className="gap-1 text-sm tracking-wide text-brand-dark uppercase hover:opacity-70 data-popup-open:opacity-70"
           />
         }
       >
