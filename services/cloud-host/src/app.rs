@@ -112,10 +112,6 @@ pub fn build_router(state: AppState) -> Router {
             delete(api::conversations::remove_participant_handler),
         )
         .route(
-            "/v1/conversations/{id}/runs",
-            post(api::conversations::enqueue_group_run),
-        )
-        .route(
             "/v1/runs/{id}/delegations",
             get(api::delegations::list_run_delegations),
         )

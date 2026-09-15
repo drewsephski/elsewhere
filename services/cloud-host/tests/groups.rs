@@ -1,5 +1,6 @@
 use cloud_host::{db::resources, groups, work};
 use sqlx::PgPool;
+use std::sync::Arc;
 use uuid::Uuid;
 
 async fn bot_with_computer(pool: &PgPool, owner: &str, name: &str) -> resources::BotRow {
@@ -230,4 +231,99 @@ async fn per_bot_codex_threads_are_independent(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(compacted, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn membership_add_race_never_exceeds_max(pool: PgPool) {
+    let mut bots = Vec::new();
+    for i in 0..5 {
+        bots.push(bot_with_computer(&pool, "alice", &format!("Bot{i}")).await);
+    }
+    let group = groups::create_group(
+        &pool,
+        "alice",
+        groups::CreateGroupRequest {
+            name: "Race add".into(),
+            bot_ids: bots.iter().take(2).map(|b| b.id.clone()).collect(),
+        },
+    )
+    .await
+    .unwrap();
+    for bot in bots.iter().skip(2).take(3) {
+        groups::add_participant(&pool, "alice", &group.id, &bot.id)
+            .await
+            .unwrap();
+    }
+    let extra = bot_with_computer(&pool, "alice", "Extra").await;
+    let pool_a = pool.clone();
+    let pool_b = pool.clone();
+    let gid_a = group.id.clone();
+    let gid_b = group.id.clone();
+    let extra_a = extra.id.clone();
+    let extra_b = extra.id.clone();
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let b1 = barrier.clone();
+    let b2 = barrier.clone();
+    let t1 = tokio::spawn(async move {
+        b1.wait().await;
+        groups::add_participant(&pool_a, "alice", &gid_a, &extra_a).await
+    });
+    let t2 = tokio::spawn(async move {
+        b2.wait().await;
+        groups::add_participant(&pool_b, "alice", &gid_b, &extra_b).await
+    });
+    let _ = t1.await.unwrap();
+    let _ = t2.await.unwrap();
+    let active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = $1 AND left_at IS NULL",
+    )
+    .bind(&group.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(active, 6);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn membership_remove_race_never_below_min(pool: PgPool) {
+    let a = bot_with_computer(&pool, "alice", "A").await;
+    let b = bot_with_computer(&pool, "alice", "B").await;
+    let c = bot_with_computer(&pool, "alice", "C").await;
+    let group = groups::create_group(
+        &pool,
+        "alice",
+        groups::CreateGroupRequest {
+            name: "Race rm".into(),
+            bot_ids: vec![a.id.clone(), b.id.clone(), c.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+    let pool_a = pool.clone();
+    let pool_b = pool.clone();
+    let gid_a = group.id.clone();
+    let gid_b = group.id.clone();
+    let bid_a = b.id.clone();
+    let bid_b = b.id.clone();
+    let barrier = Arc::new(tokio::sync::Barrier::new(2));
+    let b1 = barrier.clone();
+    let b2 = barrier.clone();
+    let t1 = tokio::spawn(async move {
+        b1.wait().await;
+        groups::remove_participant(&pool_a, "alice", &gid_a, &bid_a).await
+    });
+    let t2 = tokio::spawn(async move {
+        b2.wait().await;
+        groups::remove_participant(&pool_b, "alice", &gid_b, &bid_b).await
+    });
+    let _ = t1.await.unwrap();
+    let _ = t2.await.unwrap();
+    let active: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = $1 AND left_at IS NULL",
+    )
+    .bind(&group.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(active >= 2);
 }

@@ -148,6 +148,10 @@ export interface DelegationSummary {
   finishedAt?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
+  returnPolicy?: string;
+  sourceResumeRunId?: string | null;
+  resumeStatus?: string | null;
+  resumeError?: string | null;
 }
 
 export interface Routine {

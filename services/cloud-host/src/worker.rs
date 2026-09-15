@@ -51,6 +51,9 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
             crate::routines::tick(&state.pool, chrono::Utc::now())
                 .await
                 .map_err(|e| e.to_string())?;
+            if let Err(err) = crate::delegation::reconcile_pending_delegation_returns(&state.pool).await {
+                tracing::warn!(error = %err, "delegation return reconciliation failed");
+            }
         }
         dispatch_available(&state)
             .await

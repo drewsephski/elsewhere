@@ -8,9 +8,8 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::groups::{
-    add_participant, append_human_message, create_group, delete_transcript_message,
-    enqueue_group_bot_run,
-    get_conversation_for_owner, list_groups, list_messages, remove_participant, send_group_message,
+    add_participant, append_human_message, create_group, delete_transcript_message, get_conversation_for_owner,
+    list_groups, list_messages, remove_participant, send_group_message,
     CreateGroupRequest, GroupConversationDetail, GroupListItem, SendGroupMessageRequest,
     SendGroupMessageResponse, TranscriptMessage,
 };
@@ -160,62 +159,4 @@ pub async fn remove_participant_handler(
     )
     .await?;
     Ok(Json(detail))
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupRunRequest {
-    pub bot_id: String,
-    pub message: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupRunResponse {
-    pub run_id: String,
-    pub request_id: String,
-    pub conversation_id: String,
-    pub bot_id: String,
-}
-
-pub async fn enqueue_group_run(
-    State(state): State<AppState>,
-    Extension(principal): Extension<Principal>,
-    Path(conversation_id): Path<String>,
-    headers: axum::http::HeaderMap,
-    Json(body): Json<GroupRunRequest>,
-) -> Result<(StatusCode, Json<GroupRunResponse>), ApiError> {
-    if body.message.trim().is_empty() {
-        return Err(ApiError::Validation("message cannot be empty".into()));
-    }
-    if body.bot_id.trim().is_empty() {
-        return Err(ApiError::Validation("botId is required".into()));
-    }
-    let request_id = headers
-        .get("Idempotency-Key")
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-    let records = enqueue_group_bot_run(
-        &state.pool,
-        principal.owner_id(),
-        &conversation_id,
-        body.bot_id.trim(),
-        &request_id,
-        body.message.trim(),
-    )
-    .await?;
-
-    Ok((
-        StatusCode::CREATED,
-        Json(GroupRunResponse {
-            run_id: records.run_id,
-            request_id: records.request_id,
-            conversation_id: records.conversation_id,
-            bot_id: body.bot_id.trim().to_string(),
-        }),
-    ))
 }

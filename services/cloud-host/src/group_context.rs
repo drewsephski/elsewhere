@@ -43,15 +43,15 @@ pub fn group_context_user_message(block: &str) -> Value {
     })
 }
 
-/// Lines after `after_sequence` through `up_to_sequence`, bounded by count and bytes.
+/// Lines with `after_sequence` < sequence < `before_sequence` (exclusive upper bound), bounded.
 pub fn select_bounded_group_lines(
     rows: Vec<GroupContextLine>,
     after_sequence: i64,
-    up_to_sequence: i64,
+    before_sequence: i64,
 ) -> Vec<GroupContextLine> {
     let filtered: Vec<GroupContextLine> = rows
         .into_iter()
-        .filter(|r| r.sequence > after_sequence && r.sequence <= up_to_sequence)
+        .filter(|r| r.sequence > after_sequence && r.sequence < before_sequence)
         .collect();
     let mut selected: Vec<GroupContextLine> = Vec::new();
     let mut total_bytes = 0usize;
@@ -177,6 +177,7 @@ pub async fn build_group_context_messages(
     let all =
         load_group_context_lines(pool, conversation_id, source_message_sequence, bot_id).await?;
     let lines = select_bounded_group_lines(all, after, source_message_sequence);
+    // `source_message_sequence` is exclusive: the current human turn is appended separately.
     let block = format_group_context_block(&lines);
     if block.is_empty() {
         return Ok(Vec::new());
@@ -200,7 +201,28 @@ mod tests {
             .collect();
         let selected = select_bounded_group_lines(rows, 0, 50);
         assert_eq!(selected.len(), MAX_GROUP_CONTEXT_MESSAGES);
-        assert_eq!(selected.first().map(|l| l.sequence), Some(11));
-        assert_eq!(selected.last().map(|l| l.sequence), Some(50));
+        assert_eq!(selected.first().map(|l| l.sequence), Some(10));
+        assert_eq!(selected.last().map(|l| l.sequence), Some(49));
+    }
+
+    #[test]
+    fn exclusive_upper_bound_excludes_current_source_sequence() {
+        let rows: Vec<GroupContextLine> = vec![
+            GroupContextLine {
+                display_name: "Researcher".into(),
+                author_kind: "bot".into(),
+                body: "Finding ABC".into(),
+                sequence: 1,
+            },
+            GroupContextLine {
+                display_name: "You".into(),
+                author_kind: "human".into(),
+                body: "@Designer use that finding".into(),
+                sequence: 2,
+            },
+        ];
+        let selected = select_bounded_group_lines(rows, 0, 2);
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].sequence, 1);
     }
 }

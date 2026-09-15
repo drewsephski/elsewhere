@@ -27,10 +27,13 @@ function statusVariant(status: string) {
 
 interface DelegationCardProps {
   delegation: DelegationSummary;
+  sourceBotName?: string;
 }
 
-export function DelegationCard({ delegation }: DelegationCardProps) {
+export function DelegationCard({ delegation, sourceBotName }: DelegationCardProps) {
   const targetRunId = delegation.targetRunId;
+  const resumeRunId = delegation.sourceResumeRunId;
+  const displaySourceName = sourceBotName ?? delegation.sourceBotName;
   return (
     <div
       className="flex flex-col gap-3 rounded-lg border border-border/60 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -61,6 +64,22 @@ export function DelegationCard({ delegation }: DelegationCardProps) {
           >
             View {delegation.targetBotName}&apos;s work
           </Link>
+        ) : null}
+        {resumeRunId ? (
+          <Link
+            href={`/app/work/${resumeRunId}`}
+            className="inline-flex h-8 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-muted"
+          >
+            View {displaySourceName}&apos;s follow-up
+          </Link>
+        ) : null}
+        {delegation.returnPolicy ? (
+          <span className="text-xs text-muted-foreground">
+            Return: {delegation.returnPolicy === "resume_source" ? "resume source" : "none"}
+          </span>
+        ) : null}
+        {delegation.resumeStatus === "skipped" && delegation.resumeError ? (
+          <span className="text-xs text-destructive">{delegation.resumeError}</span>
         ) : null}
       </div>
     </div>

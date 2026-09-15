@@ -144,7 +144,8 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         "bot_delegate" => json!({
             "targetBotId": args.get("targetBotId").and_then(|v| v.as_str()).unwrap_or(""),
             "instructionLength": args.get("instruction").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
-            "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
+            "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
+            "onComplete": args.get("onComplete").and_then(|v| v.as_str()).unwrap_or("resume_source")
         }),
         _ if is_collaboration_tool(tool_name) => json!({}),
         _ => json!({}),

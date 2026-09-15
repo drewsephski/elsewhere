@@ -34,6 +34,7 @@ impl AgentCollaboration for PostgresAgentCollaboration {
         target_bot_id: &str,
         instruction: &str,
         context: Option<&str>,
+        return_policy: &str,
     ) -> Result<DelegationEnqueueResult, CollaborationError> {
         crate::delegation::create_delegation(
             &self.pool,
@@ -41,6 +42,7 @@ impl AgentCollaboration for PostgresAgentCollaboration {
             target_bot_id,
             instruction,
             context,
+            return_policy,
         )
         .await
     }

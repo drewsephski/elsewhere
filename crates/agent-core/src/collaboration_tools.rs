@@ -29,7 +29,12 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
                 "properties": {
                     "targetBotId": { "type": "string", "description": "Recipient Bot id from bot_list" },
                     "instruction": { "type": "string", "description": "Clear task for the recipient to own" },
-                    "context": { "type": "string", "description": "Optional bounded text context (not filesystem paths from your computer)" }
+                    "context": { "type": "string", "description": "Optional bounded text context (not filesystem paths from your computer)" },
+                    "onComplete": {
+                        "type": "string",
+                        "enum": ["resume_source", "none"],
+                        "description": "resume_source: queue a follow-up on the source Bot when the recipient finishes; none: hand off without source follow-up"
+                    }
                 },
                 "required": ["targetBotId", "instruction"],
                 "additionalProperties": false
@@ -106,8 +111,17 @@ async fn dispatch_collaboration_tool(
                 .get("context")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty());
+            let return_policy = args
+                .get("onComplete")
+                .and_then(|v| v.as_str())
+                .unwrap_or("resume_source");
+            if return_policy != "resume_source" && return_policy != "none" {
+                return Err(ToolError::MalformedArguments(
+                    "onComplete must be resume_source or none".into(),
+                ));
+            }
             let enqueued = service
-                .delegate(ctx, target_bot_id, instruction, context)
+                .delegate(ctx, target_bot_id, instruction, context, return_policy)
                 .await
                 .map_err(map_collaboration_error)?;
             Ok(json!({

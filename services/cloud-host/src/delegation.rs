@@ -33,6 +33,24 @@ pub fn format_delegated_user_message(
     message
 }
 
+pub fn format_delegation_return_user_message(
+    target_bot_name: &str,
+    instruction: &str,
+    target_status: &str,
+    target_result: &str,
+    target_run_id: &str,
+) -> String {
+    format!(
+        "Delegated work returned from {target_bot_name}.\n\n\
+Original delegated instruction:\n{instruction}\n\n\
+Recipient status:\n{target_status}\n\n\
+Recipient result:\n{target_result}\n\n\
+Target run:\n{target_run_id}\n\n\
+Continue the original task using these findings.\n\
+Do not claim access to files that are on another computer unless they are actually accessible."
+    )
+}
+
 pub async fn list_teammates(
     pool: &PgPool,
     owner: &str,
@@ -94,7 +112,13 @@ pub async fn create_delegation(
     target_bot_id: &str,
     instruction: &str,
     context: Option<&str>,
+    return_policy: &str,
 ) -> Result<DelegationEnqueueResult, CollaborationError> {
+    if return_policy != "none" && return_policy != "resume_source" {
+        return Err(CollaborationError::Validation(
+            "return_policy must be none or resume_source".into(),
+        ));
+    }
     if target_bot_id == ctx.source_bot_id {
         return Err(CollaborationError::Validation(
             "Cannot delegate work to yourself".into(),
@@ -223,8 +247,8 @@ pub async fn create_delegation(
         INSERT INTO bot_delegations (
             id, owner_id, source_bot_id, target_bot_id, source_run_id, source_conversation_id,
             source_request_id, root_run_id, parent_delegation_id, depth, instruction, context,
-            status, tool_invocation_id
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'queued',$13)
+            status, tool_invocation_id, return_policy
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'queued',$13,$14)
         "#,
     )
     .bind(&delegation_id)
@@ -240,6 +264,7 @@ pub async fn create_delegation(
     .bind(instruction)
     .bind(context)
     .bind(&ctx.tool_invocation_id)
+    .bind(return_policy)
     .execute(&mut *tx)
     .await;
 
@@ -313,6 +338,32 @@ async fn resolve_delegation_chain(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     source_run_id: &str,
 ) -> Result<(String, Option<String>, i32), CollaborationError> {
+    if let Some(delegation_id) = sqlx::query_scalar::<_, String>(
+        "SELECT delegation_id FROM work_queue WHERE run_id = $1 AND provenance_kind = 'delegation_return'",
+    )
+    .bind(source_run_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_error)?
+    {
+        let row = sqlx::query(
+            "SELECT root_run_id, parent_delegation_id, depth FROM bot_delegations WHERE id = $1",
+        )
+        .bind(&delegation_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_error)?
+        .ok_or(CollaborationError::Internal(
+            "delegation return missing parent row".into(),
+        ))?;
+        let depth: i32 = row.get("depth");
+        return Ok((
+            row.get("root_run_id"),
+            row.get("parent_delegation_id"),
+            depth.saturating_sub(1),
+        ));
+    }
+
     let parent = sqlx::query(
         "SELECT id, root_run_id, depth FROM bot_delegations WHERE target_run_id = $1",
     )
@@ -454,14 +505,17 @@ pub async fn sync_target_run_terminal(
         return Ok(());
     };
 
+    let mut tx = pool.begin().await?;
+
     let row = sqlx::query(
-        "SELECT id, source_request_id, status FROM bot_delegations WHERE target_run_id = $1",
+        "SELECT id, source_request_id, status, return_policy FROM bot_delegations WHERE target_run_id = $1 FOR UPDATE",
     )
     .bind(&run_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
     let Some(row) = row else {
+        tx.commit().await?;
         return Ok(());
     };
 
@@ -469,6 +523,12 @@ pub async fn sync_target_run_terminal(
     let source_request_id: String = row.get("source_request_id");
     let current: String = row.get("status");
     if matches!(current.as_str(), "completed" | "failed" | "cancelled") {
+        if row.get::<String, _>("return_policy") == "resume_source" {
+            let _ = crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id)
+                .await
+                .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        }
+        tx.commit().await?;
         return Ok(());
     }
 
@@ -493,7 +553,7 @@ pub async fn sync_target_run_terminal(
     .bind(delegation_status)
     .bind(error_code)
     .bind(error_message)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
     let payload = json!({
@@ -508,9 +568,47 @@ pub async fn sync_target_run_terminal(
     .bind(&source_request_id)
     .bind(event_type)
     .bind(&payload)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
 
+    if row.get::<String, _>("return_policy") == "resume_source" {
+        crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id)
+            .await
+            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn reconcile_pending_delegation_returns(pool: &PgPool) -> Result<(), sqlx::Error> {
+    let pending: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT id FROM bot_delegations
+        WHERE return_policy = 'resume_source'
+          AND status IN ('completed', 'failed', 'cancelled')
+          AND source_resume_run_id IS NULL
+          AND resume_status IS NULL
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for delegation_id in pending {
+        let mut tx = pool.begin().await?;
+        if let Err(err) =
+            crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id).await
+        {
+            tracing::warn!(
+                delegation_id = %delegation_id,
+                error = %err,
+                "could not reconcile delegation return"
+            );
+            tx.rollback().await.ok();
+            continue;
+        }
+        tx.commit().await?;
+    }
     Ok(())
 }
 
@@ -535,6 +633,10 @@ pub struct DelegationDetail {
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
+    pub return_policy: String,
+    pub source_resume_run_id: Option<String>,
+    pub resume_status: Option<String>,
+    pub resume_error: Option<String>,
 }
 
 pub async fn list_for_run(
@@ -627,5 +729,9 @@ fn map_delegation_row(row: sqlx::postgres::PgRow) -> DelegationDetail {
         finished_at: row.get("finished_at"),
         error_code: row.get("error_code"),
         error_message: row.get("error_message"),
+        return_policy: row.get("return_policy"),
+        source_resume_run_id: row.get("source_resume_run_id"),
+        resume_status: row.get("resume_status"),
+        resume_error: row.get("resume_error"),
     }
 }

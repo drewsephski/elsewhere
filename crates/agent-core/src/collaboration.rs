@@ -82,5 +82,6 @@ pub trait AgentCollaboration: Send + Sync {
         target_bot_id: &str,
         instruction: &str,
         context: Option<&str>,
+        return_policy: &str,
     ) -> Result<DelegationEnqueueResult, CollaborationError>;
 }

@@ -348,6 +348,60 @@ pub async fn build_run_input_messages(
     Ok(messages)
 }
 
+pub async fn commit_group_context_cursor_for_completed_run(
+    pool: &PgPool,
+    request_id: &str,
+) -> Result<(), String> {
+    let row = sqlx::query(
+        r#"
+        SELECT r.conversation_id, r.bot_id, r.group_context_through_sequence
+        FROM agent_runs r
+        WHERE r.request_id = $1 AND r.status = 'completed'
+        "#,
+    )
+    .bind(request_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    let Some(row) = row else {
+        return Ok(());
+    };
+    if conversation_type(pool, row.get("conversation_id")).await?.as_deref() != Some("group") {
+        return Ok(());
+    }
+    let through: Option<i64> = row.get("group_context_through_sequence");
+    if let Some(seq) = through {
+        crate::group_context::advance_last_seen_group_sequence(
+            pool,
+            row.get("conversation_id"),
+            row.get("bot_id"),
+            seq,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+pub async fn record_pending_group_context_boundary(
+    pool: &PgPool,
+    run_id: &str,
+    through_sequence: i64,
+) -> Result<(), String> {
+    sqlx::query(
+        r#"
+        UPDATE agent_runs
+        SET group_context_through_sequence = $2
+        WHERE id = $1 AND group_context_through_sequence IS NULL
+        "#,
+    )
+    .bind(run_id)
+    .bind(through_sequence)
+    .execute(pool)
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn advance_group_context_cursor_for_run(
     pool: &PgPool,
     conversation_id: &str,

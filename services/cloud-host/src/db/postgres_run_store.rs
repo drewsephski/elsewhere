@@ -191,6 +191,21 @@ impl RunStore for PostgresRunStore {
         .map_err(|e| RuntimeError::Store(e.to_string()))?;
 
         if finished {
+            if status == "completed" {
+                if let Err(err) =
+                    crate::conversation::commit_group_context_cursor_for_completed_run(
+                        &self.pool,
+                        request_id,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        request_id = %request_id,
+                        error = %err,
+                        "could not commit group context cursor"
+                    );
+                }
+            }
             if let Err(err) = crate::delegation::sync_target_run_terminal(
                 &self.pool,
                 request_id,

@@ -16,6 +16,73 @@ fn db_error(error: sqlx::Error) -> ApiError {
     ApiError::Internal(error.to_string())
 }
 
+/// Stable fingerprint for idempotent group sends (same key must replay the same operation).
+pub fn group_send_request_fingerprint(
+    body: &str,
+    mention_mode: Option<&str>,
+    recipient_bot_ids: Option<&[String]>,
+) -> String {
+    let mut recipients: Vec<String> = recipient_bot_ids
+        .map(|ids| {
+            ids.iter()
+                .map(|id| id.trim().to_string())
+                .filter(|id| !id.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    recipients.sort();
+    recipients.dedup();
+    let mode = mention_mode.unwrap_or("").trim().to_ascii_lowercase();
+    format!(
+        "v1|{}|{}|{}",
+        body.trim(),
+        mode,
+        recipients.join(",")
+    )
+}
+
+async fn load_idempotent_group_send(
+    pool: &PgPool,
+    owner: &str,
+    conversation_id: &str,
+    idempotency_key: &str,
+    fingerprint: &str,
+) -> Result<Option<SendGroupMessageResponse>, ApiError> {
+    let existing = sqlx::query(
+        r#"
+        SELECT message_id, request_fingerprint
+        FROM group_message_sends
+        WHERE owner_id = $1 AND conversation_id = $2 AND idempotency_key = $3
+        "#,
+    )
+    .bind(owner)
+    .bind(conversation_id)
+    .bind(idempotency_key)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_error)?;
+    let Some(existing) = existing else {
+        return Ok(None);
+    };
+    let stored: String = existing.get("request_fingerprint");
+    if stored != fingerprint {
+        return Err(ApiError::Conflict(
+            "Idempotency-Key was already used with a different request payload".into(),
+        ));
+    }
+    let message_id: String = existing.get("message_id");
+    let messages = list_messages(pool, owner, conversation_id).await?;
+    let message = messages
+        .into_iter()
+        .find(|m| m.id == message_id)
+        .ok_or(ApiError::Internal("idempotent send missing message".into()))?;
+    let recipients = message.recipients.clone().unwrap_or_default();
+    Ok(Some(SendGroupMessageResponse {
+        message,
+        recipients,
+    }))
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParticipantSummary {
@@ -754,28 +821,6 @@ pub async fn send_group_message(
         ));
     }
 
-    if let Some(existing) = sqlx::query(
-        "SELECT message_id FROM group_message_sends WHERE owner_id = $1 AND idempotency_key = $2",
-    )
-    .bind(owner)
-    .bind(idempotency_key)
-    .fetch_optional(pool)
-    .await
-    .map_err(db_error)?
-    {
-        let message_id: String = existing.get("message_id");
-        let messages = list_messages(pool, owner, conversation_id).await?;
-        let message = messages
-            .into_iter()
-            .find(|m| m.id == message_id)
-            .ok_or(ApiError::Internal("idempotent send missing message".into()))?;
-        let recipients = message.recipients.clone().unwrap_or_default();
-        return Ok(SendGroupMessageResponse {
-            message,
-            recipients,
-        });
-    }
-
     let active_bot_ids: Vec<String> = detail
         .participants
         .iter()
@@ -807,6 +852,24 @@ pub async fn send_group_message(
         &active_bot_ids,
     )?;
 
+    let fingerprint = group_send_request_fingerprint(
+        trimmed,
+        body.mention_mode.as_deref(),
+        body.recipient_bot_ids.as_deref(),
+    );
+
+    if let Some(replay) = load_idempotent_group_send(
+        pool,
+        owner,
+        conversation_id,
+        idempotency_key,
+        &fingerprint,
+    )
+    .await?
+    {
+        return Ok(replay);
+    }
+
     let send_id = Uuid::new_v4().to_string();
     let message_id = Uuid::new_v4().to_string();
     let mut tx = pool.begin().await.map_err(db_error)?;
@@ -816,27 +879,17 @@ pub async fn send_group_message(
         .await
         .map_err(db_error)?;
 
-    if let Some(existing) = sqlx::query(
-        "SELECT message_id FROM group_message_sends WHERE owner_id = $1 AND idempotency_key = $2",
+    if let Some(replay) = load_idempotent_group_send(
+        pool,
+        owner,
+        conversation_id,
+        idempotency_key,
+        &fingerprint,
     )
-    .bind(owner)
-    .bind(idempotency_key)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(db_error)?
+    .await?
     {
-        let message_id: String = existing.get("message_id");
         tx.commit().await.map_err(db_error)?;
-        let messages = list_messages(pool, owner, conversation_id).await?;
-        let message = messages
-            .into_iter()
-            .find(|m| m.id == message_id)
-            .ok_or(ApiError::Internal("idempotent send missing message".into()))?;
-        let recipients = message.recipients.clone().unwrap_or_default();
-        return Ok(SendGroupMessageResponse {
-            message,
-            recipients,
-        });
+        return Ok(replay);
     }
 
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
@@ -867,8 +920,8 @@ pub async fn send_group_message(
 
     sqlx::query(
         r#"
-        INSERT INTO group_message_sends (id, owner_id, conversation_id, idempotency_key, message_id)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO group_message_sends (id, owner_id, conversation_id, idempotency_key, message_id, request_fingerprint)
+        VALUES ($1, $2, $3, $4, $5, $6)
         "#,
     )
     .bind(&send_id)
@@ -876,13 +929,14 @@ pub async fn send_group_message(
     .bind(conversation_id)
     .bind(idempotency_key)
     .bind(&message_id)
+    .bind(&fingerprint)
     .execute(&mut *tx)
     .await
     .map_err(db_error)?;
 
     let mut recipients_out = Vec::new();
     for (bot_id, routing_kind) in routing {
-        let run_request_id = format!("{idempotency_key}:{bot_id}");
+        let run_request_id = format!("{conversation_id}:{idempotency_key}:{bot_id}");
         let records = work::enqueue_from_group_message_in_transaction(
             &mut tx,
             owner,

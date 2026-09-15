@@ -302,20 +302,6 @@ async fn execute_run(
         matches!(selected, SelectedRunEngine::ResponsesApi),
     )
     .await?;
-    if let Err(err) = crate::conversation::advance_group_context_cursor_for_run(
-        &pool,
-        &input.records.conversation_id,
-        &input.bot_id,
-        &input.records.assistant_message_id,
-    )
-    .await
-    {
-        tracing::warn!(
-            run_id = %input.records.run_id,
-            error = %err,
-            "could not advance group context cursor"
-        );
-    }
 
     let permitted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agent_runs r JOIN sandboxes s ON s.id = r.computer_id AND s.owner_id = r.owner_id WHERE r.id = $1 AND r.owner_id = $2 AND NOT r.cancel_requested AND s.state <> 'archived')")
         .bind(&input.records.run_id).bind(&owner_id).fetch_one(&pool).await.map_err(|e| e.to_string())?;
