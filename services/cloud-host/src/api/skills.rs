@@ -10,9 +10,9 @@ use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::skills::{
     append_skill_version, attach_bot_skill, create_skill_with_version, detach_bot_skill,
-    generate_skill_draft_from_run, get_skill_for_owner, get_version_for_owner, list_bot_skills,
-    list_skills, list_versions, patch_skill_metadata, delete_skill, BotSkillAttachment, SkillRow,
-    SkillVersionRow,
+    generate_skill_draft_from_run, get_skill_for_owner, get_version_for_owner,
+    list_bot_skills, list_skills, list_version_package_files, list_versions, patch_skill_metadata,
+    delete_skill, BotSkillAttachment, SkillRow, SkillVersionRow,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -27,8 +27,8 @@ pub struct SkillFileInput {
 #[serde(rename_all = "camelCase")]
 pub struct SkillPackageInput {
     skill_md: String,
-    #[serde(default)]
-    files: Vec<SkillFileInput>,
+    /// Omitted: inherit the current version's package files. Present (including `[]`): replace.
+    files: Option<Vec<SkillFileInput>>,
 }
 
 fn files_from_input(files: &[SkillFileInput]) -> Vec<SkillPackageFile> {
@@ -194,13 +194,30 @@ pub async fn create_version(
     let skill = get_skill_for_owner(&state.pool, principal.owner_id(), &skill_id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let files = files_from_input(&body.files);
-    let package =
-        SkillPackage::validate_and_build(&body.skill_md, &files, Some(&skill.slug))
-            .map_err(|e| ApiError::Validation(e.to_string()))?;
-    let version =
-        append_skill_version(&state.pool, principal.owner_id(), &skill_id, &package, &files)
-            .await?;
+    let package_files = match &body.files {
+        Some(inputs) => files_from_input(inputs),
+        None => list_version_package_files(
+            &state.pool,
+            principal.owner_id(),
+            &skill_id,
+            skill.current_version,
+        )
+        .await?,
+    };
+    let package = SkillPackage::validate_and_build(
+        &body.skill_md,
+        &package_files,
+        Some(&skill.slug),
+    )
+    .map_err(|e| ApiError::Validation(e.to_string()))?;
+    let version = append_skill_version(
+        &state.pool,
+        principal.owner_id(),
+        &skill_id,
+        &package,
+        &package_files,
+    )
+    .await?;
     Ok(Json(SkillVersionResponse::from(version)))
 }
 

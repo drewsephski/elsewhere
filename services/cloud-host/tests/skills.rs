@@ -70,6 +70,86 @@ async fn skill_version_is_immutable_on_run_snapshot() {
     assert!(packages_after[0].skill_md.contains("v1"));
 }
 
+#[tokio::test]
+async fn skill_version_can_preserve_package_files_across_versions() {
+    let pool = setup_pool().await;
+    let owner = format!("owner-{}", uuid::Uuid::new_v4());
+    let extra = agent_skills::SkillPackageFile {
+        relative_path: "scripts/run.sh".into(),
+        content: "echo ok\n".into(),
+        content_type: Some("text/plain".into()),
+    };
+    let md = "---\nname: packaged\ndescription: d\n---\n\nbody\n";
+    let package =
+        SkillPackage::validate_and_build(md, &[extra.clone()], Some("packaged")).unwrap();
+    let (skill, _) = cloud_host::skills::create_skill_with_version(
+        &pool,
+        &owner,
+        "packaged",
+        &package,
+        &[extra],
+    )
+    .await
+    .unwrap();
+
+    let inherited =
+        cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 1)
+            .await
+            .unwrap();
+    assert_eq!(inherited.len(), 1);
+
+    let md_v2 = "---\nname: packaged\ndescription: d\n---\n\nbody v2\n";
+    let package_v2 =
+        SkillPackage::validate_and_build(md_v2, &inherited, Some("packaged")).unwrap();
+    cloud_host::skills::append_skill_version(
+        &pool,
+        &owner,
+        &skill.id,
+        &package_v2,
+        &inherited,
+    )
+    .await
+    .unwrap();
+
+    let v2_files = cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 2)
+        .await
+        .unwrap();
+    assert_eq!(v2_files.len(), 1);
+    assert_eq!(v2_files[0].relative_path, "scripts/run.sh");
+}
+
+/// Set `CODEX_SKILLS_ACCEPTANCE=1` and have `codex` on PATH to run a bundled Codex
+/// discovery smoke against a materialized `.agents/skills` tree (hosted CI only).
+#[test]
+fn codex_skill_discovery_acceptance_smoke() {
+    if std::env::var("CODEX_SKILLS_ACCEPTANCE").ok().as_deref() != Some("1") {
+        return;
+    }
+    let cwd = tempfile::tempdir().unwrap();
+    let md = "---\nname: acceptance-probe\ndescription: d\n---\n\nProbe.\n";
+    let package = SkillPackage::validate_and_build(md, &[], None).unwrap();
+    materialize_agents_skills(cwd.path(), &[package]).unwrap();
+    let skill_md = NativeSkillsLayout::agents_skills_root(cwd.path())
+        .join("acceptance-probe/SKILL.md");
+    assert!(skill_md.is_file());
+
+    let output = std::process::Command::new("codex")
+        .current_dir(cwd.path())
+        .args(["skills", "list", "--json"])
+        .output()
+        .expect("spawn codex");
+    assert!(
+        output.status.success(),
+        "codex skills list failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("acceptance-probe"),
+        "expected codex to discover materialized skill, got: {stdout}"
+    );
+}
+
 #[test]
 fn materialize_agents_skills_layout() {
     let cwd = tempfile::tempdir().unwrap();

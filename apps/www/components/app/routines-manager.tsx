@@ -83,6 +83,8 @@ const emptyForm = () => ({
   timezone: "America/Chicago",
   destinationConversationId: "",
   failurePolicy: "pause_after_failure",
+  skillId: "",
+  pinnedSkillVersion: "",
   nextRunAt: localDateTime(new Date(Date.now() + 3600_000)),
   enabled: true,
 });
@@ -135,6 +137,9 @@ function routineToForm(routine: Routine): RoutineFormState {
     timezone: routine.timezone || base.timezone,
     destinationConversationId: routine.destinationConversationId ?? "",
     failurePolicy: routine.failurePolicy || base.failurePolicy,
+    skillId: routine.skillId ?? "",
+    pinnedSkillVersion:
+      routine.pinnedSkillVersion != null ? String(routine.pinnedSkillVersion) : "",
     nextRunAt: localDateTime(new Date(routine.nextRunAt)),
     enabled: routine.enabled,
   };
@@ -152,6 +157,9 @@ export function RoutinesManager() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [bots, setBots] = useState<BotSummary[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [skills, setSkills] = useState<
+    { id: string; name: string; slug: string; currentVersion: number; status: string }[]
+  >([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -165,14 +173,26 @@ export function RoutinesManager() {
 
   const load = useCallback(async () => {
     try {
-      const [nextRoutines, nextBots, nextConversations] = await Promise.all([
+      const [nextRoutines, nextBots, nextConversations, skillsRes] = await Promise.all([
         read<Routine[]>("/v1/routines"),
         read<BotSummary[]>("/v1/bots"),
         read<ConversationSummary[]>("/v1/conversations"),
+        cloudHostFetch("/v1/skills"),
       ]);
       setRoutines(nextRoutines);
       setBots(nextBots);
       setConversations(nextConversations);
+      if (skillsRes.ok) {
+        setSkills(
+          (await skillsRes.json()) as {
+            id: string;
+            name: string;
+            slug: string;
+            currentVersion: number;
+            status: string;
+          }[],
+        );
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load routines");
@@ -202,6 +222,10 @@ export function RoutinesManager() {
           timezone: form.timezone,
           destinationConversationId: form.destinationConversationId || null,
           failurePolicy: form.failurePolicy,
+          skillId: form.skillId || null,
+          pinnedSkillVersion: form.pinnedSkillVersion.trim()
+            ? Number.parseInt(form.pinnedSkillVersion, 10)
+            : null,
           nextRunAt: new Date(form.nextRunAt).toISOString(),
           enabled: form.enabled,
         }),
@@ -463,6 +487,48 @@ export function RoutinesManager() {
               requireComputer
               required
             />
+            <FormItem>
+              <Label htmlFor="routine-skill">Skill (optional)</Label>
+              <Select
+                value={form.skillId || "__none__"}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setForm({
+                    ...form,
+                    skillId: value === "__none__" ? "" : value,
+                    pinnedSkillVersion: "",
+                  });
+                }}
+              >
+                <SelectTrigger id="routine-skill" className="w-full">
+                  <SelectValue placeholder="No skill" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No skill</SelectItem>
+                  {skills
+                    .filter((skill) => skill.status === "active")
+                    .map((skill) => (
+                      <SelectItem key={skill.id} value={skill.id}>
+                        {skill.name} (v{skill.currentVersion})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+            {form.skillId ? (
+              <FormItem>
+                <Label htmlFor="routine-skill-pin">Pin skill version (optional)</Label>
+                <Input
+                  id="routine-skill-pin"
+                  inputMode="numeric"
+                  placeholder="Latest"
+                  value={form.pinnedSkillVersion}
+                  onChange={(e) =>
+                    setForm({ ...form, pinnedSkillVersion: e.target.value })
+                  }
+                />
+              </FormItem>
+            ) : null}
             <FormItem>
               <Label htmlFor="routine-task">Assignment</Label>
               <Textarea

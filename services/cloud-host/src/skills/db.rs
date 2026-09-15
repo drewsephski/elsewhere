@@ -231,6 +231,32 @@ pub async fn get_version_for_owner(
     }))
 }
 
+pub async fn list_version_package_files(
+    pool: &PgPool,
+    owner: &str,
+    skill_id: &str,
+    version: i32,
+) -> Result<Vec<SkillPackageFile>, ApiError> {
+    let version_row = get_version_for_owner(pool, owner, skill_id, version)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let file_rows = sqlx::query(
+        "SELECT relative_path, content, content_type FROM skill_files WHERE skill_version_id = $1 ORDER BY relative_path ASC",
+    )
+    .bind(&version_row.id)
+    .fetch_all(pool)
+    .await
+    .map_err(db_err)?;
+    Ok(file_rows
+        .into_iter()
+        .map(|f| SkillPackageFile {
+            relative_path: f.get("relative_path"),
+            content: f.get("content"),
+            content_type: f.get("content_type"),
+        })
+        .collect())
+}
+
 pub async fn list_versions(
     pool: &PgPool,
     owner: &str,

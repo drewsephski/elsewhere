@@ -188,6 +188,8 @@ export interface RoutineRun {
 export interface Routine {
   id: string;
   botId: string;
+  skillId?: string | null;
+  pinnedSkillVersion?: number | null;
   name: string;
   instructions: string;
   intervalMinutes: number;

@@ -77,6 +77,7 @@ export function WorkDetail({ runId }: { runId: string }) {
   const [stopping, setStopping] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [delegations, setDelegations] = useState<DelegationSummary[]>([]);
+  const [savingSkill, setSavingSkill] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -222,6 +223,47 @@ export function WorkDetail({ runId }: { runId: string }) {
     }
   }
 
+  async function handleSaveAsSkill() {
+    if (savingSkill || !detail || detail.status !== "completed") return;
+    setSavingSkill(true);
+    setError(null);
+    try {
+      const draftResponse = await cloudHostFetch(`/v1/runs/${runId}/skill-draft`, {
+        method: "POST",
+      });
+      const draftBody = await draftResponse.json();
+      if (!draftResponse.ok) {
+        throw new Error(
+          typeof draftBody.error === "string"
+            ? draftBody.error
+            : "Could not generate a skill draft from this run",
+        );
+      }
+      const slug = `run-${runId.slice(0, 8)}`;
+      const createResponse = await cloudHostFetch("/v1/skills", {
+        method: "POST",
+        body: JSON.stringify({
+          slug,
+          skillMd: draftBody.skillMd,
+          files: draftBody.files ?? [],
+        }),
+      });
+      const created = await createResponse.json();
+      if (!createResponse.ok) {
+        throw new Error(
+          typeof created.error === "string"
+            ? created.error
+            : "Could not publish skill draft",
+        );
+      }
+      router.push(`/app/skills/${created.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save skill");
+    } finally {
+      setSavingSkill(false);
+    }
+  }
+
   const previewEnabled = Boolean(detail?.computerId && detail && active(detail.status));
   const canDelete = canArchiveWorkRun(detail?.status) && !deleting;
 
@@ -264,9 +306,19 @@ export function WorkDetail({ runId }: { runId: string }) {
                 {stopping ? "Stopping…" : "Stop work"}
               </Button>
             ) : null}
+            {detail?.status === "completed" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={savingSkill}
+                onClick={() => void handleSaveAsSkill()}
+              >
+                {savingSkill ? "Preparing…" : "Save as skill"}
+              </Button>
+            ) : null}
           </div>
         </div>
-
         {delegations.length > 0 ? (
           <div className="space-y-3">
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">

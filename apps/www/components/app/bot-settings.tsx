@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/collapsible";
 import { ChevronDown } from "@/components/icons/lucide";
 import { cn } from "cn";
+import { BotSkillsSettings } from "@/components/app/bot-skills-settings";
 
 export function BotSettings({
   bot,
@@ -139,6 +140,7 @@ export function BotSettings({
             allowEmpty
             unavailableId={computer}
           />
+          <BotSkillsSettings botId={bot.id} />
           <p className="text-xs text-muted-foreground">
             Changing computers does not move files. Queued work stays on its original computer.
           </p>

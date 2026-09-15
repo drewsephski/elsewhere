@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { cloudHostFetch } from "@/lib/cloud-host";
+import { cloudHostFetch } from "@/lib/cloud-api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -44,7 +44,7 @@ export default function SkillDetailPage() {
   async function handleSaveVersion() {
     const response = await cloudHostFetch(`/v1/skills/${skillId}/versions`, {
       method: "POST",
-      body: JSON.stringify({ skillMd, files: [] }),
+      body: JSON.stringify({ skillMd }),
     });
     setMessage(response.ok ? "Saved new version." : "Validation failed.");
     if (response.ok) {

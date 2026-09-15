@@ -1,4 +1,5 @@
 -- Product Skills registry (Open Agent Skills / SKILL.md)
+-- Renumbered from 024 to avoid conflicting with 024_agent_runs_assistant_message_id_index.sql.
 
 CREATE TABLE skills (
     id TEXT PRIMARY KEY,

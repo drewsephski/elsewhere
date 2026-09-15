@@ -38,6 +38,8 @@ pub struct Routine {
     pub last_failure_at: Option<DateTime<Utc>>,
     pub consecutive_failures: i32,
     pub failure_policy: String,
+    pub skill_id: Option<String>,
+    pub pinned_skill_version: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -61,6 +63,8 @@ pub struct RoutineView {
     pub last_failure_at: Option<DateTime<Utc>>,
     pub consecutive_failures: i32,
     pub failure_policy: String,
+    pub skill_id: Option<String>,
+    pub pinned_skill_version: Option<i32>,
     pub recent_runs: Vec<RoutineRun>,
 }
 
@@ -78,6 +82,8 @@ pub struct RoutineInput {
     pub timezone: Option<String>,
     pub destination_conversation_id: Option<String>,
     pub failure_policy: Option<String>,
+    pub skill_id: Option<String>,
+    pub pinned_skill_version: Option<i32>,
 }
 
 impl RoutineInput {
@@ -115,6 +121,11 @@ impl RoutineInput {
             if !matches!(policy.as_str(), "pause_after_failure" | "continue") {
                 return Err(ApiError::Validation("Unknown failure policy".into()));
             }
+        }
+        if self.skill_id.is_none() && self.pinned_skill_version.is_some() {
+            return Err(ApiError::Validation(
+                "Choose a skill before pinning a version".into(),
+            ));
         }
         Ok(())
     }
@@ -260,6 +271,8 @@ fn to_view_with_recent_runs(
         last_failure_at: row.last_failure_at,
         consecutive_failures: row.consecutive_failures,
         failure_policy: row.failure_policy,
+        skill_id: row.skill_id,
+        pinned_skill_version: row.pinned_skill_version,
         recent_runs,
     })
 }
@@ -349,6 +362,25 @@ pub async fn save(
     )
     .await?;
 
+    if let Some(skill_id) = input.skill_id.as_deref() {
+        let skill = crate::skills::get_skill_for_owner(pool, owner, skill_id)
+            .await?
+            .ok_or(ApiError::Validation("Choose one of your skills".into()))?;
+        if skill.status != "active" {
+            return Err(ApiError::Validation(
+                "Archived skills cannot be used in routines".into(),
+            ));
+        }
+        if let Some(version) = input.pinned_skill_version {
+            if crate::skills::get_version_for_owner(pool, owner, skill_id, version)
+                .await?
+                .is_none()
+            {
+                return Err(ApiError::Validation("Pinned skill version not found".into()));
+            }
+        }
+    }
+
     let new_id = id
         .map(str::to_string)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -356,8 +388,9 @@ pub async fn save(
         r#"
         INSERT INTO routines (
             id, owner_id, bot_id, name, instructions, interval_minutes, next_run_at, enabled,
-            schedule_kind, schedule_expression, timezone, destination_conversation_id, failure_policy
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            schedule_kind, schedule_expression, timezone, destination_conversation_id, failure_policy,
+            skill_id, pinned_skill_version
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         ON CONFLICT (id) DO UPDATE SET
             bot_id = EXCLUDED.bot_id,
             name = EXCLUDED.name,
@@ -370,6 +403,8 @@ pub async fn save(
             timezone = EXCLUDED.timezone,
             destination_conversation_id = EXCLUDED.destination_conversation_id,
             failure_policy = EXCLUDED.failure_policy,
+            skill_id = EXCLUDED.skill_id,
+            pinned_skill_version = EXCLUDED.pinned_skill_version,
             acknowledged_run_id = CASE WHEN EXCLUDED.enabled THEN routines.last_run_id ELSE routines.acknowledged_run_id END,
             last_error = NULL,
             updated_at = NOW()
@@ -390,6 +425,8 @@ pub async fn save(
     .bind(schedule.timezone.to_string())
     .bind(input.destination_conversation_id.as_deref())
     .bind(failure_policy)
+    .bind(input.skill_id.as_deref())
+    .bind(input.pinned_skill_version)
     .fetch_one(&mut *tx)
     .await
     .map_err(db_error)?;
