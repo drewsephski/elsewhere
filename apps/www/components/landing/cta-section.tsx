@@ -15,8 +15,8 @@ export function CtaSection() {
                 Join the waitlist for managed sandboxes
               </h2>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                Tell us you want cloud VMs and cross-device sync. We will reach out when alpha opens
-                — desktop users get first access.
+                Tell us you want cloud VMs and cross-device sync. We will reach out when alpha opens.
+                Desktop users get first access.
               </p>
             </div>
             <div className="rounded-2xl border border-border/60 bg-background/60 p-6 backdrop-blur-sm">

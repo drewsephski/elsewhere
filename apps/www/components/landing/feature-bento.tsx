@@ -22,12 +22,12 @@ export function FeatureBento() {
               Platform
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-              Built for agents, not chat sessions
+              Built for workers with computers, not chat sessions
             </h2>
           </div>
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground md:text-right">
-            Isolated compute, durable state, and streaming UX — the same architecture on your Mac
-            today and in managed sandboxes tomorrow.
+            Isolated compute, durable state, and streaming UX. Same architecture on your Mac today
+            and on the managed sandbox path.
           </p>
         </div>
         <ul className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:grid-rows-3">

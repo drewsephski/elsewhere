@@ -3,12 +3,12 @@ import { appRoutes } from "@/lib/app-routes";
 import Link from "next/link";
 
 const terminalLines = [
-  { kind: "prompt", text: "gptbot guest attach --bot research-01" },
-  { kind: "out", text: "Connected to sandbox vm-7f2a · ubuntu 24.04 · 4 vCPU" },
-  { kind: "prompt", text: "agent run nightly-sync --approve write:~/exports" },
-  { kind: "out", text: "Routine scheduled · next run 02:00 UTC · audit log #8841" },
-  { kind: "prompt", text: "memory sync status" },
-  { kind: "out", text: "Desktop ↔ cloud · 12 threads · last push 4m ago" },
+  { kind: "prompt", text: "elsewhere computer attach research-01" },
+  { kind: "out", text: "Guest online · ubuntu 24.04 · isolated VM" },
+  { kind: "prompt", text: "run export-q4 --approve write:~/exports" },
+  { kind: "out", text: "Awaiting approval · routine queued for 02:00 UTC" },
+  { kind: "prompt", text: "connector list --mcp" },
+  { kind: "out", text: "3 connectors · credentials on runner, not in chat" },
 ] as const;
 
 export function SandboxPreview() {
@@ -30,7 +30,7 @@ export function SandboxPreview() {
             <span className="size-2.5 rounded-full bg-[oklch(0.62_0.12_145)]" />
           </div>
           <p className="font-mono text-[0.65rem] tracking-wide text-muted-foreground">
-            sandbox · research-01
+            computer · research-01
           </p>
           <Badge variant="secondary" className="h-5 px-2 font-mono text-[0.6rem] uppercase">
             Live
@@ -64,34 +64,43 @@ export function SandboxPreview() {
             </p>
             <ul className="space-y-2 text-[0.65rem] text-muted-foreground">
               <li className="flex justify-between gap-2">
-                <span>CPU</span>
-                <span className="text-foreground/80">18%</span>
+                <span>Terminal</span>
+                <span className="text-foreground/80">attached</span>
               </li>
               <li className="flex justify-between gap-2">
-                <span>Mem</span>
-                <span className="text-foreground/80">2.1 / 8 GB</span>
+                <span>Browser</span>
+                <span className="text-foreground/80">ready</span>
               </li>
               <li className="flex justify-between gap-2">
-                <span>Uptime</span>
-                <span className="text-foreground/80">14d 6h</span>
+                <span>Policy</span>
+                <span className="text-foreground/80">approvals on</span>
               </li>
             </ul>
           </div>
         </div>
         <div className="grid grid-cols-3 divide-x divide-border/60 bg-muted/20 text-center font-mono text-[0.6rem] text-muted-foreground">
-          <Link href={appRoutes.computers} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+          <Link
+            href={appRoutes.computers}
+            className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
             terminal
           </Link>
-          <Link href={appRoutes.results} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+          <Link
+            href={appRoutes.results}
+            className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
             files
           </Link>
-          <Link href={appRoutes.work} className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground">
+          <Link
+            href={appRoutes.work}
+            className="px-2 py-2 transition-colors hover:bg-muted/40 hover:text-foreground"
+          >
             browser
           </Link>
         </div>
       </div>
       <p className="mt-3 text-center font-mono text-[0.65rem] text-muted-foreground sm:text-left">
-        One isolated environment per bot — same protocol on desktop and in the cloud.
+        One isolated environment per worker. Same protocol on desktop and cloud.
       </p>
     </div>
   );

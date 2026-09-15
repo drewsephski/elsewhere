@@ -11,7 +11,7 @@ export function SiteFooter() {
         <div>
           <p className="text-sm font-medium text-foreground">{siteConfig.productName}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Desktop app and cloud platform · © {year}
+            AI workers with real computers · © {year}
           </p>
         </div>
         <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">

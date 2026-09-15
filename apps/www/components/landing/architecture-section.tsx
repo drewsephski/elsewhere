@@ -1,12 +1,12 @@
 const architectureLayers = [
   {
     name: "Clients",
-    detail: "macOS app today; web and mobile clients on the same APIs.",
+    detail: "macOS shell and signed-in web workspace today; same APIs for future clients.",
     width: "w-full",
   },
   {
     name: "Control plane",
-    detail: "Auth, bot config, billing, and policy — API-first.",
+    detail: "Auth, bot config, billing, and policy. API-first.",
     width: "w-[92%]",
   },
   {

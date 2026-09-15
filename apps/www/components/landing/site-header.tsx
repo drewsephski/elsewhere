@@ -6,9 +6,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 
 const navItems = [
+  { href: "#how-it-works", label: "How it works" },
   { href: "#platform", label: "Platform" },
-  { href: "#roadmap", label: "Roadmap" },
   { href: "#architecture", label: "Architecture" },
+  { href: "#early-access", label: "Early access" },
 ] as const;
 
 export function SiteHeader() {
