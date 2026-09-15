@@ -1,5 +1,7 @@
+use agent_skills::SkillPackage;
 use cloud_host::{
     db::{queries, resources},
+    skills::{ExplicitSkillInvocation, SkillAdmissionInput},
     work,
 };
 use sqlx::PgPool;
@@ -176,6 +178,66 @@ async fn archived_or_foreign_computers_cannot_accept_work(pool: PgPool) {
         work::enqueue(&pool, "alice", "foreign", &bot.id, None, "Task")
             .await
             .is_err()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn explicit_skill_is_part_of_run_idempotency(pool: PgPool) {
+    let bot = bot(&pool, "alice", None).await;
+    async fn create_skill(pool: &PgPool, slug: &str) -> String {
+        let md = format!("---\nname: {slug}\ndescription: d\n---\n\nbody\n");
+        let package = SkillPackage::validate_and_build(&md, &[], Some(slug)).unwrap();
+        cloud_host::skills::create_skill_with_version(pool, "alice", slug, &package, &[])
+            .await
+            .unwrap()
+            .0
+            .id
+    }
+    let skill_a = create_skill(&pool, "skill-a-idem").await;
+    let skill_b = create_skill(&pool, "skill-b-idem").await;
+    let message = "do this";
+    let key = "idem-explicit-skill";
+
+    let skills_a = SkillAdmissionInput {
+        explicit: Some(ExplicitSkillInvocation {
+            skill_id: skill_a.clone(),
+            version: None,
+        }),
+        ..Default::default()
+    };
+    let first = work::enqueue_with_skills(&pool, "alice", key, &bot.id, None, message, &skills_a)
+        .await
+        .unwrap();
+    let replay = work::enqueue_with_skills(&pool, "alice", key, &bot.id, None, message, &skills_a)
+        .await
+        .unwrap();
+    assert_eq!(first.run_id, replay.run_id);
+
+    let skills_b = SkillAdmissionInput {
+        explicit: Some(ExplicitSkillInvocation {
+            skill_id: skill_b,
+            version: None,
+        }),
+        ..Default::default()
+    };
+    assert!(
+        work::enqueue_with_skills(&pool, "alice", key, &bot.id, None, message, &skills_b)
+            .await
+            .is_err()
+    );
+
+    assert!(
+        work::enqueue_with_skills(
+            &pool,
+            "alice",
+            key,
+            &bot.id,
+            None,
+            message,
+            &SkillAdmissionInput::default(),
+        )
+        .await
+        .is_err()
     );
 }
 

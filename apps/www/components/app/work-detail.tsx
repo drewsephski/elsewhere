@@ -239,7 +239,11 @@ export function WorkDetail({ runId }: { runId: string }) {
             : "Could not generate a skill draft from this run",
         );
       }
-      const slug = `run-${runId.slice(0, 8)}`;
+      const slug =
+        typeof draftBody.parsedName === "string" ? draftBody.parsedName.trim() : "";
+      if (!slug) {
+        throw new Error("Skill draft is missing a valid name in SKILL.md frontmatter");
+      }
       const createResponse = await cloudHostFetch("/v1/skills", {
         method: "POST",
         body: JSON.stringify({
@@ -250,11 +254,20 @@ export function WorkDetail({ runId }: { runId: string }) {
       });
       const created = await createResponse.json();
       if (!createResponse.ok) {
-        throw new Error(
+        const message =
           typeof created.error === "string"
             ? created.error
-            : "Could not publish skill draft",
-        );
+            : "Could not publish skill draft";
+        if (
+          createResponse.status === 409 ||
+          message.toLowerCase().includes("duplicate") ||
+          message.toLowerCase().includes("unique")
+        ) {
+          throw new Error(
+            `A skill named "${slug}" already exists. Rename the skill in the draft or delete the existing skill before saving.`,
+          );
+        }
+        throw new Error(message);
       }
       router.push(`/app/skills/${created.id}`);
     } catch (err) {

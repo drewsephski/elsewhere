@@ -9,7 +9,10 @@ use crate::conversation::get_or_create_primary_conversation_id_in_tx;
 use crate::db::queries::BootstrapRunRecords;
 use crate::error::ApiError;
 use crate::groups;
-use crate::skills::{persist_run_skills_for_admission, SkillAdmissionInput};
+use crate::skills::{
+    explicit_invocation_idempotency_mismatch, explicit_invocation_on_run,
+    persist_run_skills_for_admission, SkillAdmissionInput,
+};
 
 fn db_error(error: sqlx::Error) -> ApiError {
     ApiError::Internal(error.to_string())
@@ -167,6 +170,13 @@ async fn admit_human_message(
             || row.get::<Option<String>, _>("user_message").as_deref() != Some(message.trim())
             || conversation_id.is_some_and(|id| id != row.get::<String, _>("conversation_id"))
         {
+            return Err(ApiError::Conflict(
+                "This request key was already used for different work".into(),
+            ));
+        }
+        let run_id: String = row.get("id");
+        let stored_explicit = explicit_invocation_on_run(tx, &run_id).await?;
+        if explicit_invocation_idempotency_mismatch(skills, stored_explicit) {
             return Err(ApiError::Conflict(
                 "This request key was already used for different work".into(),
             ));

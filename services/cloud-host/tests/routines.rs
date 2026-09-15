@@ -46,6 +46,8 @@ async fn input(pool: &PgPool, owner: &str) -> RoutineInput {
         timezone: None,
         destination_conversation_id: None,
         failure_policy: None,
+        skill_id: None,
+        pinned_skill_version: None,
     }
 }
 
@@ -345,6 +347,8 @@ fn fixed_interval_cadence_and_input_bounds() {
         timezone: None,
         destination_conversation_id: None,
         failure_policy: None,
+        skill_id: None,
+        pinned_skill_version: None,
     };
     assert!(input.validate().is_err());
     input.interval_minutes = Some(1440);

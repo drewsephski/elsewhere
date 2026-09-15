@@ -22,7 +22,11 @@ export function BotChat({ botId }: { botId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [skills, setSkills] = useState<SkillCatalogEntry[]>([]);
-  const request = useRef<{ message: string; key: string } | null>(null);
+  const request = useRef<{
+    task: string;
+    skillId: string | null;
+    key: string;
+  } | null>(null);
   const skillInvocation = useMemo(
     () => resolveSkillSlashInvocation(message, skills),
     [message, skills],
@@ -52,7 +56,13 @@ export function BotChat({ botId }: { botId: string }) {
     const task = resolved?.task ?? trimmed;
     if (pending || !task) return;
     setPending(true); setError(null);
-    if (request.current?.message !== task) request.current = { message: task, key: crypto.randomUUID() };
+    const skillId = resolved?.skill.id ?? null;
+    if (
+      request.current?.task !== task ||
+      request.current?.skillId !== skillId
+    ) {
+      request.current = { task, skillId, key: crypto.randomUUID() };
+    }
     try {
       const response = await cloudHostFetch("/v1/runs", {
         method: "POST",

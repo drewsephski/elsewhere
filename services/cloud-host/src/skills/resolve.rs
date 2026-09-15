@@ -168,6 +168,46 @@ pub async fn persist_run_skills_for_admission(
     Ok(())
 }
 
+/// Explicit skill selection stored on a run (concrete version number).
+pub async fn explicit_invocation_on_run(
+    tx: &mut Transaction<'_, sqlx::Postgres>,
+    run_id: &str,
+) -> Result<Option<(String, i32)>, ApiError> {
+    let row = sqlx::query(
+        r#"
+        SELECT rs.skill_id, sv.version
+        FROM run_skills rs
+        JOIN skill_versions sv ON sv.id = rs.skill_version_id
+        WHERE rs.run_id = $1 AND rs.invocation_kind = 'explicit'
+        LIMIT 1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_err)?;
+    Ok(row.map(|r| (r.get("skill_id"), r.get("version"))))
+}
+
+pub fn explicit_invocation_idempotency_mismatch(
+    requested: &SkillAdmissionInput,
+    stored: Option<(String, i32)>,
+) -> bool {
+    match (&requested.explicit, stored) {
+        (None, None) => false,
+        (None, Some(_)) | (Some(_), None) => true,
+        (Some(req), Some((skill_id, version))) => {
+            if req.skill_id != skill_id {
+                return true;
+            }
+            if let Some(pinned) = req.version {
+                return pinned != version;
+            }
+            false
+        }
+    }
+}
+
 pub async fn resolve_explicit_skill_id(
     tx: &mut Transaction<'_, sqlx::Postgres>,
     owner: &str,

@@ -49,6 +49,8 @@ async fn group_destination_routine_admits_researcher_only(pool: PgPool) {
         timezone: None,
         destination_conversation_id: Some(group.id.clone()),
         failure_policy: None,
+        skill_id: None,
+        pinned_skill_version: None,
     };
     let routine = routines::save(&pool, "alice", None, &input).await.unwrap();
     sqlx::query("UPDATE routines SET next_run_at = NOW() - interval '1 second' WHERE id = $1")
@@ -186,6 +188,8 @@ async fn group_routine_fails_when_owner_bot_removed_from_group(pool: PgPool) {
         timezone: None,
         destination_conversation_id: Some(group.id.clone()),
         failure_policy: None,
+        skill_id: None,
+        pinned_skill_version: None,
     };
     let routine = routines::save(&pool, "alice", None, &input).await.unwrap();
     sqlx::query("UPDATE routines SET next_run_at = NOW() - interval '1 second' WHERE id = $1")
