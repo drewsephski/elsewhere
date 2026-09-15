@@ -18,7 +18,7 @@ export const marketingFeatures = [
   {
     title: "Agent computers",
     description:
-      "Each bot gets a dedicated Linux environment for terminal, files, and browser work — locally today, in the cloud tomorrow.",
+      "Each bot gets a dedicated Linux environment for terminal, files, and browser work. Locally today, in the cloud tomorrow.",
   },
   {
     title: "Always-on routines",

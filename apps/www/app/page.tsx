@@ -195,7 +195,7 @@ function Hero() {
           className="mb-5 inline-flex animate-fade-up items-center gap-2 rounded-full border border-brand-dark/15 bg-white/60 px-4 py-2 backdrop-blur-sm transition-colors hover:bg-white/80 md:mb-6 stagger-3"
         >
           <span className="text-sm text-brand-dark">
-            macOS desktop is live — open your cloud workspace.
+            macOS desktop is live. Open your cloud workspace.
           </span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-brand-dark" aria-hidden />
         </Link>
