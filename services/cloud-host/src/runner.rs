@@ -36,13 +36,6 @@ pub struct RunExecutionInput {
     pub engine_mode: Option<RunEngineMode>,
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-#[derive(Clone)]
-pub struct TestRunOverrides {
-    pub computer: Arc<dyn AgentComputer>,
-    pub model: Arc<dyn ResponsesModel>,
-}
-
 pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedSemaphorePermit) {
     let mut tasks = state.run_tasks.lock().expect("run task registry poisoned");
     while tasks.try_join_next().is_some() {}
@@ -111,6 +104,8 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
         let registry = state.registry.clone();
         let run_id = input.records.run_id.clone();
         let timeout_secs = config.run_timeout_secs;
+        #[cfg(any(test, feature = "test-utils"))]
+        let run_overrides = state.take_test_run_overrides(&input.records.request_id);
 
         let result = timeout(
             Duration::from_secs(timeout_secs),
@@ -125,6 +120,8 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
                 events.clone(),
                 owner_id,
                 enforce_approvals,
+                #[cfg(any(test, feature = "test-utils"))]
+                run_overrides,
             ))
             .catch_unwind(),
         )
@@ -206,6 +203,8 @@ async fn execute_run(
     events: Arc<CloudEventSink>,
     owner_id: String,
     enforce_approvals: bool,
+    #[cfg(any(test, feature = "test-utils"))]
+    run_overrides: Option<crate::app_state::TestRunOverrides>,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     if let Ok(created_at) = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
         "SELECT created_at FROM agent_runs WHERE id = $1",
@@ -301,8 +300,25 @@ async fn execute_run(
     if !permitted {
         return Err("Work was cancelled or its computer is no longer available".into());
     }
-    let computer =
-        build_computer(&host_state.computer_registry, &config, &pool, &input, &owner_id).await?;
+    #[cfg(any(test, feature = "test-utils"))]
+    let computer = build_computer(
+        &host_state.computer_registry,
+        &config,
+        &pool,
+        &input,
+        &owner_id,
+        run_overrides.as_ref(),
+    )
+    .await?;
+    #[cfg(not(any(test, feature = "test-utils")))]
+    let computer = build_computer(
+        &host_state.computer_registry,
+        &config,
+        &pool,
+        &input,
+        &owner_id,
+    )
+    .await?;
 
     sqlx::query("UPDATE sandboxes SET state = 'active', last_used_at = NOW(), updated_at = NOW() WHERE id = $1 AND owner_id = $2 AND state <> 'archived'")
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
@@ -388,7 +404,24 @@ Bot collaboration:\n\
         }
         SelectedRunEngine::ResponsesApi => {
             drop(codex_run_permit);
-            run_responses_engine(&config, ctx, shared, input_messages).await
+            #[cfg(any(test, feature = "test-utils"))]
+            let responses_result = run_responses_engine(
+                &config,
+                ctx,
+                shared,
+                input_messages,
+                run_overrides,
+            )
+            .await;
+            #[cfg(not(any(test, feature = "test-utils")))]
+            let responses_result = run_responses_engine(
+                &config,
+                ctx,
+                shared,
+                input_messages,
+            )
+            .await;
+            responses_result
         }
     };
     result.map(|()| computer)
@@ -426,31 +459,50 @@ async fn run_codex_engine(
     result
 }
 
+fn openai_responses_model(
+    config: &Config,
+    cancel: Arc<AtomicBool>,
+) -> Result<Arc<dyn ResponsesModel>, String> {
+    let api_key = config
+        .openai_api_key
+        .clone()
+        .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
+    Ok(Arc::new(OpenAiResponsesModel::new(api_key, cancel)))
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+fn responses_model_for_run(
+    config: &Config,
+    cancel: Arc<AtomicBool>,
+    run_overrides: Option<crate::app_state::TestRunOverrides>,
+) -> Result<Arc<dyn ResponsesModel>, String> {
+    if let Some(o) = run_overrides {
+        return Ok(o.model);
+    }
+    openai_responses_model(config, cancel)
+}
+
+#[cfg(not(any(test, feature = "test-utils")))]
+fn responses_model_for_run(
+    config: &Config,
+    cancel: Arc<AtomicBool>,
+) -> Result<Arc<dyn ResponsesModel>, String> {
+    openai_responses_model(config, cancel)
+}
+
 async fn run_responses_engine(
     config: &Config,
     ctx: AgentLoopContext,
     shared: SharedRunDeps,
     input: Vec<serde_json::Value>,
+    #[cfg(any(test, feature = "test-utils"))]
+    run_overrides: Option<crate::app_state::TestRunOverrides>,
 ) -> Result<(), String> {
     #[cfg(any(test, feature = "test-utils"))]
-    let model: Arc<dyn ResponsesModel> = if let Some(o) = test_overrides() {
-        o.model
-    } else {
-        let api_key = config
-            .openai_api_key
-            .clone()
-            .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
-        Arc::new(OpenAiResponsesModel::new(api_key, shared.cancel.clone()))
-    };
-
+    let model =
+        responses_model_for_run(config, shared.cancel.clone(), run_overrides)?;
     #[cfg(not(any(test, feature = "test-utils")))]
-    let model: Arc<dyn ResponsesModel> = {
-        let api_key = config
-            .openai_api_key
-            .clone()
-            .ok_or_else(|| "OPENAI_API_KEY is required for the Responses engine".to_string())?;
-        Arc::new(OpenAiResponsesModel::new(api_key, shared.cancel.clone()))
-    };
+    let model = responses_model_for_run(config, shared.cancel.clone())?;
 
     tracing::info!(
         engine = "responses_api",
@@ -486,10 +538,12 @@ async fn build_computer(
     pool: &sqlx::PgPool,
     input: &RunExecutionInput,
     owner_id: &str,
+    #[cfg(any(test, feature = "test-utils"))]
+    run_overrides: Option<&crate::app_state::TestRunOverrides>,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     #[cfg(any(test, feature = "test-utils"))]
-    if let Some(o) = test_overrides() {
-        return Ok(Arc::new(ReadinessCachedComputer::new(o.computer)));
+    if let Some(o) = run_overrides {
+        return Ok(Arc::new(ReadinessCachedComputer::new(o.computer.clone())));
     }
 
     let sprite = registry
@@ -524,17 +578,3 @@ pub(crate) async fn sprite_resource_for_computer(
     Ok(sprite_computer::sprite_name_for_sandbox(computer_id))
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-fn test_overrides() -> Option<TestRunOverrides> {
-    TEST_OVERRIDES.with(|cell| cell.borrow().clone())
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-std::thread_local! {
-    static TEST_OVERRIDES: std::cell::RefCell<Option<TestRunOverrides>> = const { std::cell::RefCell::new(None) };
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-pub fn set_test_run_overrides(overrides: Option<TestRunOverrides>) {
-    TEST_OVERRIDES.with(|cell| *cell.borrow_mut() = overrides);
-}

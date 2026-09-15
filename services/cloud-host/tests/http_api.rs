@@ -3,7 +3,7 @@ use agent_core::{
     ResponsesModel, WorkspaceEntry,
 };
 use async_trait::async_trait;
-use cloud_host::{build_router, set_test_run_overrides, AppState, Config, TestRunOverrides};
+use cloud_host::{build_router, AppState, Config, TestRunOverrides};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
@@ -11,18 +11,20 @@ use std::time::Duration;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-struct RunOverrideGuard;
+struct RunOverrideGuard {
+    state: AppState,
+}
 
 impl RunOverrideGuard {
-    fn install(overrides: TestRunOverrides) -> Self {
-        set_test_run_overrides(Some(overrides));
-        Self
+    fn install_default(state: AppState, overrides: TestRunOverrides) -> Self {
+        state.set_test_run_overrides_default(Some(overrides));
+        Self { state }
     }
 }
 
 impl Drop for RunOverrideGuard {
     fn drop(&mut self) {
-        set_test_run_overrides(None);
+        self.state.set_test_run_overrides_default(None);
     }
 }
 
@@ -183,18 +185,21 @@ async fn http_auth_and_idempotent_run() {
         .unwrap();
     assert_eq!(unauthorized.status(), http::StatusCode::UNAUTHORIZED);
 
-    let _run_guard = RunOverrideGuard::install(TestRunOverrides {
-        computer: Arc::new(MockComputer),
-        model: Arc::new(ScriptedModel {
-            steps: Mutex::new(vec![CreateResponseResult {
-                output: vec![json!({
-                    "type":"message",
-                    "content":[{"type":"output_text","text":"hello from elsewhere"}]
-                })],
-                output_text: Some("hello from elsewhere".into()),
-            }]),
-        }),
-    });
+    let _run_guard = RunOverrideGuard::install_default(
+        state.clone(),
+        TestRunOverrides {
+            computer: Arc::new(MockComputer),
+            model: Arc::new(ScriptedModel {
+                steps: Mutex::new(vec![CreateResponseResult {
+                    output: vec![json!({
+                        "type":"message",
+                        "content":[{"type":"output_text","text":"hello from elsewhere"}]
+                    })],
+                    output_text: Some("hello from elsewhere".into()),
+                }]),
+            }),
+        },
+    );
 
     let body = r#"{
       "bot":{"id":"bot_demo","name":"Researcher","instructions":"test","computerId":"computer_demo"},
@@ -234,19 +239,22 @@ async fn http_auth_and_idempotent_run() {
     assert_eq!(duplicate.status(), http::StatusCode::ACCEPTED);
 }
 
-fn install_fast_mock() -> RunOverrideGuard {
-    RunOverrideGuard::install(TestRunOverrides {
-        computer: Arc::new(MockComputer),
-        model: Arc::new(ScriptedModel {
-            steps: Mutex::new(vec![CreateResponseResult {
-                output: vec![json!({
-                    "type":"message",
-                    "content":[{"type":"output_text","text":"hello from elsewhere"}]
-                })],
-                output_text: Some("hello from elsewhere".into()),
-            }]),
-        }),
-    })
+fn install_fast_mock(state: AppState) -> RunOverrideGuard {
+    RunOverrideGuard::install_default(
+        state,
+        TestRunOverrides {
+            computer: Arc::new(MockComputer),
+            model: Arc::new(ScriptedModel {
+                steps: Mutex::new(vec![CreateResponseResult {
+                    output: vec![json!({
+                        "type":"message",
+                        "content":[{"type":"output_text","text":"hello from elsewhere"}]
+                    })],
+                    output_text: Some("hello from elsewhere".into()),
+                }]),
+            }),
+        },
+    )
 }
 
 async fn post_run(
@@ -286,23 +294,26 @@ async fn concurrency_cap_returns_429_when_saturated() {
     };
     let config = test_config();
     let state = AppState::new(pool, config);
-    let app = build_router(state);
+    let app = build_router(state.clone());
 
-    let _run_guard = RunOverrideGuard::install(TestRunOverrides {
-        computer: Arc::new(MockComputer),
-        model: Arc::new(SlowScriptedModel {
-            delay: Duration::from_secs(3),
-            inner: ScriptedModel {
-                steps: Mutex::new(vec![CreateResponseResult {
-                    output: vec![json!({
-                        "type":"message",
-                        "content":[{"type":"output_text","text":"slow"}]
-                    })],
-                    output_text: Some("slow".into()),
-                }]),
-            },
-        }),
-    });
+    let _run_guard = RunOverrideGuard::install_default(
+        state.clone(),
+        TestRunOverrides {
+            computer: Arc::new(MockComputer),
+            model: Arc::new(SlowScriptedModel {
+                delay: Duration::from_secs(3),
+                inner: ScriptedModel {
+                    steps: Mutex::new(vec![CreateResponseResult {
+                        output: vec![json!({
+                            "type":"message",
+                            "content":[{"type":"output_text","text":"slow"}]
+                        })],
+                        output_text: Some("slow".into()),
+                    }]),
+                },
+            }),
+        },
+    );
 
     let suffix = Uuid::new_v4();
     let r1 = post_run(
@@ -346,8 +357,8 @@ async fn concurrent_idempotency_creates_single_run() {
     };
     let config = test_config();
     let state = AppState::new(pool.clone(), config);
-    let app = build_router(state);
-    let _run_guard = install_fast_mock();
+    let app = build_router(state.clone());
+    let _run_guard = install_fast_mock(state.clone());
 
     let key = format!("idem-concurrent-{}", Uuid::new_v4());
     let bot = format!("bot_idem_{}", Uuid::new_v4());
@@ -431,8 +442,9 @@ async fn message_sequences_increment_per_conversation() {
         return;
     };
     let config = test_config();
-    let app = build_router(AppState::new(pool.clone(), config));
-    let _run_guard = install_fast_mock();
+    let state = AppState::new(pool.clone(), config);
+    let app = build_router(state.clone());
+    let _run_guard = install_fast_mock(state.clone());
 
     let bot = format!("bot_seq_{}", Uuid::new_v4());
     let conv = Uuid::new_v4().to_string();
@@ -512,8 +524,9 @@ async fn sse_reconnect_uses_monotonic_durable_ids() {
         return;
     };
     let config = test_config();
-    let app = build_router(AppState::new(pool.clone(), config));
-    let _run_guard = install_fast_mock();
+    let state = AppState::new(pool.clone(), config);
+    let app = build_router(state.clone());
+    let _run_guard = install_fast_mock(state.clone());
 
     let key = format!("sse-{}", Uuid::new_v4());
     let bot = format!("bot_sse_{}", Uuid::new_v4());

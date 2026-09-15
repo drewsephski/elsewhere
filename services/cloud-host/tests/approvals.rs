@@ -8,9 +8,7 @@ use async_trait::async_trait;
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
-use cloud_host::{
-    build_router, set_test_run_overrides, test_signing, AppState, TestRunOverrides,
-};
+use cloud_host::{build_router, test_signing, AppState, TestRunOverrides};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -22,18 +20,32 @@ use uuid::Uuid;
 const TEST_JWT_ISSUER: &str = "http://localhost:3000";
 const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
 
-struct RunOverrideGuard;
+struct RunOverrideGuard {
+    state: AppState,
+    request_id: String,
+}
 
 impl RunOverrideGuard {
-    fn install(computer: Arc<CountingComputer>, model: Arc<dyn ResponsesModel>) -> Self {
-        set_test_run_overrides(Some(TestRunOverrides { computer, model }));
-        Self
+    fn install(
+        state: AppState,
+        request_id: String,
+        computer: Arc<CountingComputer>,
+        model: Arc<dyn ResponsesModel>,
+    ) -> Self {
+        state.register_test_run_overrides(
+            &request_id,
+            TestRunOverrides {
+                computer,
+                model,
+            },
+        );
+        Self { state, request_id }
     }
 }
 
 impl Drop for RunOverrideGuard {
     fn drop(&mut self) {
-        set_test_run_overrides(None);
+        self.state.clear_test_run_overrides(&self.request_id);
     }
 }
 
@@ -122,7 +134,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         codex_executable: None,
         codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
-        enforce_tool_approvals_internal: false,
+        enforce_tool_approvals_internal: true,
         legacy_local_approval_bypass: false,
         browser_enabled: false,
         connector_secret_key: None,
@@ -173,10 +185,15 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
             },
         ]),
     });
-    let _run_guard = RunOverrideGuard::install(computer.clone(), model);
-
     let owner = format!("user-a-read-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
+    let request_id = Uuid::new_v4().to_string();
+    let _run_guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer.clone(),
+        model,
+    );
     let computer_row = insert_computer_placeholder(&pool, &owner, "c")
         .await
         .unwrap();
@@ -205,7 +222,7 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
                 .method("POST")
                 .uri("/v1/runs")
                 .header("Authorization", format!("Bearer {}", token(&owner)))
-                .header("Idempotency-Key", Uuid::new_v4().to_string())
+                .header("Idempotency-Key", &request_id)
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(body.to_string()))
                 .unwrap(),
@@ -254,10 +271,15 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
             },
         ]),
     });
-    let _run_guard = RunOverrideGuard::install(computer.clone(), model);
-
     let owner = format!("user-a-write-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
+    let request_id = Uuid::new_v4().to_string();
+    let _run_guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer.clone(),
+        model,
+    );
     let computer_row = insert_computer_placeholder(&pool, &owner, "c")
         .await
         .unwrap();
@@ -283,7 +305,7 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
                 .method("POST")
                 .uri("/v1/runs")
                 .header("Authorization", format!("Bearer {}", token(&owner)))
-                .header("Idempotency-Key", Uuid::new_v4().to_string())
+                .header("Idempotency-Key", &request_id)
                 .header("content-type", "application/json")
                 .body(axum::body::Body::from(body.to_string()))
                 .unwrap(),

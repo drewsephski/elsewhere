@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use codex_provider::CodexAppServerClient;
 use sqlx::PgPool;
 use tokio::sync::{Mutex, Semaphore};
+
+use agent_core::{AgentComputer, ResponsesModel};
 
 use crate::approval::ApprovalService;
 use crate::auth::JwtVerifier;
@@ -13,6 +16,13 @@ use crate::codex_ops::CodexOpsPermit;
 use crate::events::registry::RunRegistry;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::provider_status_cache::ProviderStatusCache;
+
+#[cfg(any(test, feature = "test-utils"))]
+#[derive(Clone)]
+pub struct TestRunOverrides {
+    pub computer: Arc<dyn AgentComputer>,
+    pub model: Arc<dyn ResponsesModel>,
+}
 
 #[cfg(any(test, feature = "test-utils"))]
 pub type TestGroupRouteDecider = Arc<
@@ -57,6 +67,50 @@ pub struct AppState {
     pub github_client: GitHubClient,
     #[cfg(any(test, feature = "test-utils"))]
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
+    #[cfg(any(test, feature = "test-utils"))]
+    test_run_overrides: TestRunOverrideRegistry,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+#[derive(Clone, Default)]
+struct TestRunOverrideRegistry {
+    by_request_id: Arc<std::sync::Mutex<HashMap<String, TestRunOverrides>>>,
+    default: Arc<std::sync::Mutex<Option<TestRunOverrides>>>,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl TestRunOverrideRegistry {
+    fn register(&self, request_id: &str, overrides: TestRunOverrides) {
+        self.by_request_id
+            .lock()
+            .expect("test run overrides lock")
+            .insert(request_id.to_string(), overrides);
+    }
+
+    fn set_default(&self, overrides: Option<TestRunOverrides>) {
+        *self.default.lock().expect("test run overrides default lock") = overrides;
+    }
+
+    fn clear_request(&self, request_id: &str) {
+        self.by_request_id
+            .lock()
+            .expect("test run overrides lock")
+            .remove(request_id);
+    }
+
+    fn take_for_request(&self, request_id: &str) -> Option<TestRunOverrides> {
+        let mut by_id = self
+            .by_request_id
+            .lock()
+            .expect("test run overrides lock");
+        if let Some(overrides) = by_id.remove(request_id) {
+            return Some(overrides);
+        }
+        self.default
+            .lock()
+            .expect("test run overrides default lock")
+            .clone()
+    }
 }
 
 impl AppState {
@@ -115,7 +169,41 @@ impl AppState {
             github_client,
             #[cfg(any(test, feature = "test-utils"))]
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(any(test, feature = "test-utils"))]
+            test_run_overrides: TestRunOverrideRegistry::default(),
         }
+    }
+
+    /// Binds injected computer/model dependencies to a specific idempotency key before `POST /v1/runs`.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn register_test_run_overrides(
+        &self,
+        request_id: &str,
+        overrides: TestRunOverrides,
+    ) {
+        self.test_run_overrides.register(request_id, overrides);
+    }
+
+    /// Applies the same injected dependencies to any run whose request id was not registered explicitly.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn set_test_run_overrides_default(
+        &self,
+        overrides: Option<TestRunOverrides>,
+    ) {
+        self.test_run_overrides.set_default(overrides);
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn clear_test_run_overrides(&self, request_id: &str) {
+        self.test_run_overrides.clear_request(request_id);
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub(crate) fn take_test_run_overrides(
+        &self,
+        request_id: &str,
+    ) -> Option<TestRunOverrides> {
+        self.test_run_overrides.take_for_request(request_id)
     }
 
     #[cfg(any(test, feature = "test-utils"))]

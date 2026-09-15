@@ -8,9 +8,7 @@ use async_trait::async_trait;
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
-use cloud_host::{
-    build_router, set_test_run_overrides, test_signing, AppState, TestRunOverrides,
-};
+use cloud_host::{build_router, test_signing, AppState, TestRunOverrides};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -23,17 +21,32 @@ const TEST_JWT_ISSUER: &str = "http://localhost:3000";
 const TEST_JWT_AUDIENCE: &str = "elsewhere-cloud-host";
 
 /// Clears injected run dependencies when the test finishes (including on panic).
-struct RunOverrideGuard;
+struct RunOverrideGuard {
+    state: AppState,
+    request_id: String,
+}
 
 impl RunOverrideGuard {
-    fn install(computer: Arc<CountingComputer>, model: Arc<dyn ResponsesModel>) -> Self {
-        set_test_run_overrides(Some(TestRunOverrides { computer, model }));
-        Self
+    fn install(
+        state: AppState,
+        request_id: String,
+        computer: Arc<CountingComputer>,
+        model: Arc<dyn ResponsesModel>,
+    ) -> Self {
+        state.register_test_run_overrides(
+            &request_id,
+            TestRunOverrides {
+                computer,
+                model,
+            },
+        );
+        Self { state, request_id }
     }
 }
 
 impl Drop for RunOverrideGuard {
     fn drop(&mut self) {
+        self.state.clear_test_run_overrides(&self.request_id);
     }
 }
 
@@ -122,7 +135,7 @@ fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
         codex_executable: None,
         codex_profiles_dir: None,
         tool_approval_timeout_secs: approval_timeout_secs,
-        enforce_tool_approvals_internal: false,
+        enforce_tool_approvals_internal: true,
         legacy_local_approval_bypass: false,
         browser_enabled: false,
         connector_secret_key: None,
@@ -173,7 +186,12 @@ async fn start_run(
     model: Arc<dyn ResponsesModel>,
     computer: Arc<CountingComputer>,
 ) -> RunOverrideGuard {
-    let guard = RunOverrideGuard::install(computer, model);
+    let guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.to_string(),
+        computer,
+        model,
+    );
     let body = json!({ "botId": bot_id, "message": message });
     let resp = app
         .clone()
@@ -339,7 +357,24 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
     )
     .await;
 
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
     let approval_id = loop {
+        if tokio::time::Instant::now() >= deadline {
+            let pending: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
+            )
+            .bind(&owner)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or((0,));
+            let writes = computer.writes.load(Ordering::SeqCst);
+            panic!(
+                "timed out waiting for pending approval to approve immediately \
+                 (owner={owner}, request_id={request_id}, pending_count={}, writes={})",
+                pending.0,
+                writes
+            );
+        }
         if let Ok(Some((id,))) = sqlx::query_as::<_, (String,)>(
             "SELECT id FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending' ORDER BY requested_at DESC LIMIT 1",
         )
@@ -347,7 +382,7 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
         .fetch_optional(&pool)
         .await
         {
-            let _ = app
+            let approve = app
                 .clone()
                 .oneshot(
                     axum::http::Request::builder()
@@ -357,7 +392,9 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
                         .body(axum::body::Body::empty())
                         .unwrap(),
                 )
-                .await;
+                .await
+                .unwrap();
+            assert_eq!(approve.status(), axum::http::StatusCode::OK);
             break id;
         }
         tokio::time::sleep(Duration::from_millis(5)).await;

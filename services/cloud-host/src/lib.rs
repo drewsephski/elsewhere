@@ -22,7 +22,7 @@ pub use config::Config;
 #[cfg(any(test, feature = "test-utils"))]
 pub use auth::jwt_test::test_signing;
 #[cfg(any(test, feature = "test-utils"))]
-pub use runner::{set_test_run_overrides, TestRunOverrides};
+pub use app_state::TestRunOverrides;
 #[cfg(any(test, feature = "test-utils"))]
 pub use group_router::drain_one_pending_route;
 
