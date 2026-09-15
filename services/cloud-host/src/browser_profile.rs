@@ -53,6 +53,14 @@ async fn ensure_computer_owned(
 
 fn create_profile_dir(root: &Path, profile_id: uuid::Uuid) -> Result<PathBuf, ApiError> {
     let path = root.join(profile_id.to_string());
+    if path.is_dir() {
+        return Ok(path);
+    }
+    if path.exists() {
+        return Err(ApiError::Internal(
+            "Browser profile storage path is not a directory".into(),
+        ));
+    }
     let mut builder = std::fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -60,9 +68,9 @@ fn create_profile_dir(root: &Path, profile_id: uuid::Uuid) -> Result<PathBuf, Ap
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(PROFILE_DIR_MODE);
     }
-    builder
-        .create(&path)
-        .map_err(|_| ApiError::Internal("Browser profile storage unavailable".into()))?;
+    builder.create(&path).map_err(|e| {
+        ApiError::Internal(format!("Browser profile storage unavailable: {e}"))
+    })?;
     Ok(path)
 }
 
@@ -142,5 +150,18 @@ mod tests {
         assert!(validate_computer_id("../x").is_err());
         assert!(validate_computer_id("a/b").is_err());
         assert!(validate_computer_id("valid-id").is_ok());
+    }
+
+    #[test]
+    fn reuses_existing_profile_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "elsewhere-browser-profile-reuse-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let profile_id = uuid::Uuid::new_v4();
+        let first = create_profile_dir(&root, profile_id).expect("first create");
+        let second = create_profile_dir(&root, profile_id).expect("reuse existing");
+        assert_eq!(first, second);
+        std::fs::remove_dir_all(root).ok();
     }
 }
