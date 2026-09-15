@@ -1,6 +1,7 @@
 use agent_core::{
-    filter_workspace_listing, validate_workspace_mutation_path, workspace_rename_target,
-    AgentComputer, ComputerError,
+    filter_workspace_listing, normalize_workspace_path, validate_public_http_url,
+    validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,
+    AgentComputer, ComputerError, ToolError,
 };
 use serde_json::json;
 use axum::extract::{Path, Query, State};
@@ -128,6 +129,9 @@ pub async fn browser_navigate(
     if url.is_empty() {
         return Err(ApiError::Validation("url is required".into()));
     }
+    validate_public_http_url(url)
+        .await
+        .map_err(|err| ApiError::Validation(err.message()))?;
     let computer = state
         .computer_registry
         .connect_sprite_computer(
@@ -280,14 +284,13 @@ fn map_computer_error(err: ComputerError) -> ApiError {
 }
 
 fn workspace_list_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
-    let path = query.path.as_deref().unwrap_or("/workspace").trim();
-    if path.is_empty() {
-        return Err(ApiError::Validation("path is required".into()));
-    }
-    if !path.starts_with('/') {
-        return Err(ApiError::Validation("path must be absolute".into()));
-    }
-    Ok(path.to_string())
+    let path = query.path.as_deref().unwrap_or("/workspace");
+    normalize_workspace_path(path).map_err(map_workspace_validation)
+}
+
+fn workspace_read_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
+    let path = query.path.as_deref().unwrap_or("/workspace");
+    validate_workspace_readable_path(path).map_err(map_workspace_validation)
 }
 
 fn sort_workspace_entries(entries: Vec<agent_core::WorkspaceEntry>) -> Vec<agent_core::WorkspaceEntry> {
@@ -376,8 +379,8 @@ pub async fn workspace_read(
     Path(computer_id): Path<String>,
     Query(query): Query<WorkspacePathQuery>,
 ) -> Result<Json<WorkspaceFileResponse>, ApiError> {
-    let path = workspace_list_path(&query)?;
-    if path.ends_with('/') {
+    let path = workspace_read_path(&query)?;
+    if path.ends_with('/') || path == "/workspace" {
         return Err(ApiError::Validation("path must be a file, not a directory".into()));
     }
 
@@ -425,7 +428,7 @@ pub async fn workspace_delete(
     Path(computer_id): Path<String>,
     Query(query): Query<WorkspacePathQuery>,
 ) -> Result<Json<WorkspaceMutationResponse>, ApiError> {
-    let path = workspace_list_path(&query)?;
+    let path = workspace_read_path(&query)?;
     let path = validate_workspace_mutation_path(&path).map_err(map_workspace_validation)?;
 
     let computer = state

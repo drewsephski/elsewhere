@@ -30,6 +30,18 @@ pub fn normalize_workspace_path(path: &str) -> Result<String, &'static str> {
     Ok(trimmed.to_string())
 }
 
+/// User-visible read path (listing root allowed; reserved markers rejected).
+pub fn validate_workspace_readable_path(path: &str) -> Result<String, &'static str> {
+    let path = normalize_workspace_path(path)?;
+    if path != "/workspace" {
+        let name = path.rsplit('/').next().unwrap_or("");
+        if name.is_empty() || is_internal_workspace_entry(name) {
+            return Err("cannot read this path");
+        }
+    }
+    Ok(path)
+}
+
 /// User-visible file or folder (not `/workspace` root or Elsewhere markers).
 pub fn validate_workspace_mutation_path(path: &str) -> Result<String, &'static str> {
     let path = normalize_workspace_path(path)?;
@@ -91,9 +103,13 @@ mod tests {
     #[test]
     fn mutation_paths_reject_escape_and_reserved() {
         assert!(normalize_workspace_path("/workspace/a").is_ok());
+        assert!(normalize_workspace_path("/workspace/docs").is_ok());
+        assert!(validate_workspace_readable_path("/workspace/docs/readme.md").is_ok());
+        assert!(validate_workspace_readable_path("/workspace/.elsewhere-bootstrap").is_err());
         assert!(validate_workspace_mutation_path("/workspace").is_err());
         assert!(validate_workspace_mutation_path("/workspace/.elsewhere-bootstrap").is_err());
         assert!(normalize_workspace_path("/workspace/../etc/passwd").is_err());
+        assert!(normalize_workspace_path("/etc/passwd").is_err());
         assert_eq!(
             workspace_rename_target("/workspace/docs/readme.md", "notes.md").as_deref(),
             Ok("/workspace/docs/notes.md")

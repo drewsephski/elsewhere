@@ -19,15 +19,21 @@ fn jwt_config() -> JwtVerifierConfig {
     }
 }
 
-async fn try_test_pool() -> Option<PgPool> {
-    let url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-    let pool = tokio::time::timeout(Duration::from_secs(2), PgPool::connect(&url))
+async fn require_test_pool() -> PgPool {
+    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        panic!(
+            "DATABASE_URL is required for cloud-host JWT integration tests (set postgres URL or use sqlx::test harness)"
+        );
+    });
+    let pool = tokio::time::timeout(Duration::from_secs(5), PgPool::connect(&url))
         .await
-        .ok()?
-        .ok()?;
-    sqlx::migrate!("./migrations").run(&pool).await.ok()?;
-    Some(pool)
+        .expect("database connection timed out")
+        .expect("database connection failed");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("migrations failed");
+    pool
 }
 
 fn jwt_test_config() -> Config {
@@ -52,6 +58,7 @@ fn jwt_test_config() -> Config {
         codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
+        legacy_local_approval_bypass: false,
         browser_enabled: false,
     }
 }
@@ -89,10 +96,7 @@ async fn jwt_verifier_rejects_expired_and_bad_audience() {
 
 #[tokio::test]
 async fn jwt_auth_protects_bot_listing() {
-    let Some(pool) = try_test_pool().await else {
-        eprintln!("skipping jwt_auth_protects_bot_listing: Postgres unavailable");
-        return;
-    };
+    let pool = require_test_pool().await;
     let mut state = AppState::new(pool, jwt_test_config());
     state.jwt_verifier = Some(test_verifier());
     let app = build_router(state);
@@ -124,9 +128,7 @@ async fn jwt_auth_protects_bot_listing() {
 
 #[tokio::test]
 async fn hybrid_internal_token_still_maps_legacy_local() {
-    let Some(pool) = try_test_pool().await else {
-        return;
-    };
+    let pool = require_test_pool().await;
     let mut config = jwt_test_config();
     config.auth_mode = AuthMode::Hybrid;
     let state = AppState::new(pool, config);

@@ -27,6 +27,7 @@ pub use runner::{set_test_run_overrides, TestRunOverrides};
 pub use group_router::drain_one_pending_route;
 
 pub mod work;
+pub(crate) mod work_admission;
 pub mod worker;
 
 pub mod routines;
@@ -47,6 +48,8 @@ pub mod computer_session;
 pub mod results;
 pub mod result_finalization;
 pub mod artifact_handoff;
+pub mod collaboration_completion;
 pub mod delegation;
 pub mod run_lifecycle;
 pub mod collaboration;
+pub mod skills;

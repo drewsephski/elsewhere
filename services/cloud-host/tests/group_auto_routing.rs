@@ -56,6 +56,7 @@ fn test_config() -> Config {
         codex_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: false,
+        legacy_local_approval_bypass: false,
         browser_enabled: false,
     }
 }
@@ -85,7 +86,8 @@ async fn auto_send_admits_pending_without_runs(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -143,7 +145,8 @@ async fn router_selects_researcher(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -202,7 +205,8 @@ async fn explicit_mention_skips_router_and_resolves_immediately(pool: PgPool) {
             recipient_bot_ids: Some(vec![researcher.id.clone()]),
             mention_mode: None,
             routing_mode: Some("specific".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -238,7 +242,8 @@ async fn delete_pending_auto_message_cancels_route(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -296,7 +301,8 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -357,7 +363,8 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -427,7 +434,8 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -506,7 +514,8 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: Some("auto".into()),
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();

@@ -126,7 +126,9 @@ async fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError
         }
         "browser_screenshot" | "browser_download" => {
             let path = required_str(args, "path")?;
-            require_workspace_path(path)?;
+            crate::workspace_entries::validate_workspace_mutation_path(path).map_err(|err| {
+                ToolError::MalformedArguments(err.into())
+            })?;
             if name == "browser_download" {
                 let url = required_str(args, "url")?;
                 crate::public_http_url::validate_public_http_url(url).await?;
@@ -140,15 +142,6 @@ async fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError
         }
     }
     Ok(())
-}
-
-fn require_workspace_path(path: &str) -> Result<(), ToolError> {
-    if path == "/workspace" || path.starts_with("/workspace/") {
-        return Ok(());
-    }
-    Err(ToolError::MalformedArguments(format!(
-        "path must be under /workspace, got {path}"
-    )))
 }
 
 fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
@@ -250,5 +243,33 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(err, ToolError::MalformedArguments(_)));
+
+        let err = dispatch_browser_tool(
+            &computer,
+            "browser_screenshot",
+            &json!({"path":"/workspace/../escape.png"}),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, ToolError::MalformedArguments(_)));
+
+        let err = dispatch_browser_tool(
+            &computer,
+            "browser_screenshot",
+            &json!({"path":"/workspace/.elsewhere-bootstrap"}),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, ToolError::MalformedArguments(_)));
+
+        assert!(
+            dispatch_browser_tool(
+                &computer,
+                "browser_screenshot",
+                &json!({"path":"/workspace/screenshots/a.png"}),
+            )
+            .await
+            .is_ok()
+        );
     }
 }

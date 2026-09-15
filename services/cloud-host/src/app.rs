@@ -40,6 +40,36 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(api::bots::delete),
         )
         .route(
+            "/v1/skills",
+            get(api::skills::list).post(api::skills::create),
+        )
+        .route(
+            "/v1/skills/{id}",
+            get(api::skills::get)
+                .patch(api::skills::patch)
+                .delete(api::skills::delete),
+        )
+        .route(
+            "/v1/skills/{id}/versions",
+            get(api::skills::list_versions_handler).post(api::skills::create_version),
+        )
+        .route(
+            "/v1/skills/{id}/versions/{version}",
+            get(api::skills::get_version),
+        )
+        .route(
+            "/v1/bots/{botId}/skills",
+            get(api::skills::list_bot_skills_handler).post(api::skills::attach_bot_skill_handler),
+        )
+        .route(
+            "/v1/bots/{botId}/skills/{skillId}",
+            delete(api::skills::detach_bot_skill_handler),
+        )
+        .route(
+            "/v1/runs/{id}/skill-draft",
+            post(api::skills::create_run_skill_draft),
+        )
+        .route(
             "/v1/computers",
             get(api::computers::list).post(api::computers::create),
         )

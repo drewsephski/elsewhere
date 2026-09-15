@@ -14,6 +14,7 @@ use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
 use crate::collaboration::AgentCollaboration;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
+use agent_skills::SkillPackage;
 
 /// How the host executes an agent run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +49,8 @@ pub struct SharedRunDeps {
     pub owner_id: String,
     pub computer_id: String,
     pub collaboration: Option<Arc<dyn AgentCollaboration>>,
+    /// Immutable Agent Skill packages snapshotted at run admission.
+    pub skill_packages: Arc<[SkillPackage]>,
 }
 
 impl SharedRunDeps {
@@ -70,6 +73,7 @@ impl SharedRunDeps {
             owner_id,
             computer_id,
             collaboration: None,
+            skill_packages: Arc::from([]),
         }
     }
 }

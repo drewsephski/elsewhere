@@ -53,7 +53,8 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             recipient_bot_ids: Some(vec![researcher.id.clone(), designer.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -78,7 +79,8 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             recipient_bot_ids: Some(vec![researcher.id.clone(), designer.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -116,7 +118,8 @@ async fn group_send_no_mention_persists_only_human(pool: PgPool) {
             recipient_bot_ids: None,
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -158,7 +161,8 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             recipient_bot_ids: Some(vec![researcher.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -201,7 +205,8 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             recipient_bot_ids: Some(vec![designer.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -274,7 +279,8 @@ async fn codex_group_input_excludes_current_human_turn(pool: PgPool) {
             recipient_bot_ids: Some(vec![designer.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -339,7 +345,8 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -353,7 +360,8 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -390,7 +398,8 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap();
@@ -404,7 +413,8 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
             routing_mode: None,
-        },
+
+            skill_invocation: None,        },
     )
     .await
     .unwrap_err();

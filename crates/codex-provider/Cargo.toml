@@ -6,6 +6,7 @@ description = "Codex app-server client and subscription run engine for Elsewhere
 
 [dependencies]
 agent-core = { path = "../agent-core" }
+agent-skills = { path = "../agent-skills" }
 async-trait = "0.1"
 computer-mcp = { path = "../computer-mcp" }
 serde = { version = "1", features = ["derive"] }
@@ -44,6 +45,10 @@ path = "examples/mcp_probe.rs"
 [[example]]
 name = "mcp_turn_probe"
 path = "examples/mcp_turn_probe.rs"
+
+[[example]]
+name = "skills_discovery_probe"
+path = "examples/skills_discovery_probe.rs"
 
 [[example]]
 name = "schema_probe"

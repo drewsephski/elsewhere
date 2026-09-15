@@ -21,10 +21,18 @@ use crate::runner::{spawn_agent_run, RunExecutionInput};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SkillInvocationInput {
+    pub skill_id: String,
+    pub skill_version: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProductCreateRunRequest {
     pub bot_id: String,
     pub conversation_id: Option<String>,
     pub message: String,
+    pub skill_invocation: Option<SkillInvocationInput>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -113,13 +121,22 @@ async fn create_product_run(
         return Err(ApiError::Validation("botId is required".into()));
     }
 
-    let records = crate::work::enqueue(
+    let mut skills = crate::skills::SkillAdmissionInput::default();
+    if let Some(inv) = body.skill_invocation {
+        skills.explicit = Some(crate::skills::ExplicitSkillInvocation {
+            skill_id: inv.skill_id,
+            version: inv.skill_version,
+        });
+    }
+
+    let records = crate::work::enqueue_with_skills(
         &state.pool,
         principal.owner_id(),
         &request_id,
         body.bot_id.trim(),
         body.conversation_id.as_deref(),
         body.message.trim(),
+        &skills,
     )
     .await?;
     let run = find_run_for_owner(&state.pool, principal.owner_id(), &records.run_id)

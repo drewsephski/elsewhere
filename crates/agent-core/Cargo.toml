@@ -5,6 +5,7 @@ edition = "2021"
 description = "Host-independent Elsewhere agent runtime (Luna / Responses tool loop)"
 
 [dependencies]
+agent-skills = { path = "../agent-skills" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

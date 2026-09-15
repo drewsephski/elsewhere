@@ -123,6 +123,7 @@ fn jwt_state(pool: PgPool, approval_timeout_secs: u64) -> AppState {
         codex_profiles_dir: None,
         tool_approval_timeout_secs: approval_timeout_secs,
         enforce_tool_approvals_internal: false,
+        legacy_local_approval_bypass: false,
         browser_enabled: false,
     };
     let mut state = AppState::new(pool, config);

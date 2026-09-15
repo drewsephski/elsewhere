@@ -197,6 +197,38 @@ impl CodexRunEngine {
             .canonicalize()
             .unwrap_or_else(|_| cwd_dir.path().to_path_buf());
 
+        if !shared.skill_packages.is_empty() {
+            if let Err(err) =
+                agent_skills::materialize_agents_skills(&cwd, shared.skill_packages.as_ref())
+            {
+                mcp.shutdown().await;
+                fail_run(
+                    &shared,
+                    &ctx,
+                    "skill_materialization_failed",
+                    &err.to_string(),
+                    "",
+                    0,
+                )
+                .await?;
+                return Ok(());
+            }
+            let probe_root = agent_skills::NativeSkillsLayout::agents_skills_root(&cwd);
+            if !probe_root.is_dir() {
+                mcp.shutdown().await;
+                fail_run(
+                    &shared,
+                    &ctx,
+                    "skill_materialization_failed",
+                    "native skills directory missing after materialization",
+                    "",
+                    0,
+                )
+                .await?;
+                return Ok(());
+            }
+        }
+
         let using_real_codex = injected_process.is_none();
         phases.mark_codex_launch();
         let client = if let Some(process) = injected_process {

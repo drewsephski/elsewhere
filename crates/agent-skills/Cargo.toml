@@ -1,0 +1,14 @@
+[package]
+name = "agent-skills"
+version = "0.1.0"
+edition = "2021"
+description = "Open Agent Skills (SKILL.md) package validation and materialization for Elsewhere"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+sha2 = "0.10"
+thiserror = "2"
+regex = "1"
+
+[dev-dependencies]

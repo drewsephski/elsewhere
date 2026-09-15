@@ -7,21 +7,22 @@ Current cloud product: [authenticated pairing](PHASE_3C1.md), [background work](
 | Package | Path | Role |
 |---------|------|------|
 | `@elsewhere/desktop` | repo root (`src/`, `src-tauri/`) | Tauri + Vite chat shell |
-| `@elsewhere/www` | `apps/www/` | Next.js marketing site |
+| `@elsewhere/www` | `apps/www/` | Next.js product workspace (Better Auth + `/api/cloud` BFF) |
+| `cloud-host` | `services/cloud-host/` | Rust control plane (Postgres, work queue, groups, routines) |
 | `@elsewhere/brand` | `packages/brand/` | Shared product copy and URLs |
 | `agent-core` | `crates/agent-core/` | Host-independent Luna agent loop |
 | `sprite-computer` | `crates/sprite-computer/` | Fly Sprites `AgentComputer` adapter |
 
 Browser automation inside Sprites: [BROWSER.md](BROWSER.md).
 
-Desktop and web are separate bundles. Run `pnpm dev:www` for marketing and `pnpm tauri dev` for the native app.
+Desktop and web are separate bundles. Run `pnpm dev:www` for the hosted workspace UI and `pnpm tauri dev` for the native shell. Full local verification: `pnpm check` (see root README).
 
 ## Runtime boundary (portable core)
 
 ```text
 RunEngine (Phase 3B.2+)
  ├── ResponsesRunEngine   — API key + agent-core::run_agent_loop (today)
- └── CodexRunEngine       — ChatGPT subscription via Codex app-server (planned)
+ └── CodexRunEngine       — ChatGPT subscription via Codex app-server (default product path)
 
 ResponsesRunEngine:
  ├── ResponsesModel      (OpenAI Responses API — host-provided)

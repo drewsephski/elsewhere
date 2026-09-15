@@ -39,6 +39,7 @@ You do **not** paste an OpenAI API key to use the default product path. Link you
 | Control plane | `cargo run -p cloud-host` |
 | Desktop (Tauri) | `pnpm tauri dev` (starts the web workspace UI on `:1420` and proxies `/api` to `:3000`; run `cargo run -p cloud-host` separately) |
 | Frontend only (Vite) | `pnpm dev` |
+| Full local check (mirrors CI; needs Postgres for cloud-host integration tests) | `pnpm check` |
 | Rust logs | `RUST_LOG=elsewhere=info cargo run -p cloud-host` |
 
 Hosted operations: [`infra/fly/README.md`](infra/fly/README.md).

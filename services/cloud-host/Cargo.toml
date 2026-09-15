@@ -13,6 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 agent-core = { path = "../../crates/agent-core" }
+agent-skills = { path = "../../crates/agent-skills" }
 codex-provider = { path = "../../crates/codex-provider" }
 sprite-computer = { path = "../../crates/sprite-computer" }
 openai-responses = { path = "../../crates/openai-responses" }
@@ -44,6 +45,10 @@ rcgen = { version = "0.14", optional = true }
 
 [features]
 test-utils = ["rcgen"]
+
+[[test]]
+name = "skills"
+required-features = ["test-utils"]
 
 [[test]]
 name = "group_auto_routing"
@@ -79,6 +84,7 @@ required-features = ["test-utils"]
 
 [dev-dependencies]
 rcgen = "0.14"
+tempfile = "3"
 axum = { version = "0.8", features = ["macros"] }
 http = "1"
 http-body-util = "0.1"

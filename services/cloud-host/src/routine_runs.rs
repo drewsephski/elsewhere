@@ -27,6 +27,48 @@ pub struct RoutineRun {
     pub created_at: DateTime<Utc>,
 }
 
+pub async fn list_recent_for_routines(
+    pool: &PgPool,
+    owner: &str,
+    routine_ids: &[String],
+    per_routine_limit: i64,
+) -> Result<std::collections::HashMap<String, Vec<RoutineRun>>, ApiError> {
+    if routine_ids.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let rows: Vec<RoutineRun> = sqlx::query_as(
+        r#"
+        SELECT id, routine_id, run_id, scheduled_for, started_at, finished_at,
+               status, error_code, error_message, trigger_kind, created_at
+        FROM (
+            SELECT rr.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY rr.routine_id
+                       ORDER BY rr.created_at DESC
+                   ) AS rn
+            FROM routine_runs rr
+            JOIN routines r ON r.id = rr.routine_id AND r.owner_id = $1
+            WHERE rr.routine_id = ANY($2)
+        ) ranked
+        WHERE rn <= $3
+        ORDER BY routine_id, created_at DESC
+        "#,
+    )
+    .bind(owner)
+    .bind(routine_ids)
+    .bind(per_routine_limit)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut out: std::collections::HashMap<String, Vec<RoutineRun>> =
+        std::collections::HashMap::new();
+    for run in rows {
+        out.entry(run.routine_id.clone()).or_default().push(run);
+    }
+    Ok(out)
+}
+
 pub async fn list_for_routine(
     pool: &PgPool,
     owner: &str,

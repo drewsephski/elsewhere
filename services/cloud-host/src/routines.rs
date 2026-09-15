@@ -200,9 +200,16 @@ pub async fn list(pool: &PgPool, owner: &str) -> Result<Vec<RoutineView>, ApiErr
             .fetch_all(pool)
             .await
             .map_err(db_error)?;
+    let routine_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+    let recent_by_routine =
+        routine_runs::list_recent_for_routines(pool, owner, &routine_ids, 20).await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        out.push(to_view(pool, row).await?);
+        let recent_runs = recent_by_routine
+            .get(&row.id)
+            .cloned()
+            .unwrap_or_default();
+        out.push(to_view_with_recent_runs(row, recent_runs)?);
     }
     Ok(out)
 }
@@ -219,14 +226,21 @@ pub async fn get(pool: &PgPool, owner: &str, id: &str) -> Result<RoutineView, Ap
 }
 
 async fn to_view(pool: &PgPool, row: Routine) -> Result<RoutineView, ApiError> {
+    let recent_runs =
+        routine_runs::list_for_routine(pool, &row.owner_id, &row.id, 20).await?;
+    to_view_with_recent_runs(row, recent_runs)
+}
+
+fn to_view_with_recent_runs(
+    row: Routine,
+    recent_runs: Vec<RoutineRun>,
+) -> Result<RoutineView, ApiError> {
     let schedule = parse_schedule(
         &row.schedule_kind,
         &row.schedule_expression,
         &row.timezone,
         Some(row.interval_minutes),
     )?;
-    let recent_runs =
-        routine_runs::list_for_routine(pool, &row.owner_id, &row.id, 20).await?;
     Ok(RoutineView {
         id: row.id,
         bot_id: row.bot_id,

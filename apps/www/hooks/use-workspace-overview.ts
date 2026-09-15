@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  cloudHostErrorMessage,
-  cloudHostFetch,
-  readCloudApiErrorBody,
-} from "@/lib/cloud-api";
+import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
 import type { WorkspaceOverview } from "@/lib/workspace-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -15,6 +12,7 @@ export type WorkspaceLoadPhase = "initial" | "loading" | "ready" | "stale" | "un
 export function useWorkspaceOverview(pollMs = 5000) {
   const [data, setData] = useState<WorkspaceOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [phase, setPhase] = useState<WorkspaceLoadPhase>("initial");
   const consecutiveFailures = useRef(0);
   const hasLoadedOnce = useRef(false);
@@ -27,10 +25,9 @@ export function useWorkspaceOverview(pollMs = 5000) {
         timeoutMs: 20_000,
       });
       if (!response.ok) {
-        const body = await readCloudApiErrorBody(response);
-        throw new Error(
-          body?.error?.trim() ||
-            (await cloudHostErrorMessage(response, "Could not refresh your workspace")),
+        throw await cloudApiErrorFromResponse(
+          response,
+          "Could not refresh your workspace",
         );
       }
       const next: WorkspaceOverview = await response.json();
@@ -38,6 +35,7 @@ export function useWorkspaceOverview(pollMs = 5000) {
       hasLoadedOnce.current = true;
       setData(next);
       setError(null);
+      setErrorCode(null);
       setPhase("ready");
       return next;
     } catch (err) {
@@ -47,6 +45,7 @@ export function useWorkspaceOverview(pollMs = 5000) {
       consecutiveFailures.current += 1;
       const message = err instanceof Error ? err.message : "Workspace unavailable";
       setError(message);
+      setErrorCode(isCloudApiError(err) ? err.code ?? null : null);
       setPhase(hasLoadedOnce.current ? "stale" : "unavailable");
       return null;
     }
@@ -77,9 +76,8 @@ export function useWorkspaceOverview(pollMs = 5000) {
   }, [pollMs, refresh]);
 
   const runnerUnreachable =
-    phase === "unavailable" || phase === "stale"
-      ? error?.includes("temporarily unreachable") ?? false
-      : false;
+    (phase === "unavailable" || phase === "stale") &&
+    errorCode === "workspace_upstream_unreachable";
 
   return { data, error, phase, runnerUnreachable, refresh };
 }

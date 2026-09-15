@@ -1,6 +1,7 @@
 "use client";
 
-import { cloudHostFetch, readCloudApiErrorBody } from "@/lib/cloud-api";
+import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
 import type { ProviderStatus } from "@/lib/api-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -14,18 +15,13 @@ export type ProviderStatusLoadPhase = "idle" | "loading" | "ready" | "error";
 type LoginChallenge = { loginId: string; authUrl: string; userCode: string };
 
 async function readCloudJson<T>(response: Response): Promise<T> {
-  const body = await readCloudApiErrorBody(response);
   if (!response.ok) {
-    const message =
-      body?.error?.trim() ||
-      body?.message?.trim() ||
-      `Could not connect to Elsewhere (${response.status})`;
-    throw new Error(message);
+    throw await cloudApiErrorFromResponse(
+      response,
+      "Could not connect to Elsewhere",
+    );
   }
-  if (body === null) {
-    throw new Error("Could not read workspace response");
-  }
-  return body as T;
+  return (await response.json()) as T;
 }
 
 export function useProviderStatus() {
@@ -68,10 +64,7 @@ export function useProviderStatus() {
       setPhase("error");
       const message = err instanceof Error ? err.message : "Connection check failed";
       setError(message);
-      if (
-        message.includes("temporarily unreachable") ||
-        message.includes("workspace service")
-      ) {
+      if (isCloudApiError(err) && err.runnerUnreachable) {
         // Preserve last-known provider status during runner transport outages.
         return;
       }

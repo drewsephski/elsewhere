@@ -33,6 +33,8 @@ pub struct Config {
     pub codex_profiles_dir: Option<PathBuf>,
     pub tool_approval_timeout_secs: u64,
     pub enforce_tool_approvals_internal: bool,
+    /// When true, the legacy local owner may bypass tool approvals (local dev only).
+    pub legacy_local_approval_bypass: bool,
     pub browser_enabled: bool,
 }
 
@@ -97,9 +99,9 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(5 * 60);
-        let enforce_tool_approvals_internal = env::var("ELSEWHERE_ENFORCE_TOOL_APPROVALS")
-            .ok()
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        let enforce_tool_approvals_internal = parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS")
+            .unwrap_or(true);
+        let legacy_local_approval_bypass = parse_bool_env("ELSEWHERE_LEGACY_LOCAL_APPROVAL_BYPASS")
             .unwrap_or(false);
 
         let browser_enabled = match env::var("ELSEWHERE_BROWSER_ENABLED")
@@ -131,6 +133,9 @@ impl Config {
                 }
             });
 
+        let bind_addr = resolve_bind_addr(auth_mode)?;
+        validate_bind_addr(auth_mode, &bind_addr)?;
+
         Ok(Self {
             database_url,
             openai_api_key,
@@ -146,12 +151,13 @@ impl Config {
                 .unwrap_or_else(|_| sprite_computer::DEFAULT_API_BASE.to_string()),
             max_concurrent_runs,
             run_timeout_secs,
-            bind_addr: env::var("ELSEWHERE_BIND").unwrap_or_else(|_| "0.0.0.0:8080".into()),
+            bind_addr,
             run_engine,
             codex_executable,
             codex_profiles_dir,
             tool_approval_timeout_secs,
             enforce_tool_approvals_internal,
+            legacy_local_approval_bypass,
             browser_enabled,
         })
     }
@@ -193,5 +199,89 @@ fn parse_auth_mode(raw: &str) -> Result<AuthMode, String> {
         "jwt" => Ok(AuthMode::Jwt),
         "hybrid" => Ok(AuthMode::Hybrid),
         other => Err(format!("invalid ELSEWHERE_AUTH_MODE: {other}")),
+    }
+}
+
+fn parse_bool_env(key: &str) -> Option<bool> {
+    env::var(key).ok().map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
+fn resolve_bind_addr(auth_mode: AuthMode) -> Result<String, String> {
+    if let Ok(bind) = env::var("ELSEWHERE_BIND") {
+        if bind.trim().is_empty() {
+            return Err("ELSEWHERE_BIND must not be empty".into());
+        }
+        return Ok(bind);
+    }
+    Ok(match auth_mode {
+        AuthMode::Jwt => "0.0.0.0:8080".into(),
+        AuthMode::InternalToken | AuthMode::Hybrid => "127.0.0.1:8080".into(),
+    })
+}
+
+fn bind_host_is_loopback(bind_addr: &str) -> bool {
+    let host = bind_addr
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(bind_addr)
+        .trim()
+        .to_ascii_lowercase();
+    host == "127.0.0.1" || host == "localhost" || host == "::1"
+}
+
+fn validate_bind_addr(auth_mode: AuthMode, bind_addr: &str) -> Result<(), String> {
+    let allow_public = parse_bool_env("ELSEWHERE_ALLOW_PUBLIC_BIND").unwrap_or(false);
+    if matches!(auth_mode, AuthMode::InternalToken | AuthMode::Hybrid)
+        && !bind_host_is_loopback(bind_addr)
+        && !allow_public
+    {
+        return Err(
+            "Internal or hybrid auth must bind to loopback (default 127.0.0.1:8080) or set ELSEWHERE_ALLOW_PUBLIC_BIND=true".into(),
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn jwt_default_bind_allows_public() {
+        std::env::remove_var("ELSEWHERE_BIND");
+        assert_eq!(
+            resolve_bind_addr(AuthMode::Jwt).expect("bind"),
+            "0.0.0.0:8080"
+        );
+        assert!(validate_bind_addr(AuthMode::Jwt, "0.0.0.0:8080").is_ok());
+    }
+
+    #[test]
+    fn hybrid_default_bind_is_loopback() {
+        std::env::remove_var("ELSEWHERE_BIND");
+        assert_eq!(
+            resolve_bind_addr(AuthMode::Hybrid).expect("bind"),
+            "127.0.0.1:8080"
+        );
+        assert!(validate_bind_addr(AuthMode::Hybrid, "127.0.0.1:8080").is_ok());
+    }
+
+    #[test]
+    fn hybrid_public_bind_requires_explicit_opt_in() {
+        std::env::remove_var("ELSEWHERE_ALLOW_PUBLIC_BIND");
+        assert!(validate_bind_addr(AuthMode::Hybrid, "0.0.0.0:8080").is_err());
+        std::env::set_var("ELSEWHERE_ALLOW_PUBLIC_BIND", "true");
+        assert!(validate_bind_addr(AuthMode::Hybrid, "0.0.0.0:8080").is_ok());
+        std::env::remove_var("ELSEWHERE_ALLOW_PUBLIC_BIND");
+    }
+
+    #[test]
+    fn approval_defaults_favor_enforcement() {
+        std::env::remove_var("ELSEWHERE_ENFORCE_TOOL_APPROVALS");
+        assert_eq!(parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS"), None);
+        assert_eq!(
+            parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS").unwrap_or(true),
+            true
+        );
     }
 }

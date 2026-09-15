@@ -10,6 +10,7 @@ use crate::error::ApiError;
 use crate::group_router::{
     cancel_routing_for_deleted_message, resolve_group_routing_mode, GroupRoutingMode,
 };
+use crate::skills::SkillAdmissionInput;
 use crate::work;
 
 pub const MIN_GROUP_BOTS: usize = 2;
@@ -366,44 +367,88 @@ pub async fn list_groups(
     .await
     .map_err(db_error)?;
 
-    let mut out = Vec::new();
-    for row in rows {
-        let id: String = row.get("id");
-        let participants = load_participants(pool, owner, &id).await?;
-        let queued: i64 = sqlx::query_scalar(
-            r#"
-            SELECT COUNT(*) FROM group_message_recipients g
-            JOIN agent_runs r ON r.id = g.run_id
-            WHERE g.conversation_id = $1 AND r.status = 'queued'
-            "#,
-        )
-        .bind(&id)
-        .fetch_one(pool)
-        .await
-        .map_err(db_error)?;
-        let working: i64 = sqlx::query_scalar(
-            r#"
-            SELECT COUNT(*) FROM group_message_recipients g
-            JOIN agent_runs r ON r.id = g.run_id
-            WHERE g.conversation_id = $1 AND r.status = 'running'
-            "#,
-        )
-        .bind(&id)
-        .fetch_one(pool)
-        .await
-        .map_err(db_error)?;
-        out.push(GroupListItem {
-            id,
-            name: row
-                .get::<Option<String>, _>("name")
-                .filter(|n| !n.trim().is_empty())
-                .unwrap_or_else(|| "Group".into()),
-            updated_at: row.get("updated_at"),
-            participants,
-            queued_runs: queued,
-            working_runs: working,
-        });
+    if rows.is_empty() {
+        return Ok(Vec::new());
     }
+
+    let group_ids: Vec<String> = rows.iter().map(|row| row.get("id")).collect();
+
+    let participant_rows = sqlx::query(
+        r#"
+        SELECT p.conversation_id, p.bot_id, p.ordinal, p.joined_at, p.left_at, b.name, b.avatar_id
+        FROM conversation_participants p
+        JOIN bots b ON b.id = p.bot_id AND b.owner_id = p.owner_id
+        WHERE p.owner_id = $1 AND p.conversation_id = ANY($2)
+        ORDER BY p.conversation_id, p.ordinal ASC, p.joined_at ASC
+        "#,
+    )
+    .bind(owner)
+    .bind(&group_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut participants_by_group: std::collections::HashMap<String, Vec<ParticipantSummary>> =
+        std::collections::HashMap::new();
+    for row in participant_rows {
+        let conversation_id: String = row.get("conversation_id");
+        participants_by_group
+            .entry(conversation_id)
+            .or_default()
+            .push(ParticipantSummary {
+                bot_id: row.get("bot_id"),
+                name: row.get("name"),
+                avatar_id: row.get("avatar_id"),
+                ordinal: row.get("ordinal"),
+                joined_at: row.get("joined_at"),
+                left_at: row.get("left_at"),
+            });
+    }
+
+    let run_count_rows = sqlx::query(
+        r#"
+        SELECT g.conversation_id,
+               COUNT(*) FILTER (WHERE r.status = 'queued') AS queued_runs,
+               COUNT(*) FILTER (WHERE r.status = 'running') AS working_runs
+        FROM group_message_recipients g
+        JOIN agent_runs r ON r.id = g.run_id
+        WHERE g.conversation_id = ANY($1)
+        GROUP BY g.conversation_id
+        "#,
+    )
+    .bind(&group_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut queued_by_group: std::collections::HashMap<String, i64> =
+        std::collections::HashMap::new();
+    let mut working_by_group: std::collections::HashMap<String, i64> =
+        std::collections::HashMap::new();
+    for row in run_count_rows {
+        let id: String = row.get("conversation_id");
+        queued_by_group.insert(id.clone(), row.get("queued_runs"));
+        working_by_group.insert(id, row.get("working_runs"));
+    }
+
+    let out = rows
+        .into_iter()
+        .map(|row| {
+            let id: String = row.get("id");
+            GroupListItem {
+                id: id.clone(),
+                name: row
+                    .get::<Option<String>, _>("name")
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or_else(|| "Group".into()),
+                updated_at: row.get("updated_at"),
+                participants: participants_by_group.remove(&id).unwrap_or_default(),
+                queued_runs: queued_by_group.get(&id).copied().unwrap_or(0),
+                working_runs: working_by_group.get(&id).copied().unwrap_or(0),
+            }
+        })
+        .collect();
+
     Ok(out)
 }
 
@@ -782,6 +827,7 @@ pub async fn enqueue_group_bot_run(
         conversation_id,
         &message_id,
         trimmed,
+        &SkillAdmissionInput::default(),
     )
     .await?;
     tx.commit().await.map_err(db_error)?;
@@ -795,6 +841,7 @@ pub struct SendGroupMessageRequest {
     pub recipient_bot_ids: Option<Vec<String>>,
     pub mention_mode: Option<String>,
     pub routing_mode: Option<String>,
+    pub skill_invocation: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -963,14 +1010,15 @@ pub async fn send_group_message(
     .map_err(db_error)?;
     sqlx::query(
         r#"
-        INSERT INTO messages (id, conversation_id, role, body, status, sequence, author_kind)
-        VALUES ($1, $2, 'user', $3, 'complete', $4, 'human')
+        INSERT INTO messages (id, conversation_id, role, body, status, sequence, author_kind, skill_invocation)
+        VALUES ($1, $2, 'user', $3, 'complete', $4, 'human', $5)
         "#,
     )
     .bind(&message_id)
     .bind(conversation_id)
     .bind(trimmed)
     .bind(sequence)
+    .bind(body.skill_invocation.as_ref())
     .execute(&mut *tx)
     .await
     .map_err(db_error)?;
@@ -1025,6 +1073,7 @@ pub async fn send_group_message(
             conversation_id,
             &message_id,
             trimmed,
+            &SkillAdmissionInput::default(),
         )
         .await?;
         sqlx::query(

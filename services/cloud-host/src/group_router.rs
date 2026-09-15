@@ -1051,6 +1051,7 @@ async fn enqueue_selected_bots(
             conversation_id,
             message_id,
             message_body,
+            &crate::skills::SkillAdmissionInput::default(),
         )
         .await
         .map_err(|e| {

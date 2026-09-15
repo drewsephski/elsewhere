@@ -11,6 +11,7 @@ mod mcp_turn_probe;
 mod process;
 mod protocol;
 mod group_route;
+mod toolless_turn;
 mod run_engine;
 mod run_input;
 mod run_persistence;
@@ -43,6 +44,7 @@ pub use protocol::thread::{
     ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES,
 };
 pub use group_route::run_codex_group_route_decision;
+pub use toolless_turn::run_toolless_codex_turn;
 pub use protocol::{
     build_elsewhere_thread_start_params, build_toolless_thread_start_params, parse_account_response,
     CodexAccountKind, CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot,

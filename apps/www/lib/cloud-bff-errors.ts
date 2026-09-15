@@ -3,6 +3,7 @@ export type CloudApiErrorBody = {
   error?: string;
   message?: string;
   retryable?: boolean;
+  phase?: string;
   requestId?: string;
   attempted?: string[];
 };
