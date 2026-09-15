@@ -11,9 +11,52 @@ use cloud_host::{
     AppState, Config,
 };
 use sqlx::PgPool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
+
+const TEST_SYNC_TIMEOUT: Duration = Duration::from_secs(10);
+const TEST_DRAIN_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Ensures a blocking test decider always unblocks and clears injected hooks.
+struct TestGroupRouteDeciderGuard {
+    release: Arc<AtomicBool>,
+    state: AppState,
+}
+
+impl TestGroupRouteDeciderGuard {
+    fn new(state: AppState) -> (Self, Arc<AtomicBool>, Arc<AtomicBool>) {
+        let release = Arc::new(AtomicBool::new(false));
+        let decider_started = Arc::new(AtomicBool::new(false));
+        let guard = Self {
+            release: release.clone(),
+            state: state.clone(),
+        };
+        (guard, release, decider_started)
+    }
+
+    fn release_decider(&self) {
+        self.release.store(true, Ordering::SeqCst);
+    }
+}
+
+impl Drop for TestGroupRouteDeciderGuard {
+    fn drop(&mut self) {
+        self.release_decider();
+        self.state.set_test_group_route_decider(None);
+    }
+}
+
+async fn wait_for_flag(flag: &AtomicBool, label: &str) {
+    tokio::time::timeout(TEST_SYNC_TIMEOUT, async {
+        while !flag.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for {label}"));
+}
 
 async fn bot(pool: &PgPool, owner: &str, name: &str) -> resources::BotRow {
     let computer_id = resources::insert_computer_placeholder(pool, owner, "Computer")
@@ -326,35 +369,42 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
 async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     let researcher = bot(&pool, "alice", "Researcher").await;
     let designer = bot(&pool, "alice", "Designer").await;
+    let coordinator = bot(&pool, "alice", "Coordinator").await;
     let group = groups::create_group(
         &pool,
         "alice",
         groups::CreateGroupRequest {
             name: "Team".into(),
-            bot_ids: vec![researcher.id.clone(), designer.id.clone()],
+            bot_ids: vec![
+                researcher.id.clone(),
+                designer.id.clone(),
+                coordinator.id.clone(),
+            ],
         },
     )
     .await
     .unwrap();
 
-    let decider_started = Arc::new(std::sync::Mutex::new(false));
-    let continue_decider = Arc::new(std::sync::Mutex::new(false));
-    let researcher_id = researcher.id.clone();
     let state = AppState::new(pool.clone(), test_config());
-    state.set_test_group_route_decider(Some(Arc::new({
-        let decider_started = decider_started.clone();
-        let continue_decider = continue_decider.clone();
-        move |_| {
-            *decider_started.lock().unwrap() = true;
-            while !*continue_decider.lock().unwrap() {
-                std::thread::sleep(std::time::Duration::from_millis(5));
+    let (decider_guard, release_decider, decider_started) =
+        TestGroupRouteDeciderGuard::new(state.clone());
+    let researcher_id = researcher.id.clone();
+    let release_for_decider = release_decider.clone();
+    let started_for_decider = decider_started.clone();
+    state.set_test_group_route_decider(Some(Arc::new(move |_| {
+        started_for_decider.store(true, Ordering::SeqCst);
+        let deadline = Instant::now() + TEST_SYNC_TIMEOUT;
+        while !release_for_decider.load(Ordering::SeqCst) {
+            if Instant::now() >= deadline {
+                return Err("decider_gate_timeout".into());
             }
-            Ok(ValidatedRouteDecision {
-                mode: GroupRoutingMode::Specific,
-                bot_ids: vec![researcher_id.clone()],
-                decision_code: Some("single_owner".into()),
-            })
+            std::thread::sleep(Duration::from_millis(5));
         }
+        Ok(ValidatedRouteDecision {
+            mode: GroupRoutingMode::Specific,
+            bot_ids: vec![researcher_id.clone()],
+            decision_code: Some("single_owner".into()),
+        })
     })));
 
     let send = groups::send_group_message(
@@ -373,20 +423,34 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     .await
     .unwrap();
 
-    let drain = tokio::spawn(async move { drain_one_pending_route(&state).await });
-
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while !*decider_started.lock().unwrap() {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
+    let pool_for_remove = pool.clone();
+    let group_id = group.id.clone();
+    let researcher_id_for_remove = researcher.id.clone();
+    let release_for_task = release_decider.clone();
+    let state_for_drain = state.clone();
+    let (drain_ok, ()) = tokio::time::timeout(
+        TEST_DRAIN_TIMEOUT,
+        async {
+            let drain = drain_one_pending_route(&state_for_drain);
+            let coord = async {
+                wait_for_flag(&decider_started, "group route decider start").await;
+                groups::remove_participant(
+                    &pool_for_remove,
+                    "alice",
+                    &group_id,
+                    &researcher_id_for_remove,
+                )
+                .await
+                .unwrap();
+                release_for_task.store(true, Ordering::SeqCst);
+            };
+            tokio::join!(drain, coord)
+        },
+    )
     .await
-    .expect("group route decider never started");
-    groups::remove_participant(&pool, "alice", &group.id, &researcher.id)
-        .await
-        .unwrap();
-    *continue_decider.lock().unwrap() = true;
-    assert!(drain.await.unwrap().unwrap());
+    .expect("route drain/coordination timed out");
+    assert!(drain_ok.expect("drain_one_pending_route failed"));
+    drop(decider_guard);
 
     let researcher_runs: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1 AND bot_id = $2",
@@ -425,7 +489,7 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
 
     let state = AppState::new(pool.clone(), test_config());
     state.set_test_group_route_decider(Some(Arc::new(|_| {
-        Err("malformed_router_json".into())
+        Err("codex_busy".into())
     })));
 
     let send = groups::send_group_message(
@@ -444,9 +508,20 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
 
-    for _ in 0..MAX_ROUTE_ATTEMPTS {
-        assert!(drain_one_pending_route(&state).await.unwrap());
+    for attempt in 1..=MAX_ROUTE_ATTEMPTS {
+        assert!(
+            drain_one_pending_route(&state).await.unwrap(),
+            "expected pending route drain on attempt {attempt}"
+        );
     }
+    let attempts: i32 = sqlx::query_scalar(
+        "SELECT routing_attempts FROM group_message_sends WHERE message_id = $1",
+    )
+    .bind(&send.message.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(attempts, MAX_ROUTE_ATTEMPTS);
     let status: String = sqlx::query_scalar(
         "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
     )
@@ -455,10 +530,31 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(status, "failed");
+    assert!(
+        !drain_one_pending_route(&state).await.unwrap(),
+        "failed route should not be claimed again"
+    );
 
     retry_auto_route(&pool, "alice", &group.id, &send.message.id)
         .await
         .unwrap();
+
+    let attempts_after_retry: i32 = sqlx::query_scalar(
+        "SELECT routing_attempts FROM group_message_sends WHERE message_id = $1",
+    )
+    .bind(&send.message.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(attempts_after_retry, 0);
+    let status_after_retry: String = sqlx::query_scalar(
+        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
+    )
+    .bind(&send.message.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status_after_retry, "pending");
 
     state.set_test_group_route_decider(Some(Arc::new(|input| {
         Ok(ValidatedRouteDecision {
