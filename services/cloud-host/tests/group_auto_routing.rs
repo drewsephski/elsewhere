@@ -6,13 +6,13 @@ use cloud_host::{
         ValidatedRouteDecision, MAX_ROUTE_ATTEMPTS,
     },
     run_engine_select::{resolve_group_route_engine, RunEngineMode, SelectedRunEngine},
-    set_test_group_route_decider,
     drain_one_pending_route,
     groups::{self, SendGroupMessageRequest},
     AppState, Config,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
+use std::time::Duration;
 use uuid::Uuid;
 
 async fn bot(pool: &PgPool, owner: &str, name: &str) -> resources::BotRow {
@@ -118,7 +118,8 @@ async fn router_selects_researcher(pool: PgPool) {
     .await
     .unwrap();
 
-    set_test_group_route_decider(Some(Arc::new(|input| {
+    let state = AppState::new(pool.clone(), test_config());
+    state.set_test_group_route_decider(Some(Arc::new(|input| {
         let picked = input
             .candidates
             .iter()
@@ -147,10 +148,8 @@ async fn router_selects_researcher(pool: PgPool) {
     .await
     .unwrap();
 
-    let state = AppState::new(pool.clone(), test_config());
     assert!(drain_one_pending_route(&state).await.unwrap());
-
-    set_test_group_route_decider(None);
+    state.set_test_group_route_decider(None);
 
     let recipients: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",
@@ -277,7 +276,10 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
     )
     .await
     .unwrap();
-    set_test_group_route_decider(Some(Arc::new(|_| {
+    let mut config = test_config();
+    config.run_engine = RunEngineMode::Auto;
+    let state = AppState::new(pool.clone(), config);
+    state.set_test_group_route_decider(Some(Arc::new(|_| {
         Ok(ValidatedRouteDecision {
             mode: GroupRoutingMode::Auto,
             bot_ids: Vec::new(),
@@ -298,11 +300,8 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
     )
     .await
     .unwrap();
-    let mut config = test_config();
-    config.run_engine = RunEngineMode::Auto;
-    let state = AppState::new(pool.clone(), config);
     assert!(drain_one_pending_route(&state).await.unwrap());
-    set_test_group_route_decider(None);
+    state.set_test_group_route_decider(None);
     let status: String = sqlx::query_scalar(
         "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
     )
@@ -331,7 +330,8 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     let decider_started = Arc::new(std::sync::Mutex::new(false));
     let continue_decider = Arc::new(std::sync::Mutex::new(false));
     let researcher_id = researcher.id.clone();
-    set_test_group_route_decider(Some(Arc::new({
+    let state = AppState::new(pool.clone(), test_config());
+    state.set_test_group_route_decider(Some(Arc::new({
         let decider_started = decider_started.clone();
         let continue_decider = continue_decider.clone();
         move |_| {
@@ -362,19 +362,20 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     .await
     .unwrap();
 
-    let state = AppState::new(pool.clone(), test_config());
     let drain = tokio::spawn(async move { drain_one_pending_route(&state).await });
 
-    while !*decider_started.lock().unwrap() {
-        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-    }
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !*decider_started.lock().unwrap() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("group route decider never started");
     groups::remove_participant(&pool, "alice", &group.id, &researcher.id)
         .await
         .unwrap();
     *continue_decider.lock().unwrap() = true;
-    drain.await.unwrap().unwrap();
-
-    set_test_group_route_decider(None);
+    assert!(drain.await.unwrap().unwrap());
 
     let researcher_runs: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1 AND bot_id = $2",
@@ -411,7 +412,10 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
 
-    set_test_group_route_decider(Some(Arc::new(|_| Err("malformed_router_json".into()))));
+    let state = AppState::new(pool.clone(), test_config());
+    state.set_test_group_route_decider(Some(Arc::new(|_| {
+        Err("malformed_router_json".into())
+    })));
 
     let send = groups::send_group_message(
         &pool,
@@ -428,7 +432,6 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
 
-    let state = AppState::new(pool.clone(), test_config());
     for _ in 0..MAX_ROUTE_ATTEMPTS {
         assert!(drain_one_pending_route(&state).await.unwrap());
     }
@@ -445,7 +448,7 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
         .await
         .unwrap();
 
-    set_test_group_route_decider(Some(Arc::new(|input| {
+    state.set_test_group_route_decider(Some(Arc::new(|input| {
         Ok(ValidatedRouteDecision {
             mode: GroupRoutingMode::Specific,
             bot_ids: vec![input.candidates[0].bot_id.clone()],
@@ -454,7 +457,7 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     })));
 
     assert!(drain_one_pending_route(&state).await.unwrap());
-    set_test_group_route_decider(None);
+    state.set_test_group_route_decider(None);
 
     let recipients: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",
@@ -484,7 +487,8 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
     .await
     .unwrap();
 
-    set_test_group_route_decider(Some(Arc::new(|_| {
+    let state = AppState::new(pool.clone(), test_config());
+    state.set_test_group_route_decider(Some(Arc::new(|_| {
         Ok(ValidatedRouteDecision {
             mode: GroupRoutingMode::Everyone,
             bot_ids: Vec::new(),
@@ -507,9 +511,8 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
     .await
     .unwrap();
 
-    let state = AppState::new(pool.clone(), test_config());
     assert!(drain_one_pending_route(&state).await.unwrap());
-    set_test_group_route_decider(None);
+    state.set_test_group_route_decider(None);
 
     let recipients: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",

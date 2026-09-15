@@ -49,7 +49,7 @@ jobs:
       - run: cargo test -p computer-mcp
       - run: cargo test -p codex-provider
       - run: cargo test -p sprite-computer
-      - run: cargo test -p cloud-host --features test-utils
+      - run: cargo test -p cloud-host --features test-utils -- --test-threads=1
 
   rust:
     runs-on: macos-latest

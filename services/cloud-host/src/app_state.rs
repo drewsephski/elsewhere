@@ -13,6 +13,15 @@ use crate::codex_ops::CodexOpsPermit;
 use crate::events::registry::RunRegistry;
 use crate::provider_status_cache::ProviderStatusCache;
 
+#[cfg(any(test, feature = "test-utils"))]
+pub type TestGroupRouteDecider = Arc<
+    dyn Fn(
+            &crate::group_router::RouteDecisionInput,
+        ) -> Result<crate::group_router::ValidatedRouteDecision, String>
+        + Send
+        + Sync,
+>;
+
 pub struct PendingCodexLogin {
     pub owner_id: String,
     pub login_id: String,
@@ -43,6 +52,8 @@ pub struct AppState {
     pub provider_status_cache: ProviderStatusCache,
     /// Limits concurrent background group routing tasks (not Codex permits).
     pub group_route_semaphore: Arc<Semaphore>,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
 }
 
 impl AppState {
@@ -84,6 +95,16 @@ impl AppState {
             dispatcher_alive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_status_cache: ProviderStatusCache::default(),
             group_route_semaphore: Arc::new(Semaphore::new(2)),
+            #[cfg(any(test, feature = "test-utils"))]
+            test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn set_test_group_route_decider(&self, decider: Option<TestGroupRouteDecider>) {
+        *self
+            .test_group_route_decider
+            .lock()
+            .expect("test group route decider lock") = decider;
     }
 }

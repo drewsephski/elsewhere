@@ -116,28 +116,6 @@ struct ClaimedRoute {
     stored_fingerprint: Option<String>,
 }
 
-#[cfg(any(test, feature = "test-utils"))]
-type TestDecider =
-    Arc<dyn Fn(&RouteDecisionInput) -> Result<ValidatedRouteDecision, String> + Send + Sync>;
-
-#[cfg(any(test, feature = "test-utils"))]
-static TEST_DECIDER: std::sync::OnceLock<std::sync::Mutex<Option<TestDecider>>> =
-    std::sync::OnceLock::new();
-
-#[cfg(any(test, feature = "test-utils"))]
-fn test_decider_slot() -> &'static std::sync::Mutex<Option<TestDecider>> {
-    TEST_DECIDER.get_or_init(|| std::sync::Mutex::new(None))
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-pub fn set_test_group_route_decider(
-    decider: Option<
-        Arc<dyn Fn(&RouteDecisionInput) -> Result<ValidatedRouteDecision, String> + Send + Sync>,
-    >,
-) {
-    *test_decider_slot().lock().expect("test decider lock") = decider;
-}
-
 #[derive(Debug, Clone)]
 pub struct RouteDecisionInput {
     pub message_body: String,
@@ -436,7 +414,12 @@ async fn decide_route(
     input: &RouteDecisionInput,
 ) -> Result<ValidatedRouteDecision, String> {
     #[cfg(any(test, feature = "test-utils"))]
-    if let Some(decider) = test_decider_slot().lock().expect("decider lock").clone() {
+    if let Some(decider) = state
+        .test_group_route_decider
+        .lock()
+        .expect("test group route decider lock")
+        .clone()
+    {
         return decider(input);
     }
 
@@ -482,7 +465,10 @@ async fn decide_route(
                 .openai_api_key
                 .as_deref()
                 .ok_or_else(|| "responses_api_key_required".to_string())?;
-            let client = Client::new();
+            let client = Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .map_err(|e| e.to_string())?;
             let response = create_response(
                 &client,
                 api_key,
