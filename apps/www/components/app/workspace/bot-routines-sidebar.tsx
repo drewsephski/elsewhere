@@ -6,6 +6,7 @@ import { cn } from "cn";
 import { CalendarClock, Pause, Play } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { formatRoutineNextRun } from "@/lib/routine-time";
 
 const intervalLabels: Record<number, string> = {
   15: "Every 15 minutes",
@@ -15,11 +16,12 @@ const intervalLabels: Record<number, string> = {
 };
 
 function scheduleLabel(routine: Routine): string {
-  if (routine.scheduleLabel) return routine.scheduleLabel;
-  return (
+  const base =
+    routine.scheduleLabel ??
     intervalLabels[routine.intervalMinutes] ??
-    `Every ${routine.intervalMinutes} minutes`
-  );
+    `Every ${routine.intervalMinutes} minutes`;
+  const tz = routine.timezone || "UTC";
+  return `${base} · ${tz}`;
 }
 
 interface BotRoutinesSidebarProps {
@@ -105,7 +107,7 @@ export function BotRoutinesSidebar({
                 <p className="text-xs text-muted-foreground">{scheduleLabel(routine)}</p>
                 {routine.enabled ? (
                   <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                    Next {new Date(routine.nextRunAt).toLocaleString()}
+                    Next {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
                   </p>
                 ) : null}
               </div>

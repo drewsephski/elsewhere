@@ -28,7 +28,7 @@ pub fn format_group_context_block(lines: &[GroupContextLine]) -> String {
     for line in lines {
         let label = match line.author_kind.as_str() {
             "human" => line.display_name.clone(),
-            "bot" => line.display_name.clone(),
+            "system" => "Elsewhere".to_string(),
             _ => line.display_name.clone(),
         };
         out.push_str(&format!("{label}:\n{}\n\n", line.body.trim()));
@@ -108,12 +108,13 @@ pub async fn load_group_context_lines(
             if author_kind == "bot" && author_bot_id.as_deref() == Some(for_bot_id) {
                 return None;
             }
-            let display_name = if author_kind == "human" {
-                "You".to_string()
-            } else {
-                row.get::<Option<String>, _>("bot_name")
+            let display_name = match author_kind.as_str() {
+                "human" => "You".to_string(),
+                "system" => "Elsewhere".to_string(),
+                _ => row
+                    .get::<Option<String>, _>("bot_name")
                     .filter(|n| !n.is_empty())
-                    .unwrap_or_else(|| "Bot".to_string())
+                    .unwrap_or_else(|| "Bot".to_string()),
             };
             Some(GroupContextLine {
                 display_name,
@@ -216,6 +217,19 @@ mod tests {
         assert_eq!(selected.len(), MAX_GROUP_CONTEXT_MESSAGES);
         assert_eq!(selected.first().map(|l| l.sequence), Some(10));
         assert_eq!(selected.last().map(|l| l.sequence), Some(49));
+    }
+
+    #[test]
+    fn system_events_label_elsewhere_not_you() {
+        let lines = vec![GroupContextLine {
+            display_name: "Elsewhere".into(),
+            author_kind: "system".into(),
+            body: "Routine \"Daily\" started for Researcher.".into(),
+            sequence: 1,
+        }];
+        let block = format_group_context_block(&lines);
+        assert!(block.contains("Elsewhere:"));
+        assert!(!block.contains("You:\nRoutine"));
     }
 
     #[test]

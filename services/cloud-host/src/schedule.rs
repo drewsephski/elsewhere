@@ -5,6 +5,7 @@ use std::str::FromStr;
 use chrono::{
     DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc, Weekday,
 };
+use chrono::offset::LocalResult;
 use chrono_tz::Tz;
 use saffron::Cron;
 
@@ -169,14 +170,81 @@ pub fn parse_schedule(
     })
 }
 
+/// Map a local wall-clock time to UTC. Skips nonexistent DST times; on fall-back ambiguity
+/// picks the earlier UTC instant (single execution).
 fn local_datetime(
     tz: Tz,
     date: NaiveDate,
     time: NaiveTime,
 ) -> Option<DateTime<Utc>> {
-    tz.from_local_datetime(&date.and_time(time))
-        .single()
-        .map(|dt| dt.with_timezone(&Utc))
+    local_datetime_after(tz, date, time, DateTime::<Utc>::MIN_UTC)
+}
+
+/// Like `local_datetime`, but when ambiguous prefers the earliest UTC instant still after `not_before`.
+fn local_datetime_after(
+    tz: Tz,
+    date: NaiveDate,
+    time: NaiveTime,
+    not_before: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let threshold = not_before - Duration::seconds(1);
+    match tz.from_local_datetime(&date.and_time(time)) {
+        LocalResult::Single(dt) => {
+            let utc = dt.with_timezone(&Utc);
+            if utc > threshold {
+                Some(utc)
+            } else {
+                None
+            }
+        }
+        LocalResult::Ambiguous(earlier, later) => {
+            let e = earlier.with_timezone(&Utc);
+            if e > threshold {
+                return Some(e);
+            }
+            let l = later.with_timezone(&Utc);
+            if l > threshold {
+                Some(l)
+            } else {
+                None
+            }
+        }
+        LocalResult::None => None,
+    }
+}
+
+pub fn is_valid_occurrence(schedule: &ScheduleDefinition, at: DateTime<Utc>) -> bool {
+    match schedule.kind {
+        ScheduleKind::Interval => true,
+        ScheduleKind::Daily => {
+            let time = parse_time_hhmm(&schedule.expression).ok();
+            let time = match time {
+                Some(t) => t,
+                None => return false,
+            };
+            let local = at.with_timezone(&schedule.timezone);
+            local.time() == time
+        }
+        ScheduleKind::Weekly => {
+            let (days, time_str) = schedule.expression.split_once('|').unwrap_or(("", ""));
+            let weekdays = parse_weekdays(days).ok();
+            let time = parse_time_hhmm(time_str).ok();
+            match (weekdays, time) {
+                (Some(days), Some(time)) => {
+                    let local = at.with_timezone(&schedule.timezone);
+                    days.contains(&local.weekday()) && local.time() == time
+                }
+                _ => false,
+            }
+        }
+        ScheduleKind::Cron => {
+            let schedule_cron = Cron::from_str(&schedule.expression).ok();
+            match schedule_cron {
+                Some(cron) => cron_matches_local(&cron, at.with_timezone(&schedule.timezone)),
+                None => false,
+            }
+        }
+    }
 }
 
 fn next_daily(
@@ -189,10 +257,8 @@ fn next_daily(
     let local = anchor.with_timezone(&tz);
     let mut date = local.date_naive();
     for _ in 0..(366 * 2) {
-        if let Some(candidate) = local_datetime(tz, date, time) {
-            if candidate > anchor - Duration::seconds(1) {
-                return candidate;
-            }
+        if let Some(candidate) = local_datetime_after(tz, date, time, anchor) {
+            return candidate;
         }
         date = date.succ_opt().unwrap_or(date);
     }
@@ -211,10 +277,8 @@ fn next_weekly(
     let mut date = local.date_naive();
     for _ in 0..(366 * 2) {
         if days.contains(&date.weekday()) {
-            if let Some(candidate) = local_datetime(tz, date, time) {
-                if candidate > anchor - Duration::seconds(1) {
-                    return candidate;
-                }
+            if let Some(candidate) = local_datetime_after(tz, date, time, anchor) {
+                return candidate;
             }
         }
         date = date.succ_opt().unwrap_or(date);
@@ -251,10 +315,9 @@ fn next_cron(
     for _ in 0..(366 * 24 * 60) {
         probe += Duration::minutes(1);
         if cron_matches_local(&schedule, probe) {
-            if let Some(utc) = local_datetime(tz, probe.date_naive(), probe.time()) {
-                if utc > anchor - Duration::seconds(1) {
-                    return Ok(utc);
-                }
+            let utc = probe.with_timezone(&Utc);
+            if utc > anchor - Duration::seconds(1) {
+                return Ok(utc);
             }
         }
     }
@@ -286,15 +349,20 @@ pub fn next_after(
         }
         ScheduleKind::Daily => {
             let time = parse_time_hhmm(&schedule.expression)?;
-            Ok(next_daily(schedule.timezone, time, due, now))
+            let calendar_due = due + Duration::seconds(1);
+            Ok(next_daily(schedule.timezone, time, calendar_due, now))
         }
         ScheduleKind::Weekly => {
             let (days, time) = schedule.expression.split_once('|').unwrap();
             let weekdays = parse_weekdays(days)?;
             let time = parse_time_hhmm(time)?;
-            Ok(next_weekly(schedule.timezone, &weekdays, time, due, now))
+            let calendar_due = due + Duration::seconds(1);
+            Ok(next_weekly(schedule.timezone, &weekdays, time, calendar_due, now))
         }
-        ScheduleKind::Cron => next_cron(schedule.timezone, &schedule.expression, due, now),
+        ScheduleKind::Cron => {
+            let calendar_due = due + Duration::seconds(1);
+            next_cron(schedule.timezone, &schedule.expression, calendar_due, now)
+        }
     }
 }
 
@@ -308,10 +376,30 @@ pub fn initial_next_run(
             "Choose a first run within the next year".into(),
         ));
     }
-    if requested > now {
-        return Ok(requested);
+    match schedule.kind {
+        ScheduleKind::Interval => {
+            if requested > now {
+                Ok(requested)
+            } else {
+                next_after(schedule, requested, now)
+            }
+        }
+        _ => next_after(schedule, requested, now),
     }
-    next_after(schedule, requested, now)
+}
+
+/// Next fire time when resuming or refreshing a saved routine.
+pub fn resume_next_run(
+    schedule: &ScheduleDefinition,
+    current: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<DateTime<Utc>, ApiError> {
+    if current > now
+        && (schedule.kind == ScheduleKind::Interval || is_valid_occurrence(schedule, current))
+    {
+        return Ok(current);
+    }
+    next_after(schedule, current, now)
 }
 
 pub fn human_schedule_label(schedule: &ScheduleDefinition) -> String {

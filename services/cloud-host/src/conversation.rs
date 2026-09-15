@@ -475,12 +475,13 @@ pub async fn load_bounded_responses_history(
             ),
             0
           )
-          AND role IN ('user', 'assistant')
           AND status IN ('complete', 'cancelled', 'interrupted', 'error')
           AND (
-            role = 'user'
-            OR author_bot_id IS NULL
-            OR author_bot_id = $3
+            (role = 'user' AND author_kind = 'human')
+            OR (
+              role = 'assistant'
+              AND (author_bot_id IS NULL OR author_bot_id = $3)
+            )
           )
         ORDER BY sequence ASC
         "#,
@@ -617,5 +618,46 @@ mod tests {
             .filter(|v| v.get("content") == Some(&json!("current question")))
             .count();
         assert_eq!(current_count, 1);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn responses_history_excludes_system_user_messages(pool: PgPool) {
+        let bot_id = Uuid::new_v4().to_string();
+        let conv_id = Uuid::new_v4().to_string();
+        let system_id = Uuid::new_v4().to_string();
+        let asst_current = Uuid::new_v4().to_string();
+
+        sqlx::query(
+            "INSERT INTO bots (id, owner_id, name, system_prompt, model) VALUES ($1, 'alice', 't', '', 'gpt-5.6-luna')",
+        )
+        .bind(&bot_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'alice', $2)",
+        )
+        .bind(&conv_id)
+        .bind(&bot_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO messages (id, conversation_id, role, body, status, sequence, author_kind) VALUES
+             ($1, $2, 'user', 'Routine started', 'complete', 1, 'system'),
+             ($3, $2, 'assistant', '', 'pending', 2, 'bot')",
+        )
+        .bind(&system_id)
+        .bind(&conv_id)
+        .bind(&asst_current)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let history =
+            load_bounded_responses_history(&pool, &conv_id, &bot_id, &asst_current)
+                .await
+                .unwrap();
+        assert!(history.is_empty());
     }
 }

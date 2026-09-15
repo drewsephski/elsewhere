@@ -142,6 +142,68 @@ pub async fn admit_occurrence_in_tx(
     Ok(id)
 }
 
+pub async fn record_skipped_scheduled_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    owner: &str,
+    routine_id: &str,
+    scheduled_for: DateTime<Utc>,
+    error_code: &str,
+    error_message: &str,
+) -> Result<(), ApiError> {
+    if let Some(existing) = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM routine_runs WHERE routine_id = $1 AND scheduled_for = $2 AND trigger_kind = 'scheduled'",
+    )
+    .bind(routine_id)
+    .bind(scheduled_for)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_error)?
+    {
+        sqlx::query(
+            r#"
+            UPDATE routine_runs
+            SET status = 'skipped',
+                finished_at = NOW(),
+                error_code = $2,
+                error_message = $3
+            WHERE id = $1 AND status NOT IN ('completed', 'failed', 'cancelled', 'skipped')
+            "#,
+        )
+        .bind(&existing)
+        .bind(error_code)
+        .bind(error_message)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_error)?;
+        return Ok(());
+    }
+
+    let id = Uuid::new_v4().to_string();
+    if let Err(err) = sqlx::query(
+        r#"
+        INSERT INTO routine_runs (
+            id, routine_id, owner_id, scheduled_for, status, trigger_kind,
+            finished_at, error_code, error_message
+        ) VALUES ($1, $2, $3, $4, 'skipped', 'scheduled', NOW(), $5, $6)
+        "#,
+    )
+    .bind(&id)
+    .bind(routine_id)
+    .bind(owner)
+    .bind(scheduled_for)
+    .bind(error_code)
+    .bind(error_message)
+    .execute(&mut **tx)
+    .await
+    {
+        if is_unique_violation(&err) {
+            return Ok(());
+        }
+        return Err(db_error(err));
+    }
+    Ok(())
+}
+
 pub async fn link_run_in_tx(
     tx: &mut Transaction<'_, Postgres>,
     occurrence_id: &str,

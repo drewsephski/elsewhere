@@ -1,14 +1,16 @@
 //! Recurring bot assignments: timezone-aware schedules, destinations, durable history.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 
 use crate::error::ApiError;
 use crate::routine_runs::{self, RoutineRun};
 use crate::schedule::{
-    human_schedule_label, next_after, parse_schedule, ScheduleDefinition, ScheduleKind,
+    human_schedule_label, initial_next_run, next_after, parse_schedule, resume_next_run,
+    ScheduleDefinition, ScheduleKind,
 };
+use chrono_tz::Tz;
 
 pub use crate::schedule::next_occurrence;
 
@@ -137,9 +139,13 @@ pub fn compose_routine_runtime_message(
     timezone: &str,
     destination_label: &str,
 ) -> String {
-    let local = scheduled_for;
+    let tz: Tz = timezone
+        .parse()
+        .unwrap_or(chrono_tz::UTC);
+    let local = scheduled_for.with_timezone(&tz);
+    let occurrence = local.format("%Y-%m-%d %H:%M %Z").to_string();
     format!(
-        "Scheduled routine: {routine_name}\n\nRoutine instructions:\n{instructions}\n\nScheduled occurrence:\n{local} {timezone}\n\nDestination:\n{destination_label}\n\nThis is unattended scheduled work.\nFollow normal approval boundaries.\nIf a required source is unavailable, report the failure or missing source rather than inventing stale information."
+        "Scheduled routine: {routine_name}\n\nRoutine instructions:\n{instructions}\n\nScheduled occurrence:\n{occurrence} ({timezone})\n\nDestination:\n{destination_label}\n\nThis is unattended scheduled work.\nFollow normal approval boundaries.\nIf a required source is unavailable, report the failure or missing source rather than inventing stale information."
     )
 }
 
@@ -257,7 +263,8 @@ pub async fn save(
         .failure_policy
         .as_deref()
         .unwrap_or("pause_after_failure");
-    let next_run_at = input.next_run_at;
+    let now = Utc::now();
+    let next_run_at = initial_next_run(&schedule, input.next_run_at, now)?;
 
     let mut tx = pool.begin().await.map_err(db_error)?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
@@ -395,15 +402,36 @@ pub async fn set_enabled(
     id: &str,
     enabled: bool,
 ) -> Result<RoutineView, ApiError> {
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    let row: Routine = sqlx::query_as(
+        "SELECT * FROM routines WHERE id = $1 AND owner_id = $2 FOR UPDATE",
+    )
+    .bind(id)
+    .bind(owner)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_error)?
+    .ok_or(ApiError::NotFound)?;
+
+    let now = Utc::now();
+    let next_run_at = if enabled {
+        let schedule = parse_schedule(
+            &row.schedule_kind,
+            &row.schedule_expression,
+            &row.timezone,
+            Some(row.interval_minutes),
+        )?;
+        resume_next_run(&schedule, row.next_run_at, now)?
+    } else {
+        row.next_run_at
+    };
+
     let row: Routine = sqlx::query_as(
         r#"
         UPDATE routines SET
             enabled = $3,
             acknowledged_run_id = CASE WHEN $3 THEN last_run_id ELSE acknowledged_run_id END,
-            next_run_at = CASE
-                WHEN $3 AND next_run_at < NOW() THEN NOW() + interval '1 minute'
-                ELSE next_run_at
-            END,
+            next_run_at = $4,
             last_error = CASE WHEN $3 THEN NULL ELSE last_error END,
             updated_at = NOW()
         WHERE id = $1 AND owner_id = $2
@@ -413,10 +441,11 @@ pub async fn set_enabled(
     .bind(id)
     .bind(owner)
     .bind(enabled)
-    .fetch_optional(pool)
+    .bind(next_run_at)
+    .fetch_one(&mut *tx)
     .await
-    .map_err(db_error)?
-    .ok_or(ApiError::NotFound)?;
+    .map_err(db_error)?;
+    tx.commit().await.map_err(db_error)?;
     to_view(pool, row).await
 }
 
@@ -572,6 +601,15 @@ pub async fn tick(pool: &PgPool, now: DateTime<Utc>) -> Result<usize, ApiError> 
             .as_deref()
             .is_some_and(|s| matches!(s, "queued" | "running"))
         {
+            routine_runs::record_skipped_scheduled_in_tx(
+                &mut tx,
+                &routine.owner_id,
+                &routine.id,
+                scheduled_for,
+                "previous_run_active",
+                "Skipped — previous run still in progress",
+            )
+            .await?;
             sqlx::query("UPDATE routines SET next_run_at=$2, updated_at=NOW() WHERE id=$1")
                 .bind(&routine.id)
                 .bind(next)

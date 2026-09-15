@@ -40,6 +40,7 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import { CalendarClock } from "@/components/icons/lucide";
+import { formatRoutineNextRun } from "@/lib/routine-time";
 
 const intervals = [
   { value: 15, label: "Every 15 minutes" },
@@ -309,11 +310,17 @@ export function RoutinesManager() {
         header: "Schedule",
         cell: ({ row }) => (
           <div className="text-sm">
-            <p>{row.original.scheduleLabel ?? intervalLabel(row.original.intervalMinutes)}</p>
-            <p className="text-xs text-muted-foreground">{row.original.timezone}</p>
+            <p>
+              {row.original.scheduleLabel ?? intervalLabel(row.original.intervalMinutes)} ·{" "}
+              {row.original.timezone}
+            </p>
             {row.original.enabled ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                Next: {new Date(row.original.nextRunAt).toLocaleString()}
+                Next:{" "}
+                {formatRoutineNextRun(
+                  row.original.nextRunAt,
+                  row.original.timezone || "UTC",
+                )}
               </p>
             ) : null}
           </div>

@@ -8,6 +8,7 @@ import type { Routine } from "@/lib/api-types";
 import { WorkspacePageHeader } from "@/components/app/workspace-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/reui/badge";
+import { formatRoutineNextRun } from "@/lib/routine-time";
 
 export default function RoutineDetailPage() {
   const params = useParams<{ id: string }>();
@@ -75,7 +76,7 @@ export default function RoutineDetailPage() {
           {routine.enabled ? "Active" : "Paused"}
         </Badge>
         <span className="text-sm text-muted-foreground">
-          Next: {new Date(routine.nextRunAt).toLocaleString()}
+          Next: {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
         </span>
       </div>
       <p className="text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
@@ -103,8 +104,12 @@ export default function RoutineDetailPage() {
                 <div>
                   <p className="font-medium capitalize">{run.status}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(run.scheduledFor).toLocaleString()} · {run.triggerKind}
+                    {formatRoutineNextRun(run.scheduledFor, routine.timezone || "UTC")} ·{" "}
+                    {run.triggerKind}
                   </p>
+                  {run.status === "skipped" && run.errorMessage ? (
+                    <p className="text-xs text-muted-foreground">{run.errorMessage}</p>
+                  ) : null}
                 </div>
                 {run.runId ? (
                   <Link
