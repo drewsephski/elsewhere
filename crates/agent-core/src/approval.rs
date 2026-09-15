@@ -91,7 +91,6 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "bot_list" => ToolOperationKind::Read,
         "bot_delegate" => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
-        name if is_human_intervention_tool(name) => ToolOperationKind::Read,
         name if is_connector_tool(name) => ToolOperationKind::Read,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "browser_snapshot" => ToolOperationKind::Read,

@@ -82,3 +82,13 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_list_pull_requests",
     "github_get_pull_request",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_agent_tools_include_browser_request_human() {
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"browser_request_human"));
+    }
+}
