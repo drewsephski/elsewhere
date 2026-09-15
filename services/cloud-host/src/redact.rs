@@ -28,6 +28,26 @@ pub fn redact_secrets(input: &str) -> String {
             out = out.replace(&v, "[redacted]");
         }
     }
+    if let Ok(v) = std::env::var("GITHUB_CLIENT_SECRET") {
+        if !v.is_empty() {
+            out = out.replace(&v, "[redacted]");
+        }
+    }
+    out = redact_github_oauth_tokens(&out);
+    out
+}
+
+fn redact_github_oauth_tokens(input: &str) -> String {
+    let mut out = input.to_string();
+    for marker in ["gho_", "ghp_", "ghu_", "github_pat_"] {
+        while let Some(idx) = out.find(marker) {
+            let rest = &out[idx..];
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ')')
+                .unwrap_or(rest.len());
+            out.replace_range(idx..idx + end, "[redacted]");
+        }
+    }
     out
 }
 

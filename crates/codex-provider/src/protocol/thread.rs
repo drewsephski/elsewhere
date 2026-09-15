@@ -119,7 +119,15 @@ pub fn build_elsewhere_thread_start_params(
                 "browser_screenshot": { "approval_mode": "approve" },
                 "browser_download": { "approval_mode": "approve" },
                 "bot_list": { "approval_mode": "approve" },
-                "bot_delegate": { "approval_mode": "approve" }
+                "bot_delegate": { "approval_mode": "approve" },
+                "github_list_repositories": { "approval_mode": "approve" },
+                "github_search_repositories": { "approval_mode": "approve" },
+                "github_get_repository": { "approval_mode": "approve" },
+                "github_get_file_contents": { "approval_mode": "approve" },
+                "github_list_issues": { "approval_mode": "approve" },
+                "github_get_issue": { "approval_mode": "approve" },
+                "github_list_pull_requests": { "approval_mode": "approve" },
+                "github_get_pull_request": { "approval_mode": "approve" }
             }
         }
     });
