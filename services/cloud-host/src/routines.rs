@@ -7,8 +7,7 @@ use sqlx::{PgPool, Row};
 use crate::error::ApiError;
 use crate::routine_runs::{self, RoutineRun};
 use crate::schedule::{
-    human_schedule_label, initial_next_run, next_after, parse_schedule, ScheduleDefinition,
-    ScheduleKind,
+    human_schedule_label, next_after, parse_schedule, ScheduleDefinition, ScheduleKind,
 };
 
 pub use crate::schedule::next_occurrence;
@@ -641,6 +640,20 @@ pub async fn test_run(
             .await
             .map_err(db_error)?
             .ok_or(ApiError::NotFound)?;
+
+    if let Some(run_id) = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT run_id FROM routine_runs WHERE routine_id = $1 AND idempotency_key = $2",
+    )
+    .bind(id)
+    .bind(key)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_error)?
+    .flatten()
+    {
+        tx.commit().await.map_err(db_error)?;
+        return Ok(run_id);
+    }
 
     let busy = if let Some(last_run_id) = &routine.last_run_id {
         sqlx::query_scalar(

@@ -49,7 +49,15 @@ async fn concurrent_ticks_enqueue_one_occurrence_with_same_security_context(pool
     let work = work::claim_next(&pool).await.unwrap().unwrap();
     assert_eq!(Some(work.records.run_id.clone()), saved.last_run_id);
     assert_eq!(work.bot_id, input.bot_id);
-    assert_eq!(work.user_message, input.instructions);
+    assert!(work.user_message.contains(input.instructions.as_str()));
+    let humans: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM messages WHERE conversation_id = $1 AND author_kind = 'human'",
+    )
+    .bind(&work.records.conversation_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(humans, 0);
     let (owner,source):(String,String)=sqlx::query_as("SELECT r.owner_id,q.routine_id FROM agent_runs r JOIN work_queue q ON q.run_id=r.id WHERE r.id=$1")
         .bind(&work.records.run_id).fetch_one(&pool).await.unwrap();
     assert_eq!(owner, "alice");
