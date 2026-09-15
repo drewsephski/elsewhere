@@ -5,7 +5,6 @@ pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
 pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
-use crate::human_intervention::is_human_intervention_tool;
 use crate::tool_catalog::{is_browser_tool, is_collaboration_tool, is_connector_tool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

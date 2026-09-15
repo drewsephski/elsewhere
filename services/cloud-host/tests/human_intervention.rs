@@ -587,6 +587,7 @@ async fn host_restart_cancels_pending_interventions() {
         pool: pool.clone(),
         registry: Arc::new(cloud_host::approval::ApprovalWaitRegistry::default()),
     };
+    let intervention_id = Uuid::new_v4().to_string();
     sqlx::query(
         r#"
         INSERT INTO human_intervention_requests (
@@ -594,7 +595,7 @@ async fn host_restart_cancels_pending_interventions() {
         ) VALUES ($1, $2, $3, $4, 'consent', 'Accept cookies', 'pending', NOW(), NOW(), NOW())
         "#,
     )
-    .bind(Uuid::new_v4().to_string())
+    .bind(&intervention_id)
     .bind(&run_id)
     .bind(&owner)
     .bind(&computer.id)
@@ -606,7 +607,16 @@ async fn host_restart_cancels_pending_interventions() {
         .cancel_all_pending_on_host_restart()
         .await
         .unwrap();
-    assert_eq!(count, 1);
+    assert!(count >= 1, "expected at least one pending row cancelled");
+
+    let status: String = sqlx::query_scalar(
+        "SELECT status FROM human_intervention_requests WHERE id = $1",
+    )
+    .bind(&intervention_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status, "cancelled");
 }
 
 #[test]

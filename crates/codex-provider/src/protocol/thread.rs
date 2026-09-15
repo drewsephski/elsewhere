@@ -118,6 +118,7 @@ pub fn build_elsewhere_thread_start_params(
                 "browser_type": { "approval_mode": "approve" },
                 "browser_screenshot": { "approval_mode": "approve" },
                 "browser_download": { "approval_mode": "approve" },
+                "browser_request_human": { "approval_mode": "approve" },
                 "bot_list": { "approval_mode": "approve" },
                 "bot_delegate": { "approval_mode": "approve" },
                 "github_list_repositories": { "approval_mode": "approve" },
