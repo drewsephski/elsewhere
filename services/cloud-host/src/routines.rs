@@ -446,13 +446,14 @@ async fn admit_routine_work(
     )
     .await?;
 
-    let existing_run: Option<String> = sqlx::query_scalar(
+    let existing_run: Option<String> = sqlx::query_scalar::<_, Option<String>>(
         "SELECT run_id FROM routine_runs WHERE id = $1",
     )
     .bind(&occurrence_id)
     .fetch_optional(&mut **tx)
     .await
-    .map_err(db_error)?;
+    .map_err(db_error)?
+    .flatten();
     if let Some(run_id) = existing_run {
         return Ok(Some(run_id));
     }
