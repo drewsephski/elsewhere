@@ -1,4 +1,4 @@
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;

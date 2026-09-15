@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import type { BotSummary, Routine } from "@/lib/api-types";
+import type { BotSummary, ConversationSummary, Routine } from "@/lib/api-types";
 import { WorkspaceDataGrid } from "@/components/app/workspace-data-grid";
 import { WorkspaceEmptyState } from "@/components/app/workspace-empty-state";
 import {
@@ -48,6 +48,20 @@ const intervals = [
   { value: 10080, label: "Every 7 days" },
 ];
 
+const scheduleKinds = [
+  { value: "interval", label: "Every N minutes/hours" },
+  { value: "daily", label: "Daily at time" },
+  { value: "weekly", label: "Weekdays or weekly" },
+  { value: "cron", label: "Advanced cron" },
+];
+
+const timezones = [
+  "America/Chicago",
+  "America/New_York",
+  "America/Los_Angeles",
+  "UTC",
+];
+
 function localDateTime(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
     .toISOString()
@@ -59,9 +73,71 @@ const emptyForm = () => ({
   botId: "",
   instructions: "",
   intervalMinutes: 1440,
+  scheduleKind: "interval",
+  scheduleExpression: "1440",
+  dailyTime: "08:00",
+  weeklyTime: "08:00",
+  weeklyDays: "weekdays",
+  cronExpression: "0 8 * * 1-5",
+  timezone: "America/Chicago",
+  destinationConversationId: "",
+  failurePolicy: "pause_after_failure",
   nextRunAt: localDateTime(new Date(Date.now() + 3600_000)),
   enabled: true,
 });
+
+type RoutineFormState = ReturnType<typeof emptyForm>;
+
+function buildScheduleExpression(form: RoutineFormState) {
+  if (form.scheduleKind === "interval") return String(form.intervalMinutes);
+  if (form.scheduleKind === "daily") return form.dailyTime;
+  if (form.scheduleKind === "weekly") {
+    return `${form.weeklyDays}|${form.weeklyTime}`;
+  }
+  return form.cronExpression;
+}
+
+function routineToForm(routine: Routine): RoutineFormState {
+  const base = emptyForm();
+  const scheduleKind = routine.scheduleKind || "interval";
+  let dailyTime = base.dailyTime;
+  let weeklyTime = base.weeklyTime;
+  let weeklyDays = base.weeklyDays;
+  let cronExpression = base.cronExpression;
+  let intervalMinutes = routine.intervalMinutes;
+
+  if (scheduleKind === "daily") {
+    dailyTime = routine.scheduleExpression || dailyTime;
+  } else if (scheduleKind === "weekly") {
+    const [days, time] = (routine.scheduleExpression || "").split("|");
+    weeklyDays = days || weeklyDays;
+    weeklyTime = time || weeklyTime;
+  } else if (scheduleKind === "cron") {
+    cronExpression = routine.scheduleExpression || cronExpression;
+  } else {
+    const parsed = Number.parseInt(routine.scheduleExpression, 10);
+    if (!Number.isNaN(parsed)) intervalMinutes = parsed;
+  }
+
+  return {
+    ...base,
+    name: routine.name,
+    botId: routine.botId,
+    instructions: routine.instructions,
+    intervalMinutes,
+    scheduleKind,
+    scheduleExpression: routine.scheduleExpression || String(intervalMinutes),
+    dailyTime,
+    weeklyTime,
+    weeklyDays,
+    cronExpression,
+    timezone: routine.timezone || base.timezone,
+    destinationConversationId: routine.destinationConversationId ?? "",
+    failurePolicy: routine.failurePolicy || base.failurePolicy,
+    nextRunAt: localDateTime(new Date(routine.nextRunAt)),
+    enabled: routine.enabled,
+  };
+}
 
 async function read<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await cloudHostFetch(path, init);
@@ -74,6 +150,7 @@ export function RoutinesManager() {
   const router = useRouter();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [bots, setBots] = useState<BotSummary[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -87,12 +164,14 @@ export function RoutinesManager() {
 
   const load = useCallback(async () => {
     try {
-      const [nextRoutines, nextBots] = await Promise.all([
+      const [nextRoutines, nextBots, nextConversations] = await Promise.all([
         read<Routine[]>("/v1/routines"),
         read<BotSummary[]>("/v1/bots"),
+        read<ConversationSummary[]>("/v1/conversations"),
       ]);
       setRoutines(nextRoutines);
       setBots(nextBots);
+      setConversations(nextConversations);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load routines");
@@ -113,8 +192,17 @@ export function RoutinesManager() {
       await read<Routine>(editing ? `/v1/routines/${editing}` : "/v1/routines", {
         method: editing ? "PUT" : "POST",
         body: JSON.stringify({
-          ...form,
+          botId: form.botId,
+          name: form.name,
+          instructions: form.instructions,
+          intervalMinutes: form.intervalMinutes,
+          scheduleKind: form.scheduleKind,
+          scheduleExpression: buildScheduleExpression(form),
+          timezone: form.timezone,
+          destinationConversationId: form.destinationConversationId || null,
+          failurePolicy: form.failurePolicy,
           nextRunAt: new Date(form.nextRunAt).toISOString(),
+          enabled: form.enabled,
         }),
       });
       setForm(emptyForm());
@@ -157,7 +245,7 @@ export function RoutinesManager() {
       setBusy(routine.id);
       setError(null);
       try {
-        const result = await read<{ runId: string }>(`/v1/routines/${routine.id}/run`, {
+        const result = await read<{ runId: string }>(`/v1/routines/${routine.id}/test`, {
           method: "POST",
           headers: { "Idempotency-Key": crypto.randomUUID() },
         });
@@ -173,14 +261,7 @@ export function RoutinesManager() {
 
   const edit = useCallback((routine: Routine) => {
     setEditing(routine.id);
-    setForm({
-      name: routine.name,
-      botId: routine.botId,
-      instructions: routine.instructions,
-      intervalMinutes: routine.intervalMinutes,
-      nextRunAt: localDateTime(new Date(routine.nextRunAt)),
-      enabled: routine.enabled,
-    });
+    setForm(routineToForm(routine));
     document.getElementById("routine-name")?.focus();
   }, []);
 
@@ -201,7 +282,12 @@ export function RoutinesManager() {
         header: "Routine",
         cell: ({ row }) => (
           <div className="min-w-0 py-0.5">
-            <p className="font-medium">{row.original.name}</p>
+            <Link
+              href={`/app/routines/${row.original.id}`}
+              className="font-medium hover:underline underline-offset-2"
+            >
+              {row.original.name}
+            </Link>
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
               {row.original.instructions}
             </p>
@@ -223,7 +309,8 @@ export function RoutinesManager() {
         header: "Schedule",
         cell: ({ row }) => (
           <div className="text-sm">
-            <p>{intervalLabel(row.original.intervalMinutes)}</p>
+            <p>{row.original.scheduleLabel ?? intervalLabel(row.original.intervalMinutes)}</p>
+            <p className="text-xs text-muted-foreground">{row.original.timezone}</p>
             {row.original.enabled ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 Next: {new Date(row.original.nextRunAt).toLocaleString()}
@@ -265,7 +352,7 @@ export function RoutinesManager() {
                 disabled={isBusy}
                 onClick={() => void runOnce(routine)}
               >
-                Run once
+                Test run
               </Button>
               <Button
                 type="button"
@@ -344,7 +431,7 @@ export function RoutinesManager() {
         <FrameHeader>
           <FrameTitle>{editing ? "Edit routine" : "Create a routine"}</FrameTitle>
           <FrameDescription>
-            Repeats at a fixed interval. Your Elsewhere host must be running.
+            Server-side schedules run without your browser. Missed times combine into one run.
           </FrameDescription>
         </FrameHeader>
         <FramePanel>
@@ -382,22 +469,135 @@ export function RoutinesManager() {
               />
             </FormItem>
             <FormItem>
-              <Label htmlFor="routine-interval">Repeat</Label>
+              <Label htmlFor="routine-schedule-kind">Schedule</Label>
               <Select
-                value={String(form.intervalMinutes)}
+                value={form.scheduleKind}
                 onValueChange={(value) => {
-                  if (value) setForm({ ...form, intervalMinutes: Number(value) });
+                  if (value) setForm({ ...form, scheduleKind: value });
                 }}
               >
-                <SelectTrigger id="routine-interval" className="w-full">
+                <SelectTrigger id="routine-schedule-kind" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {intervals.map((interval) => (
-                    <SelectItem key={interval.value} value={String(interval.value)}>
-                      {interval.label}
+                  {scheduleKinds.map((kind) => (
+                    <SelectItem key={kind.value} value={kind.value}>
+                      {kind.label}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+            {form.scheduleKind === "interval" ? (
+              <FormItem>
+                <Label htmlFor="routine-interval">Repeat</Label>
+                <Select
+                  value={String(form.intervalMinutes)}
+                  onValueChange={(value) => {
+                    if (value) setForm({ ...form, intervalMinutes: Number(value) });
+                  }}
+                >
+                  <SelectTrigger id="routine-interval" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intervals.map((interval) => (
+                      <SelectItem key={interval.value} value={String(interval.value)}>
+                        {interval.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            ) : null}
+            {form.scheduleKind === "daily" ? (
+              <FormItem>
+                <Label htmlFor="routine-daily-time">Time</Label>
+                <Input
+                  id="routine-daily-time"
+                  type="time"
+                  value={form.dailyTime}
+                  onChange={(e) => setForm({ ...form, dailyTime: e.target.value })}
+                />
+              </FormItem>
+            ) : null}
+            {form.scheduleKind === "weekly" ? (
+              <>
+                <FormItem>
+                  <Label htmlFor="routine-weekly-days">Days</Label>
+                  <Input
+                    id="routine-weekly-days"
+                    value={form.weeklyDays}
+                    onChange={(e) => setForm({ ...form, weeklyDays: e.target.value })}
+                    placeholder="weekdays or MON,WED,FRI"
+                  />
+                </FormItem>
+                <FormItem>
+                  <Label htmlFor="routine-weekly-time">Time</Label>
+                  <Input
+                    id="routine-weekly-time"
+                    type="time"
+                    value={form.weeklyTime}
+                    onChange={(e) => setForm({ ...form, weeklyTime: e.target.value })}
+                  />
+                </FormItem>
+              </>
+            ) : null}
+            {form.scheduleKind === "cron" ? (
+              <FormItem>
+                <Label htmlFor="routine-cron">Cron</Label>
+                <Input
+                  id="routine-cron"
+                  value={form.cronExpression}
+                  onChange={(e) => setForm({ ...form, cronExpression: e.target.value })}
+                  placeholder="0 8 * * 1-5"
+                />
+              </FormItem>
+            ) : null}
+            <FormItem>
+              <Label htmlFor="routine-timezone">Timezone</Label>
+              <Select
+                value={form.timezone}
+                onValueChange={(value) => {
+                  if (value) setForm({ ...form, timezone: value });
+                }}
+              >
+                <SelectTrigger id="routine-timezone" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {timezones.map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FormItem>
+            <FormItem>
+              <Label htmlFor="routine-destination">Post results to</Label>
+              <Select
+                value={form.destinationConversationId || "direct"}
+                onValueChange={(value) => {
+                  setForm({
+                    ...form,
+                    destinationConversationId:
+                      value === "direct" || value == null ? "" : value,
+                  });
+                }}
+              >
+                <SelectTrigger id="routine-destination" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="direct">Bot direct chat</SelectItem>
+                  {conversations
+                    .filter((c) => c.conversationType === "group")
+                    .map((conversation) => (
+                      <SelectItem key={conversation.id} value={conversation.id}>
+                        {conversation.name ?? "Group"}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </FormItem>

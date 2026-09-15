@@ -15,6 +15,7 @@ const intervalLabels: Record<number, string> = {
 };
 
 function scheduleLabel(routine: Routine): string {
+  if (routine.scheduleLabel) return routine.scheduleLabel;
   return (
     intervalLabels[routine.intervalMinutes] ??
     `Every ${routine.intervalMinutes} minutes`

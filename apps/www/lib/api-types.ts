@@ -164,6 +164,20 @@ export interface DelegationSummary {
   artifacts?: DelegationArtifactSummary[];
 }
 
+export interface RoutineRun {
+  id: string;
+  routineId: string;
+  runId: string | null;
+  scheduledFor: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  triggerKind: string;
+  createdAt: string;
+}
+
 export interface Routine {
   id: string;
   botId: string;
@@ -174,4 +188,14 @@ export interface Routine {
   nextRunAt: string;
   lastRunId: string | null;
   lastError: string | null;
+  scheduleKind: string;
+  scheduleExpression: string;
+  timezone: string;
+  scheduleLabel: string;
+  destinationConversationId: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  consecutiveFailures: number;
+  failurePolicy: string;
+  recentRuns: RoutineRun[];
 }
