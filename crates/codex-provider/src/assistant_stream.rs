@@ -107,6 +107,14 @@ impl AssistantDeltaCoalescer {
     }
 }
 
+pub fn phase_to_event_str(phase: MessagePhase) -> &'static str {
+    match phase {
+        MessagePhase::Commentary => "commentary",
+        MessagePhase::FinalAnswer => "final_answer",
+        MessagePhase::Unknown => "unknown",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -168,13 +176,5 @@ mod tests {
         assert_eq!(once, "hello world");
         let twice = replay_text(&chunks.iter().chain(chunks.iter()).cloned().collect::<Vec<_>>());
         assert_eq!(twice, "hello world");
-    }
-}
-
-pub fn phase_to_event_str(phase: MessagePhase) -> &'static str {
-    match phase {
-        MessagePhase::Commentary => "commentary",
-        MessagePhase::FinalAnswer => "final_answer",
-        MessagePhase::Unknown => "unknown",
     }
 }

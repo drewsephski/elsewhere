@@ -305,8 +305,8 @@ impl CodexRunEngine {
         };
         phases.mark_thread_open();
 
-        if self.config.compact_after_completed_turns > 0 {
-            if maybe_compact_codex_thread(
+        if self.config.compact_after_completed_turns > 0
+            && maybe_compact_codex_thread(
                 &client,
                 &shared,
                 &ctx,
@@ -315,10 +315,9 @@ impl CodexRunEngine {
             )
             .await
             .is_err()
-            {
-                cleanup_run(client, mcp, None).await;
-                return Ok(());
-            }
+        {
+            cleanup_run(client, mcp, None).await;
+            return Ok(());
         }
 
         let tools = match client

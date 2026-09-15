@@ -189,7 +189,7 @@ pub async fn run_agent_loop(
             .await
             {
                 Ok(value) => value,
-                Err(err) if err == ToolError::Cancelled => {
+                Err(ToolError::Cancelled) => {
                     finalize_cancelled(&deps, &ctx).await?;
                     return Ok(());
                 }
@@ -313,14 +313,14 @@ pub async fn run_agent_loop(
 }
 
 fn is_computer_fatal(err: &ToolError) -> bool {
-    match err.computer_error() {
+    matches!(
+        err.computer_error(),
         Some(
             ComputerError::NotProvisioned
-            | ComputerError::BootFailed(_)
-            | ComputerError::GuestUnavailable(_),
-        ) => true,
-        _ => false,
-    }
+                | ComputerError::BootFailed(_)
+                | ComputerError::GuestUnavailable(_),
+        )
+    )
 }
 
 async fn persist_event(

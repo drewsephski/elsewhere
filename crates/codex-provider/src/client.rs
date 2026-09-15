@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use serde_json::json;
 
 use crate::error::CodexProviderError;
 use crate::process::{CodexProcessLaunch, ManagedCodexProcess, DEFAULT_REQUEST_TIMEOUT};

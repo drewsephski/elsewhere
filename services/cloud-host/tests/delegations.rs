@@ -128,7 +128,7 @@ async fn depth_and_fanout_limits(pool: PgPool) {
     let b = bot_with_computer(&pool, "alice", "B").await;
     let source = enqueue_user_run(&pool, "alice", &a.id, "start").await;
 
-    let mut current_run = source.run_id.clone();
+    let mut current_run = String::new();
     let mut parent_ctx = CollaborationContext {
         owner_id: "alice".into(),
         source_bot_id: a.id.clone(),

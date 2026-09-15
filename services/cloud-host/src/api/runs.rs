@@ -405,8 +405,6 @@ pub async fn run_events_sse(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn default_model_is_luna_when_omitted() {
         assert_eq!(agent_core::DEFAULT_MODEL, "gpt-5.6-luna");

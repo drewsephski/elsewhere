@@ -389,7 +389,7 @@ pub async fn bootstrap_run(
                 .await
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
         match row {
-            Some((existing_bot, existing_owner)) if existing_owner != owner_id => {
+            Some((_existing_bot, existing_owner)) if existing_owner != owner_id => {
                 return Err(ApiError::NotFound);
             }
             Some((existing_bot, _)) if existing_bot != bot_id => {

@@ -170,17 +170,8 @@ pub fn parse_schedule(
     })
 }
 
-/// Map a local wall-clock time to UTC. Skips nonexistent DST times; on fall-back ambiguity
-/// picks the earlier UTC instant (single execution).
-fn local_datetime(
-    tz: Tz,
-    date: NaiveDate,
-    time: NaiveTime,
-) -> Option<DateTime<Utc>> {
-    local_datetime_after(tz, date, time, DateTime::<Utc>::MIN_UTC)
-}
-
-/// Like `local_datetime`, but when ambiguous prefers the earliest UTC instant still after `not_before`.
+/// Map a local wall-clock time to UTC at or after `not_before`. Skips nonexistent DST times;
+/// on fall-back ambiguity prefers the earliest UTC instant still after `not_before`.
 fn local_datetime_after(
     tz: Tz,
     date: NaiveDate,

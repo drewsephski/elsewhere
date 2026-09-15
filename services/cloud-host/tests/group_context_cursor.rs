@@ -64,7 +64,7 @@ async fn setup_group_run(
     )
     .await
     .unwrap();
-    conversation::record_pending_group_context_boundary(&pool, &run.run_id, through_sequence)
+    conversation::record_pending_group_context_boundary(pool, &run.run_id, through_sequence)
         .await
         .unwrap();
     (conv, bot_a.id, run.run_id, run.request_id)

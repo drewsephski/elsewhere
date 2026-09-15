@@ -1,55 +1,6 @@
-use agent_core::{AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry};
-use async_trait::async_trait;
-use cloud_host::{artifact_handoff, result_finalization, run_lifecycle, work};
+use cloud_host::{artifact_handoff, result_finalization, work};
 use sqlx::PgPool;
-use std::collections::HashMap;
-use std::sync::Mutex;
 use uuid::Uuid;
-
-struct MemoryComputer {
-    files: Mutex<HashMap<String, Vec<u8>>>,
-}
-
-#[async_trait]
-impl AgentComputer for MemoryComputer {
-    async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
-        Ok(ComputerInfo {
-            ready: true,
-            protocol_version: 1,
-            detail: None,
-        })
-    }
-
-    async fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
-        Ok(Vec::new())
-    }
-
-    async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
-        self.files
-            .lock()
-            .unwrap()
-            .get(path)
-            .cloned()
-            .ok_or_else(|| ComputerError::ExecutionFailed(format!("missing {path}")))
-    }
-
-    async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
-        self.files
-            .lock()
-            .unwrap()
-            .insert(path.to_string(), data.to_vec());
-        Ok(())
-    }
-
-    async fn exec(&self, _command: &str) -> Result<ExecResult, ComputerError> {
-        Ok(ExecResult {
-            ok: true,
-            stdout: String::new(),
-            stderr: String::new(),
-            exit_code: 0,
-        })
-    }
-}
 
 #[sqlx::test(migrations = "./migrations")]
 async fn completed_target_without_results_finalization_does_not_resume(pool: PgPool) {

@@ -12,8 +12,6 @@ use crate::auth::LEGACY_LOCAL_OWNER;
 use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use futures_util::FutureExt;
 use openai_responses::OpenAiResponsesModel;
-use serde_json::json;
-use sprite_computer::SpriteComputer;
 use tokio::sync::OwnedSemaphorePermit;
 use tokio::time::timeout;
 

@@ -99,10 +99,10 @@ fn verify_codex_mcp_tool_exposure_support() -> Result<(), CodexProviderError> {
         .map_err(|e| CodexProviderError::UnsupportedCodexToolExposure(format!("tempdir: {e}")))?;
     generate_schema_to_dir(temp.path())?;
     verify_mcp_tool_exposure_in_schema_dir(temp.path()).or_else(|schema_err| {
-        verify_mcp_tool_exposure_config(&executable).or_else(|strict_err| {
-            Err(CodexProviderError::UnsupportedCodexToolExposure(format!(
+        verify_mcp_tool_exposure_config(&executable).map_err(|strict_err| {
+            CodexProviderError::UnsupportedCodexToolExposure(format!(
                 "{schema_err}; configuration probe: {strict_err}"
-            )))
+            ))
         })
     })
 }
@@ -289,10 +289,10 @@ fn scan_schema_value(
                     if let Value::Array(items) = child {
                         for item in items {
                             if let Some(s) = item.as_str() {
-                                if matches!(s, "deferred" | "code_mode" | "direct") {
-                                    if !exposure_enums.iter().any(|v| v == s) {
-                                        exposure_enums.push(s.to_string());
-                                    }
+                                if matches!(s, "deferred" | "code_mode" | "direct")
+                                    && !exposure_enums.iter().any(|v| v == s)
+                                {
+                                    exposure_enums.push(s.to_string());
                                 }
                             }
                         }

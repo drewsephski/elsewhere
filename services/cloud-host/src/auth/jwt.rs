@@ -21,6 +21,7 @@ struct JwksResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct Jwk {
     kid: Option<String>,
     kty: String,
@@ -31,6 +32,7 @@ struct Jwk {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 struct Claims {
     sub: String,
     iss: String,

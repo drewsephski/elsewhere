@@ -644,7 +644,7 @@ pub async fn tick(pool: &PgPool, now: DateTime<Utc>) -> Result<usize, ApiError> 
                 Ok(Some(_)) => count += 1,
                 Ok(None) => {}
                 Err(ApiError::Internal(message)) => return Err(ApiError::Internal(message)),
-                Err(err) => {
+                Err(_err) => {
                     sqlx::query(
                         "UPDATE routines SET enabled=FALSE, last_error='Could not schedule work. Check the bot, computer, destination, and pending work before resuming.', updated_at=NOW() WHERE id=$1",
                     )

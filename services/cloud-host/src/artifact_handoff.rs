@@ -131,7 +131,7 @@ pub async fn plan_transfers_for_delegation(
         )
         .bind(Uuid::new_v4().to_string())
         .bind(delegation_id)
-        .bind(&result_id)
+        .bind(result_id)
         .bind(&target_run_id)
         .bind(&source_computer_id)
         .bind(if shared {
@@ -499,7 +499,7 @@ pub async fn reconcile_artifact_handoffs(state: &AppState) -> Result<(), sqlx::E
         plan_transfers_for_delegation(&state.pool, &delegation_id).await?;
         execute_pending_transfers_for_delegation(state, &delegation_id)
             .await
-            .map_err(|e| sqlx::Error::Protocol(e.into()))?;
+            .map_err(|e| sqlx::Error::Protocol(e))?;
         crate::run_lifecycle::try_admit_delegation_return(&state.pool, &delegation_id).await?;
     }
     Ok(())

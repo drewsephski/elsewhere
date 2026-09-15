@@ -3,8 +3,8 @@ use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
 use agent_core::{
-    AgentEvent, AgentLoopContext, EventSink, MessageRole, MessageStatus, RuntimeError, RunStore,
-    SharedRunDeps, StructuredMessageInput,
+    AgentEvent, AgentLoopContext, MessageRole, MessageStatus, RuntimeError, SharedRunDeps,
+    StructuredMessageInput,
 };
 
 use crate::assistant_stream::{phase_to_event_str, CoalescedAssistantDelta};

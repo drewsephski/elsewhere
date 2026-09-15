@@ -27,7 +27,7 @@ pub fn is_blocked_ip(ip: IpAddr) -> bool {
 
 fn is_cgnat_ipv4(v4: std::net::Ipv4Addr) -> bool {
     let [a, b, _, _] = v4.octets();
-    a == 100 && b >= 64 && b <= 127
+    a == 100 && (64..=127).contains(&b)
 }
 
 fn is_unique_local_ipv6(v6: std::net::Ipv6Addr) -> bool {
