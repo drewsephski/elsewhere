@@ -147,6 +147,7 @@ impl CodexRunEngine {
             tool_run,
             shared.cancel.clone(),
             shared.collaboration.clone(),
+            shared.connectors.clone(),
             ctx.conversation_id.clone(),
         )
         .await

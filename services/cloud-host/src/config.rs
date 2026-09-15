@@ -36,6 +36,11 @@ pub struct Config {
     /// When true, the legacy local owner may bypass tool approvals (local dev only).
     pub legacy_local_approval_bypass: bool,
     pub browser_enabled: bool,
+    /// Base64-encoded 32-byte AES key for connector token encryption.
+    pub connector_secret_key: Option<String>,
+    pub github_client_id: Option<String>,
+    pub github_client_secret: Option<String>,
+    pub github_oauth_redirect_uri: Option<String>,
 }
 
 impl Config {
@@ -136,6 +141,19 @@ impl Config {
         let bind_addr = resolve_bind_addr(auth_mode)?;
         validate_bind_addr(auth_mode, &bind_addr)?;
 
+        let connector_secret_key = env::var("ELSEWHERE_CONNECTOR_SECRET_KEY")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let github_client_id = env::var("GITHUB_CLIENT_ID")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let github_client_secret = env::var("GITHUB_CLIENT_SECRET")
+            .ok()
+            .filter(|v| !v.is_empty());
+        let github_oauth_redirect_uri = env::var("GITHUB_OAUTH_REDIRECT_URI")
+            .ok()
+            .filter(|v| !v.is_empty());
+
         Ok(Self {
             database_url,
             openai_api_key,
@@ -159,6 +177,10 @@ impl Config {
             enforce_tool_approvals_internal,
             legacy_local_approval_bypass,
             browser_enabled,
+            connector_secret_key,
+            github_client_id,
+            github_client_secret,
+            github_oauth_redirect_uri,
         })
     }
 

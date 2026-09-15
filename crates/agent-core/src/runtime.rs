@@ -35,6 +35,7 @@ pub struct AgentLoopDeps {
     pub owner_id: String,
     pub computer_id: String,
     pub collaboration: Option<Arc<dyn crate::collaboration::AgentCollaboration>>,
+    pub connectors: Option<Arc<dyn crate::connectors::AgentConnectors>>,
 }
 
 pub async fn run_agent_loop(
@@ -179,6 +180,7 @@ pub async fn run_agent_loop(
             let tool_result = match dispatch_agent_tool_with_gate(
                 deps.computer.as_ref(),
                 deps.collaboration.as_ref(),
+                deps.connectors.as_ref(),
                 &name,
                 &arguments,
                 &deps.cancel,
@@ -698,6 +700,7 @@ mod tests {
             owner_id: "owner".into(),
             computer_id: "comp".into(),
             collaboration: None,
+            connectors: None,
         };
 
         let ctx = AgentLoopContext {

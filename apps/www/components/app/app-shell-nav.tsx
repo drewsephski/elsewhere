@@ -12,6 +12,7 @@ import {
   LogOut,
   MessageSquare,
   Monitor,
+  Plug,
 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,6 +23,7 @@ const linkIcons = {
   [appRoutes.results]: Files,
   [appRoutes.routines]: CalendarClock,
   [appRoutes.computers]: Monitor,
+  [appRoutes.connectors]: Plug,
 } as const;
 
 interface AppShellNavProps {

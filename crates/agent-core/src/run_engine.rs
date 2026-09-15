@@ -13,6 +13,7 @@ use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
 use crate::collaboration::AgentCollaboration;
+use crate::connectors::AgentConnectors;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 use agent_skills::SkillPackage;
 
@@ -49,6 +50,7 @@ pub struct SharedRunDeps {
     pub owner_id: String,
     pub computer_id: String,
     pub collaboration: Option<Arc<dyn AgentCollaboration>>,
+    pub connectors: Option<Arc<dyn AgentConnectors>>,
     /// Immutable Agent Skill packages snapshotted at run admission.
     pub skill_packages: Arc<[SkillPackage]>,
 }
@@ -73,6 +75,7 @@ impl SharedRunDeps {
             owner_id,
             computer_id,
             collaboration: None,
+            connectors: None,
             skill_packages: Arc::from([]),
         }
     }
@@ -122,6 +125,7 @@ pub fn responses_loop_deps(
         owner_id: shared.owner_id.clone(),
         computer_id: shared.computer_id.clone(),
         collaboration: shared.collaboration.clone(),
+        connectors: shared.connectors.clone(),
     }
 }
 

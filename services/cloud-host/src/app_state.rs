@@ -11,6 +11,7 @@ use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
 use crate::codex_ops::CodexOpsPermit;
 use crate::events::registry::RunRegistry;
+use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::provider_status_cache::ProviderStatusCache;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -52,8 +53,16 @@ pub struct AppState {
     pub provider_status_cache: ProviderStatusCache,
     /// Limits concurrent background group routing tasks (not Codex permits).
     pub group_route_semaphore: Arc<Semaphore>,
+    pub connector_secret_box: Option<Arc<ConnectorSecretBox>>,
+    pub github_client: GitHubClient,
     #[cfg(any(test, feature = "test-utils"))]
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
+}
+
+impl AppState {
+    pub fn connector_secret_box(&self) -> Option<Arc<ConnectorSecretBox>> {
+        self.connector_secret_box.clone()
+    }
 }
 
 impl AppState {
@@ -78,6 +87,13 @@ impl AppState {
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
             timeout: Duration::from_secs(config.tool_approval_timeout_secs),
         };
+        let connector_secret_box = config
+            .connector_secret_key
+            .as_deref()
+            .and_then(|key| ConnectorSecretBox::from_base64_key(key).ok())
+            .map(Arc::new);
+        let github_client = GitHubClient::production();
+
         Self {
             pool,
             config: Arc::new(config),
@@ -95,6 +111,8 @@ impl AppState {
             dispatcher_alive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_status_cache: ProviderStatusCache::default(),
             group_route_semaphore: Arc::new(Semaphore::new(2)),
+            connector_secret_box,
+            github_client,
             #[cfg(any(test, feature = "test-utils"))]
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
         }

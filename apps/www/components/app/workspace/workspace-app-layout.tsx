@@ -10,6 +10,7 @@ const LEGACY_PREFIXES = [
   "/app/results",
   "/app/routines",
   "/app/computers",
+  "/app/connectors",
 ];
 
 function isLegacyRoute(pathname: string): boolean {

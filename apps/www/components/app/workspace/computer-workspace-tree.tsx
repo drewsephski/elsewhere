@@ -18,9 +18,8 @@ import {
   useTree,
   type TreeViewElement,
 } from "@/components/ui/file-tree";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { RefreshCw } from "@/components/icons/lucide";
 import { useActiveRun } from "@/contexts/active-run-context";
 import { useComputerWorkspace } from "@/hooks/use-computer-workspace";
@@ -102,20 +101,62 @@ function WorkspaceTreeCompactSync({
   return null;
 }
 
+function WorkspaceEntryName({
+  entry,
+  computerId,
+  onRenamed,
+  startEditing,
+  onEditingChange,
+  className,
+}: {
+  entry: WorkspaceEntry;
+  computerId: string;
+  onRenamed: () => void;
+  startEditing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+  className?: string;
+}) {
+  return (
+    <InlineRenameLabel
+      value={entry.name}
+      startEditing={startEditing}
+      onEditingChange={onEditingChange}
+      onCommit={async (next) => {
+        await renameWorkspaceEntry(computerId, entry.path, next);
+        onRenamed();
+      }}
+      className={cn("truncate text-xs font-normal", className)}
+      inputClassName="text-xs font-normal"
+      ariaLabel={`Rename ${entry.name}`}
+      nested
+    />
+  );
+}
+
 function WorkspaceTreeBranch({
   entry,
+  computerId,
   dirs,
   errors,
   isLoading,
   onOpenFile,
   onContextMenu,
+  onRequestDelete,
+  onRefresh,
+  renamingPath,
+  onRenamingPathChange,
 }: {
   entry: WorkspaceEntry;
+  computerId: string;
   dirs: Record<string, WorkspaceEntry[]>;
   errors: Record<string, string>;
   isLoading: (path: string) => boolean;
   onOpenFile: (path: string) => void;
   onContextMenu: (event: React.MouseEvent, entry: WorkspaceEntry) => void;
+  onRequestDelete: (entry: WorkspaceEntry) => void;
+  onRefresh: () => void;
+  renamingPath: string | null;
+  onRenamingPathChange: (path: string | null) => void;
 }) {
   const handleContextMenu = useCallback(
     (event: React.MouseEvent) => {
@@ -124,16 +165,63 @@ function WorkspaceTreeBranch({
     [entry, onContextMenu],
   );
 
+  const rowActions = (
+    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/entry:opacity-100 group-focus-within/entry:opacity-100">
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className="h-6 px-1.5 text-[10px] text-muted-foreground"
+        aria-label={`Rename ${entry.name}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRenamingPathChange(entry.path);
+        }}
+      >
+        Rename
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-red-700"
+        aria-label={`Delete ${entry.name}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRequestDelete(entry);
+        }}
+      >
+        Delete
+      </Button>
+    </div>
+  );
+
   if (!entry.isDir) {
     return (
-      <File
-        value={entry.path}
-        handleSelect={onOpenFile}
-        onContextMenu={handleContextMenu}
-        aria-label={`Open ${entry.name}`}
-      >
-        {entry.name}
-      </File>
+      <div className="group/entry flex min-w-0 items-center gap-0.5 pr-0.5">
+        <File
+          value={entry.path}
+          handleSelect={onOpenFile}
+          onContextMenu={handleContextMenu}
+          aria-label={`Open ${entry.name}`}
+          className="min-w-0 flex-1"
+        >
+          <WorkspaceEntryName
+            entry={entry}
+            computerId={computerId}
+            onRenamed={onRefresh}
+            startEditing={renamingPath === entry.path}
+            onEditingChange={(editing) => {
+              if (!editing && renamingPath === entry.path) {
+                onRenamingPathChange(null);
+              }
+            }}
+          />
+        </File>
+        {rowActions}
+      </div>
     );
   }
 
@@ -142,7 +230,26 @@ function WorkspaceTreeBranch({
   const error = errors[entry.path];
 
   return (
-    <Folder value={entry.path} element={entry.name} onContextMenu={handleContextMenu}>
+    <div className="group/entry flex min-w-0 items-start gap-0.5 pr-0.5">
+      <Folder
+        className="min-w-0 flex-1"
+        value={entry.path}
+        element={
+          <WorkspaceEntryName
+            entry={entry}
+            computerId={computerId}
+            onRenamed={onRefresh}
+            className="font-medium"
+            startEditing={renamingPath === entry.path}
+            onEditingChange={(editing) => {
+              if (!editing && renamingPath === entry.path) {
+                onRenamingPathChange(null);
+              }
+            }}
+          />
+        }
+        onContextMenu={handleContextMenu}
+      >
       {loading && !children ? (
         <div className="flex items-center gap-2 py-1 pl-1 text-[11px] text-muted-foreground">
           <Spinner className="size-3.5" />
@@ -158,17 +265,24 @@ function WorkspaceTreeBranch({
         <WorkspaceTreeBranch
           key={child.path}
           entry={child}
+          computerId={computerId}
           dirs={dirs}
           errors={errors}
           isLoading={isLoading}
           onOpenFile={onOpenFile}
           onContextMenu={onContextMenu}
+          onRequestDelete={onRequestDelete}
+          onRefresh={onRefresh}
+          renamingPath={renamingPath}
+          onRenamingPathChange={onRenamingPathChange}
         />
       ))}
       {children && children.length === 0 && !loading ? (
         <p className="py-1 pl-1 text-[11px] text-muted-foreground">Empty folder</p>
       ) : null}
-    </Folder>
+      </Folder>
+      <div className="mt-0.5">{rowActions}</div>
+    </div>
   );
 }
 
@@ -181,8 +295,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
   const [openFilePath, setOpenFilePath] = useState<string | null>(null);
   const [fileDialogOpen, setFileDialogOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [renameEntry, setRenameEntry] = useState<WorkspaceEntry | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -237,35 +350,6 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
     [],
   );
 
-  function openRenameDialog(entry: WorkspaceEntry) {
-    setRenameEntry(entry);
-    setRenameDraft(entry.name);
-    setActionError(null);
-  }
-
-  async function handleRenameSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!renameEntry || !computerId || actionBusy) {
-      return;
-    }
-    const trimmed = renameDraft.trim();
-    if (!trimmed || trimmed === renameEntry.name) {
-      setRenameEntry(null);
-      return;
-    }
-    setActionBusy(true);
-    setActionError(null);
-    try {
-      await renameWorkspaceEntry(computerId, renameEntry.path, trimmed);
-      setRenameEntry(null);
-      refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Could not rename");
-    } finally {
-      setActionBusy(false);
-    }
-  }
-
   async function handleDeleteConfirm() {
     if (!deleteEntry || !computerId || actionBusy) {
       return;
@@ -298,26 +382,29 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
     return null;
   }
 
+  const treeHeader = (
+    <div className="flex items-center justify-between gap-2 border-b border-border/40 px-1 pb-1">
+      <div className="flex min-w-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="size-7 shrink-0 text-muted-foreground"
+          onClick={() => refresh()}
+          aria-label="Refresh workspace files"
+        >
+          <RefreshCw className="size-3.5" aria-hidden />
+        </Button>
+        <span className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Workspace
+        </span>
+      </div>
+      {collapseElements.length > 0 ? <CollapseButton elements={collapseElements} /> : null}
+    </div>
+  );
+
   return (
     <div className={cn("relative min-w-0", className)}>
-      <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          /workspace
-        </p>
-        <div className="flex items-center gap-0.5">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            className="size-7 shrink-0 text-muted-foreground"
-            onClick={() => refresh()}
-            aria-label="Refresh workspace files"
-          >
-            <RefreshCw className="size-3.5" aria-hidden />
-          </Button>
-        </div>
-      </div>
-
       {rootError ? (
         <p className="px-0.5 text-xs text-red-600" role="alert">
           {rootError}
@@ -345,13 +432,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
             scrollable={treeCompact}
             indicator
             initialExpandedItems={[]}
-            header={
-              collapseElements.length > 0 ? (
-                <div className="flex justify-end border-b border-border/40 px-1 pb-1">
-                  <CollapseButton elements={collapseElements} />
-                </div>
-              ) : null
-            }
+            header={treeHeader}
           >
             <WorkspaceTreeCompactSync onCompactChange={handleTreeCompactChange} />
             <WorkspaceTreeExpansionLoader loadDir={loadDirStable} />
@@ -359,19 +440,44 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
               <WorkspaceTreeBranch
                 key={entry.path}
                 entry={entry}
+                computerId={computerId}
                 dirs={dirs}
                 errors={errors}
                 isLoading={isLoading}
                 onOpenFile={handleOpenFile}
                 onContextMenu={handleContextMenu}
+                onRequestDelete={(item) => {
+                  setDeleteEntry(item);
+                  setActionError(null);
+                }}
+                onRefresh={refresh}
+                renamingPath={renamingPath}
+                onRenamingPathChange={setRenamingPath}
               />
             ))}
           </Tree>
         ) : null}
         {rootEntries && rootEntries.length === 0 ? (
-          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-            Workspace is empty. Files appear here when your bot creates them.
-          </p>
+          <div>
+            <div className="flex items-center gap-1 border-b border-border/40 px-1 pb-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="size-7 shrink-0 text-muted-foreground"
+                onClick={() => refresh()}
+                aria-label="Refresh workspace files"
+              >
+                <RefreshCw className="size-3.5" aria-hidden />
+              </Button>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Workspace
+              </span>
+            </div>
+            <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+              Workspace is empty. Files appear here when your bot creates them.
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -388,7 +494,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
             role="menuitem"
             className={menuItemClass}
             onClick={() => {
-              openRenameDialog(contextMenu.entry);
+              setRenamingPath(contextMenu.entry.path);
               closeContextMenu();
             }}
           >
@@ -408,41 +514,6 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
           </button>
         </div>
       ) : null}
-
-      <Dialog open={Boolean(renameEntry)} onOpenChange={(open) => !open && setRenameEntry(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <form onSubmit={(event) => void handleRenameSubmit(event)}>
-            <DialogHeader>
-              <DialogTitle>Rename {renameEntry?.isDir ? "folder" : "file"}</DialogTitle>
-              <DialogDescription>
-                Enter a new name for &ldquo;{renameEntry?.name}&rdquo;.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="mt-4 space-y-2">
-              <Label htmlFor="workspace-rename">Name</Label>
-              <Input
-                id="workspace-rename"
-                value={renameDraft}
-                onChange={(event) => setRenameDraft(event.target.value)}
-                maxLength={255}
-                required
-                autoFocus
-              />
-            </div>
-            {actionError ? (
-              <p className="mt-2 text-sm text-red-700" role="alert">{actionError}</p>
-            ) : null}
-            <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={() => setRenameEntry(null)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={actionBusy || !renameDraft.trim()}>
-                {actionBusy ? "Saving…" : "Save"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={Boolean(deleteEntry)} onOpenChange={(open) => !open && setDeleteEntry(null)}>
         <DialogContent className="sm:max-w-sm">

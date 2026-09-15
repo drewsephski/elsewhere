@@ -5,9 +5,12 @@ use agent_core::{
     dispatch_agent_tool_with_gate,
     is_browser_tool,
     is_collaboration_tool,
+    is_connector_tool,
     AgentCollaboration,
+    AgentConnectors,
     AgentComputer,
     CollaborationContext,
+    connector_openai_tool_definitions,
     ToolApprovalGate,
     ToolError,
     ToolRunContext,
@@ -35,6 +38,7 @@ pub struct ComputerHandler {
     gate: Arc<dyn ToolApprovalGate>,
     run: ToolRunContext,
     collaboration: Option<Arc<dyn AgentCollaboration>>,
+    connectors: Option<Arc<dyn AgentConnectors>>,
     source_conversation_id: String,
 }
 
@@ -45,6 +49,7 @@ impl ComputerHandler {
         run: ToolRunContext,
         cancel: Arc<AtomicBool>,
         collaboration: Option<Arc<dyn AgentCollaboration>>,
+        connectors: Option<Arc<dyn AgentConnectors>>,
         source_conversation_id: String,
     ) -> Self {
         Self {
@@ -53,6 +58,7 @@ impl ComputerHandler {
             gate,
             run,
             collaboration,
+            connectors,
             source_conversation_id,
         }
     }
@@ -217,7 +223,31 @@ fn tool_definitions() -> Vec<Tool> {
         ),
     ];
     tools.extend(collaboration_tool_definitions());
+    tools.extend(connector_mcp_tool_definitions());
     tools
+}
+
+fn connector_mcp_tool_definitions() -> Vec<Tool> {
+    connector_openai_tool_definitions()
+        .into_iter()
+        .map(|value| {
+            let name = value
+                .get("name")
+                .and_then(|v| v.as_str())
+                .expect("connector tool name")
+                .to_string();
+            let description = value
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Connector tool")
+                .to_string();
+            let parameters = value
+                .get("parameters")
+                .cloned()
+                .unwrap_or_else(|| json!({"type": "object"}));
+            Tool::new(name, description, schema_object(parameters))
+        })
+        .collect()
 }
 
 impl ServerHandler for ComputerHandler {
@@ -273,6 +303,7 @@ impl ServerHandler for ComputerHandler {
         let dispatch = dispatch_agent_tool_with_gate(
             self.computer.as_ref(),
             self.collaboration.as_ref(),
+            self.connectors.as_ref(),
             &request.name,
             &args_str,
             self.cancel.as_ref(),
@@ -320,6 +351,7 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         "bot_list" => Ok(()),
         "bot_delegate" => Ok(()),
         name if is_collaboration_tool(name) => Ok(()),
+        name if is_connector_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
             "unknown tool: {other}"
         ))),

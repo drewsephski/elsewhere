@@ -8,6 +8,7 @@ export const appRoutes = {
   approvals: "/app/approvals",
   work: "/app/work",
   results: "/app/results",
+  connectors: "/app/connectors",
 } as const;
 
 /** Order matches `marketingFeatures` in @elsewhere/brand. */
@@ -32,4 +33,5 @@ export const appShellNavLinks = [
   { href: appRoutes.results, label: "Results" },
   { href: appRoutes.routines, label: "Routines" },
   { href: appRoutes.computers, label: "Computers" },
+  { href: appRoutes.connectors, label: "Connectors" },
 ] as const;

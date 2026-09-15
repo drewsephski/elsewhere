@@ -53,3 +53,4 @@ pub mod delegation;
 pub mod run_lifecycle;
 pub mod collaboration;
 pub mod skills;
+pub mod connectors;

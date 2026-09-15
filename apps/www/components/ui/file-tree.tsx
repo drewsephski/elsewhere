@@ -317,7 +317,7 @@ TreeIndicator.displayName = "TreeIndicator";
 
 type FolderProps = {
   expandedItems?: string[];
-  element: string;
+  element: React.ReactNode;
   isSelectable?: boolean;
   isSelect?: boolean;
   onContextMenu?: React.MouseEventHandler<HTMLButtonElement>;
@@ -384,7 +384,7 @@ const Folder = forwardRef<
             : (closeIcon ?? (
                 <Files className="size-3.5 shrink-0 text-muted-foreground" />
               ))}
-          <span className="truncate">{element}</span>
+          <span className="min-w-0 flex-1 truncate">{element}</span>
         </AccordionPrimitive.Trigger>
         <AccordionPrimitive.Content
           className="relative overflow-hidden text-xs data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"

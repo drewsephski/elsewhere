@@ -19,6 +19,9 @@ sprite-computer = { path = "../../crates/sprite-computer" }
 openai-responses = { path = "../../crates/openai-responses" }
 async-trait = "0.1"
 base64 = "0.22"
+aes-gcm = "0.10"
+rand = "0.8"
+urlencoding = "2"
 axum = { version = "0.8", features = ["macros"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
@@ -45,6 +48,10 @@ rcgen = { version = "0.14", optional = true }
 
 [features]
 test-utils = ["rcgen"]
+
+[[test]]
+name = "connectors"
+required-features = ["test-utils"]
 
 [[test]]
 name = "skills"

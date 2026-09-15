@@ -5,7 +5,7 @@ pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
 pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
-use crate::tool_catalog::{is_browser_tool, is_collaboration_tool};
+use crate::tool_catalog::{is_browser_tool, is_collaboration_tool, is_connector_tool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -89,6 +89,7 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "bot_list" => ToolOperationKind::Read,
         "bot_delegate" => ToolOperationKind::Mutation,
+        name if is_connector_tool(name) => ToolOperationKind::Read,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "browser_snapshot" => ToolOperationKind::Read,
         "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
@@ -214,6 +215,10 @@ mod tests {
 
     #[test]
     fn read_tools_classified_as_read() {
+        assert_eq!(
+            operation_kind_for_tool("github_list_repositories"),
+            ToolOperationKind::Read
+        );
         assert_eq!(
             operation_kind_for_tool("workspace_list"),
             ToolOperationKind::Read

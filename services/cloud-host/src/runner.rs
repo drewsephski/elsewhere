@@ -358,6 +358,15 @@ Bot collaboration:\n\
         owner_id,
         computer_id: input.records.computer_id.clone(),
         collaboration: Some(crate::collaboration::PostgresAgentCollaboration::new(pool.clone())),
+        connectors: host_state
+            .connector_secret_box()
+            .map(|secret_box| -> Arc<dyn agent_core::AgentConnectors> {
+                crate::connectors::PostgresAgentConnectors::new(
+                    pool.clone(),
+                    secret_box,
+                    host_state.github_client.clone(),
+                )
+            }),
         skill_packages,
     };
 

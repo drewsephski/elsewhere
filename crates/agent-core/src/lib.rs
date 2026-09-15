@@ -16,6 +16,8 @@ mod runtime_identity;
 mod run_store;
 mod collaboration;
 mod collaboration_tools;
+mod connectors;
+mod connector_tools;
 mod tool_catalog;
 mod tools;
 mod workspace_entries;
@@ -64,7 +66,10 @@ pub use collaboration_tools::{
     all_openai_tool_definitions, collaboration_openai_tool_definitions,
     dispatch_agent_tool_with_gate,
 };
+pub use connectors::{AgentConnectors, ConnectorError};
+pub use connector_tools::connector_openai_tool_definitions;
 pub use tool_catalog::{
     ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
-    WORKSPACE_TOOL_NAMES, is_browser_tool, is_collaboration_tool,
+    CONNECTOR_TOOL_NAMES, WORKSPACE_TOOL_NAMES, is_browser_tool, is_collaboration_tool,
+    is_connector_tool,
 };

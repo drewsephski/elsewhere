@@ -99,6 +99,19 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(api::computers::workspace_delete)
                 .patch(api::computers::workspace_rename),
         )
+        .route("/v1/connectors", get(api::connectors::list))
+        .route(
+            "/v1/connectors/github",
+            get(api::connectors::github_status).delete(api::connectors::github_disconnect),
+        )
+        .route(
+            "/v1/connectors/github/oauth/start",
+            post(api::connectors::github_oauth_start),
+        )
+        .route(
+            "/v1/connectors/github/oauth/complete",
+            post(api::connectors::github_oauth_complete),
+        )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
             "/v1/providers/codex/login/start",

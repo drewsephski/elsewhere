@@ -2,7 +2,8 @@ use serde_json::{json, Value};
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::collaboration::{AgentCollaboration, CollaborationContext, CollaborationError};
-use crate::tool_catalog::is_collaboration_tool;
+use crate::connector_tools::dispatch_connector_tool_with_gate;
+use crate::tool_catalog::{is_collaboration_tool, is_connector_tool};
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -47,12 +48,14 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
 pub fn all_openai_tool_definitions() -> Vec<Value> {
     let mut tools = crate::tools::openai_tool_definitions();
     tools.extend(collaboration_openai_tool_definitions());
+    tools.extend(crate::connector_tools::connector_openai_tool_definitions());
     tools
 }
 
 pub async fn dispatch_agent_tool_with_gate(
     computer: &dyn crate::computer::AgentComputer,
     collaboration: Option<&Arc<dyn AgentCollaboration>>,
+    connectors: Option<&Arc<dyn crate::connectors::AgentConnectors>>,
     name: &str,
     arguments: &str,
     cancel: &AtomicBool,
@@ -62,6 +65,17 @@ pub async fn dispatch_agent_tool_with_gate(
 ) -> Result<Value, ToolError> {
     if is_collaboration_tool(name) {
         return dispatch_collaboration_tool(collaboration, name, arguments, cancel, gate, run, collaboration_ctx).await;
+    }
+    if is_connector_tool(name) {
+        return dispatch_connector_tool_with_gate(
+            connectors,
+            name,
+            arguments,
+            cancel,
+            gate,
+            run,
+        )
+        .await;
     }
     crate::tools::dispatch_tool_with_gate(computer, name, arguments, cancel, gate, run).await
 }

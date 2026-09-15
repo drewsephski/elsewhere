@@ -14,3 +14,4 @@ pub mod workspace;
 pub mod delegations;
 pub mod conversations;
 pub mod skills;
+pub mod connectors;

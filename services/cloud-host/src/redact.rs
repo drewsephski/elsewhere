@@ -5,6 +5,8 @@ pub fn redact_secrets(input: &str) -> String {
         "SPRITE_TOKEN",
         "SPRITES_TOKEN",
         "ELSEWHERE_CLOUD_API_TOKEN",
+        "ELSEWHERE_CONNECTOR_SECRET_KEY",
+        "GITHUB_CLIENT_SECRET",
         "DATABASE_URL",
     ] {
         if out.contains(secret) {

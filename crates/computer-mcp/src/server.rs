@@ -17,7 +17,9 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use agent_core::{AgentCollaboration, AgentComputer, ToolApprovalGate, ToolRunContext};
+use agent_core::{
+    AgentCollaboration, AgentConnectors, AgentComputer, ToolApprovalGate, ToolRunContext,
+};
 
 use crate::error::ComputerMcpError;
 use crate::tools::ComputerHandler;
@@ -39,6 +41,7 @@ impl ComputerMcpServer {
         run: ToolRunContext,
         run_cancel: Arc<AtomicBool>,
         collaboration: Option<Arc<dyn AgentCollaboration>>,
+        connectors: Option<Arc<dyn AgentConnectors>>,
         source_conversation_id: String,
     ) -> Result<Self, ComputerMcpError> {
         let bearer_token = generate_bearer_token();
@@ -63,6 +66,7 @@ impl ComputerMcpServer {
             run,
             run_cancel,
             collaboration,
+            connectors,
             source_conversation_id,
         );
         let service: StreamableHttpService<ComputerHandler, LocalSessionManager> =

@@ -11,6 +11,11 @@ interface InlineRenameLabelProps {
   inputClassName?: string;
   ariaLabel: string;
   disabled?: boolean;
+  /** When true, opens the inline editor (e.g. from a context menu). */
+  startEditing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
+  /** Use inside another button (e.g. file tree row); rename via double-click or startEditing. */
+  nested?: boolean;
 }
 
 export function InlineRenameLabel({
@@ -20,8 +25,22 @@ export function InlineRenameLabel({
   inputClassName,
   ariaLabel,
   disabled = false,
+  startEditing = false,
+  onEditingChange,
+  nested = false,
 }: InlineRenameLabelProps) {
   const [editing, setEditing] = useState(false);
+
+  function setEditingState(next: boolean) {
+    setEditing(next);
+    onEditingChange?.(next);
+  }
+
+  useEffect(() => {
+    if (startEditing && !disabled) {
+      setEditingState(true);
+    }
+  }, [disabled, startEditing]);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,12 +63,12 @@ export function InlineRenameLabel({
     } else {
       setDraft(value);
     }
-    setEditing(false);
+    setEditingState(false);
   }
 
   function handleCancel() {
     setDraft(value);
-    setEditing(false);
+    setEditingState(false);
   }
 
   function handleStartEdit(event: SyntheticEvent) {
@@ -58,7 +77,7 @@ export function InlineRenameLabel({
     }
     event.preventDefault();
     event.stopPropagation();
-    setEditing(true);
+    setEditingState(true);
   }
 
   if (editing) {
@@ -89,6 +108,25 @@ export function InlineRenameLabel({
     );
   }
 
+  const displayClassName = cn(
+    "min-w-0 truncate text-left rounded-md px-0.5 -mx-0.5",
+    !nested && "hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+    className,
+  );
+
+  if (nested) {
+    return (
+      <span
+        onDoubleClick={handleStartEdit}
+        onPointerDown={(event) => event.stopPropagation()}
+        className={displayClassName}
+        aria-label={ariaLabel}
+      >
+        {value}
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -96,10 +134,7 @@ export function InlineRenameLabel({
       onDoubleClick={handleStartEdit}
       onPointerDown={(event) => event.stopPropagation()}
       disabled={disabled}
-      className={cn(
-        "min-w-0 truncate text-left rounded-md px-0.5 -mx-0.5 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
-        className,
-      )}
+      className={displayClassName}
       aria-label={ariaLabel}
     >
       {value}
