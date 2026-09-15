@@ -1,7 +1,11 @@
 use agent_core::{AgentConnectors, ConnectorError};
 use base64::Engine;
+use chrono::{Duration, Utc};
 use cloud_host::connectors::{
-    db::{get_for_owner, upsert_connected, PROVIDER_GITHUB},
+    db::{
+        consume_oauth_state, disconnect, get_for_owner, load_access_token, store_oauth_state,
+        upsert_connected, PROVIDER_GITHUB,
+    },
     secret::ConnectorSecretBox,
     service::PostgresAgentConnectors,
     GitHubClient,
@@ -72,6 +76,72 @@ async fn redact_strips_github_tokens_from_errors() {
     let token = "gho_abcdefghijklmnopqrstuvwxyz1234567890";
     let redacted = cloud_host::redact::redact_secrets(&format!("failed: {token}"));
     assert!(!redacted.contains(token));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_disconnect_clears_encrypted_secret(pool: PgPool) {
+    let secret = test_secret_box();
+    upsert_connected(
+        &pool,
+        "alice",
+        PROVIDER_GITHUB,
+        &json!({ "login": "alice" }),
+        "gho_disconnect_test",
+        &secret,
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    assert!(disconnect(&pool, "alice", PROVIDER_GITHUB).await.unwrap());
+
+    assert!(
+        load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let row = get_for_owner(&pool, "alice", PROVIDER_GITHUB)
+        .await
+        .unwrap()
+        .expect("connector row");
+    assert_eq!(row.status, "disconnected");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn oauth_state_consumption_is_owner_scoped(pool: PgPool) {
+    let state = "oauth-state-alice-only";
+    let expires_at = Utc::now() + Duration::minutes(10);
+    store_oauth_state(&pool, state, "alice", PROVIDER_GITHUB, expires_at)
+        .await
+        .unwrap();
+
+    assert!(
+        !consume_oauth_state(&pool, state, PROVIDER_GITHUB, "bob")
+            .await
+            .unwrap()
+    );
+
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)::bigint FROM connector_oauth_states WHERE state = $1",
+    )
+    .bind(state)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, 1);
+
+    assert!(
+        consume_oauth_state(&pool, state, PROVIDER_GITHUB, "alice")
+            .await
+            .unwrap()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

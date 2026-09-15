@@ -66,7 +66,10 @@ pub use collaboration_tools::{
     all_openai_tool_definitions, collaboration_openai_tool_definitions,
     dispatch_agent_tool_with_gate,
 };
-pub use connectors::{AgentConnectors, ConnectorError};
+pub use connectors::{
+    bound_connector_tool_result, AgentConnectors, ConnectorError,
+    MAX_CONNECTOR_TOOL_RESULT_BYTES,
+};
 pub use connector_tools::connector_openai_tool_definitions;
 pub use tool_catalog::{
     ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,

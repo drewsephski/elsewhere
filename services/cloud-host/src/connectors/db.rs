@@ -112,7 +112,12 @@ pub async fn disconnect(
     provider: &str,
 ) -> Result<bool, ApiError> {
     let now = Utc::now();
-    let result = sqlx::query(
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let connector_id: Option<Uuid> = sqlx::query_scalar(
         r#"
         UPDATE owner_connectors
         SET status = 'disconnected',
@@ -120,32 +125,32 @@ pub async fn disconnect(
             connected_at = NULL,
             updated_at = $3
         WHERE owner_id = $1 AND provider = $2
+        RETURNING id
         "#,
     )
     .bind(owner_id)
     .bind(provider)
     .bind(now)
-    .execute(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    if result.rows_affected() == 0 {
+    let Some(connector_id) = connector_id else {
+        tx.rollback()
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
         return Ok(false);
-    }
+    };
 
-    sqlx::query(
-        r#"
-        DELETE FROM owner_connector_secrets
-        WHERE connector_id IN (
-            SELECT id FROM owner_connectors WHERE owner_id = $1 AND provider = $2
-        )
-        "#,
-    )
-    .bind(owner_id)
-    .bind(provider)
-    .execute(pool)
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    sqlx::query("DELETE FROM owner_connector_secrets WHERE connector_id = $1")
+        .bind(connector_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tx.commit()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(true)
 }
@@ -206,22 +211,24 @@ pub async fn consume_oauth_state(
     pool: &PgPool,
     state: &str,
     provider: &str,
-) -> Result<Option<String>, ApiError> {
+    owner_id: &str,
+) -> Result<bool, ApiError> {
     let now = Utc::now();
-    let owner_id: Option<String> = sqlx::query_scalar(
+    let consumed: Option<String> = sqlx::query_scalar(
         r#"
         DELETE FROM connector_oauth_states
-        WHERE state = $1 AND provider = $2 AND expires_at > $3
+        WHERE state = $1 AND provider = $2 AND owner_id = $3 AND expires_at > $4
         RETURNING owner_id
         "#,
     )
     .bind(state)
     .bind(provider)
+    .bind(owner_id)
     .bind(now)
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(owner_id)
+    Ok(consumed.is_some())
 }
 
 pub async fn purge_expired_oauth_states(pool: &PgPool) -> Result<(), ApiError> {

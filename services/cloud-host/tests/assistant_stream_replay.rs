@@ -47,6 +47,10 @@ fn jwt_state(pool: PgPool) -> AppState {
         enforce_tool_approvals_internal: false,
         legacy_local_approval_bypass: false,
         browser_enabled: false,
+        connector_secret_key: None,
+        github_client_id: None,
+        github_client_secret: None,
+        github_oauth_redirect_uri: None,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(

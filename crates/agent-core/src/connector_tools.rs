@@ -1,7 +1,9 @@
 use serde_json::{json, Value};
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
-use crate::connectors::{AgentConnectors, ConnectorError};
+use crate::connectors::{
+    bound_connector_tool_result, AgentConnectors, ConnectorError,
+};
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -176,6 +178,7 @@ pub async fn dispatch_connector_tool_with_gate(
         .dispatch_connector_tool(&run.owner_id, name, &args)
         .await
         .map_err(map_connector_error)?;
+    let result = bound_connector_tool_result(result).map_err(map_connector_error)?;
 
     let mut envelope = result;
     if let Some(obj) = envelope.as_object_mut() {

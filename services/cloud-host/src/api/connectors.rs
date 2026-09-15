@@ -149,13 +149,15 @@ pub async fn github_oauth_complete(
         .as_deref()
         .ok_or_else(|| ApiError::Validation("GitHub OAuth redirect URI is not configured".into()))?;
 
-    let owner_for_state =
-        consume_oauth_state(&state.pool, &body.state, PROVIDER_GITHUB).await?;
-    let Some(owner_for_state) = owner_for_state else {
+    let consumed = consume_oauth_state(
+        &state.pool,
+        &body.state,
+        PROVIDER_GITHUB,
+        owner.owner_id(),
+    )
+    .await?;
+    if !consumed {
         return Err(ApiError::Validation("invalid or expired OAuth state".into()));
-    };
-    if owner_for_state != owner.owner_id() {
-        return Err(ApiError::Unauthorized);
     }
 
     let token = state
