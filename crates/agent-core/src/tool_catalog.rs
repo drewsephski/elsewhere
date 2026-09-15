@@ -46,6 +46,11 @@ pub fn is_browser_tool(name: &str) -> bool {
     BROWSER_TOOL_NAMES.contains(&name)
 }
 
+/// Browser tools that mutate the page/session (not snapshot reads).
+pub fn is_browser_mutation_tool(name: &str) -> bool {
+    is_browser_tool(name) && name != "browser_snapshot"
+}
+
 pub fn is_collaboration_tool(name: &str) -> bool {
     COLLABORATION_TOOL_NAMES.contains(&name)
 }

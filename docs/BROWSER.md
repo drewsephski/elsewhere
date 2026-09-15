@@ -40,7 +40,9 @@ Refs stay valid while the browser daemon keeps the same page open. A new `browse
 
 Durable `tool_call` / `tool_result` events use the same pipeline as workspace tools. The workspace Computer panel maps browser tools via `apps/www/lib/work-events.ts`.
 
-### Live preview (workspace UI)
+### Human takeover (owner control lease)
+
+While a run is active, the owner can **Take control** from the live browser preview. Control state is stored in `computer_control_leases` (`bot` vs `human`) with heartbeat-based stale recovery (default 120s). Bot browser **mutations** wait until control returns; `browser_snapshot` and preview reads continue. Owner-only input endpoints: `POST …/browser-control/take|return`, `GET …/browser-control`, and `POST …/browser/{navigate,click,type,press-key}` (same persistent Sprite session — no second browser).
 
 While a run is active, the Computer rail polls `GET /v1/computers/{id}/browser-preview` every ~2s. The host calls the guest daemon `preview` action (viewport JPEG, base64, no workspace write, no tool approval). Preview frames skip temporary egress widening; only `navigate` and `download` open the network gate.
 

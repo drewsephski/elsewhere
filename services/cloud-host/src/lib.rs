@@ -44,6 +44,7 @@ pub mod bounded_text;
 pub mod group_router;
 pub mod computer_registry;
 pub use computer_registry::ComputerRegistry;
+pub mod computer_control;
 pub mod computer_session;
 pub mod results;
 pub mod result_finalization;

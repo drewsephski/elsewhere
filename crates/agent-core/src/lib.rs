@@ -73,6 +73,6 @@ pub use connectors::{
 pub use connector_tools::connector_openai_tool_definitions;
 pub use tool_catalog::{
     ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
-    CONNECTOR_TOOL_NAMES, WORKSPACE_TOOL_NAMES, is_browser_tool, is_collaboration_tool,
-    is_connector_tool,
+    CONNECTOR_TOOL_NAMES, WORKSPACE_TOOL_NAMES, is_browser_mutation_tool, is_browser_tool,
+    is_collaboration_tool, is_connector_tool,
 };

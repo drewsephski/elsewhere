@@ -13,7 +13,7 @@ pub struct RunScopedApprovalGate {
     service: ApprovalService,
     events: Arc<CloudEventSink>,
     store: Arc<dyn agent_core::RunStore>,
-    cancel: Arc<AtomicBool>,
+    pub(crate) cancel: Arc<AtomicBool>,
 }
 
 impl RunScopedApprovalGate {

@@ -14,6 +14,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use crate::app_state::AppState;
 use crate::auth::Principal;
+use crate::computer_control::{self, ControlHolder, HumanControlRequired};
 use crate::db::resources::{
     archive_computer, get_computer_for_owner, insert_computer_placeholder, list_computers,
 };
@@ -125,6 +126,7 @@ pub async fn browser_navigate(
     Path(computer_id): Path<String>,
     Json(body): Json<BrowserNavigateRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
     let url = body.url.trim();
     if url.is_empty() {
         return Err(ApiError::Validation("url is required".into()));
@@ -144,6 +146,257 @@ pub async fn browser_navigate(
         .await?;
     let result = computer
         .browser_invoke("navigate", &json!({ "url": url }))
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserControlStateResponse {
+    pub holder: String,
+    pub lease_id: Option<String>,
+    pub acquired_at: Option<String>,
+    pub heartbeat_at: Option<String>,
+    pub you_have_control: bool,
+}
+
+fn control_state_response(state: computer_control::ComputerControlState) -> BrowserControlStateResponse {
+    BrowserControlStateResponse {
+        holder: match state.holder {
+            ControlHolder::Bot => "bot".into(),
+            ControlHolder::Human => "human".into(),
+        },
+        lease_id: state.lease_id,
+        acquired_at: state.acquired_at.map(|t| t.to_rfc3339()),
+        heartbeat_at: state.heartbeat_at.map(|t| t.to_rfc3339()),
+        you_have_control: state.holder == ControlHolder::Human,
+    }
+}
+
+async fn require_human_control(
+    state: &AppState,
+    owner_id: &str,
+    computer_id: &str,
+) -> Result<(), ApiError> {
+    get_computer_for_owner(&state.pool, owner_id, computer_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    if !state.config.browser_enabled {
+        return Err(ApiError::Validation(
+            "browser control is disabled on this host".into(),
+        ));
+    }
+    computer_control::require_active_human_control(&state.pool, owner_id, computer_id)
+        .await
+        .map_err(map_human_control_error)
+}
+
+fn map_human_control_error(err: HumanControlRequired) -> ApiError {
+    match err {
+        HumanControlRequired::NotHuman => {
+            ApiError::Validation(err.message().into())
+        }
+        HumanControlRequired::Db(e) => ApiError::Internal(e.to_string()),
+    }
+}
+
+pub async fn browser_control_state(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<BrowserControlStateResponse>, ApiError> {
+    get_computer_for_owner(&state.pool, principal.owner_id(), &computer_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    let snapshot = computer_control::get_control_state(
+        &state.pool,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(control_state_response(snapshot)))
+}
+
+pub async fn browser_control_take(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<BrowserControlStateResponse>, ApiError> {
+    get_computer_for_owner(&state.pool, principal.owner_id(), &computer_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    if !state.config.browser_enabled {
+        return Err(ApiError::Validation(
+            "browser control is disabled on this host".into(),
+        ));
+    }
+    let snapshot = computer_control::take_human_control(
+        &state.pool,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await
+    .map_err(|err| match err {
+        computer_control::TakeControlError::Db(e) => ApiError::Internal(e.to_string()),
+        computer_control::TakeControlError::Conflict(m) => ApiError::Conflict(m),
+    })?;
+    Ok(Json(control_state_response(snapshot)))
+}
+
+pub async fn browser_control_return(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<BrowserControlStateResponse>, ApiError> {
+    get_computer_for_owner(&state.pool, principal.owner_id(), &computer_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    let snapshot = computer_control::return_control_to_bot(
+        &state.pool,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(control_state_response(snapshot)))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BrowserClickRequest {
+    #[serde(default)]
+    pub r#ref: Option<String>,
+    #[serde(default)]
+    pub x_ratio: Option<f64>,
+    #[serde(default)]
+    pub y_ratio: Option<f64>,
+}
+
+pub async fn browser_click(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<BrowserClickRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
+    let args = if let Some(ref_id) = body.r#ref.filter(|s| !s.is_empty()) {
+        json!({ "ref": ref_id })
+    } else {
+        let x_ratio = body.x_ratio.ok_or_else(|| {
+            ApiError::Validation("ref or xRatio/yRatio required for click".into())
+        })?;
+        let y_ratio = body.y_ratio.ok_or_else(|| {
+            ApiError::Validation("ref or xRatio/yRatio required for click".into())
+        })?;
+        if !(0.0..=1.0).contains(&x_ratio) || !(0.0..=1.0).contains(&y_ratio) {
+            return Err(ApiError::Validation(
+                "xRatio and yRatio must be between 0 and 1".into(),
+            ));
+        }
+        json!({ "xRatio": x_ratio, "yRatio": y_ratio })
+    };
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let action = if args.get("ref").is_some() {
+        "click"
+    } else {
+        "click_point"
+    };
+    let result = computer
+        .browser_invoke(action, &args)
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BrowserTypeRequest {
+    #[serde(default)]
+    pub r#ref: Option<String>,
+    pub text: String,
+    #[serde(default)]
+    pub submit: Option<bool>,
+}
+
+pub async fn browser_type(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<BrowserTypeRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
+    let ref_id = body
+        .r#ref
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ApiError::Validation("ref is required for type".into()))?;
+    if body.text.is_empty() {
+        return Err(ApiError::Validation("text is required".into()));
+    }
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke(
+            "type",
+            &json!({
+                "ref": ref_id,
+                "text": body.text,
+                "submit": body.submit.unwrap_or(false)
+            }),
+        )
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BrowserPressKeyRequest {
+    pub key: String,
+}
+
+pub async fn browser_press_key(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<BrowserPressKeyRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
+    let key = body.key.trim();
+    if key.is_empty() {
+        return Err(ApiError::Validation("key is required".into()));
+    }
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke("press", &json!({ "key": key }))
         .await
         .map_err(map_computer_error)?;
     Ok(Json(result))

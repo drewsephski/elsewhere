@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    AgentComputer, AgentLoopContext, AllowAllApprovalGate, ReadinessCachedComputer, ResponsesModel,
+    AgentComputer, AgentLoopContext, ReadinessCachedComputer, ResponsesModel,
     ResponsesRunEngine, RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
 };
 use agent_skills::append_skills_to_instructions;
 
-use crate::approval::RunScopedApprovalGate;
+use crate::approval::{BrowserHumanControlGate, RunScopedApprovalGate};
 use crate::auth::LEGACY_LOCAL_OWNER;
 use codex_provider::{CodexRunEngine, CodexRunEngineConfig};
 use futures_util::FutureExt;
@@ -324,14 +324,21 @@ async fn execute_run(
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
 
     let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
-        Arc::new(RunScopedApprovalGate::new(
+        let run_gate = RunScopedApprovalGate::new(
             approvals,
             events.clone(),
             store.clone(),
             cancel.clone(),
+        );
+        Arc::new(BrowserHumanControlGate::wrapping_run_gate(
+            run_gate,
+            pool.clone(),
         ))
     } else {
-        Arc::new(AllowAllApprovalGate)
+        Arc::new(BrowserHumanControlGate::wrapping_allow_all(
+            pool.clone(),
+            cancel.clone(),
+        ))
     };
 
     ctx.instructions.push_str(&format!(

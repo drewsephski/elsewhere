@@ -78,6 +78,10 @@ name = "auth_jwt"
 required-features = ["test-utils"]
 
 [[test]]
+name = "computer_control"
+required-features = ["test-utils"]
+
+[[test]]
 name = "computer_registry_lifecycle"
 required-features = ["test-utils"]
 

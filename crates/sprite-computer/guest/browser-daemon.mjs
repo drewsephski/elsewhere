@@ -154,6 +154,35 @@ async function handleRequest(req) {
         title: await page.title(),
       };
     }
+    case "click_point": {
+      const xRatio = Number(req.xRatio);
+      const yRatio = Number(req.yRatio);
+      if (!Number.isFinite(xRatio) || !Number.isFinite(yRatio)) {
+        throw new Error("xRatio and yRatio must be numbers");
+      }
+      if (xRatio < 0 || xRatio > 1 || yRatio < 0 || yRatio > 1) {
+        throw new Error("xRatio and yRatio must be between 0 and 1");
+      }
+      const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+      await page.mouse.click(xRatio * viewport.width, yRatio * viewport.height, {
+        timeout: MAX_ACTION_TIMEOUT_MS,
+      });
+      await refreshPreviewCache(page);
+      return {
+        ok: true,
+        url: page.url(),
+        title: await page.title(),
+      };
+    }
+    case "press": {
+      const key = String(req.key ?? "").trim();
+      if (!key) {
+        throw new Error("key is required");
+      }
+      await page.keyboard.press(key);
+      await refreshPreviewCache(page);
+      return { ok: true, url: page.url() };
+    }
     case "type": {
       const text = String(req.text ?? "");
       if (text.length > MAX_TYPE_TEXT_CHARS) {

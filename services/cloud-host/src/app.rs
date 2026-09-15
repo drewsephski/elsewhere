@@ -82,8 +82,32 @@ pub fn build_router(state: AppState) -> Router {
             get(api::computers::browser_preview),
         )
         .route(
+            "/v1/computers/{id}/browser-control",
+            get(api::computers::browser_control_state),
+        )
+        .route(
+            "/v1/computers/{id}/browser-control/take",
+            post(api::computers::browser_control_take),
+        )
+        .route(
+            "/v1/computers/{id}/browser-control/return",
+            post(api::computers::browser_control_return),
+        )
+        .route(
             "/v1/computers/{id}/browser/navigate",
             post(api::computers::browser_navigate),
+        )
+        .route(
+            "/v1/computers/{id}/browser/click",
+            post(api::computers::browser_click),
+        )
+        .route(
+            "/v1/computers/{id}/browser/type",
+            post(api::computers::browser_type),
+        )
+        .route(
+            "/v1/computers/{id}/browser/press-key",
+            post(api::computers::browser_press_key),
         )
         .route(
             "/v1/computers/{id}/workspace",

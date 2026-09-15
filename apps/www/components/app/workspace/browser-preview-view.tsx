@@ -4,6 +4,12 @@ import { useOptionalActiveRun } from "@/contexts/active-run-context";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import type { BrowserPreviewFrame } from "@/hooks/use-browser-preview";
 import { previewHostname } from "@/lib/browser-preview-utils";
+import { clickComputerBrowserPoint } from "@/lib/browser-control";
+import {
+  BrowserHumanControlBar,
+  BrowserHumanPreviewClickOverlay,
+} from "./browser-human-control";
+import { useBrowserHumanControl } from "@/hooks/use-browser-human-control";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -227,6 +233,9 @@ export function BrowserPreviewView({
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
+  const humanControl = useBrowserHumanControl(ctx?.computerId ?? null, enabled);
+  const [humanClickBusy, setHumanClickBusy] = useState(false);
+  const [humanClickError, setHumanClickError] = useState<string | null>(null);
   const frame = frameProp ?? ctx?.frame ?? null;
   const loading = loadingProp ?? ctx?.loading ?? false;
   const error = errorProp ?? ctx?.error ?? null;
@@ -295,6 +304,23 @@ export function BrowserPreviewView({
     setDialogOpen(open);
   }
 
+  async function handleHumanPreviewClick(xRatio: number, yRatio: number) {
+    const computerId = ctx?.computerId;
+    if (!computerId || !humanControl.humanActive) {
+      return;
+    }
+    setHumanClickBusy(true);
+    setHumanClickError(null);
+    try {
+      await clickComputerBrowserPoint(computerId, xRatio, yRatio);
+      await ctx?.refresh();
+    } catch (err) {
+      setHumanClickError(err instanceof Error ? err.message : "Click failed");
+    } finally {
+      setHumanClickBusy(false);
+    }
+  }
+
   if (variant === "floating") {
     return (
       <PreviewChrome
@@ -316,6 +342,11 @@ export function BrowserPreviewView({
             className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
           />
         ) : null}
+        <BrowserHumanPreviewClickOverlay
+          humanActive={humanControl.humanActive}
+          busy={humanClickBusy}
+          onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
+        />
       </PreviewChrome>
     );
   }
@@ -401,14 +432,24 @@ export function BrowserPreviewView({
           </div>
         )}
 
+        <BrowserHumanControlBar
+          enabled={enabled}
+          humanActive={humanControl.humanActive}
+          loading={humanControl.loading}
+          error={humanControl.error}
+          onTakeControl={() => void humanControl.takeControl()}
+          onReturnControl={() => void humanControl.returnControl()}
+          className="mb-1.5"
+        />
+
         <button
           type="button"
           className={cn(
             "group relative w-full text-left",
-            hasImage ? "cursor-zoom-in" : "cursor-default",
+            hasImage && !humanControl.humanActive ? "cursor-zoom-in" : "cursor-default",
           )}
           onClick={handleOpenDialog}
-          disabled={!hasImage}
+          disabled={!hasImage || humanControl.humanActive}
           aria-label={hasImage ? "Open expanded browser preview" : "Browser preview placeholder"}
         >
           <PreviewChrome
@@ -428,6 +469,11 @@ export function BrowserPreviewView({
                 className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
               />
             ) : null}
+            <BrowserHumanPreviewClickOverlay
+              humanActive={humanControl.humanActive}
+              busy={humanClickBusy}
+              onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
+            />
             {hasImage ? (
               <div
                 className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100"
@@ -440,6 +486,11 @@ export function BrowserPreviewView({
           </PreviewChrome>
         </button>
 
+        {humanClickError ? (
+          <p className="mt-1.5 px-1 text-[11px] text-red-600" role="alert">
+            {humanClickError}
+          </p>
+        ) : null}
         {browserToolError ? (
           <div className="mt-1.5 space-y-1.5 px-1" role="alert">
             <p className="text-[11px] text-red-600">{browserToolError}</p>
