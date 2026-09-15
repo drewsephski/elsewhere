@@ -16,70 +16,41 @@ export const siteConfig = {
 
 export const marketingFeatures = [
   {
-    title: "Bots that own the job",
+    title: "Agent computers",
     description:
-      "Workers with roles, instructions, and tools. Delegate outcomes, not one-off prompts. Stream progress while they run on real infrastructure.",
+      "Each bot gets a dedicated Linux environment for terminal, files, and browser work. Locally today, in the cloud tomorrow.",
   },
   {
-    title: "A computer per worker",
+    title: "Always-on routines",
     description:
-      "Isolated Linux with terminal, files, and browser control. Same guest protocol on your Mac today and in managed sandboxes on the cloud path.",
+      "Schedule skills and background jobs on infrastructure built for long-running agents, not one-shot chat sessions.",
   },
   {
-    title: "Approvals and handback",
+    title: "Memory that travels",
     description:
-      "Gate sensitive actions, review what ran, and recover cleanly when you need to steer. Autonomy with an audit trail, not a black box.",
+      "Conversation history, bot config, and long-term memory designed to sync when you move from desktop to cloud.",
   },
   {
-    title: "Routines, memory, connectors",
+    title: "Approvals you control",
     description:
-      "Schedule recurring work, keep history and config across sessions, and wire MCP and integrations without pasting secrets into chat.",
+      "See what your agent did, approve sensitive actions, and keep a clear audit trail as autonomy increases.",
   },
-] as const;
-
-export const howItWorksSteps = [
-  {
-    step: "01",
-    title: "Define a worker",
-    detail:
-      "Create a bot with a role, system instructions, and skills. Pair ChatGPT subscription execution or your chosen provider path from the dashboard.",
-  },
-  {
-    step: "02",
-    title: "Attach a computer",
-    detail:
-      "Provision an isolated environment for terminal, filesystem, and browser tasks. One machine per worker, strict tenant boundaries.",
-  },
-  {
-    step: "03",
-    title: "Delegate and recover",
-    detail:
-      "Send work from the workspace, approve when policy requires it, and pick up results later. Routines fire on schedule even when you are offline.",
-  },
-] as const;
-
-export const productSurfaces = [
-  { label: "Bots", detail: "Persistent workers" },
-  { label: "Computers", detail: "Isolated VMs" },
-  { label: "Approvals", detail: "Human gates" },
-  { label: "Routines", detail: "Scheduled runs" },
-  { label: "Connectors", detail: "MCP and integrations" },
 ] as const;
 
 export const cloudRoadmapPhases = [
   {
     label: "Now",
-    title: "Desktop + cloud workspace",
-    detail: "macOS app and hosted Next.js workspace with Postgres-backed bots, computers, and approvals.",
+    title: "Desktop + local VM",
+    detail: "macOS app with SQLite and an isolated guest for agent tooling.",
   },
   {
     label: "Next",
     title: "Managed sandboxes",
-    detail: "Provisioned cloud VMs with the same guest protocol, dispatcher, and runner hardening.",
+    detail: "Provisioned cloud VMs with the same guest protocol and host bridge.",
   },
   {
     label: "Later",
-    title: "Teams and policy",
-    detail: "Shared workers, org controls, and cross-device sync without mixing tenants or secrets.",
+    title: "Teams & sync",
+    detail: "Shared bots, org policies, and cross-device state without sacrificing isolation.",
   },
 ] as const;

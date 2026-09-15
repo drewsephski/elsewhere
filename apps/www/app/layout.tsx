@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: `${siteConfig.productName} · ${siteConfig.tagline}`,
+  title: `${siteConfig.productName} — ${siteConfig.tagline}`,
   description: siteConfig.cloudPitch,
   openGraph: {
     title: siteConfig.productName,

@@ -13,10 +13,10 @@ export const appRoutes = {
 
 /** Order matches `marketingFeatures` in @elsewhere/brand. */
 export const marketingFeatureAppHrefs: readonly string[] = [
-  appRoutes.workspace,
   appRoutes.computers,
+  appRoutes.routines,
+  appRoutes.workspace,
   appRoutes.approvals,
-  appRoutes.connectors,
 ];
 
 export const capabilityAppHrefs: Record<string, string> = {

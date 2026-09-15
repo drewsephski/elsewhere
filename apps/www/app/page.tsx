@@ -1,14 +1,6 @@
 "use client";
 
 import { siteConfig } from "@elsewhere/brand";
-import { ArchitectureSection } from "@/components/landing/architecture-section";
-import { CtaSection } from "@/components/landing/cta-section";
-import { FeatureBento } from "@/components/landing/feature-bento";
-import { HowItWorksSection } from "@/components/landing/how-it-works-section";
-import { RoadmapSection } from "@/components/landing/roadmap-section";
-import { SiteFooter } from "@/components/landing/site-footer";
-import { SurfacesSection } from "@/components/landing/surfaces-section";
-import { TrustStrip } from "@/components/landing/trust-strip";
 import { ArrowRight } from "@/components/icons/lucide";
 import { ProductLogo } from "@/components/product-logo";
 import {
@@ -63,12 +55,6 @@ function Navbar() {
         <div className="relative mx-auto flex h-16 w-full max-w-7xl items-center px-6 md:h-20 lg:px-8">
           <div className="hidden shrink-0 animate-fade-down items-center gap-8 md:flex stagger-1">
             <ProductNavDropdown />
-            <a
-              href="#how-it-works"
-              className="text-sm tracking-wide text-brand-dark uppercase transition-opacity hover:opacity-70"
-            >
-              How it works
-            </a>
             <a
               href={siteConfig.links.docs}
               target="_blank"
@@ -136,13 +122,6 @@ function Navbar() {
           }`}
         >
           <ProductMobileSection onNavigate={closeMenu} />
-          <a
-            href="#how-it-works"
-            className="text-3xl tracking-tight text-brand-dark"
-            onClick={closeMenu}
-          >
-            How it works
-          </a>
           <a
             href={siteConfig.links.docs}
             target="_blank"
@@ -260,16 +239,6 @@ export default function HomePage() {
     <div className="marketing-bg min-h-screen font-sans text-foreground">
       <Navbar />
       <Hero />
-      <div className="relative z-10 bg-background/95 backdrop-blur-sm">
-        <SurfacesSection />
-        <TrustStrip />
-        <HowItWorksSection />
-        <FeatureBento />
-        <RoadmapSection />
-        <ArchitectureSection />
-        <CtaSection />
-        <SiteFooter />
-      </div>
     </div>
   );
 }
