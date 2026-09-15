@@ -109,6 +109,10 @@ pub fn build_router(state: AppState) -> Router {
             delete(api::conversations::delete_conversation_message),
         )
         .route(
+            "/v1/conversations/{id}/messages/{message_id}/route/retry",
+            post(api::conversations::retry_message_route_handler),
+        )
+        .route(
             "/v1/conversations/{id}/participants",
             post(api::conversations::add_participant_handler),
         )

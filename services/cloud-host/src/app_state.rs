@@ -40,6 +40,8 @@ pub struct AppState {
     pub codex_ops: crate::codex_ops::CodexOpsGate,
     pub dispatcher_alive: Arc<std::sync::atomic::AtomicBool>,
     pub provider_status_cache: ProviderStatusCache,
+    /// Limits concurrent background group routing tasks (not Codex permits).
+    pub group_route_semaphore: Arc<Semaphore>,
 }
 
 impl AppState {
@@ -79,6 +81,7 @@ impl AppState {
             codex_ops: crate::codex_ops::CodexOpsGate::from_permits(1),
             dispatcher_alive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             provider_status_cache: ProviderStatusCache::default(),
+            group_route_semaphore: Arc::new(Semaphore::new(2)),
         }
     }
 }

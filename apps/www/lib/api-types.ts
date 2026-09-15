@@ -86,6 +86,12 @@ export interface GroupConversationDetail {
   participants: GroupParticipantSummary[];
 }
 
+export interface MessageRouting {
+  mode: string;
+  status: string;
+  errorCode?: string | null;
+}
+
 export interface MessageRecipient {
   botId: string;
   botName: string;
@@ -108,6 +114,7 @@ export interface TranscriptMessage {
   createdAt: string;
   runId?: string | null;
   recipients?: MessageRecipient[];
+  routing?: MessageRouting | null;
 }
 
 export interface GroupListItem {

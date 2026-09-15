@@ -52,6 +52,7 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             body: "@Researcher @Designer review this".into(),
             recipient_bot_ids: Some(vec![researcher.id.clone(), designer.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -76,6 +77,7 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             body: "@Researcher @Designer review this".into(),
             recipient_bot_ids: Some(vec![researcher.id.clone(), designer.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -113,11 +115,16 @@ async fn group_send_no_mention_persists_only_human(pool: PgPool) {
             body: "This is just a note".into(),
             recipient_bot_ids: None,
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
     .unwrap();
     assert!(send.recipients.is_empty());
+    assert_eq!(
+        send.message.routing.as_ref().map(|r| r.status.as_str()),
+        Some("pending")
+    );
     let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
         .bind(&group.id)
         .fetch_one(&pool)
@@ -150,6 +157,7 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             body: "investigate".into(),
             recipient_bot_ids: Some(vec![researcher.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -192,6 +200,7 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             body: "use findings".into(),
             recipient_bot_ids: Some(vec![designer.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -264,6 +273,7 @@ async fn codex_group_input_excludes_current_human_turn(pool: PgPool) {
             body: "@Designer use that finding".into(),
             recipient_bot_ids: Some(vec![designer.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -328,6 +338,7 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             body: "@A hello".into(),
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -341,6 +352,7 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             body: "@A hello".into(),
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -377,6 +389,7 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             body: "first".into(),
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await
@@ -390,6 +403,7 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             body: "second".into(),
             recipient_bot_ids: Some(vec![a.id.clone()]),
             mention_mode: None,
+            routing_mode: None,
         },
     )
     .await

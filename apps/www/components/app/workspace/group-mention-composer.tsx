@@ -209,7 +209,7 @@ export function GroupMentionComposer({
         aria-expanded={open}
       />
       <p className="px-2 text-[11px] text-muted-foreground">
-        Mention a Bot with @ to ask them to respond.
+        Write normally, or @mention a Bot to direct your message.
       </p>
       {open && options.length > 0 ? (
         <ul
@@ -271,9 +271,15 @@ export function buildGroupSendPayload(
   const recipientBotIds = everyone
     ? undefined
     : [...new Set(mentions.map((m) => m.botId).filter((id) => activeIds.has(id)))];
+  const hasExplicitMentions = everyone || (recipientBotIds?.length ?? 0) > 0;
   return {
     body,
-    mentionMode: everyone ? ("everyone" as const) : ("specific" as const),
-    recipientBotIds,
+    routingMode: everyone
+      ? ("everyone" as const)
+      : hasExplicitMentions
+        ? ("specific" as const)
+        : ("auto" as const),
+    mentionMode: everyone ? ("everyone" as const) : hasExplicitMentions ? ("specific" as const) : undefined,
+    recipientBotIds: hasExplicitMentions && !everyone ? recipientBotIds : undefined,
   };
 }

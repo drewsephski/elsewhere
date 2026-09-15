@@ -17,6 +17,7 @@ pub enum CodexOperationKind {
     Run,
     Login,
     Archive,
+    GroupRoute,
 }
 
 impl CodexOperationKind {
@@ -26,6 +27,7 @@ impl CodexOperationKind {
             Self::Run => "run",
             Self::Login => "login",
             Self::Archive => "archive",
+            Self::GroupRoute => "group_route",
         }
     }
 }

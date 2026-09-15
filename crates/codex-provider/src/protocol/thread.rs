@@ -43,6 +43,48 @@ impl ElsewhereThreadConfig {
     }
 }
 
+/// Infrastructure-only Codex thread: no MCP, no host tools, read-only sandbox.
+#[derive(Debug, Clone)]
+pub struct ToollessThreadConfig {
+    pub cwd: PathBuf,
+    pub model: String,
+    pub developer_instructions: Option<String>,
+}
+
+impl ToollessThreadConfig {
+    pub fn validate(&self) -> Result<(), CodexProviderError> {
+        if !self.cwd.is_absolute() {
+            return Err(CodexProviderError::Config(
+                "tool-less Codex cwd must be absolute".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+pub fn build_toolless_thread_start_params(
+    config: &ToollessThreadConfig,
+) -> Result<Value, CodexProviderError> {
+    config.validate()?;
+    let mut features = json!({});
+    for (key, enabled) in REQUIRED_FEATURE_DISABLES {
+        features[key] = json!(enabled);
+    }
+    let mut payload = json!({
+        "model": config.model,
+        "cwd": config.cwd.to_string_lossy(),
+        "sandbox": "read-only",
+        "approvalPolicy": "never",
+        "config": {
+            "features": features
+        }
+    });
+    if let Some(dev) = &config.developer_instructions {
+        payload["developerInstructions"] = json!(dev);
+    }
+    Ok(payload)
+}
+
 pub fn build_elsewhere_thread_start_params(
     config: &ElsewhereThreadConfig,
 ) -> Result<Value, CodexProviderError> {
@@ -290,6 +332,25 @@ mod tests {
             base_instructions: None,
             developer_instructions: None,
         }
+    }
+
+    #[test]
+    fn toolless_thread_config_has_no_mcp_and_disables_host_tools() {
+        let config = ToollessThreadConfig {
+            cwd: PathBuf::from("/tmp/elsewhere-toolless"),
+            model: "gpt-5.6-luna".into(),
+            developer_instructions: Some("router only".into()),
+        };
+        let params = build_toolless_thread_start_params(&config).unwrap();
+        assert_host_tools_disabled(&params).unwrap();
+        let config_obj = params
+            .get("config")
+            .and_then(|v| v.as_object())
+            .expect("config object");
+        assert!(
+            !config_obj.contains_key("mcp_servers"),
+            "tool-less thread must not configure MCP servers"
+        );
     }
 
     #[test]

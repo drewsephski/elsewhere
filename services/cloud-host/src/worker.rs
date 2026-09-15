@@ -63,6 +63,7 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
         dispatch_available(&state)
             .await
             .map_err(|e| e.to_string())?;
+        crate::group_router::tick(&state).await;
         *state
             .runner_heartbeat
             .lock()

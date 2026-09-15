@@ -10,8 +10,8 @@ pub use account::{
 };
 pub use thread::{
     build_elsewhere_thread_resume_params, build_elsewhere_thread_start_params,
-    parse_list_mcp_status, parse_thread_resume_response, parse_thread_start_response,
-    ElsewhereThreadConfig, MCP_SERVER_NAME,
+    build_toolless_thread_start_params, parse_list_mcp_status, parse_thread_resume_response,
+    parse_thread_start_response, ElsewhereThreadConfig, ToollessThreadConfig, MCP_SERVER_NAME,
 };
 pub use turn::{
     build_turn_interrupt_params, build_turn_start_params, item_from_notification,

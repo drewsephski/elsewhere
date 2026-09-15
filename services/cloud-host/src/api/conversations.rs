@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::groups::{
-    add_participant, append_human_message, create_group, delete_transcript_message, get_conversation_for_owner,
+    add_participant, create_group, delete_transcript_message, get_conversation_for_owner,
     list_groups, list_messages, remove_participant, send_group_message,
     CreateGroupRequest, GroupConversationDetail, GroupListItem, SendGroupMessageRequest,
     SendGroupMessageResponse, TranscriptMessage,
@@ -64,6 +64,7 @@ pub struct AppendHumanMessageRequest {
     pub body: String,
     pub recipient_bot_ids: Option<Vec<String>>,
     pub mention_mode: Option<String>,
+    pub routing_mode: Option<String>,
 }
 
 pub async fn append_human_message_handler(
@@ -73,47 +74,42 @@ pub async fn append_human_message_handler(
     headers: axum::http::HeaderMap,
     Json(body): Json<AppendHumanMessageRequest>,
 ) -> Result<(StatusCode, Json<SendGroupMessageResponse>), ApiError> {
-    let has_routing = body.mention_mode.is_some()
-        || body
-            .recipient_bot_ids
-            .as_ref()
-            .is_some_and(|ids| ids.iter().any(|id| !id.trim().is_empty()));
-    if has_routing {
-        let idempotency_key = headers
-            .get("Idempotency-Key")
-            .and_then(|v| v.to_str().ok())
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
-        let response = send_group_message(
-            &state.pool,
-            principal.owner_id(),
-            &conversation_id,
-            &idempotency_key,
-            SendGroupMessageRequest {
-                body: body.body,
-                recipient_bot_ids: body.recipient_bot_ids,
-                mention_mode: body.mention_mode,
-            },
-        )
-        .await?;
-        return Ok((StatusCode::CREATED, Json(response)));
-    }
-    let message = append_human_message(
+    let idempotency_key = headers
+        .get("Idempotency-Key")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let response = send_group_message(
         &state.pool,
         principal.owner_id(),
         &conversation_id,
-        &body.body,
+        &idempotency_key,
+        SendGroupMessageRequest {
+            body: body.body,
+            recipient_bot_ids: body.recipient_bot_ids,
+            mention_mode: body.mention_mode,
+            routing_mode: body.routing_mode,
+        },
     )
     .await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(SendGroupMessageResponse {
-            message,
-            recipients: Vec::new(),
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn retry_message_route_handler(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path((conversation_id, message_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    crate::group_router::retry_auto_route(
+        &state.pool,
+        principal.owner_id(),
+        &conversation_id,
+        &message_id,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn list_group_conversations(

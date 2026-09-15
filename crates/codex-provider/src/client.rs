@@ -6,10 +6,10 @@ use crate::error::CodexProviderError;
 use crate::process::{CodexProcessLaunch, ManagedCodexProcess, DEFAULT_REQUEST_TIMEOUT};
 use crate::protocol::{
     build_elsewhere_thread_resume_params, build_elsewhere_thread_start_params,
-    build_turn_interrupt_params, build_turn_start_params, parse_account_response,
-    parse_list_mcp_status, parse_rate_limits_response, parse_thread_resume_response,
-    parse_thread_start_response, parse_turn_start_response, CodexAccountState,
-    CodexRateLimitsSnapshot, ElsewhereThreadConfig,
+    build_toolless_thread_start_params, build_turn_interrupt_params, build_turn_start_params,
+    parse_account_response, parse_list_mcp_status, parse_rate_limits_response,
+    parse_thread_resume_response, parse_thread_start_response, parse_turn_start_response,
+    CodexAccountState, CodexRateLimitsSnapshot, ElsewhereThreadConfig, ToollessThreadConfig,
 };
 
 const CLIENT_NAME: &str = "elsewhere";
@@ -67,6 +67,18 @@ impl CodexAppServerClient {
             .request("account/rateLimits/read", json!({}), DEFAULT_REQUEST_TIMEOUT)
             .await?;
         parse_rate_limits_response(result)
+    }
+
+    pub async fn thread_start_toolless(
+        &self,
+        config: &ToollessThreadConfig,
+    ) -> Result<String, CodexProviderError> {
+        let params = build_toolless_thread_start_params(config)?;
+        let result = self
+            .process
+            .request("thread/start", params, Duration::from_secs(120))
+            .await?;
+        parse_thread_start_response(result)
     }
 
     pub async fn thread_start_elsewhere(

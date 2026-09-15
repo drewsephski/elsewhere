@@ -23,6 +23,7 @@ pub use config::Config;
 pub use auth::jwt_test::test_signing;
 #[cfg(any(test, feature = "test-utils"))]
 pub use runner::{set_test_run_overrides, TestRunOverrides};
+pub use group_router::{drain_one_pending_route, set_test_group_route_decider};
 
 pub mod work;
 pub mod worker;
@@ -37,6 +38,7 @@ pub mod bot_context;
 pub mod conversation;
 pub mod groups;
 pub mod group_context;
+pub mod group_router;
 pub mod computer_registry;
 pub use computer_registry::ComputerRegistry;
 pub mod computer_session;

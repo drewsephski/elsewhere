@@ -39,6 +39,23 @@ function recipientStatusLabel(status: string): string {
   }
 }
 
+function routingStatusLabel(routing: TranscriptMessage["routing"]): string | null {
+  if (!routing) {
+    return null;
+  }
+  switch (routing.status) {
+    case "pending":
+    case "routing":
+      return "Choosing a responder…";
+    case "no_response":
+      return "No Bot selected";
+    case "failed":
+      return "Couldn't choose a responder";
+    default:
+      return null;
+  }
+}
+
 export function GroupConversationView({ groupId, bots }: GroupConversationViewProps) {
   const [group, setGroup] = useState<GroupConversationDetail | null>(null);
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
@@ -107,6 +124,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           body: trimmed,
           recipientBotIds: payload.recipientBotIds,
           mentionMode: payload.mentionMode,
+          routingMode: payload.routingMode,
         }),
       });
       const body = await response.json();
@@ -141,6 +159,13 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     setError(null);
     try {
       if (item.authorKind === "human") {
+        const routingPending =
+          item.routing?.status === "pending" || item.routing?.status === "routing";
+        if (routingPending) {
+          await deleteConversationMessage(groupId, item.id);
+          await loadMessages();
+          return;
+        }
         const activeRecipient = item.recipients?.some(
           (recipient) => recipient.status === "queued" || recipient.status === "running",
         );
@@ -159,8 +184,27 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     }
   }
 
+  async function handleRetryRoute(messageId: string) {
+    setError(null);
+    const response = await cloudHostFetch(
+      `/v1/conversations/${groupId}/messages/${messageId}/route/retry`,
+      { method: "POST" },
+    );
+    if (!response.ok) {
+      const body = await response.json();
+      setError(body.error ?? "Could not retry routing");
+      return;
+    }
+    await loadMessages();
+  }
+
   function canDeleteMessage(item: TranscriptMessage): boolean {
     if (item.authorKind === "human") {
+      const routingPending =
+        item.routing?.status === "pending" || item.routing?.status === "routing";
+      if (routingPending) {
+        return true;
+      }
       return !item.recipients?.some(
         (recipient) => recipient.status === "queued" || recipient.status === "running",
       );
@@ -249,6 +293,24 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                       </li>
                     ))}
                   </ul>
+                ) : routingStatusLabel(item.routing) ? (
+                  <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
+                    <span>{routingStatusLabel(item.routing)}</span>
+                    {item.routing?.status === "failed" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => void handleRetryRoute(item.id)}
+                      >
+                        Retry
+                      </Button>
+                    ) : null}
+                    {item.routing?.status === "no_response" ? (
+                      <span className="text-[10px]">@mention a Bot if you&apos;d like a response.</span>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : (

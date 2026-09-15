@@ -7,6 +7,9 @@ use uuid::Uuid;
 
 use crate::db::queries::BootstrapRunRecords;
 use crate::error::ApiError;
+use crate::group_router::{
+    cancel_routing_for_deleted_message, resolve_group_routing_mode, GroupRoutingMode,
+};
 use crate::work;
 
 pub const MIN_GROUP_BOTS: usize = 2;
@@ -19,7 +22,7 @@ fn db_error(error: sqlx::Error) -> ApiError {
 /// Stable fingerprint for idempotent group sends (same key must replay the same operation).
 pub fn group_send_request_fingerprint(
     body: &str,
-    mention_mode: Option<&str>,
+    routing_mode: &str,
     recipient_bot_ids: Option<&[String]>,
 ) -> String {
     let mut recipients: Vec<String> = recipient_bot_ids
@@ -32,9 +35,9 @@ pub fn group_send_request_fingerprint(
         .unwrap_or_default();
     recipients.sort();
     recipients.dedup();
-    let mode = mention_mode.unwrap_or("").trim().to_ascii_lowercase();
+    let mode = routing_mode.trim().to_ascii_lowercase();
     format!(
-        "v1|{}|{}|{}",
+        "v2|{}|{}|{}",
         body.trim(),
         mode,
         recipients.join(",")
@@ -106,6 +109,15 @@ pub struct GroupConversationDetail {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MessageRouting {
+    pub mode: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MessageRecipient {
     pub bot_id: String,
     pub bot_name: String,
@@ -131,6 +143,8 @@ pub struct TranscriptMessage {
     pub run_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recipients: Option<Vec<MessageRecipient>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routing: Option<MessageRouting>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -250,6 +264,7 @@ pub async fn list_messages(
             created_at: row.get("created_at"),
             run_id: row.get("run_id"),
             recipients: None,
+            routing: None,
         })
         .collect();
 
@@ -260,6 +275,31 @@ pub async fn list_messages(
         .collect();
     if human_ids.is_empty() {
         return Ok(messages);
+    }
+
+    let send_rows = sqlx::query(
+        r#"
+        SELECT message_id, routing_mode, routing_status, routing_error
+        FROM group_message_sends
+        WHERE conversation_id = $1 AND message_id = ANY($2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(&human_ids)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
+    let mut routing_by_message: std::collections::HashMap<String, MessageRouting> =
+        std::collections::HashMap::new();
+    for row in send_rows {
+        routing_by_message.insert(
+            row.get("message_id"),
+            MessageRouting {
+                mode: row.get("routing_mode"),
+                status: row.get("routing_status"),
+                error_code: row.get("routing_error"),
+            },
+        );
     }
 
     let recipient_rows = sqlx::query(
@@ -299,6 +339,7 @@ pub async fn list_messages(
         .map(|mut m| {
             if m.author_kind == "human" {
                 m.recipients = by_message.get(&m.id).cloned();
+                m.routing = routing_by_message.get(&m.id).cloned();
             }
             m
         })
@@ -665,6 +706,7 @@ pub async fn append_human_message(
         created_at: Utc::now(),
         run_id: None,
         recipients: None,
+        routing: None,
     })
 }
 
@@ -752,6 +794,7 @@ pub struct SendGroupMessageRequest {
     pub body: String,
     pub recipient_bot_ids: Option<Vec<String>>,
     pub mention_mode: Option<String>,
+    pub routing_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -846,15 +889,29 @@ pub async fn send_group_message(
         }
     }
 
-    let routing = resolve_group_recipients(
+    let routing_mode = resolve_group_routing_mode(
+        body.routing_mode.as_deref(),
         body.mention_mode.as_deref(),
         body.recipient_bot_ids.as_deref(),
-        &active_bot_ids,
-    )?;
+    );
+
+    let explicit_recipients = if routing_mode == GroupRoutingMode::Auto {
+        Vec::new()
+    } else {
+        resolve_group_recipients(
+            if routing_mode == GroupRoutingMode::Everyone {
+                Some("everyone")
+            } else {
+                None
+            },
+            body.recipient_bot_ids.as_deref(),
+            &active_bot_ids,
+        )?
+    };
 
     let fingerprint = group_send_request_fingerprint(
         trimmed,
-        body.mention_mode.as_deref(),
+        routing_mode.as_str(),
         body.recipient_bot_ids.as_deref(),
     );
 
@@ -918,10 +975,21 @@ pub async fn send_group_message(
     .await
     .map_err(db_error)?;
 
+    let candidate_fingerprint = if routing_mode == GroupRoutingMode::Auto {
+        Some(crate::group_router::candidate_fingerprint(
+            &crate::group_router::load_route_candidates(pool, owner, &detail).await?,
+        ))
+    } else {
+        None
+    };
+
     sqlx::query(
         r#"
-        INSERT INTO group_message_sends (id, owner_id, conversation_id, idempotency_key, message_id, request_fingerprint)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO group_message_sends (
+            id, owner_id, conversation_id, idempotency_key, message_id, request_fingerprint,
+            routing_mode, routing_status, routed_at, routing_candidate_fingerprint
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         "#,
     )
     .bind(&send_id)
@@ -930,12 +998,24 @@ pub async fn send_group_message(
     .bind(idempotency_key)
     .bind(&message_id)
     .bind(&fingerprint)
+    .bind(routing_mode.as_str())
+    .bind(if routing_mode == GroupRoutingMode::Auto {
+        "pending"
+    } else {
+        "resolved"
+    })
+    .bind(if routing_mode == GroupRoutingMode::Auto {
+        None::<DateTime<Utc>>
+    } else {
+        Some(Utc::now())
+    })
+    .bind(candidate_fingerprint.as_deref())
     .execute(&mut *tx)
     .await
     .map_err(db_error)?;
 
     let mut recipients_out = Vec::new();
-    for (bot_id, routing_kind) in routing {
+    for (bot_id, routing_kind) in explicit_recipients {
         let run_request_id = format!("{conversation_id}:{idempotency_key}:{bot_id}");
         let records = work::enqueue_from_group_message_in_transaction(
             &mut tx,
@@ -999,6 +1079,15 @@ pub async fn send_group_message(
             created_at: Utc::now(),
             run_id: None,
             recipients: Some(recipients_out.clone()),
+            routing: Some(MessageRouting {
+                mode: routing_mode.as_str().to_string(),
+                status: if routing_mode == GroupRoutingMode::Auto {
+                    "pending".into()
+                } else {
+                    "resolved".into()
+                },
+                error_code: None,
+            }),
         },
         recipients: recipients_out,
     })
@@ -1077,6 +1166,8 @@ pub async fn delete_transcript_message(
     if !exists {
         return Err(ApiError::NotFound);
     }
+
+    cancel_routing_for_deleted_message(&state.pool, message_id).await?;
 
     let run_ids: Vec<String> = sqlx::query_scalar(
         r#"

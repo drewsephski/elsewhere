@@ -10,6 +10,7 @@ mod login;
 mod mcp_turn_probe;
 mod process;
 mod protocol;
+mod group_route;
 mod run_engine;
 mod run_input;
 mod run_persistence;
@@ -41,10 +42,11 @@ pub use protocol::thread::{
     assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled, ELSEWHERE_ENABLED_MCP_TOOLS,
     ELSEWHERE_OMIT_MCP_TOOL_EXPOSURES,
 };
+pub use group_route::run_codex_group_route_decision;
 pub use protocol::{
-    build_elsewhere_thread_start_params, parse_account_response, CodexAccountKind,
-    CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot, ElsewhereThreadConfig,
-    MCP_SERVER_NAME,
+    build_elsewhere_thread_start_params, build_toolless_thread_start_params, parse_account_response,
+    CodexAccountKind, CodexAccountState, CodexLoginHandle, CodexRateLimitsSnapshot,
+    ElsewhereThreadConfig, ToollessThreadConfig, MCP_SERVER_NAME,
 };
 pub use run_engine::{CodexRunEngine, CodexRunEngineConfig};
 pub use subscription_availability::probe_codex_subscription_availability_on_client;
