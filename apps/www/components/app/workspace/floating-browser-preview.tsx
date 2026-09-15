@@ -2,7 +2,6 @@
 
 import { BrowserPreviewView } from "./browser-preview-view";
 import { useBrowserPreviewContext } from "@/contexts/browser-preview-context";
-import { useBrowserHumanControl } from "@/hooks/use-browser-human-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "cn";
@@ -36,7 +35,6 @@ function defaultPipPosition() {
 
 export function FloatingBrowserPreview() {
   const ctx = useBrowserPreviewContext();
-  const humanControl = useBrowserHumanControl(ctx.computerId, ctx.enabled);
   const panelRef = useRef<HTMLDivElement>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -119,10 +117,6 @@ export function FloatingBrowserPreview() {
 
   async function handleNavigate(event: React.FormEvent) {
     event.preventDefault();
-    if (!humanControl.humanActive) {
-      setControlError("Take control before navigating manually.");
-      return;
-    }
     setControlError(null);
     setControlBusy(true);
     try {

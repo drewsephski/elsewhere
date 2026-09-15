@@ -94,6 +94,10 @@ pub fn build_router(state: AppState) -> Router {
             post(api::computers::browser_control_return),
         )
         .route(
+            "/v1/computers/{id}/browser-control/heartbeat",
+            post(api::computers::browser_control_heartbeat),
+        )
+        .route(
             "/v1/computers/{id}/browser/navigate",
             post(api::computers::browser_navigate),
         )

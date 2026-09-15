@@ -267,6 +267,42 @@ pub async fn browser_control_return(
     Ok(Json(control_state_response(snapshot)))
 }
 
+pub async fn browser_control_heartbeat(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<BrowserControlStateResponse>, ApiError> {
+    get_computer_for_owner(&state.pool, principal.owner_id(), &computer_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound)?;
+    if !state.config.browser_enabled {
+        return Err(ApiError::Validation(
+            "browser control is disabled on this host".into(),
+        ));
+    }
+    let touched = computer_control::touch_human_heartbeat(
+        &state.pool,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !touched {
+        return Err(ApiError::Validation(
+            "No active human browser control lease to heartbeat".into(),
+        ));
+    }
+    let snapshot = computer_control::get_control_state(
+        &state.pool,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(control_state_response(snapshot)))
+}
+
 #[derive(Debug, Deserialize)]
 pub struct BrowserClickRequest {
     #[serde(default)]
@@ -338,10 +374,6 @@ pub async fn browser_type(
     Json(body): Json<BrowserTypeRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     require_human_control(&state, principal.owner_id(), &computer_id).await?;
-    let ref_id = body
-        .r#ref
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| ApiError::Validation("ref is required for type".into()))?;
     if body.text.is_empty() {
         return Err(ApiError::Validation("text is required".into()));
     }
@@ -355,17 +387,31 @@ pub async fn browser_type(
             state.config.browser_enabled,
         )
         .await?;
-    let result = computer
-        .browser_invoke(
-            "type",
-            &json!({
-                "ref": ref_id,
-                "text": body.text,
-                "submit": body.submit.unwrap_or(false)
-            }),
-        )
-        .await
-        .map_err(map_computer_error)?;
+    let submit = body.submit.unwrap_or(false);
+    let result = if let Some(ref_id) = body.r#ref.filter(|s| !s.is_empty()) {
+        computer
+            .browser_invoke(
+                "type",
+                &json!({
+                    "ref": ref_id,
+                    "text": body.text,
+                    "submit": submit
+                }),
+            )
+            .await
+            .map_err(map_computer_error)?
+    } else {
+        computer
+            .browser_invoke(
+                "type_focused",
+                &json!({
+                    "text": body.text,
+                    "submit": submit
+                }),
+            )
+            .await
+            .map_err(map_computer_error)?
+    };
     Ok(Json(result))
 }
 

@@ -2,16 +2,21 @@
 
 import {
   fetchBrowserControlState,
+  heartbeatBrowserControl,
   returnBrowserControl,
   takeBrowserControl,
   type BrowserControlState,
 } from "@/lib/browser-control";
 import { useCallback, useEffect, useState } from "react";
 
+const CONTROL_STATE_POLL_MS = 15_000;
+const HUMAN_LEASE_HEARTBEAT_MS = 30_000;
+
 export function useBrowserHumanControl(computerId: string | null, enabled: boolean) {
   const [control, setControl] = useState<BrowserControlState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const humanActive = Boolean(control?.youHaveControl);
 
   const refresh = useCallback(async () => {
     if (!computerId || !enabled) {
@@ -37,9 +42,45 @@ export function useBrowserHumanControl(computerId: string | null, enabled: boole
     }
     const timer = window.setInterval(() => {
       void refresh();
-    }, 15_000);
+    }, CONTROL_STATE_POLL_MS);
     return () => window.clearInterval(timer);
   }, [computerId, enabled, refresh]);
+
+  useEffect(() => {
+    if (!computerId || !enabled || !humanActive) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function sendHeartbeat() {
+      if (cancelled || !computerId) {
+        return;
+      }
+      try {
+        const next = await heartbeatBrowserControl(computerId);
+        if (!cancelled) {
+          setControl(next);
+          setError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Control lease heartbeat failed");
+          void refresh();
+        }
+      }
+    }
+
+    void sendHeartbeat();
+    const timer = window.setInterval(() => {
+      void sendHeartbeat();
+    }, HUMAN_LEASE_HEARTBEAT_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [computerId, enabled, humanActive, refresh]);
 
   const handleTakeControl = useCallback(async () => {
     if (!computerId) {
@@ -80,6 +121,6 @@ export function useBrowserHumanControl(computerId: string | null, enabled: boole
     refresh,
     takeControl: handleTakeControl,
     returnControl: handleReturnControl,
-    humanActive: control?.youHaveControl ?? false,
+    humanActive,
   };
 }

@@ -4,7 +4,11 @@ import { useOptionalActiveRun } from "@/contexts/active-run-context";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import type { BrowserPreviewFrame } from "@/hooks/use-browser-preview";
 import { previewHostname } from "@/lib/browser-preview-utils";
-import { clickComputerBrowserPoint } from "@/lib/browser-control";
+import {
+  clickComputerBrowserPoint,
+  pressComputerBrowserKey,
+  typeComputerBrowserFocused,
+} from "@/lib/browser-control";
 import {
   BrowserHumanControlBar,
   BrowserHumanPreviewClickOverlay,
@@ -233,13 +237,15 @@ export function BrowserPreviewView({
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
-  const humanControl = useBrowserHumanControl(ctx?.computerId ?? null, enabled);
-  const [humanClickBusy, setHumanClickBusy] = useState(false);
-  const [humanClickError, setHumanClickError] = useState<string | null>(null);
   const frame = frameProp ?? ctx?.frame ?? null;
   const loading = loadingProp ?? ctx?.loading ?? false;
   const error = errorProp ?? ctx?.error ?? null;
   const enabled = enabledProp ?? ctx?.enabled ?? false;
+  const humanControl = useBrowserHumanControl(ctx?.computerId ?? null, enabled);
+  const [humanClickBusy, setHumanClickBusy] = useState(false);
+  const [humanClickError, setHumanClickError] = useState<string | null>(null);
+  const [humanInputBusy, setHumanInputBusy] = useState(false);
+  const [humanInputError, setHumanInputError] = useState<string | null>(null);
   const browserToolError = activeRun?.lastBrowserToolError ?? null;
 
   const browserState = useMemo(() => {
@@ -321,33 +327,81 @@ export function BrowserPreviewView({
     }
   }
 
+  async function handleHumanTypeText(text: string) {
+    const computerId = ctx?.computerId;
+    if (!computerId || !humanControl.humanActive || !text) {
+      return;
+    }
+    setHumanInputBusy(true);
+    setHumanInputError(null);
+    try {
+      await typeComputerBrowserFocused(computerId, text);
+      await ctx?.refresh();
+    } catch (err) {
+      setHumanInputError(err instanceof Error ? err.message : "Could not type in browser");
+    } finally {
+      setHumanInputBusy(false);
+    }
+  }
+
+  async function handleHumanPressKey(key: string) {
+    const computerId = ctx?.computerId;
+    if (!computerId || !humanControl.humanActive) {
+      return;
+    }
+    setHumanInputBusy(true);
+    setHumanInputError(null);
+    try {
+      await pressComputerBrowserKey(computerId, key);
+      await ctx?.refresh();
+    } catch (err) {
+      setHumanInputError(err instanceof Error ? err.message : "Key press failed");
+    } finally {
+      setHumanInputBusy(false);
+    }
+  }
+
   if (variant === "floating") {
     return (
-      <PreviewChrome
-        frame={frame}
-        loading={loading}
-        enabled={enabled}
-        addressLabel={addressLabel}
-        addressBar={addressBar}
-        attached={chromeAttached}
-        compact
-        subtle
-        className={className}
-      >
-        {frame?.imageDataUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={frame.imageDataUrl}
-            alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
-            className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
-          />
-        ) : null}
-        <BrowserHumanPreviewClickOverlay
+      <div className={className}>
+        <BrowserHumanControlBar
+          enabled={enabled}
           humanActive={humanControl.humanActive}
-          busy={humanClickBusy}
-          onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
+          loading={humanControl.loading}
+          inputBusy={humanInputBusy || humanClickBusy}
+          error={humanControl.error}
+          inputError={humanInputError ?? humanClickError}
+          onTakeControl={() => void humanControl.takeControl()}
+          onReturnControl={() => void humanControl.returnControl()}
+          onTypeText={(text) => void handleHumanTypeText(text)}
+          onPressKey={(key) => void handleHumanPressKey(key)}
+          className="mb-1.5 px-2 pt-1"
         />
-      </PreviewChrome>
+        <PreviewChrome
+          frame={frame}
+          loading={loading}
+          enabled={enabled}
+          addressLabel={addressLabel}
+          addressBar={addressBar}
+          attached={chromeAttached}
+          compact
+          subtle
+        >
+          {frame?.imageDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={frame.imageDataUrl}
+              alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
+              className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
+            />
+          ) : null}
+          <BrowserHumanPreviewClickOverlay
+            humanActive={humanControl.humanActive}
+            busy={humanClickBusy || humanInputBusy}
+            onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
+          />
+        </PreviewChrome>
+      </div>
     );
   }
 
@@ -436,9 +490,13 @@ export function BrowserPreviewView({
           enabled={enabled}
           humanActive={humanControl.humanActive}
           loading={humanControl.loading}
+          inputBusy={humanInputBusy || humanClickBusy}
           error={humanControl.error}
+          inputError={humanInputError}
           onTakeControl={() => void humanControl.takeControl()}
           onReturnControl={() => void humanControl.returnControl()}
+          onTypeText={(text) => void handleHumanTypeText(text)}
+          onPressKey={(key) => void handleHumanPressKey(key)}
           className="mb-1.5"
         />
 

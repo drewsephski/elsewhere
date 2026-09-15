@@ -53,6 +53,17 @@ export async function returnBrowserControl(computerId: string): Promise<BrowserC
   return response.json() as Promise<BrowserControlState>;
 }
 
+export async function heartbeatBrowserControl(computerId: string): Promise<BrowserControlState> {
+  const response = await cloudHostFetch(
+    `/v1/computers/${encodeURIComponent(computerId)}/browser-control/heartbeat`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw new Error(await readJsonError(response, "Could not refresh browser control lease"));
+  }
+  return response.json() as Promise<BrowserControlState>;
+}
+
 export async function navigateComputerBrowser(computerId: string, url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) {
@@ -105,6 +116,24 @@ export async function typeComputerBrowser(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ref: refId, text, submit }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readJsonError(response, "Could not type in browser"));
+  }
+}
+
+export async function typeComputerBrowserFocused(
+  computerId: string,
+  text: string,
+  submit = false,
+): Promise<void> {
+  const response = await cloudHostFetch(
+    `/v1/computers/${encodeURIComponent(computerId)}/browser/type`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, submit }),
     },
   );
   if (!response.ok) {

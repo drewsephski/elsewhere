@@ -3,6 +3,7 @@ use agent_core::{
     ToolRunContext, WorkspaceEntry,
 };
 use async_trait::async_trait;
+use chrono::Utc;
 use cloud_host::approval::BrowserHumanControlGate;
 use cloud_host::computer_control::{self, ControlHolder};
 use cloud_host::db::resources::insert_computer_placeholder;
@@ -163,6 +164,39 @@ async fn returning_control_restores_bot_holder() {
         .await
         .unwrap();
     assert_eq!(state.holder, ControlHolder::Bot);
+}
+
+#[tokio::test]
+async fn human_heartbeat_extends_active_lease() {
+    let Some(pool) = try_test_pool().await else {
+        eprintln!("skipping human_heartbeat_extends_active_lease");
+        return;
+    };
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let computer = insert_computer_placeholder(&pool, &owner, "heartbeat")
+        .await
+        .unwrap();
+    computer_control::take_human_control(&pool, &owner, &computer.id)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE computer_control_leases SET heartbeat_at = NOW() - INTERVAL '100 seconds' WHERE computer_id = $1",
+    )
+    .bind(&computer.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let touched = computer_control::touch_human_heartbeat(&pool, &owner, &computer.id)
+        .await
+        .unwrap();
+    assert!(touched);
+    let state = computer_control::get_control_state(&pool, &owner, &computer.id)
+        .await
+        .unwrap();
+    assert_eq!(state.holder, ControlHolder::Human);
+    let heartbeat_at = state.heartbeat_at.expect("heartbeat timestamp");
+    let age = Utc::now() - heartbeat_at;
+    assert!(age.num_seconds() < 5);
 }
 
 #[tokio::test]

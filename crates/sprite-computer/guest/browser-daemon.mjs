@@ -196,6 +196,21 @@ async function handleRequest(req) {
       await refreshPreviewCache(page);
       return { ok: true, url: page.url() };
     }
+    case "type_focused": {
+      const text = String(req.text ?? "");
+      if (!text) {
+        throw new Error("text is required");
+      }
+      if (text.length > MAX_TYPE_TEXT_CHARS) {
+        throw new Error(`text exceeds ${MAX_TYPE_TEXT_CHARS} characters`);
+      }
+      await page.keyboard.type(text);
+      if (req.submit) {
+        await page.keyboard.press("Enter");
+      }
+      await refreshPreviewCache(page);
+      return { ok: true, url: page.url() };
+    }
     case "preview": {
       return readPreviewCacheFromDisk(PREVIEW_DIR);
     }
