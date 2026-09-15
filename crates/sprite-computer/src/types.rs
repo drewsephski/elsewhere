@@ -82,7 +82,6 @@ pub(crate) struct SpriteRecord {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct FsListResponse {
-    pub path: String,
     pub entries: Vec<FsEntry>,
 }
 

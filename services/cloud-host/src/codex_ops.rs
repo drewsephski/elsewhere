@@ -219,3 +219,82 @@ pub async fn probe_subscription_with_profile(
     }
     availability
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn single_slot_gate() -> CodexOpsGate {
+        CodexOpsGate::from_permits(1)
+    }
+
+    #[test]
+    fn allows_only_one_active_operation() {
+        let gate = single_slot_gate();
+        let run = gate.try_acquire(CodexOperationKind::Run).expect("run permit");
+        assert_eq!(gate.active_children(), 1);
+        assert!(gate.try_acquire(CodexOperationKind::Probe).is_err());
+        assert!(gate.try_acquire(CodexOperationKind::Login).is_err());
+        drop(run);
+        assert_eq!(gate.active_children(), 0);
+        assert!(gate.try_acquire(CodexOperationKind::Probe).is_ok());
+    }
+
+    #[test]
+    fn provider_status_and_run_do_not_overlap() {
+        let gate = single_slot_gate();
+        let run = gate.try_acquire(CodexOperationKind::Run).expect("run");
+        assert!(gate.try_acquire(CodexOperationKind::Probe).is_err());
+        drop(run);
+        let probe = gate.try_acquire(CodexOperationKind::Probe).expect("probe");
+        assert!(gate.try_acquire(CodexOperationKind::Run).is_err());
+        drop(probe);
+    }
+
+    #[test]
+    fn auto_probe_and_run_share_one_slot() {
+        let gate = single_slot_gate();
+        let probe = gate.try_acquire(CodexOperationKind::Probe).expect("probe");
+        assert!(gate.try_acquire(CodexOperationKind::Run).is_err());
+        drop(probe);
+        let run = gate.try_acquire(CodexOperationKind::Run).expect("run");
+        assert!(gate.try_acquire(CodexOperationKind::Probe).is_err());
+        drop(run);
+    }
+
+    #[test]
+    fn device_login_blocks_provider_status_probe() {
+        let gate = single_slot_gate();
+        let login = gate.try_acquire(CodexOperationKind::Login).expect("login");
+        assert!(gate.try_acquire(CodexOperationKind::Probe).is_err());
+        drop(login);
+    }
+
+    #[test]
+    fn device_login_blocks_run_admission() {
+        let gate = single_slot_gate();
+        let login = gate.try_acquire(CodexOperationKind::Login).expect("login");
+        assert!(gate.try_acquire(CodexOperationKind::Run).is_err());
+        drop(login);
+    }
+
+    #[test]
+    fn group_route_waits_behind_run_permit() {
+        let gate = single_slot_gate();
+        let run = gate.try_acquire(CodexOperationKind::Run).expect("run");
+        assert!(gate.try_acquire(CodexOperationKind::GroupRoute).is_err());
+        drop(run);
+        assert!(gate.try_acquire(CodexOperationKind::GroupRoute).is_ok());
+    }
+
+    #[test]
+    fn archive_shares_slot_with_run() {
+        let gate = single_slot_gate();
+        let archive = gate
+            .try_acquire(CodexOperationKind::Archive)
+            .expect("archive");
+        assert!(gate.try_acquire(CodexOperationKind::Run).is_err());
+        drop(archive);
+        assert!(gate.try_acquire(CodexOperationKind::Run).is_ok());
+    }
+}
