@@ -46,6 +46,10 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
                 .cancel_pending_for_run(&run_id, "run_cancelled")
                 .await
                 .map_err(|e| e.to_string())?;
+            let _ = state
+                .human_interventions
+                .cancel_pending_for_run(&run_id, "run_cancelled")
+                .await;
         }
         if !state.draining.load(std::sync::atomic::Ordering::SeqCst) {
             crate::routines::tick(&state.pool, chrono::Utc::now())

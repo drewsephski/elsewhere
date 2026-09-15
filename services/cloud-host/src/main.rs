@@ -121,6 +121,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "cancelled stale tool approvals after host restart"
         );
     }
+    let cancelled_interventions = state
+        .human_interventions
+        .cancel_all_pending_on_host_restart()
+        .await?;
+    if cancelled_interventions > 0 {
+        tracing::warn!(
+            count = cancelled_interventions,
+            "cancelled stale human interventions after host restart"
+        );
+    }
     let app = build_router(state.clone());
 
     let worker_state = state.clone();

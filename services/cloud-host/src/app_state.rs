@@ -9,6 +9,7 @@ use tokio::sync::{Mutex, Semaphore};
 use agent_core::{AgentComputer, ResponsesModel};
 
 use crate::approval::ApprovalService;
+use crate::human_intervention::HumanInterventionService;
 use crate::auth::JwtVerifier;
 use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
@@ -52,6 +53,7 @@ pub struct AppState {
     pub jwt_verifier: Option<Arc<JwtVerifier>>,
     pub codex_login_client: Arc<Mutex<Option<PendingCodexLogin>>>,
     pub approvals: ApprovalService,
+    pub human_interventions: HumanInterventionService,
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub group_route_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
@@ -141,6 +143,10 @@ impl AppState {
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
             timeout: Duration::from_secs(config.tool_approval_timeout_secs),
         };
+        let human_interventions = HumanInterventionService {
+            pool: pool.clone(),
+            registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
+        };
         let connector_secret_box = config
             .connector_secret_key
             .as_deref()
@@ -156,6 +162,7 @@ impl AppState {
             jwt_verifier,
             codex_login_client: Arc::new(Mutex::new(None)),
             approvals,
+            human_interventions,
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             group_route_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),

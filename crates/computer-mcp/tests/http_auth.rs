@@ -26,6 +26,7 @@ async fn mcp_tools_require_bearer_token() {
         Arc::new(AtomicBool::new(false)),
         None,
         None,
+        None,
         "conv-test".into(),
     )
         .await
@@ -71,6 +72,7 @@ async fn fake_computer_rejects_outside_workspace_via_mcp_session() {
         Arc::new(AtomicBool::new(false)),
         None,
         None,
+        None,
         "conv-test".into(),
     )
         .await
@@ -86,6 +88,7 @@ async fn dropping_run_revokes_its_computer_endpoint() {
         Arc::new(AllowAllApprovalGate),
         test_run(),
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
         None,
         "conv-test".into(),

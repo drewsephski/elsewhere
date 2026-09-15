@@ -200,6 +200,10 @@ pub fn build_router(state: AppState) -> Router {
             get(api::delegations::get_delegation_by_id),
         )
         .route("/v1/runs/{id}", get(api::runs::get_run))
+        .route(
+            "/v1/runs/{id}/human-intervention",
+            get(crate::human_intervention::api::get_run_human_intervention),
+        )
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
         .route("/v1/runs/{id}/archive", post(api::runs::archive_run))
         .route("/v1/runs/{id}/events", get(api::runs::run_events_sse))

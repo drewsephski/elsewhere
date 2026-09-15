@@ -51,6 +51,7 @@ pub struct SharedRunDeps {
     pub computer_id: String,
     pub collaboration: Option<Arc<dyn AgentCollaboration>>,
     pub connectors: Option<Arc<dyn AgentConnectors>>,
+    pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     /// Immutable Agent Skill packages snapshotted at run admission.
     pub skill_packages: Arc<[SkillPackage]>,
 }
@@ -76,6 +77,7 @@ impl SharedRunDeps {
             computer_id,
             collaboration: None,
             connectors: None,
+            human_intervention: None,
             skill_packages: Arc::from([]),
         }
     }
@@ -126,6 +128,7 @@ pub fn responses_loop_deps(
         computer_id: shared.computer_id.clone(),
         collaboration: shared.collaboration.clone(),
         connectors: shared.connectors.clone(),
+        human_intervention: shared.human_intervention.clone(),
     }
 }
 

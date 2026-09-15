@@ -5,6 +5,7 @@ pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
 pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
+use crate::human_intervention::is_human_intervention_tool;
 use crate::tool_catalog::{is_browser_tool, is_collaboration_tool, is_connector_tool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,6 +90,8 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "bot_list" => ToolOperationKind::Read,
         "bot_delegate" => ToolOperationKind::Mutation,
+        "browser_request_human" => ToolOperationKind::Read,
+        name if is_human_intervention_tool(name) => ToolOperationKind::Read,
         name if is_connector_tool(name) => ToolOperationKind::Read,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "browser_snapshot" => ToolOperationKind::Read,
@@ -141,6 +144,10 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "path": args.get("path").and_then(|v| v.as_str()).unwrap_or("")
         }),
         "browser_snapshot" => json!({}),
+        "browser_request_human" => json!({
+            "reason": args.get("reason").and_then(|v| v.as_str()).unwrap_or(""),
+            "messageLength": args.get("message").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
+        }),
         "bot_list" => json!({}),
         "bot_delegate" => json!({
             "targetBotId": args.get("targetBotId").and_then(|v| v.as_str()).unwrap_or(""),

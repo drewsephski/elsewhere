@@ -14,6 +14,7 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     browser_type: "Typing on the page",
     browser_screenshot: "Capturing a screenshot",
     browser_download: "Downloading a file",
+    browser_request_human: "Waiting for you in the browser",
     bot_list: "Checking available Bots",
     bot_delegate: "Handing work to another Bot",
   };
@@ -49,6 +50,12 @@ export function activityText(event: string, payload: Record<string, unknown>): s
   }
   if (event === "bot_delegation_failed") {
     return "Delegated work failed";
+  }
+  if (event === "human_intervention_requested") {
+    return "Bot needs your help in the browser";
+  }
+  if (event === "human_intervention_resolved") {
+    return "You returned control to the Bot";
   }
   if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
   if (event === "queued") return "Work saved. Waiting for an available computer.";

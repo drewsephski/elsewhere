@@ -39,6 +39,7 @@ pub mod bot_avatar;
 pub mod bot_context;
 pub mod conversation;
 pub mod groups;
+pub mod human_intervention;
 pub mod group_context;
 pub mod bounded_text;
 pub mod group_router;

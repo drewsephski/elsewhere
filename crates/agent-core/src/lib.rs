@@ -16,6 +16,8 @@ mod runtime_identity;
 mod run_store;
 mod collaboration;
 mod collaboration_tools;
+mod human_intervention;
+mod human_intervention_tools;
 mod connectors;
 mod connector_tools;
 mod tool_catalog;
@@ -66,6 +68,13 @@ pub use collaboration_tools::{
     all_openai_tool_definitions, collaboration_openai_tool_definitions,
     dispatch_agent_tool_with_gate,
 };
+pub use human_intervention::{
+    is_human_intervention_tool, sanitize_human_intervention_message,
+    validate_human_intervention_reason, AgentHumanIntervention, HumanInterventionContext,
+    HumanInterventionError, HumanInterventionOutcome, HUMAN_INTERVENTION_REASONS,
+    MAX_HUMAN_INTERVENTION_MESSAGE_CHARS,
+};
+pub use human_intervention_tools::human_intervention_openai_tool_definitions;
 pub use connectors::{
     bound_connector_tool_result, AgentConnectors, ConnectorError,
     MAX_CONNECTOR_TOOL_RESULT_BYTES,

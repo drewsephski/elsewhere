@@ -264,6 +264,13 @@ pub async fn browser_control_return(
     )
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if let Err(err) = state
+        .human_interventions
+        .resolve_pending_for_computer_handback(principal.owner_id(), &computer_id)
+        .await
+    {
+        tracing::warn!(error = %err, "could not resolve pending human interventions on handback");
+    }
     Ok(Json(control_state_response(snapshot)))
 }
 

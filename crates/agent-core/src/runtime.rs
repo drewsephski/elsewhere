@@ -36,6 +36,7 @@ pub struct AgentLoopDeps {
     pub computer_id: String,
     pub collaboration: Option<Arc<dyn crate::collaboration::AgentCollaboration>>,
     pub connectors: Option<Arc<dyn crate::connectors::AgentConnectors>>,
+    pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
 }
 
 pub async fn run_agent_loop(
@@ -181,6 +182,7 @@ pub async fn run_agent_loop(
                 deps.computer.as_ref(),
                 deps.collaboration.as_ref(),
                 deps.connectors.as_ref(),
+                deps.human_intervention.as_ref(),
                 &name,
                 &arguments,
                 &deps.cancel,
@@ -701,6 +703,7 @@ mod tests {
             computer_id: "comp".into(),
             collaboration: None,
             connectors: None,
+            human_intervention: None,
         };
 
         let ctx = AgentLoopContext {

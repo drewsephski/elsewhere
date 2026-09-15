@@ -33,7 +33,7 @@ use crate::run_persistence::{
 };
 use agent_core::MessageStatus;
 
-const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. Use bot_list to discover other Bots owned by the same user and bot_delegate to queue asynchronous handoffs to them (returns immediately; does not wait for completion). Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals. Persistent workspace files live under /workspace; final user-retrievable artifacts for this assignment belong under the results directory described in your role instructions.";
+const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. When a page requires owner login, CAPTCHA, 2FA, passkeys, credential entry, or similar human-only interaction, call browser_request_human with a short safe message — never ask the user for passwords or OTP values in chat. After the owner returns control, call browser_snapshot before continuing. Use bot_list to discover other Bots owned by the same user and bot_delegate to queue asynchronous handoffs to them (returns immediately; does not wait for completion). Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals. Persistent workspace files live under /workspace; final user-retrievable artifacts for this assignment belong under the results directory described in your role instructions.";
 
 const WORKSPACE_CONTRACT_MARKER: &str = "\n\nComputer workspace contract:\n";
 
@@ -148,6 +148,7 @@ impl CodexRunEngine {
             shared.cancel.clone(),
             shared.collaboration.clone(),
             shared.connectors.clone(),
+            shared.human_intervention.clone(),
             ctx.conversation_id.clone(),
         )
         .await

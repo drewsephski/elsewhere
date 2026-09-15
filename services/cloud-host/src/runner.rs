@@ -24,6 +24,7 @@ use crate::db::queries::BootstrapRunRecords;
 use crate::events::cloud_event_sink::CloudEventSink;
 use crate::events::registry::ActiveRun;
 use crate::finalizer::{sanitize_host_error, HostFinalizer};
+use crate::human_intervention::RunScopedHumanIntervention;
 use crate::run_engine_select::{
     resolve_run_engine, ResolveRunEngineError, RunEngineMode, SelectedRunEngine,
 };
@@ -177,6 +178,13 @@ pub fn spawn_agent_run(state: AppState, input: RunExecutionInput, permit: OwnedS
             .await
         {
             tracing::error!(run_id = %run_id, error = %error, "could not close remaining approvals");
+        }
+        if let Err(error) = state
+            .human_interventions
+            .cancel_pending_for_run(&run_id, "work_finished")
+            .await
+        {
+            tracing::error!(run_id = %run_id, error = %error, "could not close remaining human interventions");
         }
 
         if let Err(error) =
@@ -355,7 +363,11 @@ Bot collaboration:\n\
 - Use bot_delegate to hand durable work to a specialist asynchronously; it only queues work and returns immediately.\n\
 - Do not delegate trivial work or repeat the same handoff unnecessarily.\n\
 - Do not claim another Bot finished work just because delegation was accepted.\n\
-- Cross-computer file paths are not shared; pass bounded text context only unless both Bots share a computer.",
+- Cross-computer file paths are not shared; pass bounded text context only unless both Bots share a computer.\n\n\
+Human browser intervention:\n\
+- Use browser tools for normal automation. Never ask the user for passwords, OTP codes, or other secrets in chat.\n\
+- When a page requires owner login, CAPTCHA, 2FA, passkeys, credential entry, or consent, call browser_request_human with a short safe message.\n\
+- After the owner returns control, call browser_snapshot before continuing; do not assume the human step succeeded.",
         crate::results::output_directory(&input.records.run_id)
     ));
 
@@ -373,9 +385,9 @@ Bot collaboration:\n\
 
     let shared = SharedRunDeps {
         computer: computer.clone(),
-        store,
-        events: events as Arc<dyn agent_core::EventSink>,
-        cancel,
+        store: store.clone(),
+        events: events.clone() as Arc<dyn agent_core::EventSink>,
+        cancel: cancel.clone(),
         approval_gate,
         run_id: input.records.run_id.clone(),
         owner_id,
@@ -390,6 +402,12 @@ Bot collaboration:\n\
                     host_state.github_client.clone(),
                 )
             }),
+        human_intervention: Some(RunScopedHumanIntervention::new(
+            host_state.human_interventions.clone(),
+            store.clone(),
+            events.clone(),
+            cancel.clone(),
+        )),
         skill_packages,
     };
 

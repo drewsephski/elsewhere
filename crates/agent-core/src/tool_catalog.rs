@@ -70,6 +70,7 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "browser_type",
     "browser_screenshot",
     "browser_download",
+    "browser_request_human",
     "bot_list",
     "bot_delegate",
     "github_list_repositories",

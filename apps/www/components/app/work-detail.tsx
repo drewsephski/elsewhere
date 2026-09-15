@@ -37,6 +37,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { ListTree } from "lucide-react";
+import { HumanInterventionBanner } from "@/components/app/human-intervention-banner";
+import {
+  fetchHumanInterventionStatus,
+  type PendingHumanIntervention,
+} from "@/lib/human-intervention";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 import { BrowserPreviewView } from "@/components/app/workspace/browser-preview-view";
 
@@ -78,6 +83,8 @@ export function WorkDetail({ runId }: { runId: string }) {
   const [deleting, setDeleting] = useState(false);
   const [delegations, setDelegations] = useState<DelegationSummary[]>([]);
   const [savingSkill, setSavingSkill] = useState(false);
+  const [pendingHumanIntervention, setPendingHumanIntervention] =
+    useState<PendingHumanIntervention | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -85,6 +92,18 @@ export function WorkDetail({ runId }: { runId: string }) {
       .then(async (response) => {
         if (!response.ok) return;
         setDelegations(await response.json());
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [runId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchHumanInterventionStatus(runId)
+      .then((status) => {
+        if (!controller.signal.aborted) {
+          setPendingHumanIntervention(status.pending);
+        }
       })
       .catch(() => undefined);
     return () => controller.abort();
@@ -130,6 +149,26 @@ export function WorkDetail({ runId }: { runId: string }) {
             }
             const id = event.id ?? `terminal-${runId}`;
             if (
+              event.event === "human_intervention_requested" &&
+              typeof payload.interventionId === "string"
+            ) {
+              setDetail((previous) => {
+                const computerId = String(
+                  payload.computerId ?? previous?.computerId ?? "",
+                );
+                setPendingHumanIntervention({
+                  id: payload.interventionId as string,
+                  runId,
+                  computerId,
+                  reason: String(payload.reason ?? "other"),
+                  message: String(payload.message ?? "The Bot needs your help"),
+                  requestedAt: new Date().toISOString(),
+                });
+                return previous;
+              });
+            } else if (event.event === "human_intervention_resolved") {
+              setPendingHumanIntervention(null);
+            } else if (
               event.event === "approval_requested" &&
               typeof payload.approvalId === "string" &&
               typeof payload.summary === "string"
@@ -354,7 +393,11 @@ export function WorkDetail({ runId }: { runId: string }) {
         )}
       </div>
 
-      {error ? (
+        {pendingHumanIntervention ? (
+          <HumanInterventionBanner pending={pendingHumanIntervention} />
+        ) : null}
+
+        {error ? (
         <Alert variant="destructive">
           <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
