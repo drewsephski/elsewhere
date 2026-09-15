@@ -5,7 +5,7 @@ use agent_core::{
 use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::Value;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 use crate::auth::LEGACY_LOCAL_OWNER;
@@ -168,7 +168,13 @@ impl RunStore for PostgresRunStore {
         step_count: i64,
     ) -> Result<(), RuntimeError> {
         let now = Utc::now();
-        let finished = matches!(status, "completed" | "failed" | "cancelled" | "interrupted");
+        let finished = crate::run_lifecycle::is_terminal_run_status(status);
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))?;
+
         sqlx::query(
             r#"
             UPDATE agent_runs
@@ -186,65 +192,53 @@ impl RunStore for PostgresRunStore {
         .bind(now)
         .bind(finished)
         .bind(request_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| RuntimeError::Store(e.to_string()))?;
 
         if finished {
-            if status == "completed" {
-                if let Err(err) =
-                    crate::conversation::commit_group_context_cursor_for_completed_run(
-                        &self.pool,
-                        request_id,
-                    )
-                    .await
+            let run_row = sqlx::query("SELECT id FROM agent_runs WHERE request_id = $1")
+                .bind(request_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(|e| RuntimeError::Store(e.to_string()))?;
+            if let Some(run_row) = run_row {
+                let run_id: String = run_row.get("id");
+                if status == "completed" {
+                    if let Err(err) =
+                        crate::conversation::commit_group_context_cursor_for_completed_run_in_tx(
+                            &mut tx,
+                            request_id,
+                        )
+                        .await
+                    {
+                        tracing::warn!(
+                            request_id = %request_id,
+                            error = %err,
+                            "could not commit group context cursor"
+                        );
+                    }
+                }
+                if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
+                    &mut tx,
+                    &run_id,
+                    status,
+                    error_code,
+                )
+                .await
                 {
                     tracing::warn!(
                         request_id = %request_id,
                         error = %err,
-                        "could not commit group context cursor"
+                        "could not synchronize run terminal lifecycle"
                     );
                 }
             }
-            if let Err(err) = crate::delegation::sync_target_run_terminal(
-                &self.pool,
-                request_id,
-                status,
-                error_code,
-            )
-            .await
-            {
-                tracing::warn!(
-                    request_id = %request_id,
-                    error = %err,
-                    "could not sync delegation lifecycle"
-                );
-            }
-            let recipient_status = match status {
-                "completed" => "completed",
-                "cancelled" => "cancelled",
-                _ => "failed",
-            };
-            if let Err(err) = sqlx::query(
-                r#"
-                UPDATE group_message_recipients g
-                SET status = $2, updated_at = NOW()
-                FROM agent_runs r
-                WHERE g.run_id = r.id AND r.request_id = $1
-                "#,
-            )
-            .bind(request_id)
-            .bind(recipient_status)
-            .execute(&self.pool)
-            .await
-            {
-                tracing::warn!(
-                    request_id = %request_id,
-                    error = %err,
-                    "could not sync group recipient status"
-                );
-            }
         }
+
+        tx.commit()
+            .await
+            .map_err(|e| RuntimeError::Store(e.to_string()))?;
         Ok(())
     }
 

@@ -83,6 +83,33 @@ pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
         .await?;
     }
 
+    for (request_id, _) in &restarted {
+        if let Some(run_id) = sqlx::query_scalar::<_, String>(
+            "SELECT id FROM agent_runs WHERE request_id = $1",
+        )
+        .bind(request_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        {
+            if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
+                &mut tx,
+                &run_id,
+                "interrupted",
+                Some("host_restart"),
+            )
+            .await
+            {
+                tracing::warn!(
+                    request_id = %request_id,
+                    run_id = %run_id,
+                    error = %err,
+                    repair_action = "restart_interrupted_sync",
+                    "could not synchronize interrupted run lifecycle"
+                );
+            }
+        }
+    }
+
     sqlx::query("UPDATE agent_runs SET execution_released_at = NOW(), results_note = CASE WHEN status = 'completed' THEN 'The runner restarted while saving results. The summary is available; some files may remain on the computer.' ELSE results_note END WHERE started_at IS NOT NULL AND execution_released_at IS NULL")
         .execute(&mut *tx).await?;
     tx.commit().await?;

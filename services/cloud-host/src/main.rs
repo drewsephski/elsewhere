@@ -103,6 +103,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             count = interrupted,
             "marked orphan runs interrupted after host restart"
         );
+        if let Err(err) =
+            cloud_host::run_lifecycle::reconcile_collaboration_lifecycle(&pool).await
+        {
+            tracing::warn!(
+                error = %err,
+                "collaboration lifecycle reconciliation after restart failed"
+            );
+        }
     }
 
     let state = AppState::new(pool.clone(), config.clone());

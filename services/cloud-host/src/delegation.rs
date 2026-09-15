@@ -39,16 +39,44 @@ pub fn format_delegation_return_user_message(
     target_status: &str,
     target_result: &str,
     target_run_id: &str,
+    artifact_lines: &[String],
+    shared_computer: bool,
+    interruption_detail: Option<&str>,
 ) -> String {
-    format!(
+    let mut message = format!(
         "Delegated work returned from {target_bot_name}.\n\n\
 Original delegated instruction:\n{instruction}\n\n\
 Recipient status:\n{target_status}\n\n\
 Recipient result:\n{target_result}\n\n\
-Target run:\n{target_run_id}\n\n\
-Continue the original task using these findings.\n\
-Do not claim access to files that are on another computer unless they are actually accessible."
-    )
+Target run:\n{target_run_id}\n"
+    );
+    if let Some(detail) = interruption_detail.filter(|d| !d.is_empty()) {
+        message.push_str("\nInterruption:\n");
+        message.push_str(detail);
+        message.push('\n');
+    }
+    if !artifact_lines.is_empty() {
+        message.push_str("\nTarget artifacts:\n");
+        for line in artifact_lines {
+            message.push_str("- ");
+            message.push_str(line);
+            message.push('\n');
+        }
+    }
+    if shared_computer {
+        message.push_str(
+            "\nSource and target Bots share the same computer; workspace files from the target run may still be available under /workspace.\n",
+        );
+    } else {
+        message.push_str(
+            "\nSource and target Bots use different computers; target workspace files are not locally accessible on your computer.\n",
+        );
+    }
+    message.push_str(
+        "\nContinue the original task using these findings.\n\
+Do not claim access to files that are on another computer unless they are actually accessible.",
+    );
+    message
 }
 
 pub async fn list_teammates(
@@ -491,125 +519,12 @@ pub async fn sync_target_run_terminal(
     status: &str,
     error_code: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    if !matches!(status, "completed" | "failed" | "cancelled" | "interrupted") {
-        return Ok(());
-    }
-
-    let run_id: Option<String> =
-        sqlx::query_scalar("SELECT id FROM agent_runs WHERE request_id = $1")
-            .bind(request_id)
-            .fetch_optional(pool)
-            .await?;
-
-    let Some(run_id) = run_id else {
-        return Ok(());
-    };
-
-    let mut tx = pool.begin().await?;
-
-    let row = sqlx::query(
-        "SELECT id, source_request_id, status, return_policy FROM bot_delegations WHERE target_run_id = $1 FOR UPDATE",
-    )
-    .bind(&run_id)
-    .fetch_optional(&mut *tx)
-    .await?;
-
-    let Some(row) = row else {
-        tx.commit().await?;
-        return Ok(());
-    };
-
-    let delegation_id: String = row.get("id");
-    let source_request_id: String = row.get("source_request_id");
-    let current: String = row.get("status");
-    if matches!(current.as_str(), "completed" | "failed" | "cancelled") {
-        if row.get::<String, _>("return_policy") == "resume_source" {
-            let _ = crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id)
-                .await
-                .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-        }
-        tx.commit().await?;
-        return Ok(());
-    }
-
-    let (delegation_status, event_type, error_message) = match status {
-        "completed" => ("completed", "bot_delegation_completed", None),
-        "cancelled" => ("cancelled", "bot_delegation_failed", Some("cancelled")),
-        "interrupted" => ("failed", "bot_delegation_failed", Some("interrupted")),
-        _ => ("failed", "bot_delegation_failed", error_code),
-    };
-
-    sqlx::query(
-        r#"
-        UPDATE bot_delegations
-        SET status = $2,
-            finished_at = NOW(),
-            error_code = $3,
-            error_message = $4
-        WHERE id = $1
-        "#,
-    )
-    .bind(&delegation_id)
-    .bind(delegation_status)
-    .bind(error_code)
-    .bind(error_message)
-    .execute(&mut *tx)
-    .await?;
-
-    let payload = json!({
-        "delegationId": delegation_id,
-        "targetRunId": run_id,
-        "status": delegation_status,
-        "errorCode": error_code
-    });
-    sqlx::query(
-        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, $2, $3)",
-    )
-    .bind(&source_request_id)
-    .bind(event_type)
-    .bind(&payload)
-    .execute(&mut *tx)
-    .await?;
-
-    if row.get::<String, _>("return_policy") == "resume_source" {
-        crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id)
-            .await
-            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
-    }
-
-    tx.commit().await?;
-    Ok(())
+    crate::run_lifecycle::synchronize_run_terminal_for_request(pool, request_id, status, error_code)
+        .await
 }
 
 pub async fn reconcile_pending_delegation_returns(pool: &PgPool) -> Result<(), sqlx::Error> {
-    let pending: Vec<String> = sqlx::query_scalar(
-        r#"
-        SELECT id FROM bot_delegations
-        WHERE return_policy = 'resume_source'
-          AND status IN ('completed', 'failed', 'cancelled')
-          AND source_resume_run_id IS NULL
-          AND resume_status IS NULL
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
-
-    for delegation_id in pending {
-        let mut tx = pool.begin().await?;
-        if let Err(err) =
-            crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id).await
-        {
-            tracing::warn!(
-                delegation_id = %delegation_id,
-                error = %err,
-                "could not reconcile delegation return"
-            );
-            tx.rollback().await.ok();
-            continue;
-        }
-        tx.commit().await?;
-    }
-    Ok(())
+    crate::run_lifecycle::reconcile_collaboration_lifecycle(pool).await
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

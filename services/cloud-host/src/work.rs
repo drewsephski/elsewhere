@@ -389,6 +389,41 @@ pub async fn enqueue_delegated_in_transaction(
 }
 
 const MAX_DELEGATION_RETURN_RESULT_CHARS: usize = 12_000;
+const MAX_DELEGATION_RETURN_ARTIFACTS: usize = 10;
+
+async fn load_target_artifact_lines_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    target_run_id: &str,
+) -> Result<Vec<String>, ApiError> {
+    let rows = sqlx::query(
+        r#"
+        SELECT name, kind, octet_length(content)::bigint AS size
+        FROM work_results
+        WHERE run_id = $1
+        ORDER BY created_at ASC, name ASC
+        LIMIT $2
+        "#,
+    )
+    .bind(target_run_id)
+    .bind(MAX_DELEGATION_RETURN_ARTIFACTS as i64)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(db_error)?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let name: String = row.get("name");
+            let size: i64 = row.get("size");
+            let size_label = if size >= 1024 {
+                format!("{:.0} KB", (size as f64) / 1024.0)
+            } else {
+                format!("{size} B")
+            };
+            format!("{name} ({size_label})")
+        })
+        .collect())
+}
 
 /// Queue exactly one source-Bot continuation after a delegated target reaches a terminal state.
 pub async fn enqueue_delegation_return_in_transaction(
@@ -401,9 +436,13 @@ pub async fn enqueue_delegation_return_in_transaction(
                tb.name AS target_bot_name,
                tr.status AS target_run_status,
                tr.id AS target_run_id,
-               am.body AS target_result_body
+               tr.error_code AS target_run_error_code,
+               am.body AS target_result_body,
+               sb.computer_id AS source_computer_id,
+               tb.computer_id AS target_computer_id
         FROM bot_delegations d
         JOIN bots tb ON tb.id = d.target_bot_id
+        JOIN bots sb ON sb.id = d.source_bot_id
         LEFT JOIN agent_runs tr ON tr.id = d.target_run_id
         LEFT JOIN messages am ON am.id = tr.assistant_message_id
         WHERE d.id = $1
@@ -422,8 +461,38 @@ pub async fn enqueue_delegation_return_in_transaction(
     }
     let resume_status: Option<String> = row.get("resume_status");
     let source_resume_run_id: Option<String> = row.get("source_resume_run_id");
-    if source_resume_run_id.is_some() || resume_status.is_some() {
+    let source_request_id: String = row.get("source_request_id");
+    if source_resume_run_id.is_some() {
         return Ok(source_resume_run_id);
+    }
+    if resume_status.as_deref() == Some("skipped") {
+        return Ok(None);
+    }
+
+    let return_request_id = format!("delegation-return:{delegation_id}");
+    if let Some(existing_run_id) = sqlx::query_scalar::<_, String>(
+        "SELECT id FROM agent_runs WHERE request_id = $1",
+    )
+    .bind(&return_request_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(db_error)?
+    {
+        sqlx::query(
+            r#"
+            UPDATE bot_delegations
+            SET source_resume_run_id = $2,
+                resume_status = COALESCE(resume_status, 'queued'),
+                resume_created_at = COALESCE(resume_created_at, NOW())
+            WHERE id = $1 AND source_resume_run_id IS NULL
+            "#,
+        )
+        .bind(delegation_id)
+        .bind(&existing_run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_error)?;
+        return Ok(Some(existing_run_id));
     }
 
     let owner: String = row.get("owner_id");
@@ -482,9 +551,50 @@ pub async fn enqueue_delegation_return_in_transaction(
             .execute(&mut **tx)
             .await
             .map_err(db_error)?;
+            sqlx::query(
+                "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'bot_delegation_return_skipped', $2)",
+            )
+            .bind(&source_request_id)
+            .bind(serde_json::json!({
+                "delegationId": delegation_id,
+                "resumeStatus": "skipped",
+                "reason": "source bot is not an active group participant"
+            }))
+            .execute(&mut **tx)
+            .await
+            .map_err(db_error)?;
             return Ok(None);
         }
     }
+
+    let target_run_id_value = target_run_id.clone().unwrap_or_default();
+    let artifact_lines = if target_run_id.is_some() {
+        load_target_artifact_lines_in_tx(tx, &target_run_id_value).await?
+    } else {
+        Vec::new()
+    };
+    let source_computer_id: String = row.get("source_computer_id");
+    let target_computer_id: String = row.get("target_computer_id");
+    let shared_computer =
+        crate::run_lifecycle::bots_share_computer(&source_computer_id, &target_computer_id);
+    let target_run_error: Option<String> = row.get("target_run_error_code");
+    let interruption_detail = if target_status == "interrupted" {
+        Some(match target_run_error.as_deref() {
+            Some("host_restart") => {
+                format!(
+                    "{target_bot_name} was interrupted by a runner restart. Do not replay their external actions; continue from this summary."
+                )
+            }
+            Some(code) => format!(
+                "{target_bot_name} was interrupted ({code}). Continue from the summary without replaying their side effects."
+            ),
+            None => format!(
+                "{target_bot_name} was interrupted. Continue from the summary without replaying their side effects."
+            ),
+        })
+    } else {
+        None
+    };
 
     let user_message = crate::delegation::format_delegation_return_user_message(
         &target_bot_name,
@@ -492,9 +602,12 @@ pub async fn enqueue_delegation_return_in_transaction(
         &target_status,
         &target_result,
         target_run_id.as_deref().unwrap_or(""),
+        &artifact_lines,
+        shared_computer,
+        interruption_detail.as_deref(),
     );
 
-    let request_id = format!("delegation-return:{delegation_id}");
+    let request_id = return_request_id;
     for key in [
         format!("work-owner:{owner}"),
         format!("work-request:{request_id}"),
@@ -654,6 +767,19 @@ pub async fn enqueue_delegation_return_in_transaction(
         .await
         .map_err(db_error)?;
 
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'bot_delegation_return_queued', $2)",
+    )
+    .bind(&source_request_id)
+    .bind(serde_json::json!({
+        "delegationId": delegation_id,
+        "sourceResumeRunId": run_id,
+        "resumeStatus": "queued"
+    }))
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
+
     Ok(Some(run_id))
 }
 
@@ -701,6 +827,15 @@ pub async fn claim_next(pool: &PgPool) -> Result<Option<RunExecutionInput>, sqlx
     if let Err(err) = crate::delegation::on_target_run_claimed(pool, &input.records.run_id).await {
         tracing::warn!(run_id = %input.records.run_id, error = %err, "could not mark delegation running");
     }
+    if let Err(err) =
+        crate::run_lifecycle::on_delegation_return_run_claimed(pool, &input.records.run_id).await
+    {
+        tracing::warn!(
+            run_id = %input.records.run_id,
+            error = %err,
+            "could not mark delegation return running"
+        );
+    }
     Ok(Some(input))
 }
 
@@ -710,6 +845,7 @@ pub async fn request_cancel(pool: &PgPool, owner: &str, run_id: &str) -> Result<
         .bind(run_id).bind(owner).fetch_optional(&mut *tx).await.map_err(db_error)?.ok_or(ApiError::NotFound)?;
     let status: String = row.get("status");
     if status == "queued" {
+        let request_id: String = row.get("request_id");
         sqlx::query("UPDATE agent_runs SET status = 'cancelled', cancel_requested = TRUE, finished_at = NOW(), updated_at = NOW() WHERE id = $1")
             .bind(run_id).execute(&mut *tx).await.map_err(db_error)?;
         sqlx::query("UPDATE messages SET status = 'cancelled', updated_at = NOW() WHERE id = $1")
@@ -718,7 +854,21 @@ pub async fn request_cancel(pool: &PgPool, owner: &str, run_id: &str) -> Result<
             .await
             .map_err(db_error)?;
         sqlx::query("INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'cancelled', $2)")
-            .bind(row.get::<String,_>("request_id")).bind(serde_json::json!({"status":"cancelled"})).execute(&mut *tx).await.map_err(db_error)?;
+            .bind(&request_id).bind(serde_json::json!({"status":"cancelled"})).execute(&mut *tx).await.map_err(db_error)?;
+        if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
+            &mut tx,
+            run_id,
+            "cancelled",
+            None,
+        )
+        .await
+        {
+            tracing::warn!(
+                run_id = %run_id,
+                error = %err,
+                "could not synchronize cancelled run lifecycle"
+            );
+        }
     } else if status == "running" {
         sqlx::query("UPDATE agent_runs SET cancel_requested = TRUE WHERE id = $1")
             .bind(run_id)

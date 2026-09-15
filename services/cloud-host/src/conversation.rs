@@ -109,6 +109,25 @@ pub(crate) async fn ensure_bot_thread_row(
     Ok(())
 }
 
+pub(crate) async fn ensure_bot_thread_row_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conversation_id: &str,
+    bot_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO conversation_bot_threads (conversation_id, bot_id, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (conversation_id, bot_id) DO NOTHING
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(bot_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub async fn get_codex_thread_id(
     pool: &PgPool,
     conversation_id: &str,
@@ -352,6 +371,16 @@ pub async fn commit_group_context_cursor_for_completed_run(
     pool: &PgPool,
     request_id: &str,
 ) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    commit_group_context_cursor_for_completed_run_in_tx(&mut tx, request_id).await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn commit_group_context_cursor_for_completed_run_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request_id: &str,
+) -> Result<(), String> {
     let row = sqlx::query(
         r#"
         SELECT r.conversation_id, r.bot_id, r.group_context_through_sequence
@@ -360,20 +389,28 @@ pub async fn commit_group_context_cursor_for_completed_run(
         "#,
     )
     .bind(request_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|e| e.to_string())?;
     let Some(row) = row else {
         return Ok(());
     };
-    if conversation_type(pool, row.get("conversation_id")).await?.as_deref() != Some("group") {
+    let conversation_id: String = row.get("conversation_id");
+    let conv_type: Option<String> = sqlx::query_scalar(
+        "SELECT conversation_type FROM conversations WHERE id = $1",
+    )
+    .bind(&conversation_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    if conv_type.as_deref() != Some("group") {
         return Ok(());
     }
     let through: Option<i64> = row.get("group_context_through_sequence");
     if let Some(seq) = through {
-        crate::group_context::advance_last_seen_group_sequence(
-            pool,
-            row.get("conversation_id"),
+        crate::group_context::advance_last_seen_group_sequence_in_tx(
+            tx,
+            &conversation_id,
             row.get("bot_id"),
             seq,
         )

@@ -147,7 +147,20 @@ pub async fn advance_last_seen_group_sequence(
     bot_id: &str,
     up_to_sequence: i64,
 ) -> Result<(), String> {
-    crate::conversation::ensure_bot_thread_row(pool, conversation_id, bot_id)
+    let mut tx = pool.begin().await.map_err(|e| e.to_string())?;
+    advance_last_seen_group_sequence_in_tx(&mut tx, conversation_id, bot_id, up_to_sequence)
+        .await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn advance_last_seen_group_sequence_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conversation_id: &str,
+    bot_id: &str,
+    up_to_sequence: i64,
+) -> Result<(), String> {
+    crate::conversation::ensure_bot_thread_row_in_tx(tx, conversation_id, bot_id)
         .await
         .map_err(|e| e.to_string())?;
     sqlx::query(
@@ -161,7 +174,7 @@ pub async fn advance_last_seen_group_sequence(
     .bind(conversation_id)
     .bind(bot_id)
     .bind(up_to_sequence)
-    .execute(pool)
+    .execute(&mut **tx)
     .await
     .map_err(|e| e.to_string())?;
     Ok(())

@@ -40,4 +40,5 @@ pub use computer_registry::ComputerRegistry;
 pub mod computer_session;
 pub mod results;
 pub mod delegation;
+pub mod run_lifecycle;
 pub mod collaboration;
