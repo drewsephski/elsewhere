@@ -4,6 +4,7 @@ use agent_core::{
     AgentComputer, ComputerError, ToolError,
 };
 use serde_json::json;
+use std::time::Duration;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -802,6 +803,49 @@ pub async fn workspace_rename(
 
     let revision = bump_workspace_revision(computer.as_ref());
     Ok(Json(WorkspaceMutationResponse { path: to, revision }))
+}
+
+/// Owner-only: wipe durable browser sign-in state for this computer (host volume + guest profile).
+pub async fn reset_browser_sign_in(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    if !state.config.browser_enabled {
+        return Err(ApiError::Conflict("Browser automation is disabled".into()));
+    }
+    crate::browser_profile::reset_profile_for_computer(
+        &state.pool,
+        &state.config,
+        principal.owner_id(),
+        &computer_id,
+    )
+    .await?;
+
+    if state.config.browser_profiles_dir.is_some() {
+        let sprite = state
+            .computer_registry
+            .connect_sprite(
+                &state.config,
+                &state.pool,
+                principal.owner_id(),
+                &computer_id,
+                true,
+            )
+            .await?;
+        sprite_computer::clear_guest_profile(
+            sprite.client(),
+            &sprite_computer::default_deny_network_policy(),
+            Duration::from_secs(45),
+        )
+        .await
+        .map_err(map_computer_error)?;
+        state
+            .computer_registry
+            .evict(principal.owner_id(), &computer_id);
+    }
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 pub async fn delete(

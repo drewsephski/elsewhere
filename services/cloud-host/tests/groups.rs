@@ -190,6 +190,62 @@ async fn group_human_and_bot_authored_messages(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn group_transcript_excludes_structured_runner_messages(pool: PgPool) {
+    let bot_a = bot_with_computer(&pool, "alice", "PM").await;
+    let bot_b = bot_with_computer(&pool, "alice", "Designer").await;
+    let group = groups::create_group(
+        &pool,
+        "alice",
+        groups::CreateGroupRequest {
+            name: "Status noise".into(),
+            bot_ids: vec![bot_a.id.clone(), bot_b.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+
+    let human = groups::append_human_message(&pool, "alice", &group.id, "Hello team")
+        .await
+        .unwrap();
+
+    for (sequence, body) in [
+        (3_i64, r#"{"status":"running","detail":null}"#),
+        (4_i64, r#"{"status":"completed","detail":null}"#),
+    ] {
+        sqlx::query(
+            r#"
+            INSERT INTO messages (
+                id, conversation_id, role, kind, body, status, sequence, author_kind
+            ) VALUES ($1, $2, 'assistant', 'agent_status', $3, 'complete', $4, 'system')
+            "#,
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(&group.id)
+        .bind(body)
+        .bind(sequence)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    let transcript = groups::list_messages(&pool, "alice", &group.id).await.unwrap();
+    assert_eq!(transcript.len(), 1);
+    assert_eq!(transcript[0].id, human.id);
+    assert!(!transcript[0].body.contains("\"status\""));
+
+    let context = cloud_host::group_context::load_group_context_lines(
+        &pool,
+        &group.id,
+        10,
+        &bot_a.id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(context.len(), 1);
+    assert_eq!(context[0].body, "Hello team");
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn per_bot_codex_threads_are_independent(pool: PgPool) {
     let researcher = bot_with_computer(&pool, "alice", "Researcher").await;
     let designer = bot_with_computer(&pool, "alice", "Designer").await;

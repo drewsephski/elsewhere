@@ -85,6 +85,7 @@ pub async fn load_group_context_lines(
         WHERE m.conversation_id = $1
           AND m.sequence <= $2
           AND m.deleted_at IS NULL
+          AND m.kind = $3
           AND m.status IN ('complete', 'cancelled', 'interrupted', 'error')
           AND m.body <> ''
         ORDER BY m.sequence ASC
@@ -92,6 +93,7 @@ pub async fn load_group_context_lines(
     )
     .bind(conversation_id)
     .bind(up_to_sequence)
+    .bind(crate::message_kind::CHAT_MESSAGE_KIND)
     .fetch_all(pool)
     .await
     .map_err(|e| e.to_string())?;

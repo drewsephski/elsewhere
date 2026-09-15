@@ -26,8 +26,13 @@ import {
   PaginationState,
   useTable,
 } from "@tanstack/react-table";
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { Monitor } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+type ComputerConfirmAction =
+  | { kind: "reset-browser"; computerId: string }
+  | { kind: "archive"; computerId: string };
 
 export function ComputersManager() {
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
@@ -39,6 +44,9 @@ export function ComputersManager() {
     pageIndex: 0,
     pageSize: 10,
   });
+  const [confirmAction, setConfirmAction] = useState<ComputerConfirmAction | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     try {
@@ -77,31 +85,72 @@ export function ComputersManager() {
     }
   }
 
-  const handleArchive = useCallback(
-    async (id: string) => {
-      if (
-        !window.confirm(
-          "Archive this computer? Its files will be preserved. Finish or stop its work first.",
-        )
-      ) {
-        return;
-      }
-      if (busy) return;
-      setBusy(true);
-      setError(null);
-      try {
-        const response = await cloudHostFetch(`/v1/computers/${id}`, { method: "DELETE" });
+  const handleConfirmAction = useCallback(async () => {
+    if (!confirmAction || busy) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      if (confirmAction.kind === "reset-browser") {
+        const response = await cloudHostFetch(
+          `/v1/computers/${encodeURIComponent(confirmAction.computerId)}/browser-profile/reset`,
+          { method: "POST" },
+        );
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(
+            (body as { error?: string }).error ?? "Could not reset browser sign-in",
+          );
+        }
+      } else {
+        const response = await cloudHostFetch(
+          `/v1/computers/${confirmAction.computerId}`,
+          { method: "DELETE" },
+        );
         const body = response.ok ? null : await response.json();
-        if (!response.ok) throw new Error(body.error ?? "Could not archive computer");
+        if (!response.ok) {
+          throw new Error(body.error ?? "Could not archive computer");
+        }
         await load();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not archive computer");
-      } finally {
-        setBusy(false);
       }
-    },
-    [busy, load],
-  );
+      setConfirmAction(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : confirmAction.kind === "reset-browser"
+            ? "Could not reset browser sign-in"
+            : "Could not archive computer",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, confirmAction, load]);
+
+  const confirmDialogCopy = useMemo(() => {
+    if (!confirmAction) {
+      return null;
+    }
+    if (confirmAction.kind === "reset-browser") {
+      return {
+        title: "Reset browser sign-in?",
+        description:
+          "Saved logins (Gmail, GitHub, etc.) will be cleared for this computer. You can sign in again via take control.",
+        confirmLabel: "Reset",
+        pendingLabel: "Resetting…",
+        destructive: false,
+      };
+    }
+    return {
+      title: "Archive this computer?",
+      description:
+        "Its files will be preserved. Finish or stop its work before archiving.",
+      confirmLabel: "Archive",
+      pendingLabel: "Archiving…",
+      destructive: true,
+    };
+  }, [confirmAction]);
 
   const columns = useMemo<ColumnDef<DataGridFeatures, ComputerSummary>[]>(
     () => [
@@ -134,22 +183,41 @@ export function ComputersManager() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            disabled={busy}
-            onClick={() => void handleArchive(row.original.id)}
-          >
-            Archive
-          </Button>
+          <div className="flex justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              disabled={busy}
+              onClick={() =>
+                setConfirmAction({
+                  kind: "reset-browser",
+                  computerId: row.original.id,
+                })
+              }
+            >
+              Reset browser sign-in
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              disabled={busy}
+              onClick={() =>
+                setConfirmAction({ kind: "archive", computerId: row.original.id })
+              }
+            >
+              Archive
+            </Button>
+          </div>
         ),
-        size: 100,
+        size: 220,
         enableSorting: false,
       },
     ],
-    [busy, handleArchive],
+    [busy],
   );
 
   const table = useTable({
@@ -212,6 +280,24 @@ export function ComputersManager() {
           </form>
         </FramePanel>
       </Frame>
+
+      {confirmDialogCopy ? (
+        <ConfirmAlertDialog
+          open={Boolean(confirmAction)}
+          onOpenChange={(open) => {
+            if (!open && !busy) {
+              setConfirmAction(null);
+            }
+          }}
+          title={confirmDialogCopy.title}
+          description={confirmDialogCopy.description}
+          confirmLabel={confirmDialogCopy.confirmLabel}
+          pendingLabel={confirmDialogCopy.pendingLabel}
+          destructive={confirmDialogCopy.destructive}
+          pending={busy}
+          onConfirm={handleConfirmAction}
+        />
+      ) : null}
     </div>
   );
 }

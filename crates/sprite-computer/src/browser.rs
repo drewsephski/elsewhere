@@ -18,7 +18,7 @@ pub const BROWSER_PREVIEW_META: &str = "/var/elsewhere/browser/preview/meta.json
 pub const BROWSER_PREVIEW_FRAMES: &str = "/var/elsewhere/browser/preview/frames";
 
 /// Browser install/daemon work should not depend on `/workspace` existing.
-const BROWSER_EXEC_CWD: &str = "/home/sprite";
+pub(crate) const BROWSER_EXEC_CWD: &str = "/home/sprite";
 
 const CLIENT_SOURCE: &str = include_str!("../guest/browser-client.mjs");
 const DAEMON_SOURCE: &str = include_str!("../guest/browser-daemon.mjs");
@@ -311,7 +311,7 @@ pub async fn invoke_browser_daemon(
     }))
 }
 
-async fn restart_browser_daemon(
+pub(crate) async fn restart_browser_daemon(
     client: &SpriteClient,
     baseline_policy: &NetworkPolicyConfig,
 ) -> Result<(), ComputerError> {

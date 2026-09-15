@@ -249,6 +249,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         exec_timeout: Duration::from_secs(60),
         browser_enabled: browser_smoke,
         browser_exec_timeout: Duration::from_secs(120),
+        browser_profile_host_dir: None,
     };
 
     let computer = SpriteComputer::new(config)?;

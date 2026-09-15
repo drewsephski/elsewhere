@@ -12,6 +12,7 @@ import type {
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
 import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
+import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
@@ -500,74 +501,70 @@ export function BotConversationView({
                 )}
 
                 {!isLive && run.status !== "queued" && run.status !== "running" ? (
-                  <div className="flex justify-start">
-                    <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
-                      <RunDelegationList
-                        runId={run.runId}
-                        enabled={!isLive && run.status !== "queued" && run.status !== "running"}
-                      />
-                      <p className="text-xs font-medium text-muted-foreground">
-                        {workStatus(run.status)}
-                      </p>
-                      <RunAssistantSnippet
-                        runId={run.runId}
-                        fallbackText={
-                          run.runId === liveRunId
-                            ? assistantStream.answerText ||
-                              liveDetail?.assistantResult ||
-                              undefined
-                            : undefined
-                        }
-                      />
-                      <Link
-                        href={`/app/work/${run.runId}`}
-                        className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
-                      >
-                        View full progress
-                        <Info className="size-3" aria-hidden />
-                      </Link>
-                      <ChatResultCards runId={run.runId} className="mt-3" />
-                    </div>
-                  </div>
+                  <AssistantMessageBubble>
+                    <RunDelegationList
+                      runId={run.runId}
+                      enabled={!isLive && run.status !== "queued" && run.status !== "running"}
+                    />
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {workStatus(run.status)}
+                    </p>
+                    <RunAssistantSnippet
+                      runId={run.runId}
+                      fallbackText={
+                        run.runId === liveRunId
+                          ? assistantStream.answerText ||
+                            liveDetail?.assistantResult ||
+                            undefined
+                          : undefined
+                      }
+                    />
+                    <Link
+                      href={`/app/work/${run.runId}`}
+                      className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
+                    >
+                      View full progress
+                      <Info className="size-3" aria-hidden />
+                    </Link>
+                    <ChatResultCards runId={run.runId} className="mt-3" />
+                  </AssistantMessageBubble>
                 ) : null}
 
                 {isLive ? (
-                  <div className="flex justify-start">
-                    <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
-                      <p className="text-xs font-medium text-primary">
-                        {workStatus(liveDetail?.status ?? run.status)}
+                  <AssistantMessageBubble>
+                    <p className="text-xs font-medium text-primary">
+                      {workStatus(liveDetail?.status ?? run.status)}
+                    </p>
+                    {assistantStream.commentaryText ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {assistantStream.commentaryText}
                       </p>
-                      {assistantStream.commentaryText ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {assistantStream.commentaryText}
-                        </p>
-                      ) : null}
-                      {assistantText ? (
-                        <div className="mt-2">
-                          <MarkdownContent text={assistantText} />
-                          {assistantStream.streaming ? (
-                            <span
-                              className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
-                              aria-hidden
-                            />
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-muted-foreground">
-                          {assistantStream.streaming
-                            ? "Composing a reply…"
-                            : "Your bot is working on this…"}
-                        </p>
-                      )}
-                      <Link
-                        href={`/app/work/${run.runId}`}
-                        className="mt-3 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
-                      >
-                        Open detailed work view
-                      </Link>
-                      <ChatResultCards runId={run.runId} className="mt-2" />
-                    </div>
-                  </div>
+                    ) : null}
+                    {assistantText ? (
+                      <div className="mt-2">
+                        <MarkdownContent text={assistantText} />
+                        {assistantStream.streaming ? (
+                          <span
+                            className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
+                            aria-hidden
+                          />
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-muted-foreground">
+                        {assistantStream.streaming
+                          ? "Composing a reply…"
+                          : "Your bot is working on this…"}
+                      </p>
+                    )}
+                    <Link
+                      href={`/app/work/${run.runId}`}
+                      className="mt-3 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    >
+                      Open detailed work view
+                    </Link>
+                    <ChatResultCards runId={run.runId} className="mt-2" />
+                  </AssistantMessageBubble>
                 ) : null}
               </div>
             );

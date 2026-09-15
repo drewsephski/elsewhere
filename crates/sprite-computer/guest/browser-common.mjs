@@ -3,6 +3,7 @@ import dns from "dns/promises";
 import { chromium } from "playwright-core";
 
 export const BROWSER_ROOT = "/var/elsewhere/browser";
+/** Chromium user-data dir; hydrated from the host per computer before automation. Reset via cloud-host API clears host + guest copies. */
 export const PROFILE = `${BROWSER_ROOT}/profile`;
 export const SOCKET_PATH = `${BROWSER_ROOT}/daemon.sock`;
 export const REFS_PATH = `${BROWSER_ROOT}/refs.json`;

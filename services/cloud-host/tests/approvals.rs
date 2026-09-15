@@ -133,6 +133,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         run_engine: cloud_host::run_engine_select::RunEngineMode::Responses,
         codex_executable: None,
         codex_profiles_dir: None,
+        browser_profiles_dir: None,
         tool_approval_timeout_secs: 300,
         enforce_tool_approvals_internal: true,
         legacy_local_approval_bypass: false,

@@ -144,6 +144,7 @@ async fn list_dir_does_not_bootstrap_workspace() {
         exec_timeout: Duration::from_secs(5),
         browser_enabled: false,
         browser_exec_timeout: Duration::from_secs(5),
+        browser_profile_host_dir: None,
     })
     .unwrap();
 
@@ -196,6 +197,7 @@ async fn write_file_materializes_workspace_on_cold_sprite() {
         exec_timeout: Duration::from_secs(5),
         browser_enabled: false,
         browser_exec_timeout: Duration::from_secs(5),
+        browser_profile_host_dir: None,
     })
     .unwrap();
 
@@ -276,6 +278,7 @@ async fn filesystem_roundtrip_and_errors() {
         exec_timeout: Duration::from_secs(5),
         browser_enabled: false,
         browser_exec_timeout: Duration::from_secs(5),
+        browser_profile_host_dir: None,
     })
     .unwrap();
     assert_eq!(
@@ -411,6 +414,7 @@ async fn sprite_computer_enforces_workspace_boundary() {
         exec_timeout: Duration::from_secs(5),
         browser_enabled: false,
         browser_exec_timeout: Duration::from_secs(120),
+        browser_profile_host_dir: None,
     };
     let computer = SpriteComputer::new(config).unwrap();
     let err = computer.read_file("/etc/passwd").await.unwrap_err();
@@ -553,6 +557,7 @@ async fn browser_invoke_materializes_workspace_before_browser_work() {
         exec_timeout: Duration::from_secs(5),
         browser_enabled: true,
         browser_exec_timeout: Duration::from_secs(5),
+        browser_profile_host_dir: None,
     })
     .unwrap();
 

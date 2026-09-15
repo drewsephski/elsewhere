@@ -83,6 +83,7 @@ impl ComputerRegistry {
         config: &Config,
         sprite_name: String,
         browser_enabled: bool,
+        browser_profile_host_dir: Option<std::path::PathBuf>,
     ) -> Result<Arc<SpriteComputer>, ApiError> {
         let computer = SpriteComputer::new(SpriteComputerConfig {
             base_url: config.sprites_api_base.clone(),
@@ -95,6 +96,7 @@ impl ComputerRegistry {
             exec_timeout: Duration::from_secs(60),
             browser_enabled,
             browser_exec_timeout: Duration::from_secs(45),
+            browser_profile_host_dir,
         })
         .map_err(|e| ApiError::Internal(format!("SpriteComputer: {e}")))?;
         Ok(Arc::new(computer))
@@ -127,7 +129,27 @@ impl ComputerRegistry {
 
         self.evict_idle_and_bound();
 
-        let computer = Self::build_sprite(config, sprite_name.clone(), browser_enabled)?;
+        let browser_profile_host_dir =
+            if browser_enabled && config.browser_profiles_dir.is_some() {
+                Some(
+                    crate::browser_profile::profile_for_computer(
+                        pool,
+                        config,
+                        owner_id,
+                        computer_id,
+                    )
+                    .await?,
+                )
+            } else {
+                None
+            };
+
+        let computer = Self::build_sprite(
+            config,
+            sprite_name.clone(),
+            browser_enabled,
+            browser_profile_host_dir,
+        )?;
 
         let entry = CachedEntry {
             computer: computer.clone(),

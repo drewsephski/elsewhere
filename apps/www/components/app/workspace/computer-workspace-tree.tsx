@@ -1,15 +1,8 @@
 "use client";
 
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { ComputerWorkspaceFileDialog } from "./computer-workspace-file-dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   CollapseButton,
   File,
@@ -515,34 +508,27 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
         </div>
       ) : null}
 
-      <Dialog open={Boolean(deleteEntry)} onOpenChange={(open) => !open && setDeleteEntry(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Delete {deleteEntry?.name}?</DialogTitle>
-            <DialogDescription>
-              {deleteEntry?.isDir
-                ? "This removes the folder and everything inside it from the bot workspace."
-                : "This removes the file from the bot workspace."}
-            </DialogDescription>
-          </DialogHeader>
-          {actionError ? (
-            <p className="text-sm text-red-700" role="alert">{actionError}</p>
-          ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteEntry(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              className="bg-red-700 text-white hover:bg-red-800"
-              disabled={actionBusy}
-              onClick={() => void handleDeleteConfirm()}
-            >
-              {actionBusy ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmAlertDialog
+        open={Boolean(deleteEntry)}
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) {
+            setDeleteEntry(null);
+            setActionError(null);
+          }
+        }}
+        title={deleteEntry ? `Delete ${deleteEntry.name}?` : "Delete?"}
+        description={
+          deleteEntry?.isDir
+            ? "This removes the folder and everything inside it from the bot workspace."
+            : "This removes the file from the bot workspace."
+        }
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        destructive
+        pending={actionBusy}
+        error={actionError}
+        onConfirm={handleDeleteConfirm}
+      />
 
       <ComputerWorkspaceFileDialog
         computerId={computerId}

@@ -242,10 +242,12 @@ pub async fn list_messages(
         LEFT JOIN bots b ON b.id = m.author_bot_id
         WHERE m.conversation_id = $1
           AND m.deleted_at IS NULL
+          AND m.kind = $2
         ORDER BY m.sequence ASC
         "#,
     )
     .bind(conversation_id)
+    .bind(crate::message_kind::CHAT_MESSAGE_KIND)
     .fetch_all(pool)
     .await
     .map_err(db_error)?;

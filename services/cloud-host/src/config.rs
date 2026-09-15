@@ -31,6 +31,7 @@ pub struct Config {
     pub run_engine: RunEngineMode,
     pub codex_executable: Option<PathBuf>,
     pub codex_profiles_dir: Option<PathBuf>,
+    pub browser_profiles_dir: Option<PathBuf>,
     pub tool_approval_timeout_secs: u64,
     pub enforce_tool_approvals_internal: bool,
     /// When true, the legacy local owner may bypass tool approvals (local dev only).
@@ -138,6 +139,20 @@ impl Config {
                 }
             });
 
+        let browser_profiles_dir = env::var("ELSEWHERE_BROWSER_PROFILES_DIR")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                if browser_enabled {
+                    std::env::current_dir()
+                        .ok()
+                        .map(|cwd| cwd.join(".data").join("browser-profiles"))
+                } else {
+                    None
+                }
+            });
+
         let bind_addr = resolve_bind_addr(auth_mode)?;
         validate_bind_addr(auth_mode, &bind_addr)?;
 
@@ -173,6 +188,7 @@ impl Config {
             run_engine,
             codex_executable,
             codex_profiles_dir,
+            browser_profiles_dir,
             tool_approval_timeout_secs,
             enforce_tool_approvals_internal,
             legacy_local_approval_bypass,
@@ -195,6 +211,7 @@ impl Config {
             cors_web_origin = ?self.cors_web_origin,
             allow_codex_login = self.allow_codex_login,
             codex_profiles_dir = ?self.codex_profiles_dir,
+            browser_profiles_dir = ?self.browser_profiles_dir,
             run_engine = ?self.run_engine,
             codex_on_path = self.codex_executable.is_some(),
             sprites_api_base = %self.sprites_api_base,

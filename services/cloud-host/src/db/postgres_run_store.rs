@@ -107,8 +107,8 @@ impl RunStore for PostgresRunStore {
         sqlx::query(
             r#"
             INSERT INTO messages (
-                id, conversation_id, role, kind, body, status, model, sequence, created_at, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+                id, conversation_id, role, kind, body, status, model, sequence, author_kind, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'system', $9, $9)
             "#,
         )
         .bind(&message_id)

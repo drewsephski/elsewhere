@@ -13,6 +13,7 @@ use tracing::warn;
 use crate::browser::{
     ensure_browser_guest, invoke_browser_daemon, read_browser_preview_cache, BrowserPreviewCache,
 };
+use crate::browser_profile_sync::{hydrate_from_host, persist_to_host};
 use crate::client::{SpriteClient, SpriteClientConfig};
 use crate::policy::NetworkPolicyConfig;
 use crate::types::{Checkpoint, SpriteError};
@@ -29,6 +30,8 @@ pub struct SpriteComputerConfig {
     pub exec_timeout: Duration,
     pub browser_enabled: bool,
     pub browser_exec_timeout: Duration,
+    /// Host-only Chromium user-data directory (cloud-host volume); synced into the guest per invoke.
+    pub browser_profile_host_dir: Option<std::path::PathBuf>,
 }
 
 impl SpriteComputerConfig {
@@ -51,6 +54,7 @@ pub struct SpriteComputer {
     exec_timeout: Duration,
     browser_enabled: bool,
     browser_exec_timeout: Duration,
+    browser_profile_host_dir: Option<std::path::PathBuf>,
     network_policy: NetworkPolicyConfig,
     /// Serializes `workspace_exec` and browser work so egress cannot overlap shell exec.
     execution_gate: Mutex<()>,
@@ -66,6 +70,7 @@ impl SpriteComputer {
         let exec_timeout = config.exec_timeout;
         let browser_exec_timeout = config.browser_exec_timeout;
         let browser_enabled = config.browser_enabled;
+        let browser_profile_host_dir = config.browser_profile_host_dir.clone();
         let network_policy = config.network_policy.clone();
         let workspace_root = config.workspace_root.clone();
         let client = Arc::new(SpriteClient::new(config.into_client_config())?);
@@ -75,6 +80,7 @@ impl SpriteComputer {
             exec_timeout,
             browser_enabled,
             browser_exec_timeout,
+            browser_profile_host_dir,
             network_policy,
             execution_gate: Mutex::new(()),
             workspace_bootstrap: Mutex::new(()),
@@ -326,6 +332,16 @@ impl AgentComputer for SpriteComputer {
         )
         .await?;
 
+        if let Some(host_dir) = &self.browser_profile_host_dir {
+            hydrate_from_host(
+                &self.client,
+                &self.network_policy,
+                self.browser_exec_timeout,
+                host_dir,
+            )
+            .await?;
+        }
+
         let mut request = args.clone();
         if let Some(obj) = request.as_object_mut() {
             obj.insert("action".into(), json!(action));
@@ -345,9 +361,21 @@ impl AgentComputer for SpriteComputer {
         .await?;
 
         let line = stdout.lines().last().unwrap_or(stdout.trim());
-        serde_json::from_str(line).map_err(|e| {
+        let parsed = serde_json::from_str(line).map_err(|e| {
             ComputerError::ExecutionFailed(format!("browser daemon returned invalid JSON: {e}"))
-        })
+        })?;
+
+        if let Some(host_dir) = &self.browser_profile_host_dir {
+            persist_to_host(
+                &self.client,
+                &self.network_policy,
+                self.browser_exec_timeout,
+                host_dir,
+            )
+            .await?;
+        }
+
+        Ok(parsed)
     }
 }
 

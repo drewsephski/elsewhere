@@ -4,6 +4,7 @@ import type { GroupConversationDetail, TranscriptMessage } from "@/lib/api-types
 import type { WorkspaceBotPresence } from "@/lib/workspace-types";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
+import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
@@ -314,30 +315,32 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                 ) : null}
               </div>
             ) : (
-              <div key={item.id} className="flex flex-col items-start gap-1">
-                <div className="flex justify-start">
-                <div className="max-w-[90%] rounded-3xl rounded-bl-md border border-border/80 bg-white px-4 py-3 text-sm shadow-sm">
-                  <div className="mb-2 flex items-center gap-2">
-                    <BotCreatureAvatar
-                      name={item.authorBotName ?? "Bot"}
-                      avatarId={item.authorAvatarId ?? DEFAULT_BOT_AVATAR_ID}
-                      size="sm"
-                    />
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {item.authorBotName ?? "Bot"}
-                    </p>
-                  </div>
-                  <MarkdownContent text={item.body || (item.status === "pending" ? "Working…" : "")} />
-                </div>
-                </div>
-                {canDeleteMessage(item) ? (
-                  <MessageDeleteButton
-                    onDelete={() => handleDeleteMessage(item)}
-                    label="Delete message"
-                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+              <AssistantMessageBubble
+                key={item.id}
+                leading={
+                  <BotCreatureAvatar
+                    name={item.authorBotName ?? "Bot"}
+                    avatarId={item.authorAvatarId ?? DEFAULT_BOT_AVATAR_ID}
+                    size="sm"
                   />
-                ) : null}
-              </div>
+                }
+                footer={
+                  canDeleteMessage(item) ? (
+                    <MessageDeleteButton
+                      onDelete={() => handleDeleteMessage(item)}
+                      label="Delete message"
+                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                    />
+                  ) : null
+                }
+              >
+                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                  {item.authorBotName ?? "Bot"}
+                </p>
+                <MarkdownContent
+                  text={item.body || (item.status === "pending" ? "Working…" : "")}
+                />
+              </AssistantMessageBubble>
             ),
           )}
         </div>
