@@ -1,3 +1,6 @@
+/**
+ * Alternate marketing layout (topo hero). The public `/` route uses the video hero in `app/page.tsx`.
+ */
 import { siteConfig } from "@elsewhere/brand";
 import { ArchitectureSection } from "@/components/landing/architecture-section";
 import { CtaSection } from "@/components/landing/cta-section";
@@ -45,20 +48,6 @@ export function LandingPage() {
                 >
                   View on GitHub
                 </a>
-              </div>
-              <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                <a
-                  href={siteConfig.links.download}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  Download for macOS
-                </a>
-                <Link
-                  href={appRoutes.signIn}
-                  className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                >
-                  Sign in
-                </Link>
               </div>
             </div>
             <SandboxPreview />

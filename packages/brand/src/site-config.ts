@@ -1,11 +1,11 @@
 /** Public marketing copy and URLs shared by the web app and docs. */
 export const siteConfig = {
   productName: "Elsewhere",
-  tagline: "Create AI workers. Give them computers.",
+  tagline: "Run your agents elsewhere.",
   /** Hero headline split across lines (www). */
-  heroLines: ["Create AI workers.", "Give them computers."] as const,
+  heroLines: ["Run your agents", "elsewhere."] as const,
   cloudPitch:
-    "Spin up persistent bots with their own Linux machines, durable work history, human approvals, scheduled routines, and connectors. Close the laptop; work keeps running until you take it back.",
+    "Give every agent a computer of its own, with memory, routines, and approvals that keep working when you close the laptop.",
   contactEmail: "hello@elsewhere.dev",
   waitlistMailSubject: "Elsewhere cloud waitlist",
   links: {
