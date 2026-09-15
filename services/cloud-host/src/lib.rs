@@ -39,6 +39,8 @@ pub mod computer_registry;
 pub use computer_registry::ComputerRegistry;
 pub mod computer_session;
 pub mod results;
+pub mod result_finalization;
+pub mod artifact_handoff;
 pub mod delegation;
 pub mod run_lifecycle;
 pub mod collaboration;

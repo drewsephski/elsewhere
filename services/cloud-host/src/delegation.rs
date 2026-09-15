@@ -39,7 +39,8 @@ pub fn format_delegation_return_user_message(
     target_status: &str,
     target_result: &str,
     target_run_id: &str,
-    artifact_lines: &[String],
+    artifacts: &[crate::artifact_handoff::ArtifactContextLine],
+    results_collection_note: Option<&str>,
     shared_computer: bool,
     interruption_detail: Option<&str>,
 ) -> String {
@@ -55,26 +56,40 @@ Target run:\n{target_run_id}\n"
         message.push_str(detail);
         message.push('\n');
     }
-    if !artifact_lines.is_empty() {
-        message.push_str("\nTarget artifacts:\n");
-        for line in artifact_lines {
+    if let Some(note) = results_collection_note.filter(|n| !n.is_empty()) {
+        message.push_str("\nResult collection:\n");
+        message.push_str(note);
+        message.push('\n');
+    }
+    if !artifacts.is_empty() {
+        message.push_str("\nArtifacts:\n");
+        for artifact in artifacts {
             message.push_str("- ");
-            message.push_str(line);
+            message.push_str(&artifact.name);
+            if let Some(path) = &artifact.path {
+                message.push_str(" — available at ");
+                message.push_str(path);
+            } else if let Some(err) = &artifact.error {
+                message.push_str(" — ");
+                message.push_str(err);
+            } else if artifact.transfer_status == "pending" || artifact.transfer_status == "transferring" {
+                message.push_str(" — transfer in progress");
+            }
             message.push('\n');
         }
     }
     if shared_computer {
         message.push_str(
-            "\nSource and target Bots share the same computer; workspace files from the target run may still be available under /workspace.\n",
+            "\nResearcher used the same computer. Artifacts remain available under /workspace/results when captured.\n",
         );
-    } else {
+    } else if !artifacts.is_empty() {
         message.push_str(
-            "\nSource and target Bots use different computers; target workspace files are not locally accessible on your computer.\n",
+            "\nTransferred artifact paths are local to your computer and are available to read.\n",
         );
     }
     message.push_str(
-        "\nContinue the original task using these findings.\n\
-Do not claim access to files that are on another computer unless they are actually accessible.",
+        "\nContinue the original task using the returned findings and artifacts.\n\
+Do not claim access to failed or missing artifacts.",
     );
     message
 }
@@ -552,6 +567,7 @@ pub struct DelegationDetail {
     pub source_resume_run_id: Option<String>,
     pub resume_status: Option<String>,
     pub resume_error: Option<String>,
+    pub artifacts: Vec<crate::artifact_handoff::DelegationArtifactSummary>,
 }
 
 pub async fn list_for_run(
@@ -592,7 +608,16 @@ pub async fn list_for_run(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(rows.into_iter().map(map_delegation_row).collect())
+    let mut details = Vec::with_capacity(rows.len());
+    for row in rows {
+        let detail = map_delegation_row(row);
+        let artifacts =
+            crate::artifact_handoff::list_artifacts_for_delegation(pool, owner, &detail.id)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+        details.push(DelegationDetail { artifacts, ..detail });
+    }
+    Ok(details)
 }
 
 pub async fn get_delegation(
@@ -621,7 +646,12 @@ pub async fn get_delegation(
     .map_err(|e| ApiError::Internal(e.to_string()))?
     .ok_or(ApiError::NotFound)?;
 
-    Ok(map_delegation_row(row))
+    let detail = map_delegation_row(row);
+    let artifacts =
+        crate::artifact_handoff::list_artifacts_for_delegation(pool, owner, &detail.id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(DelegationDetail { artifacts, ..detail })
 }
 
 fn map_delegation_row(row: sqlx::postgres::PgRow) -> DelegationDetail {
@@ -648,5 +678,6 @@ fn map_delegation_row(row: sqlx::postgres::PgRow) -> DelegationDetail {
         source_resume_run_id: row.get("source_resume_run_id"),
         resume_status: row.get("resume_status"),
         resume_error: row.get("resume_error"),
+        artifacts: Vec::new(),
     }
 }

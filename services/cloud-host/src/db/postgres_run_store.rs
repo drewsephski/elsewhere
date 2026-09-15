@@ -204,6 +204,20 @@ impl RunStore for PostgresRunStore {
                 .map_err(|e| RuntimeError::Store(e.to_string()))?;
             if let Some(run_row) = run_row {
                 let run_id: String = run_row.get("id");
+                if let Err(err) =
+                    crate::result_finalization::mark_terminal_run_results_policy(
+                        &mut tx,
+                        &run_id,
+                        status,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        request_id = %request_id,
+                        error = %err,
+                        "could not set result finalization policy"
+                    );
+                }
                 if status == "completed" {
                     if let Err(err) =
                         crate::conversation::commit_group_context_cursor_for_completed_run_in_tx(

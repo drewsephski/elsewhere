@@ -129,6 +129,15 @@ export interface CreateConversationResponse {
   botId: string;
 }
 
+export interface DelegationArtifactSummary {
+  resultId: string;
+  name: string;
+  size: number;
+  transferStatus: string;
+  destinationPath?: string | null;
+  error?: string | null;
+}
+
 export interface DelegationSummary {
   id: string;
   status: string;
@@ -152,6 +161,7 @@ export interface DelegationSummary {
   sourceResumeRunId?: string | null;
   resumeStatus?: string | null;
   resumeError?: string | null;
+  artifacts?: DelegationArtifactSummary[];
 }
 
 export interface Routine {

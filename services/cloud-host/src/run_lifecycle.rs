@@ -241,20 +241,65 @@ async fn sync_delegation_target_in_tx(
         );
     }
 
-    if return_policy == "resume_source" {
-        if let Err(err) =
-            crate::work::enqueue_delegation_return_in_transaction(tx, &delegation_id).await
-        {
+    if return_policy == "resume_source"
+        && try_admit_delegation_return_in_tx(tx, &delegation_id).await?
+    {
+        counters.delegation_resume_repairs += 1;
+    }
+
+    Ok(())
+}
+
+/// After target result collection + artifact handoff, enqueue source continuation when ready.
+pub async fn try_admit_delegation_return(
+    pool: &PgPool,
+    delegation_id: &str,
+) -> Result<(), sqlx::Error> {
+    crate::artifact_handoff::plan_transfers_for_delegation(pool, delegation_id).await?;
+    let mut tx = pool.begin().await?;
+    if try_admit_delegation_return_in_tx(&mut tx, delegation_id).await? {
+        tx.commit().await?;
+    } else {
+        tx.rollback().await.ok();
+    }
+    Ok(())
+}
+
+async fn try_admit_delegation_return_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    delegation_id: &str,
+) -> Result<bool, sqlx::Error> {
+    if !crate::artifact_handoff::delegation_return_ready_in_tx(tx, delegation_id).await? {
+        return Ok(false);
+    }
+    match crate::work::enqueue_delegation_return_in_transaction(tx, delegation_id).await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Ok(false),
+        Err(err) => {
             tracing::warn!(
                 delegation_id = %delegation_id,
                 error = %err,
-                "could not enqueue delegation return during terminal sync"
+                "could not enqueue delegation return"
             );
-        } else {
-            counters.delegation_resume_repairs += 1;
+            Ok(false)
         }
     }
+}
 
+/// Target run results reached a terminal collection state; plan handoff and maybe admit return.
+pub async fn on_target_results_finalized(pool: &PgPool, target_run_id: &str) -> Result<(), sqlx::Error> {
+    let delegation_id: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM bot_delegations WHERE target_run_id = $1 AND return_policy = 'resume_source'",
+    )
+    .bind(target_run_id)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(delegation_id) = delegation_id else {
+        return Ok(());
+    };
+
+    crate::artifact_handoff::plan_transfers_for_delegation(pool, &delegation_id).await?;
     Ok(())
 }
 
@@ -393,6 +438,7 @@ pub async fn synchronize_run_terminal_for_request(
 }
 
 pub async fn reconcile_collaboration_lifecycle(pool: &PgPool) -> Result<(), sqlx::Error> {
+    reconcile_stale_result_finalization(pool).await?;
     let stale_targets: Vec<(String, String, String, Option<String>)> = sqlx::query_as(
         r#"
         SELECT tr.request_id, tr.id, tr.status, tr.error_code
@@ -428,16 +474,15 @@ pub async fn reconcile_collaboration_lifecycle(pool: &PgPool) -> Result<(), sqlx
     .await?;
 
     for delegation_id in pending_returns {
+        crate::artifact_handoff::plan_transfers_for_delegation(pool, &delegation_id).await?;
         let mut tx = pool.begin().await?;
-        if let Err(err) =
-            crate::work::enqueue_delegation_return_in_transaction(&mut tx, &delegation_id).await
+        if !crate::artifact_handoff::delegation_return_ready_in_tx(&mut tx, &delegation_id)
+            .await?
         {
-            tracing::warn!(
-                delegation_id = %delegation_id,
-                error = %err,
-                repair_action = "delegation_resume_enqueue",
-                "could not reconcile delegation return"
-            );
+            tx.rollback().await.ok();
+            continue;
+        }
+        if !try_admit_delegation_return_in_tx(&mut tx, &delegation_id).await? {
             tx.rollback().await.ok();
             continue;
         }
@@ -489,6 +534,40 @@ pub async fn reconcile_collaboration_lifecycle(pool: &PgPool) -> Result<(), sqlx
         tx.commit().await?;
     }
 
+    Ok(())
+}
+
+async fn reconcile_stale_result_finalization(pool: &PgPool) -> Result<(), sqlx::Error> {
+    let stale: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT id FROM agent_runs
+        WHERE status = 'completed'
+          AND results_status IN ('pending', 'collecting')
+          AND execution_released_at IS NOT NULL
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for run_id in stale {
+        if let Err(err) = crate::result_finalization::finalize_collection(
+            pool,
+            &run_id,
+            "failed",
+            Some(
+                "Result collection did not finish before the computer was released. Some files may remain only on the target computer.",
+            ),
+        )
+        .await
+        {
+            tracing::warn!(
+                run_id = %run_id,
+                error = %err,
+                repair_action = "stale_result_finalization",
+                "could not finalize stale result collection"
+            );
+        }
+    }
     Ok(())
 }
 

@@ -389,40 +389,13 @@ pub async fn enqueue_delegated_in_transaction(
 }
 
 const MAX_DELEGATION_RETURN_RESULT_CHARS: usize = 12_000;
-const MAX_DELEGATION_RETURN_ARTIFACTS: usize = 10;
-
-async fn load_target_artifact_lines_in_tx(
+async fn load_delegation_artifacts_in_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    target_run_id: &str,
-) -> Result<Vec<String>, ApiError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT name, kind, octet_length(content)::bigint AS size
-        FROM work_results
-        WHERE run_id = $1
-        ORDER BY created_at ASC, name ASC
-        LIMIT $2
-        "#,
-    )
-    .bind(target_run_id)
-    .bind(MAX_DELEGATION_RETURN_ARTIFACTS as i64)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(db_error)?;
-
-    Ok(rows
-        .into_iter()
-        .map(|row| {
-            let name: String = row.get("name");
-            let size: i64 = row.get("size");
-            let size_label = if size >= 1024 {
-                format!("{:.0} KB", (size as f64) / 1024.0)
-            } else {
-                format!("{size} B")
-            };
-            format!("{name} ({size_label})")
-        })
-        .collect())
+    delegation_id: &str,
+) -> Result<Vec<crate::artifact_handoff::ArtifactContextLine>, ApiError> {
+    crate::artifact_handoff::load_artifact_context_lines(&mut **tx, delegation_id)
+        .await
+        .map_err(db_error)
 }
 
 /// Queue exactly one source-Bot continuation after a delegated target reaches a terminal state.
@@ -567,11 +540,27 @@ pub async fn enqueue_delegation_return_in_transaction(
         }
     }
 
-    let target_run_id_value = target_run_id.clone().unwrap_or_default();
-    let artifact_lines = if target_run_id.is_some() {
-        load_target_artifact_lines_in_tx(tx, &target_run_id_value).await?
+    let artifacts = load_delegation_artifacts_in_tx(tx, delegation_id).await?;
+    let results_collection_note: Option<String> = if target_run_id.is_some() {
+        sqlx::query_scalar(
+            r#"
+            SELECT CASE
+              WHEN tr.results_status = 'partial' THEN COALESCE(tr.results_note, 'Result collection was partial.')
+              WHEN tr.results_status = 'failed' THEN COALESCE(tr.results_note, 'Result collection failed.')
+              ELSE NULL
+            END
+            FROM bot_delegations d
+            JOIN agent_runs tr ON tr.id = d.target_run_id
+            WHERE d.id = $1
+            "#,
+        )
+        .bind(delegation_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_error)?
+        .flatten()
     } else {
-        Vec::new()
+        None
     };
     let source_computer_id: String = row.get("source_computer_id");
     let target_computer_id: String = row.get("target_computer_id");
@@ -602,7 +591,8 @@ pub async fn enqueue_delegation_return_in_transaction(
         &target_status,
         &target_result,
         target_run_id.as_deref().unwrap_or(""),
-        &artifact_lines,
+        &artifacts,
+        results_collection_note.as_deref(),
         shared_computer,
         interruption_detail.as_deref(),
     );

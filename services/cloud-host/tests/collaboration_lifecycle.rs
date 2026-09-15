@@ -34,6 +34,25 @@ async fn bot_with_computer(pool: &PgPool, owner: &str, name: &str) -> resources:
     .unwrap()
 }
 
+async fn finalize_target_results(pool: &PgPool, target_run_id: &str) {
+    sqlx::query(
+        r#"
+        UPDATE agent_runs
+        SET results_status = 'complete',
+            results_finalized_at = NOW(),
+            execution_released_at = COALESCE(execution_released_at, NOW())
+        WHERE id = $1
+        "#,
+    )
+    .bind(target_run_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    run_lifecycle::on_target_results_finalized(pool, target_run_id)
+        .await
+        .unwrap();
+}
+
 async fn delegate_resume(
     pool: &PgPool,
     owner: &str,
@@ -94,6 +113,7 @@ async fn boundary_a_target_run_terminal_before_delegation_sync(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    finalize_target_results(&pool, &target_run_id).await;
 
     let stale: String = sqlx::query_scalar("SELECT status FROM bot_delegations WHERE id = $1")
         .bind(&delegation_id)
@@ -133,6 +153,7 @@ async fn boundary_b_delegation_terminal_resume_missing(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    finalize_target_results(&pool, &target_run_id).await;
 
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
@@ -193,11 +214,18 @@ async fn boundary_d_concurrent_reconciliation_one_resume(pool: PgPool) {
     let (_delegation_id, _target_run_id, target_request) =
         delegate_resume(&pool, "alice", &chief, &researcher, "boundary-d").await;
 
+    let target_run_id: String = sqlx::query_scalar(
+        "SELECT target_run_id FROM bot_delegations WHERE tool_invocation_id = 'boundary-d'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     sqlx::query("UPDATE agent_runs SET status = 'completed' WHERE request_id = $1")
         .bind(&target_request)
         .execute(&pool)
         .await
         .unwrap();
+    finalize_target_results(&pool, &target_run_id).await;
 
     let barrier = Arc::new(Barrier::new(2));
     let pool_a = pool.clone();
@@ -278,8 +306,15 @@ async fn boundary_e_restart_interrupted_target_wakes_source_once(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn resume_lifecycle_queued_running_completed(pool: PgPool) {
     let (chief, researcher) = chief_and_researcher(&pool, "alice").await;
-    let (delegation_id, _, target_request) =
+    let (delegation_id, target_run_id, target_request) =
         delegate_resume(&pool, "alice", &chief, &researcher, "resume-life").await;
+
+    sqlx::query("UPDATE agent_runs SET status = 'completed', finished_at = NOW() WHERE id = $1")
+        .bind(&target_run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    finalize_target_results(&pool, &target_run_id).await;
 
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
@@ -457,7 +492,16 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    finalize_target_results(&pool, &target_run_id).await;
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
+        .await
+        .unwrap();
+    run_lifecycle::try_admit_delegation_return(&pool, &sqlx::query_scalar::<_, String>(
+        "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-shared'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap())
         .await
         .unwrap();
     let shared_msg: String = sqlx::query_scalar(
@@ -467,7 +511,7 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
     .await
     .unwrap();
     assert!(shared_msg.contains("report.md"));
-    assert!(shared_msg.contains("share the same computer"));
+    assert!(shared_msg.contains("same computer"));
 
     let chief2 = bot_with_computer(&pool, "bob", "ChiefBob").await;
     let researcher2 = bot_with_computer(&pool, "bob", "ResearchBob").await;
@@ -478,7 +522,16 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    finalize_target_results(&pool, &target2).await;
     delegation::sync_target_run_terminal(&pool, &req2, "completed", None)
+        .await
+        .unwrap();
+    run_lifecycle::try_admit_delegation_return(&pool, &sqlx::query_scalar::<_, String>(
+        "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-diff'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap())
         .await
         .unwrap();
     let diff_msg: String = sqlx::query_scalar(
@@ -487,7 +540,14 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(diff_msg.contains("different computers"));
+    assert!(!diff_msg.contains("same computer"));
+    let resume: Option<String> = sqlx::query_scalar(
+        "SELECT source_resume_run_id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-diff'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(resume.is_some());
 }
 
 #[test]

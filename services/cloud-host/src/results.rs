@@ -4,8 +4,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub const FILE_LIMIT: usize = 1024 * 1024;
-const TOTAL_LIMIT: usize = 5 * FILE_LIMIT;
-const COUNT_LIMIT: usize = 20;
+pub const TOTAL_LIMIT: usize = 5 * FILE_LIMIT;
+pub const COUNT_LIMIT: usize = 20;
 
 pub fn output_directory(run_id: &str) -> String {
     format!("/workspace/results/{run_id}")

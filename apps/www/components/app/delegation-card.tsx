@@ -56,6 +56,10 @@ export function DelegationCard({ delegation, sourceBotName }: DelegationCardProp
   const showResumeChain =
     delegation.returnPolicy === "resume_source" &&
     (resumeStatus != null || resumeRunId != null);
+  const artifacts = delegation.artifacts ?? [];
+  const availableArtifacts = artifacts.filter(
+    (a) => a.transferStatus === "completed" || a.transferStatus === "skipped",
+  );
 
   return (
     <div
@@ -89,6 +93,40 @@ export function DelegationCard({ delegation, sourceBotName }: DelegationCardProp
           ) : null}
         </div>
       </div>
+
+      {delegation.status === "completed" && artifacts.length > 0 ? (
+        <div className="flex flex-col gap-2 border-t border-border/50 pt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {availableArtifacts.length === artifacts.length
+              ? `${artifacts.length} artifact${artifacts.length === 1 ? "" : "s"} returned`
+              : `${availableArtifacts.length} of ${artifacts.length} artifacts available`}
+          </p>
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {artifacts.map((artifact) => (
+              <li key={artifact.resultId} className="flex flex-wrap items-center gap-2">
+                <span>
+                  {artifact.transferStatus === "completed" ||
+                  artifact.transferStatus === "skipped"
+                    ? "✓"
+                    : "·"}{" "}
+                  {artifact.name}
+                </span>
+                {artifact.transferStatus === "failed" && artifact.error ? (
+                  <span className="text-destructive">{artifact.error}</span>
+                ) : null}
+                {artifact.transferStatus === "completed" ? (
+                  <a
+                    href={`/v1/results/${artifact.resultId}/download`}
+                    className="text-primary hover:underline"
+                  >
+                    Download
+                  </a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {showResumeChain ? (
         <div className="flex flex-col gap-2 border-t border-border/50 pt-3 pl-1">
