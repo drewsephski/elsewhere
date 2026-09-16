@@ -383,3 +383,67 @@ async fn membership_remove_race_never_below_min(pool: PgPool) {
     .unwrap();
     assert!(active >= 2);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn group_rename_and_delete(pool: PgPool) {
+    let a = bot_with_computer(&pool, "alice", "A").await;
+    let b = bot_with_computer(&pool, "alice", "B").await;
+    let group = groups::create_group(
+        &pool,
+        "alice",
+        groups::CreateGroupRequest {
+            name: "Launch".into(),
+            bot_ids: vec![a.id.clone(), b.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+
+    let renamed = groups::rename_group(&pool, "alice", &group.id, "  Product launch  ")
+        .await
+        .unwrap();
+    assert_eq!(renamed.name, "Product launch");
+
+    let empty = groups::rename_group(&pool, "alice", &group.id, "   ")
+        .await
+        .unwrap_err();
+    assert!(matches!(empty, cloud_host::error::ApiError::Validation(_)));
+
+    let foreign = groups::rename_group(&pool, "bob", &group.id, "Nope")
+        .await
+        .unwrap_err();
+    assert!(matches!(foreign, cloud_host::error::ApiError::NotFound));
+
+    groups::append_human_message(&pool, "alice", &group.id, "Kickoff")
+        .await
+        .unwrap();
+
+    groups::delete_group(&pool, "alice", &group.id).await.unwrap();
+
+    let missing = groups::get_conversation_for_owner(&pool, "alice", &group.id)
+        .await
+        .unwrap_err();
+    assert!(matches!(missing, cloud_host::error::ApiError::NotFound));
+
+    let remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = $1",
+    )
+    .bind(&group.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(remaining, 0);
+
+    let messages: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE conversation_id = $1")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(messages, 0);
+
+    let already_gone = groups::delete_group(&pool, "alice", &group.id)
+        .await
+        .unwrap_err();
+    assert!(matches!(already_gone, cloud_host::error::ApiError::NotFound));
+}

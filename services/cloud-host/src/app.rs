@@ -172,7 +172,9 @@ pub fn build_router(state: AppState) -> Router {
         )
         .route(
             "/v1/conversations/{id}",
-            get(api::conversations::get_conversation),
+            get(api::conversations::get_conversation)
+                .patch(api::conversations::patch_conversation)
+                .delete(api::conversations::delete_conversation),
         )
         .route(
             "/v1/conversations/{id}/messages",

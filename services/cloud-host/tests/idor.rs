@@ -191,6 +191,87 @@ async fn user_can_delete_own_bot_with_conversations() {
 }
 
 #[tokio::test]
+async fn user_cannot_rename_or_delete_other_users_group() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let computer = insert_computer_placeholder(&pool, "user-a", "Computer A")
+        .await
+        .unwrap();
+    let a = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "A",
+        "i",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    let b = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "B",
+        "i",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    let group = cloud_host::groups::create_group(
+        &pool,
+        "user-a",
+        cloud_host::groups::CreateGroupRequest {
+            name: "Launch".into(),
+            bot_ids: vec![a.id.clone(), b.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+
+    let app = build_router(jwt_state(pool.clone()));
+    let rename = app
+        .clone()
+        .oneshot(
+            http::Request::builder()
+                .method("PATCH")
+                .uri(format!("/v1/conversations/{}", group.id))
+                .header("authorization", format!("Bearer {}", token("user-b")))
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(r#"{"name":"Stolen"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rename.status(), http::StatusCode::NOT_FOUND);
+
+    let delete = app
+        .oneshot(
+            http::Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/conversations/{}", group.id))
+                .header("authorization", format!("Bearer {}", token("user-b")))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(delete.status(), http::StatusCode::NOT_FOUND);
+
+    let still_there: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(still_there);
+}
+
+#[tokio::test]
 async fn user_cannot_stream_other_users_run_events() {
     let Some(pool) = try_test_pool().await else {
         return;

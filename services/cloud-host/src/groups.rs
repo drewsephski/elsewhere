@@ -466,12 +466,7 @@ pub async fn create_group(
     owner: &str,
     body: CreateGroupRequest,
 ) -> Result<GroupConversationDetail, ApiError> {
-    let name = body.name.trim();
-    if name.is_empty() || name.len() > 200 {
-        return Err(ApiError::Validation(
-            "name must be between 1 and 200 characters".into(),
-        ));
-    }
+    let name = validate_group_name(&body.name)?;
     let bot_ids = normalize_group_bot_ids(&body.bot_ids)?;
     validate_group_bots(pool, owner, &bot_ids).await?;
 
@@ -505,6 +500,263 @@ pub async fn create_group(
     tx.commit().await.map_err(db_error)?;
 
     get_conversation_for_owner(pool, owner, &conversation_id).await
+}
+
+async fn require_group_conversation(
+    pool: &PgPool,
+    owner: &str,
+    conversation_id: &str,
+) -> Result<GroupConversationDetail, ApiError> {
+    let detail = get_conversation_for_owner(pool, owner, conversation_id).await?;
+    if detail.conversation_type != "group" {
+        return Err(ApiError::Validation("not a group conversation".into()));
+    }
+    Ok(detail)
+}
+
+fn validate_group_name(name: &str) -> Result<&str, ApiError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.len() > 200 {
+        return Err(ApiError::Validation(
+            "name must be between 1 and 200 characters".into(),
+        ));
+    }
+    Ok(trimmed)
+}
+
+pub async fn rename_group(
+    pool: &PgPool,
+    owner: &str,
+    conversation_id: &str,
+    name: &str,
+) -> Result<GroupConversationDetail, ApiError> {
+    let name = validate_group_name(name)?;
+    require_group_conversation(pool, owner, conversation_id).await?;
+    let updated = sqlx::query(
+        r#"
+        UPDATE conversations
+        SET name = $3, updated_at = NOW()
+        WHERE id = $1 AND owner_id = $2 AND conversation_type = 'group'
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .bind(name)
+    .execute(pool)
+    .await
+    .map_err(db_error)?;
+    if updated.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+    get_conversation_for_owner(pool, owner, conversation_id).await
+}
+
+pub async fn delete_group(
+    pool: &PgPool,
+    owner: &str,
+    conversation_id: &str,
+) -> Result<(), ApiError> {
+    require_group_conversation(pool, owner, conversation_id).await?;
+
+    sqlx::query(
+        r#"
+        UPDATE group_message_sends
+        SET routing_status = 'cancelled',
+            routing_claim_token = NULL,
+            routing_lease_until = NULL
+        WHERE conversation_id = $1
+          AND routing_mode = 'auto'
+          AND routing_status IN ('pending', 'routing')
+        "#,
+    )
+    .bind(conversation_id)
+    .execute(pool)
+    .await
+    .map_err(db_error)?;
+
+    let mut tx = pool.begin().await.map_err(db_error)?;
+
+    sqlx::query(
+        "UPDATE routines SET destination_conversation_id = NULL WHERE destination_conversation_id = $1",
+    )
+    .bind(conversation_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        UPDATE routines
+        SET last_run_id = NULL
+        WHERE last_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        UPDATE routines
+        SET acknowledged_run_id = NULL
+        WHERE acknowledged_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        UPDATE routine_runs
+        SET run_id = NULL
+        WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM work_queue
+        WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+           OR delegation_id IN (
+                SELECT id FROM bot_delegations
+                WHERE owner_id = $2
+                  AND (
+                    source_conversation_id = $1
+                    OR target_conversation_id = $1
+                    OR source_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR target_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR root_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR source_resume_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                  )
+           )
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM tool_approval_requests
+        WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM work_results
+        WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM run_events
+        WHERE request_id IN (SELECT request_id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        UPDATE bot_delegations
+        SET parent_delegation_id = NULL
+        WHERE parent_delegation_id IN (
+            SELECT id FROM (
+                SELECT d.id
+                FROM bot_delegations d
+                WHERE d.owner_id = $2
+                  AND (
+                    d.source_conversation_id = $1
+                    OR d.target_conversation_id = $1
+                    OR d.source_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR d.target_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR d.root_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                    OR d.source_resume_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+                  )
+            ) matching
+        )
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM bot_delegations
+        WHERE owner_id = $2
+          AND (
+            source_conversation_id = $1
+            OR target_conversation_id = $1
+            OR source_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+            OR target_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+            OR root_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+            OR source_resume_run_id IN (SELECT id FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2)
+          )
+        "#,
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+
+    sqlx::query("DELETE FROM agent_runs WHERE conversation_id = $1 AND owner_id = $2")
+        .bind(conversation_id)
+        .bind(owner)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    sqlx::query("DELETE FROM messages WHERE conversation_id = $1")
+        .bind(conversation_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    let deleted = sqlx::query(
+        "DELETE FROM conversations WHERE id = $1 AND owner_id = $2 AND conversation_type = 'group'",
+    )
+    .bind(conversation_id)
+    .bind(owner)
+    .execute(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    if deleted.rows_affected() == 0 {
+        return Err(ApiError::NotFound);
+    }
+
+    tx.commit().await.map_err(db_error)?;
+    Ok(())
 }
 
 fn normalize_group_bot_ids(bot_ids: &[String]) -> Result<Vec<String>, ApiError> {

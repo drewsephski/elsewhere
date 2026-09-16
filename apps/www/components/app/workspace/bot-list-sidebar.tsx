@@ -50,12 +50,21 @@ interface BotListSidebarProps {
   onCreateGroup?: () => void;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
   onDeleteBot?: (botId: string) => Promise<void>;
+  onRenameGroup?: (groupId: string, name: string) => Promise<void>;
+  onDeleteGroup?: (groupId: string) => Promise<void>;
   footer: React.ReactNode;
   className?: string;
 }
 
-interface ContextMenuState {
-  bot: WorkspaceBotPresence;
+type SidebarItemKind = "bot" | "group";
+
+interface SidebarNamedItem {
+  kind: SidebarItemKind;
+  id: string;
+  name: string;
+}
+
+interface ContextMenuState extends SidebarNamedItem {
   x: number;
   y: number;
 }
@@ -80,14 +89,16 @@ export function BotListSidebar({
   onCreateGroup,
   onRenameBot,
   onDeleteBot,
+  onRenameGroup,
+  onDeleteGroup,
   footer,
   className,
 }: BotListSidebarProps) {
   const [query, setQuery] = useState("");
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [renameBot, setRenameBot] = useState<WorkspaceBotPresence | null>(null);
+  const [renameItem, setRenameItem] = useState<SidebarNamedItem | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
-  const [deleteBot, setDeleteBot] = useState<WorkspaceBotPresence | null>(null);
+  const [deleteItem, setDeleteItem] = useState<SidebarNamedItem | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -123,53 +134,82 @@ export function BotListSidebar({
     };
   }, [closeContextMenu, contextMenu]);
 
-  function handleContextMenu(event: React.MouseEvent, bot: WorkspaceBotPresence) {
-    if (!onRenameBot && !onDeleteBot) {
+  function canRename(kind: SidebarItemKind): boolean {
+    return kind === "bot" ? Boolean(onRenameBot) : Boolean(onRenameGroup);
+  }
+
+  function canDelete(kind: SidebarItemKind): boolean {
+    return kind === "bot" ? Boolean(onDeleteBot) : Boolean(onDeleteGroup);
+  }
+
+  function handleContextMenu(event: React.MouseEvent, item: SidebarNamedItem) {
+    if (!canRename(item.kind) && !canDelete(item.kind)) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    setContextMenu({ bot, x: event.clientX, y: event.clientY });
+    setContextMenu({ ...item, x: event.clientX, y: event.clientY });
   }
 
-  function openRenameDialog(bot: WorkspaceBotPresence) {
-    setRenameBot(bot);
-    setRenameDraft(bot.name);
+  function openRenameDialog(item: SidebarNamedItem) {
+    setRenameItem(item);
+    setRenameDraft(item.name);
     setActionError(null);
   }
 
   async function handleRenameSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!renameBot || !onRenameBot || actionBusy) {
+    if (!renameItem || actionBusy) {
       return;
     }
     const trimmed = renameDraft.trim();
     if (!trimmed) {
       return;
     }
+    const rename =
+      renameItem.kind === "bot" ? onRenameBot : onRenameGroup;
+    if (!rename) {
+      return;
+    }
     setActionBusy(true);
     setActionError(null);
     try {
-      await onRenameBot(renameBot.id, trimmed);
-      setRenameBot(null);
+      await rename(renameItem.id, trimmed);
+      setRenameItem(null);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Could not rename bot");
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : renameItem.kind === "bot"
+            ? "Could not rename bot"
+            : "Could not rename group",
+      );
     } finally {
       setActionBusy(false);
     }
   }
 
   async function handleDeleteConfirm() {
-    if (!deleteBot || !onDeleteBot || actionBusy) {
+    if (!deleteItem || actionBusy) {
+      return;
+    }
+    const remove = deleteItem.kind === "bot" ? onDeleteBot : onDeleteGroup;
+    if (!remove) {
       return;
     }
     setActionBusy(true);
     setActionError(null);
     try {
-      await onDeleteBot(deleteBot.id);
-      setDeleteBot(null);
+      await remove(deleteItem.id);
+      setDeleteItem(null);
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "Could not delete bot");
+      setActionError(
+        err instanceof Error
+          ? err.message
+          : deleteItem.kind === "bot"
+            ? "Could not delete bot"
+            : "Could not delete group",
+      );
     } finally {
       setActionBusy(false);
     }
@@ -226,7 +266,9 @@ export function BotListSidebar({
                 key={bot.id}
                 href={`/app/bots/${bot.id}`}
                 className="flex w-14 shrink-0 flex-col items-center gap-1"
-                onContextMenu={(event) => handleContextMenu(event, bot)}
+                onContextMenu={(event) =>
+                  handleContextMenu(event, { kind: "bot", id: bot.id, name: bot.name })
+                }
               >
                 <BotCreatureAvatar
                   name={bot.name}
@@ -255,6 +297,13 @@ export function BotListSidebar({
                   <li key={group.id}>
                     <Link
                       href={`/app/groups/${group.id}`}
+                      onContextMenu={(event) =>
+                        handleContextMenu(event, {
+                          kind: "group",
+                          id: group.id,
+                          name: group.name,
+                        })
+                      }
                       className={cn(
                         navRowClass,
                         selected ? navRowSelectedClass : navRowIdleClass,
@@ -275,9 +324,19 @@ export function BotListSidebar({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate text-[13px] font-medium leading-tight">
-                            {group.name}
-                          </span>
+                          {onRenameGroup ? (
+                            <InlineRenameLabel
+                              value={group.name}
+                              onCommit={(next) => onRenameGroup(group.id, next)}
+                              className="text-[13px] font-medium leading-tight"
+                              inputClassName="text-[13px]"
+                              ariaLabel={`Rename ${group.name}`}
+                            />
+                          ) : (
+                            <span className="truncate text-[13px] font-medium leading-tight">
+                              {group.name}
+                            </span>
+                          )}
                           <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
                             {formatMessageTime(group.updatedAt)}
                           </span>
@@ -310,7 +369,9 @@ export function BotListSidebar({
             <li key={bot.id}>
               <Link
                 href={`/app/bots/${bot.id}`}
-                onContextMenu={(event) => handleContextMenu(event, bot)}
+                onContextMenu={(event) =>
+                  handleContextMenu(event, { kind: "bot", id: bot.id, name: bot.name })
+                }
                 className={cn(navRowClass, selected ? navRowSelectedClass : navRowIdleClass)}
                 aria-current={selected ? "page" : undefined}
               >
@@ -380,26 +441,26 @@ export function BotListSidebar({
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          {onRenameBot ? (
+          {canRename(contextMenu.kind) ? (
             <button
               type="button"
               role="menuitem"
               className={menuItemClass}
               onClick={() => {
-                openRenameDialog(contextMenu.bot);
+                openRenameDialog(contextMenu);
                 closeContextMenu();
               }}
             >
               Rename
             </button>
           ) : null}
-          {onDeleteBot ? (
+          {canDelete(contextMenu.kind) ? (
             <button
               type="button"
               role="menuitem"
               className={cn(menuItemClass, "text-destructive hover:bg-destructive/10 hover:text-destructive")}
               onClick={() => {
-                setDeleteBot(contextMenu.bot);
+                setDeleteItem(contextMenu);
                 setActionError(null);
                 closeContextMenu();
               }}
@@ -410,20 +471,26 @@ export function BotListSidebar({
         </div>
       ) : null}
 
-      <Dialog open={Boolean(renameBot)} onOpenChange={(open) => !open && setRenameBot(null)}>
+      <Dialog open={Boolean(renameItem)} onOpenChange={(open) => !open && setRenameItem(null)}>
         <DialogContent className="sm:max-w-sm">
           <form onSubmit={(event) => void handleRenameSubmit(event)}>
             <DialogHeader>
-              <DialogTitle>Rename bot</DialogTitle>
-              <DialogDescription>Choose a name your team will recognize.</DialogDescription>
+              <DialogTitle>
+                {renameItem?.kind === "group" ? "Rename group" : "Rename bot"}
+              </DialogTitle>
+              <DialogDescription>
+                {renameItem?.kind === "group"
+                  ? "Choose a name for this group conversation."
+                  : "Choose a name your team will recognize."}
+              </DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-2">
-              <Label htmlFor="sidebar-rename-bot">Name</Label>
+              <Label htmlFor="sidebar-rename-item">Name</Label>
               <Input
-                id="sidebar-rename-bot"
+                id="sidebar-rename-item"
                 value={renameDraft}
                 onChange={(event) => setRenameDraft(event.target.value)}
-                maxLength={100}
+                maxLength={renameItem?.kind === "group" ? 200 : 100}
                 required
                 autoFocus
               />
@@ -432,7 +499,7 @@ export function BotListSidebar({
               <p className="mt-2 text-sm text-destructive" role="alert">{actionError}</p>
             ) : null}
             <DialogFooter className="mt-4">
-              <Button type="button" variant="outline" onClick={() => setRenameBot(null)}>
+              <Button type="button" variant="outline" onClick={() => setRenameItem(null)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={actionBusy || !renameDraft.trim()}>
@@ -443,19 +510,21 @@ export function BotListSidebar({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(deleteBot)} onOpenChange={(open) => !open && setDeleteBot(null)}>
+      <Dialog open={Boolean(deleteItem)} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete {deleteBot?.name}?</DialogTitle>
+            <DialogTitle>Delete {deleteItem?.name}?</DialogTitle>
             <DialogDescription>
-              This removes the bot and its settings. Work history may remain in your account.
+              {deleteItem?.kind === "group"
+                ? "This removes the group conversation and its transcript."
+                : "This removes the bot and its settings. Work history may remain in your account."}
             </DialogDescription>
           </DialogHeader>
           {actionError ? (
             <p className="text-sm text-destructive" role="alert">{actionError}</p>
           ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteBot(null)}>
+            <Button type="button" variant="outline" onClick={() => setDeleteItem(null)}>
               Cancel
             </Button>
             <Button

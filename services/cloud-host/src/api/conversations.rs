@@ -8,10 +8,10 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::groups::{
-    add_participant, create_group, delete_transcript_message, get_conversation_for_owner,
-    list_groups, list_messages, remove_participant, send_group_message,
-    CreateGroupRequest, GroupConversationDetail, GroupListItem, SendGroupMessageRequest,
-    SendGroupMessageResponse, TranscriptMessage,
+    add_participant, create_group, delete_group, delete_transcript_message,
+    get_conversation_for_owner, list_groups, list_messages, remove_participant, rename_group,
+    send_group_message, CreateGroupRequest, GroupConversationDetail, GroupListItem,
+    SendGroupMessageRequest, SendGroupMessageResponse, TranscriptMessage,
 };
 
 pub async fn get_conversation(
@@ -22,6 +22,35 @@ pub async fn get_conversation(
     let detail =
         get_conversation_for_owner(&state.pool, principal.owner_id(), &conversation_id).await?;
     Ok(Json(detail))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatchConversationRequest {
+    pub name: Option<String>,
+}
+
+pub async fn patch_conversation(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(conversation_id): Path<String>,
+    Json(body): Json<PatchConversationRequest>,
+) -> Result<Json<GroupConversationDetail>, ApiError> {
+    let name = body
+        .name
+        .as_deref()
+        .ok_or_else(|| ApiError::Validation("name is required".into()))?;
+    let detail = rename_group(&state.pool, principal.owner_id(), &conversation_id, name).await?;
+    Ok(Json(detail))
+}
+
+pub async fn delete_conversation(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(conversation_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    delete_group(&state.pool, principal.owner_id(), &conversation_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn list_conversation_messages(

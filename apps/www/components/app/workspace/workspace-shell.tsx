@@ -80,6 +80,19 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   const bots = workspace?.bots ?? [];
 
+  const refreshGroups = useCallback(async () => {
+    try {
+      const response = await cloudHostFetch("/v1/conversations/groups");
+      if (!response.ok) {
+        return;
+      }
+      const next: GroupListItem[] = await response.json();
+      setGroups(next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
     let stopped = false;
     async function loadGroups() {
@@ -218,6 +231,41 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     [bot?.id, refresh],
   );
 
+  const handleRenameGroup = useCallback(
+    async (groupId: string, name: string) => {
+      const response = await cloudHostFetch(`/v1/conversations/${groupId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not rename group");
+      }
+      await refreshGroups();
+    },
+    [refreshGroups],
+  );
+
+  const handleDeleteGroup = useCallback(
+    async (groupId: string) => {
+      const response = await cloudHostFetch(`/v1/conversations/${groupId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === "string" ? body.error : "Could not delete group",
+        );
+      }
+      await refreshGroups();
+      if (selectedGroupId === groupId) {
+        router.push("/app");
+      }
+      router.refresh();
+    },
+    [refreshGroups, router, selectedGroupId],
+  );
+
   const showConversation = Boolean(selectedBotId || selectedGroupId);
 
   const previewEnabled = Boolean(bot?.computerId);
@@ -320,6 +368,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             onCreateGroup={() => setCreateGroupOpen(true)}
             onRenameBot={handleRenameBot}
             onDeleteBot={handleDeleteBot}
+            onRenameGroup={handleRenameGroup}
+            onDeleteGroup={handleDeleteGroup}
             footer={
               <ProfileFooter
                 email={userEmail}
@@ -340,10 +390,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         bots={bots}
         onClose={() => setCreateGroupOpen(false)}
         onCreated={(groupId) => {
-          void cloudHostFetch("/v1/conversations/groups")
-            .then((r) => (r.ok ? r.json() : []))
-            .then((next: GroupListItem[]) => setGroups(next))
-            .catch(() => undefined);
+          void refreshGroups();
           router.push(`/app/groups/${groupId}`);
         }}
       />
