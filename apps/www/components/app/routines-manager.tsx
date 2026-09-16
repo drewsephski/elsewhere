@@ -97,6 +97,17 @@ const emptyForm = () => ({
 
 type RoutineFormState = ReturnType<typeof emptyForm>;
 
+function absoluteWebhookUrl(url: string) {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+  const path = url.startsWith("/") ? url : `/${url}`;
+  if (typeof window === "undefined") {
+    return path;
+  }
+  return `${window.location.origin}${path}`;
+}
+
 function buildScheduleExpression(form: RoutineFormState) {
   if (form.scheduleKind === "interval") return String(form.intervalMinutes);
   if (form.scheduleKind === "daily") return form.dailyTime;
@@ -240,7 +251,7 @@ export function RoutinesManager() {
         }),
       });
       if (saved.webhook?.webhookUrl) {
-        setRevealedWebhookUrl(saved.webhook.webhookUrl);
+        setRevealedWebhookUrl(absoluteWebhookUrl(saved.webhook.webhookUrl));
         setEditing(saved.id);
         setForm(routineToForm(saved));
         toast.success("Webhook URL created. Copy it now — it will not be shown again.");
@@ -328,7 +339,7 @@ export function RoutinesManager() {
       }
       const url = (body as { webhookUrl?: string }).webhookUrl;
       if (url) {
-        setRevealedWebhookUrl(url);
+        setRevealedWebhookUrl(absoluteWebhookUrl(url));
         toast.success("New webhook URL created. The previous URL no longer works.");
       }
       await load();
@@ -784,7 +795,13 @@ export function RoutinesManager() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={!editing || busy !== null}
+                  disabled={
+                    !editing ||
+                    busy !== null ||
+                    form.triggerMode !== "webhook" ||
+                    routines.find((routine) => routine.id === editing)?.triggerMode !==
+                      "webhook"
+                  }
                   onClick={() => void handleRotateWebhookUrl()}
                 >
                   Rotate URL

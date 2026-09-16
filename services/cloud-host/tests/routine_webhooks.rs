@@ -289,6 +289,22 @@ async fn rotating_token_invalidates_old_url(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn rotating_a_scheduled_routine_does_not_create_a_webhook(pool: PgPool) {
+    let input = scheduled_input(&pool, "alice").await;
+    let saved = routines::save(&pool, "alice", None, &input).await.unwrap();
+    let rotated = routine_webhooks::rotate_for_owner(&pool, "alice", &saved.id, None).await;
+    assert!(matches!(
+        rotated,
+        Err(cloud_host::error::ApiError::Validation(_))
+    ));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM routine_webhook_triggers")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn external_event_ids_deduplicate_retries_but_not_distinct_events(pool: PgPool) {
     let input = webhook_input(&pool, "alice").await;
     let saved = routines::save(&pool, "alice", None, &input).await.unwrap();

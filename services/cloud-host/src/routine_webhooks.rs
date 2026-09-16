@@ -276,15 +276,21 @@ pub async fn rotate_for_owner(
     public_origin: Option<&str>,
 ) -> Result<WebhookTriggerView, ApiError> {
     let mut tx = pool.begin().await.map_err(db_error)?;
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM routines WHERE id = $1 AND owner_id = $2)")
-            .bind(routine_id)
-            .bind(owner)
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(db_error)?;
-    if !exists {
+    let trigger_mode: Option<String> = sqlx::query_scalar(
+        "SELECT trigger_mode FROM routines WHERE id = $1 AND owner_id = $2 FOR UPDATE",
+    )
+    .bind(routine_id)
+    .bind(owner)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(db_error)?;
+    let Some(trigger_mode) = trigger_mode else {
         return Err(ApiError::NotFound);
+    };
+    if trigger_mode != "webhook" {
+        return Err(ApiError::Validation(
+            "Switch this routine to webhook trigger before creating a URL".into(),
+        ));
     }
     sqlx::query("DELETE FROM routine_webhook_triggers WHERE routine_id = $1 AND owner_id = $2")
         .bind(routine_id)
