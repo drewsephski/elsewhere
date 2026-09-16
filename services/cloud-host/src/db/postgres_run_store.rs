@@ -226,6 +226,16 @@ impl RunStore for PostgresRunStore {
                             "could not commit group context cursor"
                         );
                     }
+                    if let Err(err) =
+                        crate::channels::delivery::enqueue_assistant_reply_for_run(&mut tx, &run_id)
+                            .await
+                    {
+                        tracing::warn!(
+                            request_id = %request_id,
+                            error = %err,
+                            "could not enqueue channel delivery"
+                        );
+                    }
                 }
                 if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
                     &mut tx, &run_id, status, error_code,

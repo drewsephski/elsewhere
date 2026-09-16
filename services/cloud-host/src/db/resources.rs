@@ -425,7 +425,8 @@ pub async fn list_runs_for_owner(
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
-               error_code, step_count, assistant_message_id, started_at, finished_at
+               error_code, step_count, assistant_message_id, started_at, finished_at,
+               origin_kind, origin_provider
         FROM agent_runs
         WHERE owner_id = $1
         ORDER BY created_at DESC
@@ -451,7 +452,7 @@ pub async fn list_conversations_for_owner(
             FROM conversations c
             WHERE c.owner_id = $1
               AND (
-                (c.conversation_type = 'direct' AND c.bot_id = $2)
+                (c.conversation_type = 'direct' AND c.bot_id = $2 AND c.origin_kind = 'web')
                 OR EXISTS (
                   SELECT 1 FROM conversation_participants p
                   WHERE p.conversation_id = c.id AND p.bot_id = $2 AND p.left_at IS NULL
@@ -472,6 +473,7 @@ pub async fn list_conversations_for_owner(
             SELECT id, owner_id, bot_id, conversation_type, name, created_at, updated_at
             FROM conversations
             WHERE owner_id = $1
+              AND (conversation_type = 'group' OR origin_kind = 'web')
             ORDER BY updated_at DESC
             LIMIT $2
             "#,

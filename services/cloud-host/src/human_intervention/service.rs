@@ -288,6 +288,19 @@ impl HumanInterventionService {
                 .await;
             return Err(err);
         }
+        let origin = std::env::var("ELSEWHERE_WEB_ORIGIN")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        if let Err(err) = crate::channels::delivery::enqueue_owner_attention(
+            &self.pool,
+            &ctx.run_id,
+            "help",
+            origin.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(error = %err, "could not enqueue channel human-intervention notice");
+        }
 
         let resolution = self
             .wait_for_resolution(&intervention_id, &ctx.run_id, cancel, rx)

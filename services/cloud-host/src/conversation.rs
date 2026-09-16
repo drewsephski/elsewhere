@@ -38,7 +38,7 @@ pub async fn get_or_create_primary_conversation_id_in_tx(
     bot_id: &str,
 ) -> Result<String, ApiError> {
     if let Some(id) = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2 AND conversation_type = 'direct' ORDER BY updated_at DESC LIMIT 1",
+        "SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2 AND conversation_type = 'direct' AND origin_kind = 'web' ORDER BY updated_at DESC LIMIT 1",
     )
     .bind(bot_id)
     .bind(owner)
@@ -50,7 +50,7 @@ pub async fn get_or_create_primary_conversation_id_in_tx(
     }
     let id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type) VALUES ($1, $2, $3, 'direct')",
+        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type, origin_kind) VALUES ($1, $2, $3, 'direct', 'web')",
     )
         .bind(&id)
         .bind(owner)
@@ -78,7 +78,7 @@ pub async fn create_conversation_for_bot(
     }
     let id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type) VALUES ($1, $2, $3, 'direct')",
+        "INSERT INTO conversations (id, owner_id, bot_id, conversation_type, origin_kind) VALUES ($1, $2, $3, 'direct', 'web')",
     )
         .bind(&id)
         .bind(owner)

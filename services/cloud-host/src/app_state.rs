@@ -10,6 +10,7 @@ use agent_core::{AgentComputer, ResponsesModel};
 
 use crate::approval::ApprovalService;
 use crate::auth::JwtVerifier;
+use crate::channels::slack::SlackClient;
 use crate::codex_ops::CodexOpsPermit;
 use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
@@ -69,6 +70,7 @@ pub struct AppState {
     pub group_route_semaphore: Arc<Semaphore>,
     pub connector_secret_box: Option<Arc<ConnectorSecretBox>>,
     pub github_client: GitHubClient,
+    pub slack_client: SlackClient,
     #[cfg(any(test, feature = "test-utils"))]
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
     #[cfg(any(test, feature = "test-utils"))]
@@ -156,6 +158,9 @@ impl AppState {
             .and_then(|key| ConnectorSecretBox::from_base64_key(key).ok())
             .map(Arc::new);
         let github_client = GitHubClient::production();
+        let slack_api_base = config.slack_api_base.clone();
+        let slack_oauth_base = slack_api_base.trim_end_matches("/api").to_string();
+        let slack_client = SlackClient::with_bases(slack_api_base, slack_oauth_base);
 
         Self {
             pool,
@@ -178,6 +183,7 @@ impl AppState {
             group_route_semaphore: Arc::new(Semaphore::new(2)),
             connector_secret_box,
             github_client,
+            slack_client,
             #[cfg(any(test, feature = "test-utils"))]
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(any(test, feature = "test-utils"))]

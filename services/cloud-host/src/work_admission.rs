@@ -121,6 +121,13 @@ pub(crate) enum WorkAdmissionIntent<'a> {
         message: &'a str,
         skills: &'a SkillAdmissionInput,
     },
+    ChannelMessage {
+        bot_id: &'a str,
+        conversation_id: &'a str,
+        message: &'a str,
+        skills: &'a SkillAdmissionInput,
+        origin_provider: &'a str,
+    },
 }
 
 pub(crate) async fn admit(
@@ -144,6 +151,28 @@ pub(crate) async fn admit(
                 conversation_id,
                 message,
                 skills,
+                "web",
+                None,
+            )
+            .await
+        }
+        WorkAdmissionIntent::ChannelMessage {
+            bot_id,
+            conversation_id,
+            message,
+            skills,
+            origin_provider,
+        } => {
+            admit_human_message(
+                tx,
+                owner,
+                request_id,
+                bot_id,
+                Some(conversation_id),
+                message,
+                skills,
+                "channel",
+                Some(origin_provider),
             )
             .await
         }
@@ -158,6 +187,8 @@ async fn admit_human_message(
     conversation_id: Option<&str>,
     message: &str,
     skills: &SkillAdmissionInput,
+    origin_kind: &str,
+    origin_provider: Option<&str>,
 ) -> Result<BootstrapRunRecords, ApiError> {
     validate_admission_message(message)?;
     validate_request_id(request_id)?;
@@ -251,7 +282,7 @@ async fn admit_human_message(
 
     let run_id = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO agent_runs (id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status, assistant_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',$8)",
+        "INSERT INTO agent_runs (id, owner_id, request_id, bot_id, conversation_id, computer_id, model, status, assistant_message_id, origin_kind, origin_provider) VALUES ($1,$2,$3,$4,$5,$6,$7,'queued',$8,$9,$10)",
     )
     .bind(&run_id)
     .bind(owner)
@@ -261,16 +292,23 @@ async fn admit_human_message(
     .bind(&snapshot.computer_id)
     .bind(&snapshot.model)
     .bind(&assistant_message_id)
+    .bind(origin_kind)
+    .bind(origin_provider)
     .execute(&mut **tx)
     .await
     .map_err(db_error)?;
     sqlx::query(
-        "INSERT INTO work_queue (run_id, user_message, instructions, engine_preference) VALUES ($1,$2,$3,$4)",
+        "INSERT INTO work_queue (run_id, user_message, instructions, engine_preference, provenance_kind) VALUES ($1,$2,$3,$4,$5)",
     )
     .bind(&run_id)
     .bind(message.trim())
     .bind(&snapshot.instructions)
     .bind(&snapshot.engine)
+    .bind(if origin_kind == "channel" {
+        Some(origin_kind)
+    } else {
+        None
+    })
     .execute(&mut **tx)
     .await
     .map_err(db_error)?;

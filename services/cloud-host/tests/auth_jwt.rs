@@ -65,6 +65,11 @@ fn jwt_test_config() -> Config {
         github_client_id: None,
         github_client_secret: None,
         github_oauth_redirect_uri: None,
+        slack_client_id: None,
+        slack_client_secret: None,
+        slack_signing_secret: None,
+        slack_oauth_redirect_uri: None,
+        slack_api_base: "https://slack.com/api".into(),
     }
 }
 

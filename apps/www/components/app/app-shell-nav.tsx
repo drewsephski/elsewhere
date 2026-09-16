@@ -26,6 +26,7 @@ const linkIcons = {
   [appRoutes.routines]: CalendarClock,
   [appRoutes.computers]: Monitor,
   [appRoutes.connectors]: Plug,
+  [appRoutes.channels]: MessageSquare,
   [appRoutes.skills]: Sparkles,
   [appRoutes.settings]: Settings2,
 } as const;

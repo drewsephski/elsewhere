@@ -50,6 +50,9 @@ export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "create
   stepCount: number;
   errorCode: string | null;
   assistantResult: string | null;
+  originKind?: string;
+  originProvider?: string | null;
+  originLabel?: string | null;
 }
 
 export interface CreateRunResponse {

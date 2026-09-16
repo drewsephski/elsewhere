@@ -7,6 +7,8 @@ pub fn redact_secrets(input: &str) -> String {
         "ELSEWHERE_CLOUD_API_TOKEN",
         "ELSEWHERE_CONNECTOR_SECRET_KEY",
         "GITHUB_CLIENT_SECRET",
+        "SLACK_CLIENT_SECRET",
+        "SLACK_SIGNING_SECRET",
         "DATABASE_URL",
     ] {
         if out.contains(secret) {
@@ -33,7 +35,32 @@ pub fn redact_secrets(input: &str) -> String {
             out = out.replace(&v, "[redacted]");
         }
     }
+    if let Ok(v) = std::env::var("SLACK_CLIENT_SECRET") {
+        if !v.is_empty() {
+            out = out.replace(&v, "[redacted]");
+        }
+    }
+    if let Ok(v) = std::env::var("SLACK_SIGNING_SECRET") {
+        if !v.is_empty() {
+            out = out.replace(&v, "[redacted]");
+        }
+    }
     out = redact_github_oauth_tokens(&out);
+    out = redact_slack_tokens(&out);
+    out
+}
+
+fn redact_slack_tokens(input: &str) -> String {
+    let mut out = input.to_string();
+    for marker in ["xoxb-", "xoxp-", "xoxa-", "xoxe-"] {
+        while let Some(idx) = out.find(marker) {
+            let rest = &out[idx..];
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ')')
+                .unwrap_or(rest.len());
+            out.replace_range(idx..idx + end, "[redacted]");
+        }
+    }
     out
 }
 

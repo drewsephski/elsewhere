@@ -375,6 +375,9 @@ export function WorkDetail({ runId }: { runId: string }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {detail?.originLabel ? (
+              <Badge variant="secondary">Started from {detail.originLabel}</Badge>
+            ) : null}
             <Badge variant={statusBadgeVariant(detail?.status)}>
               {detail ? workStatus(detail.status) : "Loading…"}
             </Badge>

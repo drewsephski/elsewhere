@@ -32,6 +32,8 @@ futures-util = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "json", "chrono", "migrate", "uuid"] }
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
@@ -96,6 +98,10 @@ required-features = ["test-utils"]
 
 [[test]]
 name = "permission_policies"
+required-features = ["test-utils"]
+
+[[test]]
+name = "channels"
 required-features = ["test-utils"]
 
 [dev-dependencies]

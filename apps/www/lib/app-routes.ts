@@ -9,6 +9,7 @@ export const appRoutes = {
   work: "/app/work",
   results: "/app/results",
   connectors: "/app/connectors",
+  channels: "/app/channels",
   skills: "/app/skills",
   settings: "/app/settings",
 } as const;
@@ -36,6 +37,7 @@ export const appShellNavLinks = [
   { href: appRoutes.routines, label: "Routines" },
   { href: appRoutes.computers, label: "Computers" },
   { href: appRoutes.connectors, label: "Integrations" },
+  { href: appRoutes.channels, label: "Channels" },
   { href: appRoutes.skills, label: "Skills" },
   { href: appRoutes.settings, label: "Settings" },
 ] as const;

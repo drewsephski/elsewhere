@@ -80,6 +80,9 @@ pub struct RunDetailResponse {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     pub assistant_result: Option<String>,
+    pub origin_kind: String,
+    pub origin_provider: Option<String>,
+    pub origin_label: Option<String>,
 }
 
 pub async fn create_run(
@@ -293,6 +296,12 @@ pub async fn get_run(
         started_at: run.started_at,
         finished_at: run.finished_at,
         assistant_result,
+        origin_kind: run.origin_kind.clone(),
+        origin_provider: run.origin_provider.clone(),
+        origin_label: crate::channels::origin_label(
+            &run.origin_kind,
+            run.origin_provider.as_deref(),
+        ),
     }))
 }
 

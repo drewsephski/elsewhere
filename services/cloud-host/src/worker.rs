@@ -68,6 +68,15 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
             .await
             .map_err(|e| e.to_string())?;
         crate::group_router::tick(&state).await;
+        if let Err(err) = crate::channels::admission::tick_pending(&state).await {
+            tracing::warn!(error = %err, "channel event admission tick failed");
+        }
+        if let Err(err) = crate::channels::delivery::recover_sending(&state.pool).await {
+            tracing::warn!(error = %err, "channel delivery recovery failed");
+        }
+        if let Err(err) = crate::channels::delivery::tick(&state).await {
+            tracing::warn!(error = %err, "channel delivery tick failed");
+        }
         *state
             .runner_heartbeat
             .lock()

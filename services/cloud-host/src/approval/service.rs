@@ -555,6 +555,22 @@ impl ApprovalService {
                 .await;
             return Err(err);
         }
+        let origin = std::env::var("ELSEWHERE_WEB_ORIGIN")
+            .ok()
+            .filter(|v| !v.trim().is_empty());
+        if let Err(err) = crate::channels::delivery::enqueue_owner_attention(
+            &self.pool,
+            &context.run_id,
+            "approval",
+            origin.as_deref(),
+        )
+        .await
+        {
+            tracing::warn!(
+                error = %err,
+                "could not enqueue channel approval notice"
+            );
+        }
 
         let resolution = self
             .wait_for_resolution(&approval_id, &context.run_id, cancel, rx)

@@ -50,6 +50,7 @@ pub mod human_intervention;
 pub mod message_kind;
 pub use computer_registry::ComputerRegistry;
 pub mod artifact_handoff;
+pub mod channels;
 pub mod collaboration;
 pub mod collaboration_completion;
 pub mod computer_control;

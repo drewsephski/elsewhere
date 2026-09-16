@@ -25,6 +25,8 @@ pub struct AgentRunRow {
     pub assistant_message_id: Option<String>,
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
+    pub origin_kind: String,
+    pub origin_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -122,7 +124,8 @@ pub async fn find_run_by_id(
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
-               error_code, step_count, assistant_message_id, started_at, finished_at
+               error_code, step_count, assistant_message_id, started_at, finished_at,
+               origin_kind, origin_provider
         FROM agent_runs WHERE id = $1
         "#,
     )
@@ -139,7 +142,8 @@ pub async fn find_run_for_owner(
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
-               error_code, step_count, assistant_message_id, started_at, finished_at
+               error_code, step_count, assistant_message_id, started_at, finished_at,
+               origin_kind, origin_provider
         FROM agent_runs WHERE id = $1 AND owner_id = $2
         "#,
     )
@@ -156,7 +160,8 @@ pub async fn find_run_by_request_id(
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
-               error_code, step_count, assistant_message_id, started_at, finished_at
+               error_code, step_count, assistant_message_id, started_at, finished_at,
+               origin_kind, origin_provider
         FROM agent_runs WHERE request_id = $1
         "#,
     )
@@ -172,7 +177,8 @@ async fn find_run_by_request_id_tx(
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
-               error_code, step_count, assistant_message_id, started_at, finished_at
+               error_code, step_count, assistant_message_id, started_at, finished_at,
+               origin_kind, origin_provider
         FROM agent_runs WHERE request_id = $1
         "#,
     )

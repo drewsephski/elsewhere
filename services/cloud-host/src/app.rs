@@ -196,6 +196,20 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/connectors/installs/{id}/oauth/start",
             post(api::installs::oauth_start),
         )
+        .route("/v1/channels", get(api::channels::list_channels))
+        .route(
+            "/v1/channels/slack/oauth/start",
+            post(api::channels::slack_oauth_start),
+        )
+        .route(
+            "/v1/channels/slack/oauth/complete",
+            post(api::channels::slack_oauth_complete),
+        )
+        .route(
+            "/v1/channels/{id}",
+            axum::routing::patch(api::channels::patch_channel)
+                .delete(api::channels::disconnect_channel),
+        )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
             "/v1/providers/codex/login/start",
@@ -313,6 +327,14 @@ pub fn build_router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(
                     crate::routine_webhooks::WEBHOOK_MAX_BYTES,
                 )),
+        )
+        .merge(
+            Router::new()
+                .route(
+                    "/internal/hooks/channels/slack/events",
+                    post(api::channels::slack_events),
+                )
+                .layer(DefaultBodyLimit::max(crate::channels::MAX_EVENT_BODY_BYTES)),
         )
         .merge(protected)
         .with_state(state.clone())
