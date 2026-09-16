@@ -14,6 +14,8 @@ mod human_intervention;
 mod human_intervention_tools;
 mod input;
 mod luna;
+mod memory;
+mod memory_tools;
 mod model;
 mod public_http_url;
 mod readiness_cache;
@@ -68,6 +70,14 @@ pub use human_intervention::{
 pub use human_intervention_tools::human_intervention_openai_tool_definitions;
 pub use input::{build_responses_input, ConversationMessage, MessageRole, MessageStatus};
 pub use luna::{default_model_id, luna_model_id, DEFAULT_MODEL};
+pub use memory::{
+    is_memory_mutation_tool, AgentMemory, MemoryContext, MemoryError, MemoryRecallItem,
+    MemoryWriteResult, DEFAULT_MEMORY_RECALL_LIMIT, FORGET_MEMORY_DESCRIPTION,
+    FORGET_MEMORY_TOOL_NAME, MAX_MEMORY_CONTENT_BYTES, MAX_MEMORY_RECALL_LIMIT,
+    MAX_MEMORY_SEARCH_TERMS, MAX_MEMORY_SEARCH_TERM_BYTES, RECALL_MEMORY_DESCRIPTION,
+    RECALL_MEMORY_TOOL_NAME, REMEMBER_DESCRIPTION, REMEMBER_TOOL_NAME,
+};
+pub use memory_tools::{dispatch_memory_tool, memory_openai_tool_definitions};
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult, ModelError,
@@ -83,7 +93,9 @@ pub use run_store::{
     CreateRunParams, PersistedMessage, RunEventReceipt, RunStore, StructuredMessageInput,
 };
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
-pub use runtime_identity::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
+pub use runtime_identity::{
+    compose_runtime_instruction_snapshot, RuntimeIdentityInput, RuntimeMemoryFact,
+};
 pub use subagent::{
     bound_subagent_result, subagent_developer_instructions, subagent_task_summary,
     subagent_user_prompt, truncate_utf8_bytes, validate_subagent_request, AgentSubagents,
@@ -96,12 +108,12 @@ pub use subagent::{
 pub use tool_catalog::{
     is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
-    is_github_connector_tool, is_known_agent_tool, is_policy_non_overridable_tool,
+    is_github_connector_tool, is_known_agent_tool, is_memory_tool, is_policy_non_overridable_tool,
     is_policy_overridable_tool, is_subagent_tool, policy_action_group, policy_action_label,
     policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES,
     BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES, CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES,
-    POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
-    WORKSPACE_TOOL_NAMES,
+    MEMORY_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES,
+    SUBAGENT_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
 };
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};

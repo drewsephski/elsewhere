@@ -16,5 +16,6 @@ pub mod connectors;
 pub mod conversations;
 pub mod delegations;
 pub mod installs;
+pub mod memories;
 pub mod permission_policies;
 pub mod skills;

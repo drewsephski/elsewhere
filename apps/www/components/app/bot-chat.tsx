@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Label } from "@/components/ui/label";
 import { BotSettings } from "./bot-settings";
-import { BotContext } from "./bot-context";
+import { BotMemoryPanel } from "./bot-memory";
 import { RecentRunsPanel } from "./recent-runs-panel";
 
 export function BotChat({ botId }: { botId: string }) {
@@ -105,7 +105,17 @@ export function BotChat({ botId }: { botId: string }) {
         {bot && !bot.computerId ? <p className="mt-3 text-sm text-warning">Assign this bot a computer before delegating work.</p> : null}
         {error ? <p className="mt-3 text-sm text-destructive" role="alert">{error}</p> : null}
       </section>
-      <BotContext botId={botId} />
+      {bot ? (
+        <BotMemoryPanel
+          botId={botId}
+          learnFromConversations={Boolean(bot.learnFromConversations)}
+          onLearnChanged={(enabled) =>
+            setBot((current) =>
+              current ? { ...current, learnFromConversations: enabled } : current,
+            )
+          }
+        />
+      ) : null}
       <RecentRunsPanel botId={botId} />
       {bot ? <BotSettings bot={bot} onSaved={setBot} /> : null}
     </div>

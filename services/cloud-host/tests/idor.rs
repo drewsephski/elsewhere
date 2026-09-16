@@ -735,6 +735,7 @@ async fn concurrent_bot_setting_edits_preserve_unrelated_fields(pool: PgPool) {
             None,
             None,
             None,
+            None,
             None
         ),
         patch_bot(
@@ -743,6 +744,7 @@ async fn concurrent_bot_setting_edits_preserve_unrelated_fields(pool: PgPool) {
             &bot.id,
             None,
             Some("Changed role"),
+            None,
             None,
             None,
             None,

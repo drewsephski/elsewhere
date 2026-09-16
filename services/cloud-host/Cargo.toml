@@ -104,6 +104,10 @@ required-features = ["test-utils"]
 name = "channels"
 required-features = ["test-utils"]
 
+[[test]]
+name = "memories"
+required-features = ["test-utils"]
+
 [dev-dependencies]
 rcgen = "0.14"
 tempfile = "3"

@@ -77,6 +77,9 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
         if let Err(err) = crate::channels::delivery::tick(&state).await {
             tracing::warn!(error = %err, "channel delivery tick failed");
         }
+        if let Err(err) = crate::memory::tick_extraction(&state).await {
+            tracing::warn!(error = %err, "memory extraction tick failed");
+        }
         *state
             .runner_heartbeat
             .lock()

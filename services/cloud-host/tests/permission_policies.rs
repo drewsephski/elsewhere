@@ -1153,6 +1153,345 @@ async fn ask_run_subagent_creates_approval_and_does_not_launch(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn remember_allow_ask_deny_are_isolated_from_other_actions(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    state
+        .permission_policies
+        .upsert_bot_decision(&owner, &bot_id, "remember", Some(PolicyDecision::Allow))
+        .await
+        .unwrap();
+    let write_policy = state
+        .permission_policies
+        .resolve(&owner, &bot_id, "workspace_write")
+        .await
+        .unwrap();
+    assert_eq!(write_policy.decision, PolicyDecision::Ask);
+
+    let computer = CountingComputer::new();
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer,
+        ScriptedModel::calls(
+            "remember",
+            r#"{"content":"Production repos use pnpm.","kind":"workflow"}"#,
+        ),
+    );
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "remember this" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::ACCEPTED);
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner).await);
+    let stored: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM bot_memories WHERE owner_id = $1 AND bot_id = $2 AND status = 'active'",
+    )
+    .bind(&owner)
+    .bind(&bot_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, 1);
+    assert_eq!(pending_count(&pool, &owner).await, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn deny_remember_does_not_persist_and_ask_remember_waits(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    state
+        .permission_policies
+        .upsert_bot_decision(&owner, &bot_id, "remember", Some(PolicyDecision::Deny))
+        .await
+        .unwrap();
+    let computer = CountingComputer::new();
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer,
+        ScriptedModel::calls("remember", r#"{"content":"Do not store this."}"#),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "remember" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner).await);
+    let stored: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_memories WHERE owner_id = $1 AND bot_id = $2")
+            .bind(&owner)
+            .bind(&bot_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored, 0);
+
+    let owner_ask = format!("owner-{}", Uuid::new_v4());
+    let (bot_ask, _) = seed_bot(&pool, &owner_ask).await;
+    let request_ask = Uuid::new_v4().to_string();
+    let _ask_guard = RunOverrideGuard::install(
+        state.clone(),
+        request_ask.clone(),
+        CountingComputer::new(),
+        ScriptedModel::calls("remember", r#"{"content":"Ask before remembering."}"#),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner_ask)))
+                .header("Idempotency-Key", &request_ask)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_ask, "message": "remember" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_pending(&pool, &owner_ask).await);
+    let stored_ask: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_memories WHERE owner_id = $1 AND bot_id = $2")
+            .bind(&owner_ask)
+            .bind(&bot_ask)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored_ask, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn forget_memory_allow_ask_deny(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let memory_id: String = sqlx::query_scalar(
+        r#"
+        INSERT INTO bot_memories (
+            id, owner_id, bot_id, kind, content, content_normalized, search_terms,
+            importance, confidence, source_kind, status
+        )
+        VALUES (
+            $1, $2, $3, 'fact', 'Forgettable fact.', 'forgettable fact', '{}',
+            3, 1.0, 'manual', 'active'
+        )
+        RETURNING id
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&owner)
+    .bind(&bot_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let state = jwt_state(pool.clone());
+    state
+        .permission_policies
+        .upsert_bot_decision(
+            &owner,
+            &bot_id,
+            "forget_memory",
+            Some(PolicyDecision::Allow),
+        )
+        .await
+        .unwrap();
+    let args = format!(r#"{{"memoryId":"{memory_id}"}}"#);
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        CountingComputer::new(),
+        ScriptedModel::calls("forget_memory", &args),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "forget that" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner).await);
+    let status: String = sqlx::query_scalar("SELECT status FROM bot_memories WHERE id = $1")
+        .bind(&memory_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(status, "archived");
+
+    let owner_deny = format!("owner-{}", Uuid::new_v4());
+    let (bot_deny, _) = seed_bot(&pool, &owner_deny).await;
+    let deny_memory: String = sqlx::query_scalar(
+        r#"
+        INSERT INTO bot_memories (
+            id, owner_id, bot_id, kind, content, content_normalized, search_terms,
+            importance, confidence, source_kind, status
+        )
+        VALUES (
+            $1, $2, $3, 'fact', 'Keep this.', 'keep this', '{}',
+            3, 1.0, 'manual', 'active'
+        )
+        RETURNING id
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&owner_deny)
+    .bind(&bot_deny)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    state
+        .permission_policies
+        .upsert_bot_decision(
+            &owner_deny,
+            &bot_deny,
+            "forget_memory",
+            Some(PolicyDecision::Deny),
+        )
+        .await
+        .unwrap();
+    let deny_args = format!(r#"{{"memoryId":"{deny_memory}"}}"#);
+    let deny_request = Uuid::new_v4().to_string();
+    let _deny_guard = RunOverrideGuard::install(
+        state.clone(),
+        deny_request.clone(),
+        CountingComputer::new(),
+        ScriptedModel::calls("forget_memory", &deny_args),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner_deny)))
+                .header("Idempotency-Key", &deny_request)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_deny, "message": "forget that" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner_deny).await);
+    let deny_status: String = sqlx::query_scalar("SELECT status FROM bot_memories WHERE id = $1")
+        .bind(&deny_memory)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(deny_status, "active");
+
+    let owner_ask = format!("owner-{}", Uuid::new_v4());
+    let (bot_ask, _) = seed_bot(&pool, &owner_ask).await;
+    let ask_memory: String = sqlx::query_scalar(
+        r#"
+        INSERT INTO bot_memories (
+            id, owner_id, bot_id, kind, content, content_normalized, search_terms,
+            importance, confidence, source_kind, status
+        )
+        VALUES (
+            $1, $2, $3, 'fact', 'Ask first.', 'ask first', '{}',
+            3, 1.0, 'manual', 'active'
+        )
+        RETURNING id
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&owner_ask)
+    .bind(&bot_ask)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let ask_args = format!(r#"{{"memoryId":"{ask_memory}"}}"#);
+    let ask_request = Uuid::new_v4().to_string();
+    let _ask_guard = RunOverrideGuard::install(
+        state.clone(),
+        ask_request.clone(),
+        CountingComputer::new(),
+        ScriptedModel::calls("forget_memory", &ask_args),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner_ask)))
+                .header("Idempotency-Key", &ask_request)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_ask, "message": "forget that" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_pending(&pool, &owner_ask).await);
+    let ask_status: String = sqlx::query_scalar("SELECT status FROM bot_memories WHERE id = $1")
+        .bind(&ask_memory)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(ask_status, "active");
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn connected_app_mutation_uses_exact_scoped_policy_not_global_allow(pool: PgPool) {
     use cloud_host::permission_policies::{PermissionPolicyService, PolicyDecision, PolicySource};
 

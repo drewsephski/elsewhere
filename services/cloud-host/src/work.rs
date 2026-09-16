@@ -2,10 +2,7 @@
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use agent_core::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
-
 use crate::{
-    conversation::get_or_create_primary_conversation_id_in_tx,
     db::queries::BootstrapRunRecords,
     error::ApiError,
     runner::RunExecutionInput,
@@ -157,33 +154,14 @@ pub async fn enqueue_routine_in_transaction(
 
     crate::groups::assert_bot_may_use_conversation(tx, owner, bot_id, conversation_id).await?;
 
-    let bot = sqlx::query(
-        "SELECT b.name, b.model, b.system_prompt, b.engine_preference, b.computer_id FROM bots b JOIN sandboxes s ON s.id = b.computer_id AND s.owner_id = b.owner_id WHERE b.id = $1 AND b.owner_id = $2 AND s.state <> 'archived' FOR SHARE OF b, s",
-    )
-    .bind(bot_id)
-    .bind(owner)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_error)?
-    .ok_or_else(|| ApiError::Validation("Choose a bot with an available computer".into()))?;
-
-    let model: String = bot.get("model");
-    let bot_name: String = bot.get("name");
-    let bot_display_name = bot_name.clone();
-    let system_prompt: String = bot.get("system_prompt");
-    let context: Option<String> =
-        sqlx::query_scalar("SELECT content FROM bot_context WHERE bot_id = $1")
-            .bind(bot_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(db_error)?;
-    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
-        bot_name,
-        role_instructions: system_prompt,
-        saved_context: context.filter(|value| !value.is_empty()),
-    });
-    let computer_id: String = bot.get("computer_id");
-    let engine: String = bot.get("engine_preference");
+    let snapshot =
+        crate::work_admission::load_bot_execution_snapshot(tx, owner, bot_id, runtime_message)
+            .await?;
+    let model = snapshot.model.clone();
+    let bot_display_name = snapshot.bot_name.clone();
+    let instructions = snapshot.instructions.clone();
+    let computer_id = snapshot.computer_id.clone();
+    let engine = snapshot.engine.clone();
 
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("conversation-seq:{conversation_id}"))
@@ -327,6 +305,8 @@ pub async fn enqueue_routine_in_transaction(
         skill_admission.routine_pinned_version = row.get("pinned_skill_version");
     }
     persist_run_skills_for_admission(tx, owner, bot_id, &run_id, &skill_admission).await?;
+    crate::memory::snapshot::persist_run_memories(tx, owner, bot_id, &run_id, &snapshot.memories)
+        .await?;
 
     Ok(BootstrapRunRecords {
         run_id,
@@ -453,32 +433,12 @@ pub async fn enqueue_from_group_message_in_transaction(
 
     crate::groups::assert_bot_may_use_conversation(tx, owner, bot_id, conversation_id).await?;
 
-    let bot = sqlx::query(
-        "SELECT b.name, b.model, b.system_prompt, b.engine_preference, b.computer_id FROM bots b JOIN sandboxes s ON s.id = b.computer_id AND s.owner_id = b.owner_id WHERE b.id = $1 AND b.owner_id = $2 AND s.state <> 'archived' FOR SHARE OF b, s",
-    )
-    .bind(bot_id)
-    .bind(owner)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_error)?
-    .ok_or_else(|| ApiError::Validation("Choose a bot with an available computer".into()))?;
-
-    let model: String = bot.get("model");
-    let bot_name: String = bot.get("name");
-    let system_prompt: String = bot.get("system_prompt");
-    let context: Option<String> =
-        sqlx::query_scalar("SELECT content FROM bot_context WHERE bot_id = $1")
-            .bind(bot_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(db_error)?;
-    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
-        bot_name,
-        role_instructions: system_prompt,
-        saved_context: context.filter(|value| !value.is_empty()),
-    });
-    let computer_id: String = bot.get("computer_id");
-    let engine: String = bot.get("engine_preference");
+    let snapshot =
+        crate::work_admission::load_bot_execution_snapshot(tx, owner, bot_id, user_message).await?;
+    let model = snapshot.model.clone();
+    let instructions = snapshot.instructions.clone();
+    let computer_id = snapshot.computer_id.clone();
+    let engine = snapshot.engine.clone();
 
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("conversation-seq:{conversation_id}"))
@@ -549,6 +509,8 @@ pub async fn enqueue_from_group_message_in_transaction(
         .map_err(db_error)?;
 
     persist_run_skills_for_admission(tx, owner, bot_id, &run_id, &skill_admission).await?;
+    crate::memory::snapshot::persist_run_memories(tx, owner, bot_id, &run_id, &snapshot.memories)
+        .await?;
 
     Ok(BootstrapRunRecords {
         run_id,
@@ -820,32 +782,21 @@ pub async fn enqueue_delegation_return_in_transaction(
     )
     .await?;
 
-    let bot = sqlx::query(
-        "SELECT b.name, b.model, b.system_prompt, b.engine_preference, b.computer_id FROM bots b JOIN sandboxes s ON s.id = b.computer_id AND s.owner_id = b.owner_id WHERE b.id = $1 AND b.owner_id = $2 AND s.state <> 'archived' FOR SHARE OF b, s",
+    let snapshot = crate::work_admission::load_bot_execution_snapshot(
+        tx,
+        &owner,
+        &source_bot_id,
+        &user_message,
     )
-    .bind(&source_bot_id)
-    .bind(&owner)
-    .fetch_optional(&mut **tx)
     .await
-    .map_err(db_error)?
-    .ok_or_else(|| ApiError::Validation("Source bot computer unavailable".into()))?;
-
-    let model: String = bot.get("model");
-    let bot_name: String = bot.get("name");
-    let system_prompt: String = bot.get("system_prompt");
-    let context: Option<String> =
-        sqlx::query_scalar("SELECT content FROM bot_context WHERE bot_id = $1")
-            .bind(&source_bot_id)
-            .fetch_optional(&mut **tx)
-            .await
-            .map_err(db_error)?;
-    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
-        bot_name,
-        role_instructions: system_prompt,
-        saved_context: context.filter(|value| !value.is_empty()),
-    });
-    let computer_id: String = bot.get("computer_id");
-    let engine: String = bot.get("engine_preference");
+    .map_err(|err| match err {
+        ApiError::Validation(_) => ApiError::Validation("Source bot computer unavailable".into()),
+        other => other,
+    })?;
+    let model = snapshot.model.clone();
+    let instructions = snapshot.instructions.clone();
+    let computer_id = snapshot.computer_id.clone();
+    let engine = snapshot.engine.clone();
 
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(format!("conversation-seq:{source_conversation_id}"))
@@ -950,6 +901,15 @@ pub async fn enqueue_delegation_return_in_transaction(
     .execute(&mut **tx)
     .await
     .map_err(db_error)?;
+
+    crate::memory::snapshot::persist_run_memories(
+        tx,
+        &owner,
+        &source_bot_id,
+        &run_id,
+        &snapshot.memories,
+    )
+    .await?;
 
     sqlx::query(
         "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)",

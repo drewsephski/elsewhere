@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    browser_recovery_policy_instructions, AgentComputer, AgentLoopContext, BrowserRecoverySession,
-    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, ResponsesSubagentTurn, RunEngine,
-    RunStore, SharedRunDeps, ToolApprovalGate,
+    browser_recovery_policy_instructions, AgentComputer, AgentLoopContext, AgentMemory,
+    BrowserRecoverySession, ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine,
+    ResponsesSubagentTurn, RunEngine, RunStore, SharedRunDeps, ToolApprovalGate,
 };
 use agent_skills::append_skills_to_instructions;
 
@@ -425,8 +425,26 @@ Browser recovery:\n\
             cancel.clone(),
             ctx.model.clone(),
         )),
+        memory: Some(crate::memory::PostgresAgentMemory::new(pool.clone()) as Arc<dyn AgentMemory>),
         skill_packages,
     };
+
+    let executed_engine = match selected {
+        SelectedRunEngine::CodexSubscription => "codex",
+        SelectedRunEngine::ResponsesApi => "responses",
+    };
+    if let Err(err) = sqlx::query("UPDATE agent_runs SET executed_engine = $2 WHERE id = $1")
+        .bind(&input.records.run_id)
+        .bind(executed_engine)
+        .execute(&pool)
+        .await
+    {
+        tracing::warn!(
+            run_id = %input.records.run_id,
+            error = %err,
+            "could not persist executed engine for memory extraction"
+        );
+    }
 
     let result = match selected {
         SelectedRunEngine::CodexSubscription => {

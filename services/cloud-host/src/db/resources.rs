@@ -17,6 +17,7 @@ pub struct BotRow {
     pub computer_id: Option<String>,
     pub engine_preference: String,
     pub avatar_id: String,
+    pub learn_from_conversations: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -49,7 +50,7 @@ pub async fn list_bots(pool: &PgPool, owner_id: &str) -> Result<Vec<BotRow>, sql
     sqlx::query_as(
         r#"
         SELECT id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-               avatar_id, created_at, updated_at
+               avatar_id, learn_from_conversations, created_at, updated_at
         FROM bots WHERE owner_id = $1 ORDER BY updated_at DESC
         "#,
     )
@@ -66,7 +67,7 @@ pub async fn get_bot_for_owner(
     sqlx::query_as(
         r#"
         SELECT id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-               avatar_id, created_at, updated_at
+               avatar_id, learn_from_conversations, created_at, updated_at
         FROM bots WHERE id = $1 AND owner_id = $2
         "#,
     )
@@ -95,7 +96,7 @@ pub async fn insert_bot(
             engine_preference, avatar_id, created_at, updated_at
         ) VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8, $9, $9)
         RETURNING id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-                  avatar_id, created_at, updated_at
+                  avatar_id, learn_from_conversations, created_at, updated_at
         "#,
     )
     .bind(&id)
@@ -122,6 +123,7 @@ pub async fn patch_bot(
     computer_id: Option<Option<&str>>,
     engine_preference: Option<&str>,
     avatar_id: Option<&str>,
+    learn_from_conversations: Option<bool>,
 ) -> Result<Option<BotRow>, ApiError> {
     sqlx::query_as(
         r#"
@@ -132,10 +134,11 @@ pub async fn patch_bot(
             computer_id = CASE WHEN $6 THEN $7 ELSE computer_id END,
             engine_preference = COALESCE($8, engine_preference),
             avatar_id = COALESCE($9, avatar_id),
+            learn_from_conversations = COALESCE($10, learn_from_conversations),
             updated_at = NOW()
         WHERE id = $1 AND owner_id = $2
         RETURNING id, owner_id, name, system_prompt, model, computer_id, engine_preference,
-                  avatar_id, created_at, updated_at
+                  avatar_id, learn_from_conversations, created_at, updated_at
         "#,
     )
     .bind(bot_id)
@@ -147,6 +150,7 @@ pub async fn patch_bot(
     .bind(computer_id.flatten())
     .bind(engine_preference)
     .bind(avatar_id)
+    .bind(learn_from_conversations)
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))

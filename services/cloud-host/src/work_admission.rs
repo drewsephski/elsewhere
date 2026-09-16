@@ -3,12 +3,12 @@
 use sqlx::{Postgres, Row, Transaction};
 use uuid::Uuid;
 
-use agent_core::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
-
 use crate::conversation::get_or_create_primary_conversation_id_in_tx;
 use crate::db::queries::BootstrapRunRecords;
 use crate::error::ApiError;
 use crate::groups;
+use crate::memory::retrieval::{retrieve_scored_in_tx, RetrievedMemory, MAX_RUN_MEMORY_ITEMS};
+use crate::memory::snapshot::{compose_with_memories, persist_run_memories};
 use crate::skills::{
     explicit_invocation_idempotency_mismatch, explicit_invocation_on_run,
     persist_run_skills_for_admission, SkillAdmissionInput,
@@ -23,6 +23,8 @@ pub(crate) struct BotExecutionSnapshot {
     pub computer_id: String,
     pub engine: String,
     pub instructions: String,
+    pub bot_name: String,
+    pub memories: Vec<RetrievedMemory>,
 }
 
 pub(crate) fn validate_admission_message(message: &str) -> Result<(), ApiError> {
@@ -80,6 +82,7 @@ pub(crate) async fn load_bot_execution_snapshot(
     tx: &mut Transaction<'_, Postgres>,
     owner: &str,
     bot_id: &str,
+    retrieval_query: &str,
 ) -> Result<BotExecutionSnapshot, ApiError> {
     let bot = sqlx::query(
         "SELECT b.name, b.model, b.system_prompt, b.engine_preference, b.computer_id FROM bots b JOIN sandboxes s ON s.id = b.computer_id AND s.owner_id = b.owner_id WHERE b.id = $1 AND b.owner_id = $2 AND s.state <> 'archived' FOR SHARE OF b, s",
@@ -100,17 +103,28 @@ pub(crate) async fn load_bot_execution_snapshot(
             .fetch_optional(&mut **tx)
             .await
             .map_err(db_error)?;
-    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
-        bot_name,
-        role_instructions: system_prompt,
-        saved_context: context.filter(|value| !value.is_empty()),
-    });
+    let memories = retrieve_scored_in_tx(
+        tx,
+        owner,
+        bot_id,
+        retrieval_query,
+        MAX_RUN_MEMORY_ITEMS as i64,
+    )
+    .await?;
+    let instructions = compose_with_memories(
+        bot_name.clone(),
+        system_prompt,
+        context.filter(|value| !value.is_empty()),
+        &memories,
+    );
 
     Ok(BotExecutionSnapshot {
         model,
         computer_id: bot.get("computer_id"),
         engine: bot.get("engine_preference"),
         instructions,
+        bot_name,
+        memories,
     })
 }
 
@@ -233,7 +247,7 @@ async fn admit_human_message(
     }
 
     enforce_active_run_limit(tx, owner).await?;
-    let snapshot = load_bot_execution_snapshot(tx, owner, bot_id).await?;
+    let snapshot = load_bot_execution_snapshot(tx, owner, bot_id, message).await?;
 
     let conversation_id = if let Some(id) = conversation_id {
         groups::assert_bot_may_use_conversation(tx, owner, bot_id, id).await?;
@@ -329,6 +343,7 @@ async fn admit_human_message(
         .await
         .map_err(db_error)?;
     persist_run_skills_for_admission(tx, owner, bot_id, &run_id, skills).await?;
+    persist_run_memories(tx, owner, bot_id, &run_id, &snapshot.memories).await?;
 
     Ok(BootstrapRunRecords {
         run_id,

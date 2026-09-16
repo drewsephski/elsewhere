@@ -47,6 +47,7 @@ pub mod group_context;
 pub mod group_router;
 pub mod groups;
 pub mod human_intervention;
+pub mod memory;
 pub mod message_kind;
 pub use computer_registry::ComputerRegistry;
 pub mod artifact_handoff;

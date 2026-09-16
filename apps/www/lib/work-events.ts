@@ -20,6 +20,9 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     bot_list: "Checking available Bots",
     bot_delegate: "Handing work to another Bot",
     run_subagent: "Running a temporary helper",
+    recall_memory: "Looking up remembered context",
+    remember: "Saving a memory",
+    forget_memory: "Forgetting a memory",
   };
   const base = tools[tool];
   if (!base) {

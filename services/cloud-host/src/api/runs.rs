@@ -83,6 +83,7 @@ pub struct RunDetailResponse {
     pub origin_kind: String,
     pub origin_provider: Option<String>,
     pub origin_label: Option<String>,
+    pub memories: Vec<crate::memory::RunMemorySnapshot>,
 }
 
 pub async fn create_run(
@@ -282,6 +283,9 @@ pub async fn get_run(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let memories =
+        crate::memory::run_memory_snapshots(&state.pool, principal.owner_id(), &run.id).await?;
+
     Ok(Json(RunDetailResponse {
         task,
         run_id: run.id,
@@ -302,6 +306,7 @@ pub async fn get_run(
             &run.origin_kind,
             run.origin_provider.as_deref(),
         ),
+        memories,
     }))
 }
 

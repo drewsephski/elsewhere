@@ -60,6 +60,15 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(api::bots::delete),
         )
         .route(
+            "/v1/bots/{id}/memories",
+            get(api::memories::list).post(api::memories::create),
+        )
+        .route("/v1/bots/{id}/memories/search", get(api::memories::search))
+        .route(
+            "/v1/bots/{id}/memories/{memoryId}",
+            axum::routing::patch(api::memories::patch).delete(api::memories::delete),
+        )
+        .route(
             "/v1/skills",
             get(api::skills::list).post(api::skills::create),
         )

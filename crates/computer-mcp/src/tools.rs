@@ -4,9 +4,10 @@ use std::sync::Arc;
 use agent_core::{
     connector_openai_tool_definitions, dispatch_agent_tool_with_gate_and_recovery,
     human_intervention_openai_tool_definitions, is_browser_tool, is_collaboration_tool,
-    is_connector_tool, is_human_intervention_tool, is_subagent_tool, AgentCollaboration,
-    AgentComputer, AgentConnectors, AgentHumanIntervention, AgentSubagents, BrowserRecoverySession,
-    CollaborationContext, ToolApprovalGate, ToolError, ToolRunContext, RUN_SUBAGENT_DESCRIPTION,
+    is_connector_tool, is_human_intervention_tool, is_memory_tool, is_subagent_tool,
+    AgentCollaboration, AgentComputer, AgentConnectors, AgentHumanIntervention, AgentMemory,
+    AgentSubagents, BrowserRecoverySession, CollaborationContext, ToolApprovalGate, ToolError,
+    ToolRunContext, RUN_SUBAGENT_DESCRIPTION,
 };
 use rmcp::{
     model::{
@@ -34,6 +35,7 @@ pub struct ComputerHandler {
     human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
     browser_recovery: Option<Arc<BrowserRecoverySession>>,
     subagents: Option<Arc<dyn AgentSubagents>>,
+    memory: Option<Arc<dyn AgentMemory>>,
     source_conversation_id: String,
 }
 
@@ -48,6 +50,7 @@ impl ComputerHandler {
         human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
         browser_recovery: Option<Arc<BrowserRecoverySession>>,
         subagents: Option<Arc<dyn AgentSubagents>>,
+        memory: Option<Arc<dyn AgentMemory>>,
         source_conversation_id: String,
     ) -> Self {
         Self {
@@ -60,6 +63,7 @@ impl ComputerHandler {
             human_intervention,
             browser_recovery,
             subagents,
+            memory,
             source_conversation_id,
         }
     }
@@ -261,7 +265,31 @@ fn tool_definitions() -> Vec<Tool> {
             .collect::<Vec<_>>(),
     );
     tools.extend(connector_mcp_tool_definitions());
+    tools.extend(memory_mcp_tool_definitions());
     tools
+}
+
+fn memory_mcp_tool_definitions() -> Vec<Tool> {
+    agent_core::memory_openai_tool_definitions()
+        .into_iter()
+        .map(|value| {
+            let name = value
+                .get("name")
+                .and_then(|v| v.as_str())
+                .expect("memory tool name")
+                .to_string();
+            let description = value
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Memory tool")
+                .to_string();
+            let parameters = value
+                .get("parameters")
+                .cloned()
+                .unwrap_or_else(|| json!({"type": "object"}));
+            Tool::new(name, description, schema_object(parameters))
+        })
+        .collect()
 }
 
 fn connector_mcp_tool_definitions() -> Vec<Tool> {
@@ -343,6 +371,7 @@ impl ServerHandler for ComputerHandler {
             self.connectors.as_ref(),
             self.human_intervention.as_ref(),
             self.subagents.as_ref(),
+            self.memory.as_ref(),
             &request.name,
             &args_str,
             self.cancel.as_ref(),
@@ -395,6 +424,7 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         name if is_collaboration_tool(name) => Ok(()),
         name if is_subagent_tool(name) => Ok(()),
         name if is_connector_tool(name) => Ok(()),
+        name if is_memory_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
             "unknown tool: {other}"
         ))),
@@ -432,6 +462,9 @@ mod tests {
         assert!(names.contains(&"connected_apps_load_tool".to_string()));
         assert!(names.contains(&"connected_apps_execute_tool".to_string()));
         assert!(names.contains(&"github_list_repositories".to_string()));
+        assert!(names.contains(&"recall_memory".to_string()));
+        assert!(names.contains(&"remember".to_string()));
+        assert!(names.contains(&"forget_memory".to_string()));
         assert_eq!(
             names
                 .iter()

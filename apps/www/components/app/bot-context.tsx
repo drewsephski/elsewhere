@@ -44,15 +44,15 @@ export function BotContext({
       <FormFields className={embedded ? "min-w-0 gap-2" : undefined}>
       {!embedded ? (
         <>
-          <h2 className="text-base font-semibold">What your bot should remember</h2>
+          <h2 className="text-base font-semibold">Pinned Context</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Keep project facts, preferences, and recurring instructions here. You control this
-            memory. Leave passwords and sensitive credentials out.
+            Information this Bot should always have available. You control this context. Leave
+            passwords and sensitive credentials out.
           </p>
         </>
       ) : (
         <p className="text-[11px] leading-snug text-muted-foreground">
-          Notes for future work. Skip passwords and secrets.
+          Always included. Skip passwords and secrets.
         </p>
       )}
       <label htmlFor="bot-context" className="sr-only">

@@ -20,6 +20,8 @@ pub const COLLABORATION_TOOL_NAMES: &[&str] = &["bot_list", "bot_delegate"];
 
 pub const SUBAGENT_TOOL_NAMES: &[&str] = &["run_subagent"];
 
+pub const MEMORY_TOOL_NAMES: &[&str] = &["recall_memory", "remember", "forget_memory"];
+
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_list_repositories",
     "github_search_repositories",
@@ -67,6 +69,10 @@ pub fn is_subagent_tool(name: &str) -> bool {
     SUBAGENT_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_memory_tool(name: &str) -> bool {
+    MEMORY_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_github_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
 }
@@ -95,6 +101,8 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "browser_download",
     "bot_delegate",
     "run_subagent",
+    "remember",
+    "forget_memory",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -107,6 +115,7 @@ pub enum PolicyActionGroup {
     Browser,
     Delegation,
     ConnectedApps,
+    Memory,
 }
 
 impl PolicyActionGroup {
@@ -117,6 +126,7 @@ impl PolicyActionGroup {
             Self::Browser => "browser",
             Self::Delegation => "delegation",
             Self::ConnectedApps => "connected_apps",
+            Self::Memory => "memory",
         }
     }
 
@@ -127,6 +137,7 @@ impl PolicyActionGroup {
             Self::Browser => "Browser",
             Self::Delegation => "Delegation",
             Self::ConnectedApps => "Connected apps",
+            Self::Memory => "Memory",
         }
     }
 }
@@ -150,6 +161,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
+        "remember" | "forget_memory" => Some(PolicyActionGroup::Memory),
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -168,6 +180,8 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "browser_download" => "Download files",
         "bot_delegate" => "Hand off work",
         "run_subagent" => "Run subagents",
+        "remember" => "Remember things",
+        "forget_memory" => "Forget memories",
         "connected_apps_execute_tool" => "Use a connected app",
         _ => "This action",
     }
@@ -184,6 +198,8 @@ pub fn policy_denied_message(name: &str) -> String {
         "browser_download" => "This Bot is not allowed to download files.".into(),
         "bot_delegate" => "This Bot is not allowed to hand work to another Bot.".into(),
         "run_subagent" => "This Bot is not allowed to run subagents.".into(),
+        "remember" => "This Bot is not allowed to save memories.".into(),
+        "forget_memory" => "This Bot is not allowed to forget memories.".into(),
         "connected_apps_execute_tool" => {
             "This Bot is not allowed to use this connected app.".into()
         }
@@ -217,6 +233,9 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "connected_apps_search_tools",
     "connected_apps_load_tool",
     "connected_apps_execute_tool",
+    "recall_memory",
+    "remember",
+    "forget_memory",
 ];
 
 #[cfg(test)]
@@ -241,7 +260,18 @@ mod tests {
         assert!(!is_policy_overridable_tool("workspace_read"));
         assert!(!is_policy_overridable_tool("github_list_repositories"));
         assert!(!is_policy_overridable_tool("connected_apps_execute_tool"));
+        assert!(!is_policy_overridable_tool("recall_memory"));
+        assert!(is_policy_overridable_tool("remember"));
+        assert!(is_policy_overridable_tool("forget_memory"));
         assert!(!is_policy_overridable_tool("not_a_tool"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"recall_memory"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"remember"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"forget_memory"));
+        assert_eq!(
+            policy_action_group("remember"),
+            Some(PolicyActionGroup::Memory)
+        );
+        assert!(!is_memory_tool("run_subagent"));
         assert_eq!(CONNECTED_APPS_TOOL_NAMES.len(), 3);
         assert!(ALL_AGENT_TOOL_NAMES.contains(&"run_subagent"));
         assert!(ALL_AGENT_TOOL_NAMES.contains(&"connected_apps_search_tools"));

@@ -36,6 +36,7 @@ pub struct BotResponse {
     pub computer_id: Option<String>,
     pub engine_preference: String,
     pub avatar_id: String,
+    pub learn_from_conversations: bool,
 }
 
 fn to_response(row: crate::db::resources::BotRow) -> BotResponse {
@@ -47,6 +48,7 @@ fn to_response(row: crate::db::resources::BotRow) -> BotResponse {
         computer_id: row.computer_id,
         engine_preference: row.engine_preference,
         avatar_id: row.avatar_id,
+        learn_from_conversations: row.learn_from_conversations,
     }
 }
 
@@ -127,6 +129,7 @@ pub struct PatchBotRequest {
     pub computer_id: Option<String>,
     pub engine_preference: Option<String>,
     pub avatar_id: Option<String>,
+    pub learn_from_conversations: Option<bool>,
 }
 
 pub async fn patch(
@@ -169,6 +172,7 @@ pub async fn patch(
             .map(|id| if id.is_empty() { None } else { Some(id) }),
         engine,
         avatar_id.as_deref(),
+        body.learn_from_conversations,
     )
     .await?
     .ok_or(ApiError::NotFound)?;

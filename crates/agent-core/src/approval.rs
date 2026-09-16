@@ -133,6 +133,9 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "bot_list" => ToolOperationKind::Read,
         "bot_delegate" => ToolOperationKind::Mutation,
         "run_subagent" => ToolOperationKind::Mutation,
+        "recall_memory" => ToolOperationKind::Read,
+        "remember" => ToolOperationKind::Mutation,
+        "forget_memory" => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
         name if is_github_connector_tool(name) => ToolOperationKind::Read,
         name if is_connected_apps_tool(name) && !is_connected_apps_execute_tool(name) => {
@@ -205,6 +208,18 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "name": args.get("name").and_then(|v| v.as_str()).unwrap_or(""),
             "taskLength": args.get("task").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
             "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
+        }),
+        "recall_memory" => json!({
+            "query": truncate_str(args.get("query").and_then(|v| v.as_str()).unwrap_or(""), 120),
+            "limit": args.get("limit").and_then(|v| v.as_i64())
+        }),
+        "remember" => json!({
+            "contentLength": args.get("content").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
+            "contentPreview": args.get("content").and_then(|v| v.as_str()).map(|t| truncate_str(t, 80)),
+            "kind": args.get("kind").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        "forget_memory" => json!({
+            "memoryId": args.get("memoryId").and_then(|v| v.as_str()).unwrap_or("")
         }),
         "connected_apps_search_tools" | "connected_apps_load_tool" => json!({
             "query": args.get("query").and_then(|v| v.as_str()).unwrap_or(""),
@@ -422,6 +437,18 @@ mod tests {
         );
         assert_eq!(
             operation_kind_for_tool("run_subagent"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("recall_memory"),
+            ToolOperationKind::Read
+        );
+        assert_eq!(
+            operation_kind_for_tool("remember"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("forget_memory"),
             ToolOperationKind::Mutation
         );
     }

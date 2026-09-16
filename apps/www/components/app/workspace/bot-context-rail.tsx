@@ -1,7 +1,7 @@
 "use client";
 
 import type { BotSummary, RunSummary } from "@/lib/api-types";
-import { BotContext } from "@/components/app/bot-context";
+import { BotMemoryPanel } from "@/components/app/bot-memory";
 import { BotSettings } from "@/components/app/bot-settings";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { BotRoutinesSidebar } from "./bot-routines-sidebar";
@@ -106,7 +106,12 @@ export function BotContextRail({
               </RailSection>
             ) : null}
             <RailSection title="Memory">
-              <BotContext botId={bot.id} embedded />
+              <BotMemoryPanel
+                botId={bot.id}
+                learnFromConversations={Boolean(bot.learnFromConversations)}
+                onLearnChanged={(enabled) => onBotSaved({ ...bot, learnFromConversations: enabled })}
+                embedded
+              />
             </RailSection>
             <div ref={settingsRef} className="scroll-mt-2">
               <RailSection title="Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>

@@ -27,7 +27,7 @@ export function groupedPolicyActions(actions: PolicyAction[]): {
   groupLabel: string;
   actions: PolicyAction[];
 }[] {
-  const order = ["files", "terminal", "browser", "delegation", "connected_apps"];
+  const order = ["files", "terminal", "browser", "delegation", "connected_apps", "memory"];
   const groups = new Map<string, { group: string; groupLabel: string; actions: PolicyAction[] }>();
   for (const action of actions) {
     const existing = groups.get(action.group);

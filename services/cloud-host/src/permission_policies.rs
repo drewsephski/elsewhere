@@ -503,6 +503,9 @@ mod tests {
         assert!(views.iter().any(|view| view.action == "workspace_write"));
         assert!(views.iter().any(|view| view.action == "bot_delegate"));
         assert!(views.iter().any(|view| view.action == "run_subagent"));
+        assert!(views.iter().any(|view| view.action == "remember"));
+        assert!(views.iter().any(|view| view.action == "forget_memory"));
+        assert!(!views.iter().any(|view| view.action == "recall_memory"));
         assert!(!views
             .iter()
             .any(|view| view.action == "browser_request_human"));

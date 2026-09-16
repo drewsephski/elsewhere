@@ -3,8 +3,6 @@ use serde_json::{json, Value};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use agent_core::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
-
 use agent_core::DEFAULT_MODEL;
 use sprite_computer::sprite_name_for_sandbox;
 
@@ -528,13 +526,22 @@ pub async fn bootstrap_run_from_bot(
             .fetch_optional(pool)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
-    let instructions = compose_runtime_instruction_snapshot(&RuntimeIdentityInput {
-        bot_name: bot.name.clone(),
-        role_instructions: bot.system_prompt.clone(),
-        saved_context: saved_context.filter(|value| !value.is_empty()),
-    });
+    let memories = crate::memory::retrieve_scored(
+        pool,
+        owner_id,
+        bot_id,
+        user_message,
+        crate::memory::MAX_RUN_MEMORY_ITEMS as i64,
+    )
+    .await?;
+    let instructions = crate::memory::snapshot::compose_with_memories(
+        bot.name.clone(),
+        bot.system_prompt.clone(),
+        saved_context.filter(|value| !value.is_empty()),
+        &memories,
+    );
 
-    bootstrap_run(
+    let records = bootstrap_run(
         pool,
         owner_id,
         request_id,
@@ -547,7 +554,17 @@ pub async fn bootstrap_run_from_bot(
         user_message,
         &bot.engine_preference,
     )
-    .await
+    .await?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    crate::memory::persist_run_memories(&mut tx, owner_id, bot_id, &records.run_id, &memories)
+        .await?;
+    tx.commit()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(records)
 }
 
 pub async fn bootstrap_run_legacy(

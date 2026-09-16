@@ -5,11 +5,15 @@ use crate::collaboration::{AgentCollaboration, CollaborationContext, Collaborati
 use crate::connector_tools::dispatch_connector_tool_with_gate;
 use crate::human_intervention::is_human_intervention_tool;
 use crate::human_intervention_tools::dispatch_human_intervention_tool;
+use crate::memory::MemoryContext;
+use crate::memory_tools::dispatch_memory_tool;
 use crate::subagent::{
     AgentSubagents, SubagentContext, SubagentError, SubagentRequest, RUN_SUBAGENT_DESCRIPTION,
     RUN_SUBAGENT_TOOL_NAME,
 };
-use crate::tool_catalog::{is_collaboration_tool, is_connector_tool, is_subagent_tool};
+use crate::tool_catalog::{
+    is_collaboration_tool, is_connector_tool, is_memory_tool, is_subagent_tool,
+};
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -83,6 +87,7 @@ pub fn all_openai_tool_definitions() -> Vec<Value> {
     tools.extend(crate::human_intervention_tools::human_intervention_openai_tool_definitions());
     tools.extend(collaboration_openai_tool_definitions());
     tools.extend(crate::connector_tools::connector_openai_tool_definitions());
+    tools.extend(crate::memory_tools::memory_openai_tool_definitions());
     tools
 }
 
@@ -104,6 +109,7 @@ pub async fn dispatch_agent_tool_with_gate(
         connectors,
         human_intervention,
         None,
+        None,
         name,
         arguments,
         cancel,
@@ -121,6 +127,7 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     connectors: Option<&Arc<dyn crate::connectors::AgentConnectors>>,
     human_intervention: Option<&Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     subagents: Option<&Arc<dyn AgentSubagents>>,
+    memory: Option<&Arc<dyn crate::memory::AgentMemory>>,
     name: &str,
     arguments: &str,
     cancel: &AtomicBool,
@@ -138,6 +145,26 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
             gate,
             run,
             browser_recovery,
+        )
+        .await;
+    }
+    if is_memory_tool(name) {
+        let memory_ctx = collaboration_ctx.map(|ctx| MemoryContext {
+            owner_id: ctx.owner_id.clone(),
+            bot_id: ctx.source_bot_id.clone(),
+            run_id: ctx.source_run_id.clone(),
+            request_id: ctx.source_request_id.clone(),
+            source_message_id: None,
+            tool_invocation_id: ctx.tool_invocation_id.clone(),
+        });
+        return dispatch_memory_tool(
+            memory,
+            name,
+            arguments,
+            cancel,
+            gate,
+            run,
+            memory_ctx.as_ref(),
         )
         .await;
     }
@@ -447,6 +474,7 @@ mod tests {
             None,
             None,
             Some(&subagents),
+            None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,
             &cancel,
@@ -490,6 +518,7 @@ mod tests {
             None,
             None,
             Some(&subagents),
+            None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,
             &cancel,

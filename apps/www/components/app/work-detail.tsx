@@ -378,6 +378,11 @@ export function WorkDetail({ runId }: { runId: string }) {
             {detail?.originLabel ? (
               <Badge variant="secondary">Started from {detail.originLabel}</Badge>
             ) : null}
+            {detail?.memories && detail.memories.length > 0 ? (
+              <Badge variant="secondary">
+                Used {detail.memories.length} {detail.memories.length === 1 ? "memory" : "memories"}
+              </Badge>
+            ) : null}
             <Badge variant={statusBadgeVariant(detail?.status)}>
               {detail ? workStatus(detail.status) : "Loading…"}
             </Badge>
@@ -432,6 +437,18 @@ export function WorkDetail({ runId }: { runId: string }) {
             {detail ? "No assignment text saved for this work." : "Loading assignment…"}
           </p>
         )}
+        {detail?.memories && detail.memories.length > 0 ? (
+          <details className="rounded-lg border border-border bg-surface-raised p-3 text-xs">
+            <summary className="cursor-pointer font-medium text-foreground">
+              Used {detail.memories.length} {detail.memories.length === 1 ? "memory" : "memories"}
+            </summary>
+            <ul className="mt-2 space-y-1 text-muted-foreground">
+              {detail.memories.map((memory, index) => (
+                <li key={`${memory.kind}-${index}`}>{memory.content}</li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
 
         {pendingHumanIntervention ? (

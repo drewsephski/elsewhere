@@ -76,6 +76,7 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
         None,
         None,
         None,
+        None,
         "conv-probe".into(),
     )
     .await

@@ -18,6 +18,7 @@ export interface BotSummary {
   computerId: string | null;
   enginePreference: string;
   avatarId?: string;
+  learnFromConversations?: boolean;
 }
 
 export interface ComputerSummary {
@@ -53,6 +54,12 @@ export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "create
   originKind?: string;
   originProvider?: string | null;
   originLabel?: string | null;
+  memories?: RunMemoryFact[];
+}
+
+export interface RunMemoryFact {
+  content: string;
+  kind: string;
 }
 
 export interface CreateRunResponse {

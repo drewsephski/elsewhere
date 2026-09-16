@@ -236,6 +236,15 @@ impl RunStore for PostgresRunStore {
                             "could not enqueue channel delivery"
                         );
                     }
+                    if let Err(err) =
+                        crate::memory::enqueue_if_eligible(&mut tx, &run_id, status).await
+                    {
+                        tracing::warn!(
+                            request_id = %request_id,
+                            error = %err,
+                            "could not enqueue memory extraction"
+                        );
+                    }
                 }
                 if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
                     &mut tx, &run_id, status, error_code,

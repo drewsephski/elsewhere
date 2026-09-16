@@ -75,6 +75,21 @@ pub struct AppState {
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
     #[cfg(any(test, feature = "test-utils"))]
     test_run_overrides: TestRunOverrideRegistry,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub test_memory_extractor: Arc<
+        std::sync::Mutex<
+            Option<
+                Arc<
+                    dyn Fn(
+                            &crate::memory::extraction::ExtractionRequest,
+                        )
+                            -> Result<crate::memory::extraction::ExtractionModelResponse, String>
+                        + Send
+                        + Sync,
+                >,
+            >,
+        >,
+    >,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -188,6 +203,8 @@ impl AppState {
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(any(test, feature = "test-utils"))]
             test_run_overrides: TestRunOverrideRegistry::default(),
+            #[cfg(any(test, feature = "test-utils"))]
+            test_memory_extractor: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -219,5 +236,25 @@ impl AppState {
             .test_group_route_decider
             .lock()
             .expect("test group route decider lock") = decider;
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn set_test_memory_extractor(
+        &self,
+        extractor: Option<
+            Arc<
+                dyn Fn(
+                        &crate::memory::extraction::ExtractionRequest,
+                    )
+                        -> Result<crate::memory::extraction::ExtractionModelResponse, String>
+                    + Send
+                    + Sync,
+            >,
+        >,
+    ) {
+        *self
+            .test_memory_extractor
+            .lock()
+            .expect("test memory extractor lock") = extractor;
     }
 }

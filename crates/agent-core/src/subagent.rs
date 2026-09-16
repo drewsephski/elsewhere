@@ -364,6 +364,8 @@ mod tests {
         assert!(developer.contains("ephemeral helper"));
         assert!(developer.contains("no tools"));
         assert!(developer.contains("Never claim you performed browser"));
+        assert!(!developer.contains("remember"));
+        assert!(!developer.contains("recall_memory"));
         let prompt = subagent_user_prompt("Reviewer", "check the plan", Some("diff summary"));
         assert!(prompt.contains("Helper name: Reviewer"));
         assert!(prompt.contains("diff summary"));

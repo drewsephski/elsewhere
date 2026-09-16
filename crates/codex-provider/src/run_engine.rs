@@ -151,6 +151,7 @@ impl CodexRunEngine {
             shared.human_intervention.clone(),
             shared.browser_recovery.clone(),
             shared.subagents.clone(),
+            shared.memory.clone(),
             ctx.conversation_id.clone(),
         )
         .await
