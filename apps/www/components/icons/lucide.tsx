@@ -18,6 +18,7 @@ import { BotIcon } from "./bot";
 import { BriefcaseBusinessIcon } from "./briefcase-business";
 import { CalendarCheck2Icon } from "./calendar-check-2";
 import { CheckIcon } from "./check";
+import { DeleteIcon } from "./delete";
 import { ChevronDownIcon } from "./chevron-down";
 import { ChevronLeftIcon } from "./chevron-left";
 import { ChevronRightIcon } from "./chevron-right";
@@ -49,6 +50,7 @@ import { RefreshCWIcon } from "./refresh-cw";
 import { SearchIcon } from "./search";
 import { SettingsIcon } from "./settings";
 import { SparklesIcon } from "./sparkles";
+import { SquarePenIcon } from "./square-pen";
 import { Triangle } from "./triangle";
 import { XIcon } from "./x";
 
@@ -62,6 +64,7 @@ const Bot = adaptAnimatedIcon(BotIcon);
 const BriefcaseBusiness = adaptAnimatedIcon(BriefcaseBusinessIcon);
 const CalendarClock = adaptAnimatedIcon(CalendarCheck2Icon);
 const Check = adaptAnimatedIcon(CheckIcon);
+const Delete = adaptAnimatedIcon(DeleteIcon);
 const ChevronDown = adaptAnimatedIcon(ChevronDownIcon);
 const ChevronLeft = adaptAnimatedIcon(ChevronLeftIcon);
 const ChevronRight = adaptAnimatedIcon(ChevronRightIcon);
@@ -87,6 +90,7 @@ const RefreshCw = adaptAnimatedIcon(RefreshCWIcon);
 const Search = adaptAnimatedIcon(SearchIcon);
 const Settings2 = adaptAnimatedIcon(SettingsIcon);
 const Sparkles = adaptAnimatedIcon(SparklesIcon);
+const SquarePen = adaptAnimatedIcon(SquarePenIcon);
 const X = adaptAnimatedIcon(XIcon);
 const MessageSquare = adaptAnimatedIcon(MessageSquareIcon);
 
@@ -124,6 +128,8 @@ export {
   Check,
   CheckCircle2,
   CheckIcon,
+  Delete,
+  DeleteIcon,
   ChevronDown,
   ChevronDownIcon,
   ChevronLeft,
@@ -182,6 +188,8 @@ export {
   SettingsIcon,
   Sparkles,
   SparklesIcon,
+  SquarePen,
+  SquarePenIcon,
   Triangle,
   X,
   XIcon,

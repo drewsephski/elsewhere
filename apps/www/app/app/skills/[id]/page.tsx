@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudHostErrorMessage, cloudHostFetch } from "@/lib/cloud-api";
+import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/reui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/reui/alert";
-import { ChevronLeft } from "@/components/icons/lucide";
+import { ChevronLeft, SquarePen } from "@/components/icons/lucide";
 
 interface SkillDetail {
   id: string;
@@ -33,6 +34,8 @@ export default function SkillDetailPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [startRename, setStartRename] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
@@ -70,6 +73,33 @@ export default function SkillDetailPage() {
       if (detail.ok) setSkill((await detail.json()) as SkillDetail);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRename(next: string) {
+    if (renaming) {
+      return;
+    }
+    setRenaming(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const response = await cloudHostFetch(`/v1/skills/${skillId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: next }),
+      });
+      if (!response.ok) {
+        throw new Error(
+          await cloudHostErrorMessage(response, "Could not rename skill"),
+        );
+      }
+      const body = (await response.json()) as SkillDetail;
+      setSkill((current) => (current ? { ...current, ...body } : body));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not rename skill");
+    } finally {
+      setRenaming(false);
+      setStartRename(false);
     }
   }
 
@@ -119,8 +149,32 @@ export default function SkillDetailPage() {
             <ChevronLeft className="size-4" aria-hidden />
             Skills
           </Link>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">{skill.name}</h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h1 className="min-w-0">
+              <InlineRenameLabel
+                value={skill.name}
+                startEditing={startRename}
+                disabled={saving || renaming}
+                onEditingChange={setStartRename}
+                onCommit={handleRename}
+                className="text-xl font-semibold tracking-tight"
+                inputClassName="h-8 text-xl font-semibold"
+                ariaLabel="Skill name"
+              />
+            </h1>
+            {startRename ? null : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                disabled={saving || renaming}
+                aria-label={`Rename ${skill.name}`}
+                onClick={() => setStartRename(true)}
+              >
+                <SquarePen aria-hidden />
+              </Button>
+            )}
             <Badge variant={active ? "success-light" : "warning-light"} size="sm">
               {skill.status}
             </Badge>
@@ -141,7 +195,7 @@ export default function SkillDetailPage() {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not save</AlertTitle>
+          <AlertTitle>Could not update skill</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}

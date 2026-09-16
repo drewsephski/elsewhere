@@ -265,7 +265,7 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
           direction,
         }}
       >
-        <div className={cn(scrollable ? "size-full" : "w-full", className)}>
+        <div className={cn(scrollable ? "size-full min-w-0" : "w-full min-w-0", className)}>
           {header}
           <div
             ref={ref}
@@ -280,7 +280,7 @@ const Tree = forwardRef<HTMLDivElement, TreeViewProps>(
               type="multiple"
               value={expandedItems}
               onValueChange={setExpandedItems}
-              className="flex flex-col gap-0.5"
+              className="flex min-w-0 flex-col gap-0.5"
               dir={dir as Direction}
             >
               {treeChildren}
@@ -358,7 +358,7 @@ const Folder = forwardRef<
         ref={ref}
         {...props}
         value={value}
-        className="relative overflow-hidden"
+        className="relative min-w-0"
       >
         <AccordionPrimitive.Trigger
           onContextMenu={onContextMenu}
@@ -384,7 +384,7 @@ const Folder = forwardRef<
             : (closeIcon ?? (
                 <Files className="size-3.5 shrink-0 text-muted-foreground" />
               ))}
-          <span className="min-w-0 flex-1 truncate">{element}</span>
+          <span className="min-w-0 flex-1 truncate pr-1">{element}</span>
         </AccordionPrimitive.Trigger>
         <AccordionPrimitive.Content
           className="relative overflow-hidden text-xs data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
@@ -395,7 +395,7 @@ const Folder = forwardRef<
           <AccordionPrimitive.Root
             dir={direction}
             type="multiple"
-            className="ml-4 flex flex-col gap-0.5 py-0.5 rtl:mr-4"
+            className="flex min-w-0 flex-col gap-0.5 py-0.5 pl-4 rtl:pr-4"
             value={expandedItems}
           >
             {children}
@@ -460,7 +460,7 @@ const File = forwardRef<
         {fileIcon ?? (
           <FileText className="size-3.5 shrink-0 text-muted-foreground" />
         )}
-        <span className="truncate">{children}</span>
+        <span className="min-w-0 flex-1 truncate pr-1">{children}</span>
       </button>
     );
   },

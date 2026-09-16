@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/file-tree";
 import { Spinner } from "@/components/ui/spinner";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
-import { RefreshCw } from "@/components/icons/lucide";
+import { Delete, RefreshCw, SquarePen } from "@/components/icons/lucide";
 import { useActiveRun } from "@/contexts/active-run-context";
 import { useComputerWorkspace } from "@/hooks/use-computer-workspace";
 import {
@@ -39,7 +39,59 @@ interface ContextMenuState {
 }
 
 const menuItemClass =
-  "flex w-full cursor-default items-center rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent";
+  "flex w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent";
+
+function WorkspaceRowActions({
+  name,
+  hidden,
+  onRename,
+  onDelete,
+}: {
+  name: string;
+  hidden?: boolean;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute top-0 right-0 z-10 flex h-7 items-center bg-gradient-to-l from-card from-40% via-card/90 to-transparent pl-4 pr-0.5 transition-opacity",
+        hidden
+          ? "pointer-events-none opacity-0"
+          : "pointer-events-none opacity-0 group-hover/entry:pointer-events-auto group-hover/entry:opacity-100 group-focus-within/entry:pointer-events-auto group-focus-within/entry:opacity-100",
+      )}
+    >
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-6 text-muted-foreground"
+        aria-label={`Rename ${name}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRename();
+        }}
+      >
+        <SquarePen className="size-3.5" aria-hidden />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="size-6 text-muted-foreground hover:text-destructive"
+        aria-label={`Delete ${name}`}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDelete();
+        }}
+      >
+        <Delete className="size-3.5" aria-hidden />
+      </Button>
+    </div>
+  );
+}
 
 function workspaceEntriesToTreeElements(
   entries: WorkspaceEntry[],
@@ -158,54 +210,31 @@ function WorkspaceTreeBranch({
     [entry, onContextMenu],
   );
 
+  const isRenaming = renamingPath === entry.path;
   const rowActions = (
-    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/entry:opacity-100 group-focus-within/entry:opacity-100">
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        className="h-6 px-1.5 text-[10px] text-muted-foreground"
-        aria-label={`Rename ${entry.name}`}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onRenamingPathChange(entry.path);
-        }}
-      >
-        Rename
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="xs"
-        className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
-        aria-label={`Delete ${entry.name}`}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onRequestDelete(entry);
-        }}
-      >
-        Delete
-      </Button>
-    </div>
+    <WorkspaceRowActions
+      name={entry.name}
+      hidden={isRenaming}
+      onRename={() => onRenamingPathChange(entry.path)}
+      onDelete={() => onRequestDelete(entry)}
+    />
   );
 
   if (!entry.isDir) {
     return (
-      <div className="group/entry flex min-w-0 items-center gap-0.5 pr-0.5">
+      <div className="group/entry relative min-w-0">
         <File
           value={entry.path}
           handleSelect={onOpenFile}
           onContextMenu={handleContextMenu}
           aria-label={`Open ${entry.name}`}
-          className="min-w-0 flex-1"
+          className="min-w-0"
         >
           <WorkspaceEntryName
             entry={entry}
             computerId={computerId}
             onRenamed={onRefresh}
-            startEditing={renamingPath === entry.path}
+            startEditing={isRenaming}
             onEditingChange={(editing) => {
               if (!editing && renamingPath === entry.path) {
                 onRenamingPathChange(null);
@@ -223,9 +252,9 @@ function WorkspaceTreeBranch({
   const error = errors[entry.path];
 
   return (
-    <div className="group/entry flex min-w-0 items-start gap-0.5 pr-0.5">
+    <div className="group/entry relative min-w-0">
       <Folder
-        className="min-w-0 flex-1"
+        className="min-w-0"
         value={entry.path}
         element={
           <WorkspaceEntryName
@@ -233,7 +262,7 @@ function WorkspaceTreeBranch({
             computerId={computerId}
             onRenamed={onRefresh}
             className="font-medium"
-            startEditing={renamingPath === entry.path}
+            startEditing={isRenaming}
             onEditingChange={(editing) => {
               if (!editing && renamingPath === entry.path) {
                 onRenamingPathChange(null);
@@ -274,7 +303,7 @@ function WorkspaceTreeBranch({
         <p className="py-1 pl-1 text-[11px] text-muted-foreground">Empty folder</p>
       ) : null}
       </Folder>
-      <div className="mt-0.5">{rowActions}</div>
+      {rowActions}
     </div>
   );
 }
@@ -491,6 +520,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
               closeContextMenu();
             }}
           >
+            <SquarePen className="size-3.5" aria-hidden />
             Rename
           </button>
           <button
@@ -503,6 +533,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
               closeContextMenu();
             }}
           >
+            <Delete className="size-3.5" aria-hidden />
             Delete
           </button>
         </div>

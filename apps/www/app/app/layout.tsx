@@ -1,5 +1,6 @@
 import { ProductThemeScope } from "@/components/app/product-theme-scope";
 import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
+import { Toaster } from "@/components/ui/sonner";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -32,6 +33,7 @@ export default async function AppLayout({
           {children}
         </WorkspaceAppLayout>
       </Suspense>
+      <Toaster position="bottom-right" />
     </>
   );
 }

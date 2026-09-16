@@ -19,6 +19,7 @@ import {
 import { ChevronLeft, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
 import {
   buildGroupSendPayload,
@@ -28,6 +29,20 @@ import {
 import { deleteConversationMessage, canArchiveWorkRun, archiveWorkRun } from "@/lib/archive-work-run";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill, type StatusTone } from "@/components/app/status-pill";
+
+const MIN_GROUP_BOTS = 2;
+
+function formatCloudError(message: string): string {
+  const stripped = message.replace(/^(validation|conflict):\s*/i, "").trim();
+  if (!stripped) {
+    return message;
+  }
+  return stripped.charAt(0).toUpperCase() + stripped.slice(1);
+}
+
+function toastCloudError(message: string) {
+  toast.error(formatCloudError(message));
+}
 
 interface GroupConversationViewProps {
   groupId: string;
@@ -86,7 +101,6 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [message, setMessage] = useState("");
   const [mentions, setMentions] = useState<MentionToken[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const idempotencyRef = useRef<string | null>(null);
 
@@ -117,7 +131,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         await loadGroup();
         await loadMessages();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load group");
+        toastCloudError(err instanceof Error ? err.message : "Could not load group");
       }
     })();
   }, [loadGroup, loadMessages]);
@@ -134,7 +148,6 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       return;
     }
     setPending(true);
-    setError(null);
     const trimmed = message.trim();
     const payload = buildGroupSendPayload(trimmed, mentions, group?.participants ?? []);
     const idempotencyKey = idempotencyRef.current ?? crypto.randomUUID();
@@ -160,28 +173,30 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       await loadMessages();
     } catch (err) {
       setMessage(trimmed);
-      setError(err instanceof Error ? err.message : "Could not send message");
+      toastCloudError(err instanceof Error ? err.message : "Could not send message");
     } finally {
       setPending(false);
     }
   }
 
   async function handleRemoveParticipant(botId: string) {
-    setError(null);
+    if (activeParticipants.length <= MIN_GROUP_BOTS) {
+      toast.error("Keep at least 2 bots in the group.");
+      return;
+    }
     const response = await cloudHostFetch(
       `/v1/conversations/${groupId}/participants/${botId}`,
       { method: "DELETE" },
     );
     const body = await response.json();
     if (!response.ok) {
-      setError(body.error ?? "Could not remove participant");
+      toastCloudError(body.error ?? "Could not remove participant");
       return;
     }
     setGroup(body);
   }
 
   async function handleDeleteMessage(item: TranscriptMessage) {
-    setError(null);
     try {
       if (item.authorKind === "human") {
         const routingPending =
@@ -205,19 +220,18 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       }
       await loadMessages();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete message");
+      toastCloudError(err instanceof Error ? err.message : "Could not delete message");
     }
   }
 
   async function handleRetryRoute(messageId: string) {
-    setError(null);
     const response = await cloudHostFetch(
       `/v1/conversations/${groupId}/messages/${messageId}/route/retry`,
       { method: "POST" },
     );
     if (!response.ok) {
       const body = await response.json();
-      setError(body.error ?? "Could not retry routing");
+      toastCloudError(body.error ?? "Could not retry routing");
       return;
     }
     await loadMessages();
@@ -238,14 +252,13 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   }
 
   async function handleAddParticipant(botId: string) {
-    setError(null);
     const response = await cloudHostFetch(`/v1/conversations/${groupId}/participants`, {
       method: "POST",
       body: JSON.stringify({ botId }),
     });
     const body = await response.json();
     if (!response.ok) {
-      setError(body.error ?? "Could not add participant");
+      toastCloudError(body.error ?? "Could not add participant");
       return;
     }
     setGroup(body);
@@ -448,9 +461,6 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
               pending={pending}
             />
           </ChatComposerFrame>
-          {error ? (
-            <p className="px-3 text-[11px] text-destructive" role="alert">{error}</p>
-          ) : null}
         </div>
       </footer>
     </div>

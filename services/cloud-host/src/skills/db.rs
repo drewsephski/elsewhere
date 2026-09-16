@@ -9,6 +9,13 @@ fn db_err(e: sqlx::Error) -> ApiError {
     ApiError::Internal(e.to_string())
 }
 
+fn is_foreign_key_violation(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(|db| db.code())
+        .is_some_and(|code| code == "23503")
+}
+
 #[derive(Debug, Clone)]
 pub struct SkillRow {
     pub id: String,
@@ -329,12 +336,15 @@ pub async fn delete_skill(pool: &PgPool, owner: &str, skill_id: &str) -> Result<
         .bind(skill_id)
         .bind(owner)
         .execute(pool)
-        .await
-        .map_err(db_err)?;
-    if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound);
+        .await;
+    match result {
+        Ok(deleted) if deleted.rows_affected() == 0 => Err(ApiError::NotFound),
+        Ok(_) => Ok(()),
+        Err(error) if is_foreign_key_violation(&error) => Err(ApiError::Conflict(
+            "This skill cannot be deleted because it was used in past work or a routine.".into(),
+        )),
+        Err(error) => Err(db_err(error)),
     }
-    Ok(())
 }
 
 pub async fn attach_bot_skill(
