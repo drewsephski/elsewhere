@@ -23,6 +23,8 @@ import { ChevronLeftIcon } from "./chevron-left";
 import { ChevronRightIcon } from "./chevron-right";
 import { ChevronUpIcon } from "./chevron-up";
 import { ChevronsUpDownIcon } from "./chevrons-up-down";
+import { ChevronsLeft, ChevronsLeftIcon, ChevronsRight, ChevronsRightIcon } from "./chevrons-right";
+import { LayoutGrid, LayoutGridIcon } from "./layout-grid";
 import { CircleCheckIcon } from "./circle-check";
 import { CircleHelpIcon } from "./circle-help";
 import { DownloadIcon } from "./download";
@@ -132,6 +134,12 @@ export {
   ChevronUpIcon,
   ChevronsUpDown,
   ChevronsUpDownIcon,
+  ChevronsLeft,
+  ChevronsLeftIcon,
+  ChevronsRight,
+  ChevronsRightIcon,
+  LayoutGrid,
+  LayoutGridIcon,
   CirclePlus,
   CirclePlusIcon,
   Download,
