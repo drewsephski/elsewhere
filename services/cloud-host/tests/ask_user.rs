@@ -493,12 +493,25 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
             .await
         }
     });
-    tokio::time::sleep(Duration::from_millis(80)).await;
-    let pending = service
-        .get_pending_for_owner_run(&owner, &records.run_id)
-        .await
-        .unwrap();
-    assert!(pending.is_some());
+    let mut pending = None;
+    for _ in 0..80 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        pending = service
+            .get_pending_for_owner_run(&owner, &records.run_id)
+            .await
+            .unwrap();
+        if pending.is_some() {
+            break;
+        }
+        if first.is_finished() {
+            let result = first.await.expect("ask_user task panicked");
+            panic!("ask_user ended before creating a pending question: {result:?}");
+        }
+    }
+    assert!(
+        pending.is_some(),
+        "timed out waiting for pending ask_user question"
+    );
     let duplicate = dispatch_agent_tool_with_gate_and_recovery(
         &MockComputer,
         None,
