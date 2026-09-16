@@ -8,7 +8,11 @@ use cloud_host::{
 };
 use sqlx::PgPool;
 
-async fn save_due_now(pool: &PgPool, owner: &str, input: &RoutineInput) -> cloud_host::routines::RoutineView {
+async fn save_due_now(
+    pool: &PgPool,
+    owner: &str,
+    input: &RoutineInput,
+) -> cloud_host::routines::RoutineView {
     let view = routines::save(pool, owner, None, input).await.unwrap();
     sqlx::query("UPDATE routines SET next_run_at = NOW() - interval '1 second' WHERE id = $1")
         .bind(&view.id)
@@ -48,6 +52,7 @@ async fn input(pool: &PgPool, owner: &str) -> RoutineInput {
         failure_policy: None,
         skill_id: None,
         pinned_skill_version: None,
+        trigger_mode: None,
     }
 }
 
@@ -349,6 +354,7 @@ fn fixed_interval_cadence_and_input_bounds() {
         failure_policy: None,
         skill_id: None,
         pinned_skill_version: None,
+        trigger_mode: None,
     };
     assert!(input.validate().is_err());
     input.interval_minutes = Some(1440);

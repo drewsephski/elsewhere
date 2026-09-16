@@ -95,7 +95,9 @@ pub async fn github_oauth_start(
         .config
         .github_oauth_redirect_uri
         .as_deref()
-        .ok_or_else(|| ApiError::Validation("GitHub OAuth redirect URI is not configured".into()))?;
+        .ok_or_else(|| {
+            ApiError::Validation("GitHub OAuth redirect URI is not configured".into())
+        })?;
 
     let _ = purge_expired_oauth_states(&state.pool).await?;
     let state_token = Uuid::new_v4().to_string();
@@ -147,17 +149,16 @@ pub async fn github_oauth_complete(
         .config
         .github_oauth_redirect_uri
         .as_deref()
-        .ok_or_else(|| ApiError::Validation("GitHub OAuth redirect URI is not configured".into()))?;
+        .ok_or_else(|| {
+            ApiError::Validation("GitHub OAuth redirect URI is not configured".into())
+        })?;
 
-    let consumed = consume_oauth_state(
-        &state.pool,
-        &body.state,
-        PROVIDER_GITHUB,
-        owner.owner_id(),
-    )
-    .await?;
+    let consumed =
+        consume_oauth_state(&state.pool, &body.state, PROVIDER_GITHUB, owner.owner_id()).await?;
     if !consumed {
-        return Err(ApiError::Validation("invalid or expired OAuth state".into()));
+        return Err(ApiError::Validation(
+            "invalid or expired OAuth state".into(),
+        ));
     }
 
     let token = state

@@ -75,14 +75,13 @@ pub async fn list_for_routine(
     routine_id: &str,
     limit: i64,
 ) -> Result<Vec<RoutineRun>, ApiError> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM routines WHERE id = $1 AND owner_id = $2)",
-    )
-    .bind(routine_id)
-    .bind(owner)
-    .fetch_one(pool)
-    .await
-    .map_err(db_error)?;
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM routines WHERE id = $1 AND owner_id = $2)")
+            .bind(routine_id)
+            .bind(owner)
+            .fetch_one(pool)
+            .await
+            .map_err(db_error)?;
     if !exists {
         return Err(ApiError::NotFound);
     }
@@ -251,14 +250,12 @@ pub async fn link_run_in_tx(
     occurrence_id: &str,
     run_id: &str,
 ) -> Result<(), ApiError> {
-    sqlx::query(
-        "UPDATE routine_runs SET run_id = $2 WHERE id = $1 AND run_id IS NULL",
-    )
-    .bind(occurrence_id)
-    .bind(run_id)
-    .execute(&mut **tx)
-    .await
-    .map_err(db_error)?;
+    sqlx::query("UPDATE routine_runs SET run_id = $2 WHERE id = $1 AND run_id IS NULL")
+        .bind(occurrence_id)
+        .bind(run_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(db_error)?;
     Ok(())
 }
 
@@ -305,7 +302,10 @@ pub async fn sync_terminal_for_run_in_tx(
     let occurrence_id: String = row.get("id");
     let routine_id: String = row.get("routine_id");
     let current: String = row.get("status");
-    if matches!(current.as_str(), "completed" | "failed" | "cancelled" | "skipped") {
+    if matches!(
+        current.as_str(),
+        "completed" | "failed" | "cancelled" | "skipped"
+    ) {
         return Ok(());
     }
 

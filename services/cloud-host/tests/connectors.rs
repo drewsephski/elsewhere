@@ -24,14 +24,23 @@ fn test_secret_box() -> ConnectorSecretBox {
 async fn connector_ownership_isolated_in_database(pool: PgPool) {
     let secret = test_secret_box();
     let metadata = json!({ "login": "alice" });
-    upsert_connected(&pool, "alice", PROVIDER_GITHUB, &metadata, "gho_alice_token", &secret)
-        .await
-        .unwrap();
+    upsert_connected(
+        &pool,
+        "alice",
+        PROVIDER_GITHUB,
+        &metadata,
+        "gho_alice_token",
+        &secret,
+    )
+    .await
+    .unwrap();
 
     let bob = get_for_owner(&pool, "bob", PROVIDER_GITHUB).await.unwrap();
     assert!(bob.is_none());
 
-    let alice = get_for_owner(&pool, "alice", PROVIDER_GITHUB).await.unwrap();
+    let alice = get_for_owner(&pool, "alice", PROVIDER_GITHUB)
+        .await
+        .unwrap();
     assert_eq!(alice.unwrap().status, "connected");
 }
 
@@ -92,21 +101,17 @@ async fn github_disconnect_clears_encrypted_secret(pool: PgPool) {
     .await
     .unwrap();
 
-    assert!(
-        load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
-            .await
-            .unwrap()
-            .is_some()
-    );
+    assert!(load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
+        .await
+        .unwrap()
+        .is_some());
 
     assert!(disconnect(&pool, "alice", PROVIDER_GITHUB).await.unwrap());
 
-    assert!(
-        load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(load_access_token(&pool, "alice", PROVIDER_GITHUB, &secret)
+        .await
+        .unwrap()
+        .is_none());
     let row = get_for_owner(&pool, "alice", PROVIDER_GITHUB)
         .await
         .unwrap()
@@ -122,26 +127,21 @@ async fn oauth_state_consumption_is_owner_scoped(pool: PgPool) {
         .await
         .unwrap();
 
-    assert!(
-        !consume_oauth_state(&pool, state, PROVIDER_GITHUB, "bob")
-            .await
-            .unwrap()
-    );
+    assert!(!consume_oauth_state(&pool, state, PROVIDER_GITHUB, "bob")
+        .await
+        .unwrap());
 
-    let remaining: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*)::bigint FROM connector_oauth_states WHERE state = $1",
-    )
-    .bind(state)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*)::bigint FROM connector_oauth_states WHERE state = $1")
+            .bind(state)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(remaining, 1);
 
-    assert!(
-        consume_oauth_state(&pool, state, PROVIDER_GITHUB, "alice")
-            .await
-            .unwrap()
-    );
+    assert!(consume_oauth_state(&pool, state, PROVIDER_GITHUB, "alice")
+        .await
+        .unwrap());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -176,6 +176,9 @@ async fn github_list_repositories_dispatches_via_connector_service(pool: PgPool)
         .await
         .expect("dispatch");
     assert_eq!(value.get("ok"), Some(&json!(true)));
-    let repos = value.get("repositories").and_then(|v| v.as_array()).unwrap();
+    let repos = value
+        .get("repositories")
+        .and_then(|v| v.as_array())
+        .unwrap();
     assert_eq!(repos.len(), 1);
 }

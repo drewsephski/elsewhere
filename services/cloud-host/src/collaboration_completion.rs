@@ -117,7 +117,10 @@ pub async fn advance_delegation_after_target_results(
 }
 
 /// Worker/reconciliation entry: repair artifact transfer and return admission without re-running collection.
-pub async fn reconcile_delegation_completion(state: &AppState, delegation_id: &str) -> Result<(), String> {
+pub async fn reconcile_delegation_completion(
+    state: &AppState,
+    delegation_id: &str,
+) -> Result<(), String> {
     if let Err(err) =
         crate::artifact_handoff::execute_pending_transfers_for_delegation(state, delegation_id)
             .await

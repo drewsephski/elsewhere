@@ -1,15 +1,16 @@
 use agent_core::{CollaborationContext, RunStore};
 use cloud_host::{
-    db::postgres_run_store::PostgresRunStore,
-    db::resources,
-    delegation, run_lifecycle, work,
+    db::postgres_run_store::PostgresRunStore, db::resources, delegation, run_lifecycle, work,
 };
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::Barrier;
 use uuid::Uuid;
 
-async fn chief_and_researcher(pool: &PgPool, owner: &str) -> (resources::BotRow, resources::BotRow) {
+async fn chief_and_researcher(
+    pool: &PgPool,
+    owner: &str,
+) -> (resources::BotRow, resources::BotRow) {
     let chief = bot_with_computer(pool, owner, "Chief").await;
     let researcher = bot_with_computer(pool, owner, "Researcher").await;
     (chief, researcher)
@@ -88,18 +89,13 @@ async fn delegate_resume(
     )
     .await
     .unwrap();
-    let target_request: String = sqlx::query_scalar(
-        "SELECT request_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&created.target_run_id)
-    .fetch_one(pool)
-    .await
-    .unwrap();
-    (
-        created.delegation_id,
-        created.target_run_id,
-        target_request,
-    )
+    let target_request: String =
+        sqlx::query_scalar("SELECT request_id FROM agent_runs WHERE id = $1")
+            .bind(&created.target_run_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    (created.delegation_id, created.target_run_id, target_request)
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -158,13 +154,12 @@ async fn boundary_b_delegation_terminal_resume_missing(pool: PgPool) {
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
         .unwrap();
-    let resume_run: Option<String> = sqlx::query_scalar(
-        "SELECT source_resume_run_id FROM bot_delegations WHERE id = $1",
-    )
-    .bind(&delegation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume_run: Option<String> =
+        sqlx::query_scalar("SELECT source_resume_run_id FROM bot_delegations WHERE id = $1")
+            .bind(&delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     if let Some(resume_run) = resume_run {
         sqlx::query(
             "UPDATE bot_delegations SET source_resume_run_id = NULL, resume_status = NULL WHERE id = $1",
@@ -189,13 +184,12 @@ async fn boundary_b_delegation_terminal_resume_missing(pool: PgPool) {
         .await
         .unwrap();
 
-    let resume: Option<String> = sqlx::query_scalar(
-        "SELECT source_resume_run_id FROM bot_delegations WHERE id = $1",
-    )
-    .bind(&delegation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume: Option<String> =
+        sqlx::query_scalar("SELECT source_resume_run_id FROM bot_delegations WHERE id = $1")
+            .bind(&delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(resume.is_some());
 
     let dup_count: i64 = sqlx::query_scalar(
@@ -262,20 +256,16 @@ async fn boundary_e_restart_interrupted_target_wakes_source_once(pool: PgPool) {
     let (delegation_id, target_run_id, _) =
         delegate_resume(&pool, "alice", &chief, &researcher, "boundary-e").await;
 
-    sqlx::query(
-        "UPDATE agent_runs SET status = 'running', started_at = NOW() WHERE id = $1",
-    )
-    .bind(&target_run_id)
-    .execute(&pool)
-    .await
-    .unwrap();
-    sqlx::query(
-        "UPDATE bot_delegations SET status = 'running' WHERE id = $1",
-    )
-    .bind(&delegation_id)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE agent_runs SET status = 'running', started_at = NOW() WHERE id = $1")
+        .bind(&target_run_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE bot_delegations SET status = 'running' WHERE id = $1")
+        .bind(&delegation_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     cloud_host::db::queries::mark_interrupted_runs(&pool)
         .await
@@ -342,13 +332,11 @@ async fn resume_lifecycle_queued_running_completed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT resume_status FROM bot_delegations WHERE id = $1"
-        )
-        .bind(&delegation_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
+        sqlx::query_scalar::<_, String>("SELECT resume_status FROM bot_delegations WHERE id = $1")
+            .bind(&delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
         "running"
     );
 
@@ -363,13 +351,11 @@ async fn resume_lifecycle_queued_running_completed(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(
-        sqlx::query_scalar::<_, String>(
-            "SELECT resume_status FROM bot_delegations WHERE id = $1"
-        )
-        .bind(&delegation_id)
-        .fetch_one(&pool)
-        .await
-        .unwrap(),
+        sqlx::query_scalar::<_, String>("SELECT resume_status FROM bot_delegations WHERE id = $1")
+            .bind(&delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
         "completed"
     );
 }
@@ -449,13 +435,12 @@ async fn group_recipient_stale_lifecycle_repaired(pool: PgPool) {
         .await
         .unwrap();
 
-    let recipient_status: String = sqlx::query_scalar(
-        "SELECT status FROM group_message_recipients WHERE run_id = $1",
-    )
-    .bind(&run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let recipient_status: String =
+        sqlx::query_scalar("SELECT status FROM group_message_recipients WHERE run_id = $1")
+            .bind(&run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(recipient_status, "completed");
 }
 
@@ -496,14 +481,17 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
         .unwrap();
-    run_lifecycle::try_admit_delegation_return(&pool, &sqlx::query_scalar::<_, String>(
-        "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-shared'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap())
+    run_lifecycle::try_admit_delegation_return(
+        &pool,
+        &sqlx::query_scalar::<_, String>(
+            "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-shared'",
+        )
+        .fetch_one(&pool)
         .await
-        .unwrap();
+        .unwrap(),
+    )
+    .await
+    .unwrap();
     let shared_msg: String = sqlx::query_scalar(
         "SELECT user_message FROM work_queue WHERE run_id = (SELECT source_resume_run_id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-shared')",
     )
@@ -526,14 +514,17 @@ async fn artifact_metadata_same_and_different_computer(pool: PgPool) {
     delegation::sync_target_run_terminal(&pool, &req2, "completed", None)
         .await
         .unwrap();
-    run_lifecycle::try_admit_delegation_return(&pool, &sqlx::query_scalar::<_, String>(
-        "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-diff'",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap())
+    run_lifecycle::try_admit_delegation_return(
+        &pool,
+        &sqlx::query_scalar::<_, String>(
+            "SELECT id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-diff'",
+        )
+        .fetch_one(&pool)
         .await
-        .unwrap();
+        .unwrap(),
+    )
+    .await
+    .unwrap();
     let diff_msg: String = sqlx::query_scalar(
         "SELECT user_message FROM work_queue WHERE run_id = (SELECT source_resume_run_id FROM bot_delegations WHERE tool_invocation_id = 'artifacts-diff')",
     )

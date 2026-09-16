@@ -29,7 +29,8 @@ pub struct ComputerRegistry {
 
 impl ComputerRegistry {
     pub fn evict(&self, owner_id: &str, computer_id: &str) {
-        self.sprites.remove(&(owner_id.to_string(), computer_id.to_string()));
+        self.sprites
+            .remove(&(owner_id.to_string(), computer_id.to_string()));
     }
 
     fn evict_idle_and_bound(&self) {
@@ -129,20 +130,14 @@ impl ComputerRegistry {
 
         self.evict_idle_and_bound();
 
-        let browser_profile_host_dir =
-            if browser_enabled && config.browser_profiles_dir.is_some() {
-                Some(
-                    crate::browser_profile::profile_for_computer(
-                        pool,
-                        config,
-                        owner_id,
-                        computer_id,
-                    )
+        let browser_profile_host_dir = if browser_enabled && config.browser_profiles_dir.is_some() {
+            Some(
+                crate::browser_profile::profile_for_computer(pool, config, owner_id, computer_id)
                     .await?,
-                )
-            } else {
-                None
-            };
+            )
+        } else {
+            None
+        };
 
         let computer = Self::build_sprite(
             config,
@@ -159,7 +154,8 @@ impl ComputerRegistry {
         };
 
         if let Some(mut hit) = self.sprites.get_mut(&key) {
-            if hit.sprite_name == entry.sprite_name && hit.browser_enabled == entry.browser_enabled {
+            if hit.sprite_name == entry.sprite_name && hit.browser_enabled == entry.browser_enabled
+            {
                 hit.last_used = Instant::now();
                 return Ok(hit.computer.clone());
             }

@@ -206,5 +206,12 @@ export interface Routine {
   lastFailureAt: string | null;
   consecutiveFailures: number;
   failurePolicy: string;
+  triggerMode: string;
+  webhook: {
+    configured: boolean;
+    tokenHint?: string | null;
+    lastTriggeredAt?: string | null;
+    webhookUrl?: string | null;
+  };
   recentRuns: RoutineRun[];
 }

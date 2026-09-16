@@ -194,23 +194,21 @@ pub async fn probe_subscription_with_profile(
     }
 
     const PROBE_STARTUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
-    let client = match tokio::time::timeout(
-        PROBE_STARTUP_TIMEOUT,
-        CodexAppServerClient::launch(launch),
-    )
-    .await
-    {
-        Ok(Ok(client)) => client,
-        Ok(Err(CodexProviderError::CodexNotInstalled)) => {
-            return CodexSubscriptionAvailability::NotInstalled;
-        }
-        Ok(Err(err)) => return CodexSubscriptionAvailability::Unavailable(err.to_string()),
-        Err(_) => {
-            return CodexSubscriptionAvailability::Unavailable(
-                "Codex app-server startup timed out during availability probe".into(),
-            );
-        }
-    };
+    let client =
+        match tokio::time::timeout(PROBE_STARTUP_TIMEOUT, CodexAppServerClient::launch(launch))
+            .await
+        {
+            Ok(Ok(client)) => client,
+            Ok(Err(CodexProviderError::CodexNotInstalled)) => {
+                return CodexSubscriptionAvailability::NotInstalled;
+            }
+            Ok(Err(err)) => return CodexSubscriptionAvailability::Unavailable(err.to_string()),
+            Err(_) => {
+                return CodexSubscriptionAvailability::Unavailable(
+                    "Codex app-server startup timed out during availability probe".into(),
+                );
+            }
+        };
     permit.log_child_started();
 
     let availability = probe_codex_subscription_availability_on_client(&client).await;
@@ -231,7 +229,9 @@ mod tests {
     #[test]
     fn allows_only_one_active_operation() {
         let gate = single_slot_gate();
-        let run = gate.try_acquire(CodexOperationKind::Run).expect("run permit");
+        let run = gate
+            .try_acquire(CodexOperationKind::Run)
+            .expect("run permit");
         assert_eq!(gate.active_children(), 1);
         assert!(gate.try_acquire(CodexOperationKind::Probe).is_err());
         assert!(gate.try_acquire(CodexOperationKind::Login).is_err());

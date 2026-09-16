@@ -9,13 +9,13 @@ use tokio::sync::{Mutex, Semaphore};
 use agent_core::{AgentComputer, ResponsesModel};
 
 use crate::approval::ApprovalService;
-use crate::human_intervention::HumanInterventionService;
 use crate::auth::JwtVerifier;
+use crate::codex_ops::CodexOpsPermit;
 use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
-use crate::codex_ops::CodexOpsPermit;
-use crate::events::registry::RunRegistry;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
+use crate::events::registry::RunRegistry;
+use crate::human_intervention::HumanInterventionService;
 use crate::provider_status_cache::ProviderStatusCache;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -90,7 +90,10 @@ impl TestRunOverrideRegistry {
     }
 
     fn set_default(&self, overrides: Option<TestRunOverrides>) {
-        *self.default.lock().expect("test run overrides default lock") = overrides;
+        *self
+            .default
+            .lock()
+            .expect("test run overrides default lock") = overrides;
     }
 
     fn clear_request(&self, request_id: &str) {
@@ -101,10 +104,7 @@ impl TestRunOverrideRegistry {
     }
 
     fn take_for_request(&self, request_id: &str) -> Option<TestRunOverrides> {
-        let mut by_id = self
-            .by_request_id
-            .lock()
-            .expect("test run overrides lock");
+        let mut by_id = self.by_request_id.lock().expect("test run overrides lock");
         if let Some(overrides) = by_id.remove(request_id) {
             return Some(overrides);
         }
@@ -183,20 +183,13 @@ impl AppState {
 
     /// Binds injected computer/model dependencies to a specific idempotency key before `POST /v1/runs`.
     #[cfg(any(test, feature = "test-utils"))]
-    pub fn register_test_run_overrides(
-        &self,
-        request_id: &str,
-        overrides: TestRunOverrides,
-    ) {
+    pub fn register_test_run_overrides(&self, request_id: &str, overrides: TestRunOverrides) {
         self.test_run_overrides.register(request_id, overrides);
     }
 
     /// Applies the same injected dependencies to any run whose request id was not registered explicitly.
     #[cfg(any(test, feature = "test-utils"))]
-    pub fn set_test_run_overrides_default(
-        &self,
-        overrides: Option<TestRunOverrides>,
-    ) {
+    pub fn set_test_run_overrides_default(&self, overrides: Option<TestRunOverrides>) {
         self.test_run_overrides.set_default(overrides);
     }
 
@@ -206,10 +199,7 @@ impl AppState {
     }
 
     #[cfg(any(test, feature = "test-utils"))]
-    pub(crate) fn take_test_run_overrides(
-        &self,
-        request_id: &str,
-    ) -> Option<TestRunOverrides> {
+    pub(crate) fn take_test_run_overrides(&self, request_id: &str) -> Option<TestRunOverrides> {
         self.test_run_overrides.take_for_request(request_id)
     }
 

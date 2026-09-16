@@ -89,9 +89,7 @@ pub async fn persist_run_skills_for_admission(
             return Err(ApiError::Validation("routine skill not found".into()));
         };
         if row.get::<String, _>("status") != "active" {
-            return Err(ApiError::Validation(
-                "routine skill is not active".into(),
-            ));
+            return Err(ApiError::Validation("routine skill is not active".into()));
         }
         let current: i32 = row.get("current_version");
         let version = input.routine_pinned_version.unwrap_or(current);
@@ -213,24 +211,21 @@ pub async fn resolve_explicit_skill_id(
     owner: &str,
     skill_id_or_slug: &str,
 ) -> Result<String, ApiError> {
-    if let Some(id) = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM skills WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(skill_id_or_slug)
-    .bind(owner)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_err)?
+    if let Some(id) =
+        sqlx::query_scalar::<_, String>("SELECT id FROM skills WHERE id = $1 AND owner_id = $2")
+            .bind(skill_id_or_slug)
+            .bind(owner)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_err)?
     {
         return Ok(id);
     }
-    sqlx::query_scalar::<_, String>(
-        "SELECT id FROM skills WHERE slug = $1 AND owner_id = $2",
-    )
-    .bind(skill_id_or_slug)
-    .bind(owner)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_err)?
-    .ok_or(ApiError::NotFound)
+    sqlx::query_scalar::<_, String>("SELECT id FROM skills WHERE slug = $1 AND owner_id = $2")
+        .bind(skill_id_or_slug)
+        .bind(owner)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(db_err)?
+        .ok_or(ApiError::NotFound)
 }

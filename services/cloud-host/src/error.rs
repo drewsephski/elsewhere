@@ -18,6 +18,10 @@ pub enum ApiError {
     Conflict(String),
     #[error("too many requests")]
     TooManyRequests,
+    #[error("payload too large")]
+    PayloadTooLarge,
+    #[error("unsupported media type")]
+    UnsupportedMediaType,
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -37,6 +41,13 @@ impl IntoResponse for ApiError {
             ApiError::TooManyRequests => (
                 StatusCode::TOO_MANY_REQUESTS,
                 "too many concurrent runs".into(),
+            ),
+            ApiError::PayloadTooLarge => {
+                (StatusCode::PAYLOAD_TOO_LARGE, "payload too large".into())
+            }
+            ApiError::UnsupportedMediaType => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "JSON is required".into(),
             ),
             ApiError::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m.clone()),
         };

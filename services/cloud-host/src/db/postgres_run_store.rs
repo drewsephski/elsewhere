@@ -18,7 +18,6 @@ impl PostgresRunStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-
 }
 
 async fn next_message_sequence_in_tx(
@@ -30,12 +29,11 @@ async fn next_message_sequence_in_tx(
         .bind(&lock_key)
         .execute(&mut **tx)
         .await?;
-    let row: (Option<i64>,) = sqlx::query_as(
-        "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
-    )
-    .bind(conversation_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let row: (Option<i64>,) =
+        sqlx::query_as("SELECT MAX(sequence) FROM messages WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&mut **tx)
+            .await?;
     Ok(row.0.unwrap_or(0) + 1)
 }
 
@@ -204,13 +202,10 @@ impl RunStore for PostgresRunStore {
                 .map_err(|e| RuntimeError::Store(e.to_string()))?;
             if let Some(run_row) = run_row {
                 let run_id: String = run_row.get("id");
-                if let Err(err) =
-                    crate::result_finalization::mark_terminal_run_results_policy(
-                        &mut tx,
-                        &run_id,
-                        status,
-                    )
-                    .await
+                if let Err(err) = crate::result_finalization::mark_terminal_run_results_policy(
+                    &mut tx, &run_id, status,
+                )
+                .await
                 {
                     tracing::warn!(
                         request_id = %request_id,
@@ -221,8 +216,7 @@ impl RunStore for PostgresRunStore {
                 if status == "completed" {
                     if let Err(err) =
                         crate::conversation::commit_group_context_cursor_for_completed_run_in_tx(
-                            &mut tx,
-                            request_id,
+                            &mut tx, request_id,
                         )
                         .await
                     {
@@ -234,10 +228,7 @@ impl RunStore for PostgresRunStore {
                     }
                 }
                 if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
-                    &mut tx,
-                    &run_id,
-                    status,
-                    error_code,
+                    &mut tx, &run_id, status, error_code,
                 )
                 .await
                 {
@@ -390,13 +381,10 @@ mod tests {
     async fn try_test_pool() -> Option<PgPool> {
         let url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere".into());
-        let pool = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            PgPool::connect(&url),
-        )
-        .await
-        .ok()?
-        .ok()?;
+        let pool = tokio::time::timeout(std::time::Duration::from_secs(2), PgPool::connect(&url))
+            .await
+            .ok()?
+            .ok()?;
         sqlx::migrate!("./migrations").run(&pool).await.ok()?;
         Some(pool)
     }
@@ -419,12 +407,14 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
-        sqlx::query("INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'legacy-local', $2)")
-            .bind(&conv_id)
-            .bind(&bot_id)
-            .execute(&pool)
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO conversations (id, owner_id, bot_id) VALUES ($1, 'legacy-local', $2)",
+        )
+        .bind(&conv_id)
+        .bind(&bot_id)
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let request_id = Uuid::new_v4().to_string();
         let run_id = store
@@ -464,12 +454,11 @@ mod tests {
             .await
             .unwrap();
 
-        let row: (String,) =
-            sqlx::query_as("SELECT status FROM agent_runs WHERE id = $1")
-                .bind(&run_id)
-                .fetch_one(&pool)
-                .await
-                .unwrap();
+        let row: (String,) = sqlx::query_as("SELECT status FROM agent_runs WHERE id = $1")
+            .bind(&run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(row.0, "completed");
 
         let events: (i64,) =

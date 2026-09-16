@@ -71,7 +71,10 @@ fn token(sub: &str) -> String {
 }
 
 fn apply_delta(answer: &mut String, commentary: &mut String, payload: &serde_json::Value) {
-    let phase = payload.get("phase").and_then(|v| v.as_str()).unwrap_or("answer");
+    let phase = payload
+        .get("phase")
+        .and_then(|v| v.as_str())
+        .unwrap_or("answer");
     let delta = payload.get("delta").and_then(|v| v.as_str()).unwrap_or("");
     if delta.is_empty() {
         return;
@@ -278,9 +281,7 @@ async fn assistant_delta_sse_replay_reconstructs_answer_without_gaps() {
         assert!(id > reconnect_from, "catch-up replayed an old event id");
     }
 
-    let catchup_has_terminal = second_batch
-        .iter()
-        .any(|(_, kind, _)| kind == "terminal");
+    let catchup_has_terminal = second_batch.iter().any(|(_, kind, _)| kind == "terminal");
     assert!(catchup_has_terminal);
 
     let terminal_payload: serde_json::Value = second_batch

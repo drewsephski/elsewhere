@@ -11,7 +11,7 @@ pub mod context_results;
 
 pub mod workspace;
 
-pub mod delegations;
-pub mod conversations;
-pub mod skills;
 pub mod connectors;
+pub mod conversations;
+pub mod delegations;
+pub mod skills;

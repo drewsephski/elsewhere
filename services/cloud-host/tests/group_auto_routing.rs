@@ -1,13 +1,13 @@
 use cloud_host::{
     db::resources,
+    drain_one_pending_route,
     group_router::{
         build_router_transcript, candidate_fingerprint, parse_and_validate_router_output,
         retry_auto_route, GroupRoutingMode, RouteCandidate, RouteDecisionInput,
         ValidatedRouteDecision, MAX_ROUTE_ATTEMPTS,
     },
-    run_engine_select::{resolve_group_route_engine, RunEngineMode, SelectedRunEngine},
-    drain_one_pending_route,
     groups::{self, SendGroupMessageRequest},
+    run_engine_select::{resolve_group_route_engine, RunEngineMode, SelectedRunEngine},
     AppState, Config,
 };
 use sqlx::PgPool;
@@ -135,7 +135,8 @@ async fn auto_send_admits_pending_without_runs(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -145,11 +146,12 @@ async fn auto_send_admits_pending_without_runs(pool: PgPool) {
         Some("pending")
     );
     assert!(send.recipients.is_empty());
-    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
-        .bind(&group.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let runs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(runs, 0);
 }
 
@@ -194,7 +196,8 @@ async fn router_selects_researcher(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -202,13 +205,12 @@ async fn router_selects_researcher(pool: PgPool) {
     assert!(drain_one_pending_route(&state).await.unwrap());
     state.set_test_group_route_decider(None);
 
-    let recipients: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let recipients: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(recipients, 1);
     let kind: String = sqlx::query_scalar(
         "SELECT routing_kind FROM group_message_recipients WHERE message_id = $1",
@@ -218,13 +220,12 @@ async fn router_selects_researcher(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(kind, "auto");
-    let status: String = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "resolved");
 }
 
@@ -254,7 +255,8 @@ async fn explicit_mention_skips_router_and_resolves_immediately(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("specific".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -291,7 +293,8 @@ async fn delete_pending_auto_message_cancels_route(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -301,13 +304,12 @@ async fn delete_pending_auto_message_cancels_route(pool: PgPool) {
         .await
         .unwrap();
 
-    let status: Option<String> = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_optional(&pool)
-    .await
-    .unwrap();
+    let status: Option<String> =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap();
     assert_eq!(status.as_deref(), Some("cancelled"));
 }
 
@@ -350,19 +352,19 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
     assert!(drain_one_pending_route(&state).await.unwrap());
     state.set_test_group_route_decider(None);
-    let status: String = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "no_response");
 }
 
@@ -419,7 +421,8 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -429,25 +432,22 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     let researcher_id_for_remove = researcher.id.clone();
     let release_for_task = release_decider.clone();
     let state_for_drain = state.clone();
-    let (drain_ok, ()) = tokio::time::timeout(
-        TEST_DRAIN_TIMEOUT,
-        async {
-            let drain = drain_one_pending_route(&state_for_drain);
-            let coord = async {
-                wait_for_flag(&decider_started, "group route decider start").await;
-                groups::remove_participant(
-                    &pool_for_remove,
-                    "alice",
-                    &group_id,
-                    &researcher_id_for_remove,
-                )
-                .await
-                .unwrap();
-                release_for_task.store(true, Ordering::SeqCst);
-            };
-            tokio::join!(drain, coord)
-        },
-    )
+    let (drain_ok, ()) = tokio::time::timeout(TEST_DRAIN_TIMEOUT, async {
+        let drain = drain_one_pending_route(&state_for_drain);
+        let coord = async {
+            wait_for_flag(&decider_started, "group route decider start").await;
+            groups::remove_participant(
+                &pool_for_remove,
+                "alice",
+                &group_id,
+                &researcher_id_for_remove,
+            )
+            .await
+            .unwrap();
+            release_for_task.store(true, Ordering::SeqCst);
+        };
+        tokio::join!(drain, coord)
+    })
     .await
     .expect("route drain/coordination timed out");
     assert!(drain_ok.expect("drain_one_pending_route failed"));
@@ -463,13 +463,12 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
     .unwrap();
     assert_eq!(researcher_runs, 0);
 
-    let status: String = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "pending");
 }
 
@@ -489,9 +488,7 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .unwrap();
 
     let state = AppState::new(pool.clone(), test_config());
-    state.set_test_group_route_decider(Some(Arc::new(|_| {
-        Err("codex_busy".into())
-    })));
+    state.set_test_group_route_decider(Some(Arc::new(|_| Err("codex_busy".into()))));
 
     let send = groups::send_group_message(
         &pool,
@@ -504,7 +501,8 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -523,13 +521,12 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(attempts, MAX_ROUTE_ATTEMPTS);
-    let status: String = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "failed");
     assert!(
         !drain_one_pending_route(&state).await.unwrap(),
@@ -548,13 +545,12 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     .await
     .unwrap();
     assert_eq!(attempts_after_retry, 0);
-    let status_after_retry: String = sqlx::query_scalar(
-        "SELECT routing_status FROM group_message_sends WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status_after_retry: String =
+        sqlx::query_scalar("SELECT routing_status FROM group_message_sends WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status_after_retry, "pending");
 
     state.set_test_group_route_decider(Some(Arc::new(|input| {
@@ -568,13 +564,12 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
     assert!(drain_one_pending_route(&state).await.unwrap());
     state.set_test_group_route_decider(None);
 
-    let recipients: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let recipients: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(recipients, 1);
 }
 
@@ -616,7 +611,8 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
             mention_mode: None,
             routing_mode: Some("auto".into()),
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -624,13 +620,12 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
     assert!(drain_one_pending_route(&state).await.unwrap());
     state.set_test_group_route_decider(None);
 
-    let recipients: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1",
-    )
-    .bind(&send.message.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let recipients: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM group_message_recipients WHERE message_id = $1")
+            .bind(&send.message.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(recipients, 3);
 }
 
@@ -651,7 +646,13 @@ async fn router_transcript_prefers_newest_under_byte_cap(pool: PgPool) {
 
     let huge = "x".repeat(39_993);
     let current_id = Uuid::new_v4().to_string();
-    let bodies = [huge.as_str(), "recent one", "recent two", "recent three", "current"];
+    let bodies = [
+        huge.as_str(),
+        "recent one",
+        "recent two",
+        "recent three",
+        "current",
+    ];
     for (seq, body) in bodies.iter().enumerate() {
         let id = if *body == "current" {
             current_id.clone()

@@ -1,7 +1,7 @@
+use agent_skills::{SkillPackage, SkillPackageFile};
 use axum::extract::{Path, State};
 use axum::Extension;
 use axum::Json;
-use agent_skills::{SkillPackage, SkillPackageFile};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -9,10 +9,10 @@ use crate::app_state::AppState;
 use crate::auth::Principal;
 use crate::error::ApiError;
 use crate::skills::{
-    append_skill_version, attach_bot_skill, create_skill_with_version, detach_bot_skill,
-    generate_skill_draft_from_run, get_skill_for_owner, get_version_for_owner,
+    append_skill_version, attach_bot_skill, create_skill_with_version, delete_skill,
+    detach_bot_skill, generate_skill_draft_from_run, get_skill_for_owner, get_version_for_owner,
     list_bot_skills, list_skills, list_version_package_files, list_versions, patch_skill_metadata,
-    delete_skill, BotSkillAttachment, SkillRow, SkillVersionRow,
+    BotSkillAttachment, SkillRow, SkillVersionRow,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -101,7 +101,9 @@ pub async fn list(
     Extension(principal): Extension<Principal>,
 ) -> Result<Json<Vec<SkillSummaryResponse>>, ApiError> {
     let rows = list_skills(&state.pool, principal.owner_id()).await?;
-    Ok(Json(rows.into_iter().map(SkillSummaryResponse::from).collect()))
+    Ok(Json(
+        rows.into_iter().map(SkillSummaryResponse::from).collect(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -124,9 +126,14 @@ pub async fn create(
     let files = files_from_input(&body.files);
     let package = SkillPackage::validate_and_build(&body.skill_md, &files, Some(&body.slug))
         .map_err(|e| ApiError::Validation(e.to_string()))?;
-    let (skill, _version) =
-        create_skill_with_version(&state.pool, principal.owner_id(), &body.slug, &package, &files)
-            .await?;
+    let (skill, _version) = create_skill_with_version(
+        &state.pool,
+        principal.owner_id(),
+        &body.slug,
+        &package,
+        &files,
+    )
+    .await?;
     Ok(Json(SkillSummaryResponse::from(skill)))
 }
 
@@ -182,7 +189,9 @@ pub async fn list_versions_handler(
     Path(skill_id): Path<String>,
 ) -> Result<Json<Vec<SkillVersionResponse>>, ApiError> {
     let rows = list_versions(&state.pool, principal.owner_id(), &skill_id).await?;
-    Ok(Json(rows.into_iter().map(SkillVersionResponse::from).collect()))
+    Ok(Json(
+        rows.into_iter().map(SkillVersionResponse::from).collect(),
+    ))
 }
 
 pub async fn create_version(
@@ -196,20 +205,19 @@ pub async fn create_version(
         .ok_or(ApiError::NotFound)?;
     let package_files = match &body.files {
         Some(inputs) => files_from_input(inputs),
-        None => list_version_package_files(
-            &state.pool,
-            principal.owner_id(),
-            &skill_id,
-            skill.current_version,
-        )
-        .await?,
+        None => {
+            list_version_package_files(
+                &state.pool,
+                principal.owner_id(),
+                &skill_id,
+                skill.current_version,
+            )
+            .await?
+        }
     };
-    let package = SkillPackage::validate_and_build(
-        &body.skill_md,
-        &package_files,
-        Some(&skill.slug),
-    )
-    .map_err(|e| ApiError::Validation(e.to_string()))?;
+    let package =
+        SkillPackage::validate_and_build(&body.skill_md, &package_files, Some(&skill.slug))
+            .map_err(|e| ApiError::Validation(e.to_string()))?;
     let version = append_skill_version(
         &state.pool,
         principal.owner_id(),

@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    sanitize_human_intervention_message, validate_human_intervention_reason, AgentHumanIntervention,
-    EventSink, HumanInterventionContext, HumanInterventionError, HumanInterventionOutcome,
-    RunStore,
+    sanitize_human_intervention_message, validate_human_intervention_reason,
+    AgentHumanIntervention, EventSink, HumanInterventionContext, HumanInterventionError,
+    HumanInterventionOutcome, RunStore,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -56,7 +56,11 @@ impl HumanInterventionService {
         .await
     }
 
-    pub async fn cancel_pending_for_run(&self, run_id: &str, reason: &str) -> Result<u64, sqlx::Error> {
+    pub async fn cancel_pending_for_run(
+        &self,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<u64, sqlx::Error> {
         let pending: Vec<(String,)> = sqlx::query_as(
             "SELECT id FROM human_intervention_requests WHERE run_id = $1 AND status = 'pending'",
         )
@@ -66,7 +70,10 @@ impl HumanInterventionService {
 
         let mut count = 0u64;
         for (id,) in pending {
-            if self.resolve_pending(&id, run_id, "cancelled", Some(reason)).await? {
+            if self
+                .resolve_pending(&id, run_id, "cancelled", Some(reason))
+                .await?
+            {
                 count += 1;
             }
         }
@@ -221,7 +228,10 @@ impl HumanInterventionService {
     ) -> Result<HumanInterventionOutcome, HumanInterventionError> {
         validate_human_intervention_reason(reason)?;
         let safe_message = sanitize_human_intervention_message(message)?;
-        let bounded_message = truncate_utf8_bytes(&safe_message, agent_core::MAX_HUMAN_INTERVENTION_MESSAGE_CHARS);
+        let bounded_message = truncate_utf8_bytes(
+            &safe_message,
+            agent_core::MAX_HUMAN_INTERVENTION_MESSAGE_CHARS,
+        );
 
         if cancel.load(Ordering::Relaxed) {
             return Err(HumanInterventionError::Cancelled);
@@ -269,7 +279,12 @@ impl HumanInterventionService {
             .await
         {
             let _ = self
-                .resolve_pending(&intervention_id, &ctx.run_id, "cancelled", Some("request_failed"))
+                .resolve_pending(
+                    &intervention_id,
+                    &ctx.run_id,
+                    "cancelled",
+                    Some("request_failed"),
+                )
                 .await;
             return Err(err);
         }
@@ -286,9 +301,7 @@ impl HumanInterventionService {
                 {
                     tracing::warn!(error = %err, "could not emit human_intervention_resolved");
                 }
-                Ok(HumanInterventionOutcome {
-                    intervention_id,
-                })
+                Ok(HumanInterventionOutcome { intervention_id })
             }
             ApprovalResolution::Cancelled { reason } => {
                 if reason == "run_cancelled" || reason == "host_restart" {
@@ -297,9 +310,7 @@ impl HumanInterventionService {
                     Err(HumanInterventionError::Internal(reason))
                 }
             }
-            ApprovalResolution::Denied { reason } => {
-                Err(HumanInterventionError::Internal(reason))
-            }
+            ApprovalResolution::Denied { reason } => Err(HumanInterventionError::Internal(reason)),
             ApprovalResolution::Expired => Err(HumanInterventionError::Internal(
                 "intervention expired".into(),
             )),

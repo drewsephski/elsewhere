@@ -16,7 +16,11 @@ pub struct PostgresAgentConnectors {
 }
 
 impl PostgresAgentConnectors {
-    pub fn new(pool: PgPool, secret_box: Arc<ConnectorSecretBox>, github: GitHubClient) -> Arc<Self> {
+    pub fn new(
+        pool: PgPool,
+        secret_box: Arc<ConnectorSecretBox>,
+        github: GitHubClient,
+    ) -> Arc<Self> {
         Arc::new(Self {
             pool,
             secret_box,
@@ -34,7 +38,9 @@ impl AgentConnectors for PostgresAgentConnectors {
         arguments: &Value,
     ) -> Result<Value, ConnectorError> {
         if !tool_name.starts_with("github_") {
-            return Err(ConnectorError::Validation(format!("unknown connector tool: {tool_name}")));
+            return Err(ConnectorError::Validation(format!(
+                "unknown connector tool: {tool_name}"
+            )));
         }
         let token = load_access_token(&self.pool, owner_id, PROVIDER_GITHUB, &self.secret_box)
             .await
@@ -139,7 +145,9 @@ async fn dispatch_github_tool(
                 .map_err(ConnectorError::Provider)?;
             Ok(json!({ "ok": true, "pullRequest": pull }))
         }
-        other => Err(ConnectorError::Validation(format!("unknown connector tool: {other}"))),
+        other => Err(ConnectorError::Validation(format!(
+            "unknown connector tool: {other}"
+        ))),
     }
 }
 

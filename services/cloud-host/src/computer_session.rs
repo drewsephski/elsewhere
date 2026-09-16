@@ -17,12 +17,6 @@ pub async fn connect_sprite_computer(
     }
     state
         .computer_registry
-        .connect_sprite_computer(
-            &state.config,
-            &state.pool,
-            owner_id,
-            computer_id,
-            true,
-        )
+        .connect_sprite_computer(&state.config, &state.pool, owner_id, computer_id, true)
         .await
 }

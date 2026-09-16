@@ -1,10 +1,15 @@
+use crate::app_state::AppState;
+use crate::auth::Principal;
+use crate::computer_control::{self, ControlHolder, HumanControlRequired};
+use crate::db::resources::{
+    archive_computer, get_computer_for_owner, insert_computer_placeholder, list_computers,
+};
+use crate::error::ApiError;
 use agent_core::{
     filter_workspace_listing, normalize_workspace_path, validate_public_http_url,
     validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,
     AgentComputer, ComputerError, ToolError,
 };
-use serde_json::json;
-use std::time::Duration;
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -13,13 +18,8 @@ use axum::Json;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use crate::app_state::AppState;
-use crate::auth::Principal;
-use crate::computer_control::{self, ControlHolder, HumanControlRequired};
-use crate::db::resources::{
-    archive_computer, get_computer_for_owner, insert_computer_placeholder, list_computers,
-};
-use crate::error::ApiError;
+use serde_json::json;
+use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -77,7 +77,9 @@ pub async fn create(
     Json(body): Json<CreateComputerRequest>,
 ) -> Result<Json<ComputerResponse>, ApiError> {
     if body.display_name.trim().is_empty() || body.display_name.len() > 100 {
-        return Err(ApiError::Validation("Computer names must contain 1 to 100 bytes".into()));
+        return Err(ApiError::Validation(
+            "Computer names must contain 1 to 100 bytes".into(),
+        ));
     }
     let row =
         insert_computer_placeholder(&state.pool, principal.owner_id(), body.display_name.trim())
@@ -162,7 +164,9 @@ pub struct BrowserControlStateResponse {
     pub you_have_control: bool,
 }
 
-fn control_state_response(state: computer_control::ComputerControlState) -> BrowserControlStateResponse {
+fn control_state_response(
+    state: computer_control::ComputerControlState,
+) -> BrowserControlStateResponse {
     BrowserControlStateResponse {
         holder: match state.holder {
             ControlHolder::Bot => "bot".into(),
@@ -196,9 +200,7 @@ async fn require_human_control(
 
 fn map_human_control_error(err: HumanControlRequired) -> ApiError {
     match err {
-        HumanControlRequired::NotHuman => {
-            ApiError::Validation(err.message().into())
-        }
+        HumanControlRequired::NotHuman => ApiError::Validation(err.message().into()),
         HumanControlRequired::Db(e) => ApiError::Internal(e.to_string()),
     }
 }
@@ -212,13 +214,10 @@ pub async fn browser_control_state(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
-    let snapshot = computer_control::get_control_state(
-        &state.pool,
-        principal.owner_id(),
-        &computer_id,
-    )
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let snapshot =
+        computer_control::get_control_state(&state.pool, principal.owner_id(), &computer_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(control_state_response(snapshot)))
 }
 
@@ -236,16 +235,13 @@ pub async fn browser_control_take(
             "browser control is disabled on this host".into(),
         ));
     }
-    let snapshot = computer_control::take_human_control(
-        &state.pool,
-        principal.owner_id(),
-        &computer_id,
-    )
-    .await
-    .map_err(|err| match err {
-        computer_control::TakeControlError::Db(e) => ApiError::Internal(e.to_string()),
-        computer_control::TakeControlError::Conflict(m) => ApiError::Conflict(m),
-    })?;
+    let snapshot =
+        computer_control::take_human_control(&state.pool, principal.owner_id(), &computer_id)
+            .await
+            .map_err(|err| match err {
+                computer_control::TakeControlError::Db(e) => ApiError::Internal(e.to_string()),
+                computer_control::TakeControlError::Conflict(m) => ApiError::Conflict(m),
+            })?;
     Ok(Json(control_state_response(snapshot)))
 }
 
@@ -258,13 +254,10 @@ pub async fn browser_control_return(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
-    let snapshot = computer_control::return_control_to_bot(
-        &state.pool,
-        principal.owner_id(),
-        &computer_id,
-    )
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let snapshot =
+        computer_control::return_control_to_bot(&state.pool, principal.owner_id(), &computer_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     if let Err(err) = state
         .human_interventions
         .resolve_pending_for_computer_handback(principal.owner_id(), &computer_id)
@@ -289,25 +282,19 @@ pub async fn browser_control_heartbeat(
             "browser control is disabled on this host".into(),
         ));
     }
-    let touched = computer_control::touch_human_heartbeat(
-        &state.pool,
-        principal.owner_id(),
-        &computer_id,
-    )
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let touched =
+        computer_control::touch_human_heartbeat(&state.pool, principal.owner_id(), &computer_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     if !touched {
         return Err(ApiError::Validation(
             "No active human browser control lease to heartbeat".into(),
         ));
     }
-    let snapshot = computer_control::get_control_state(
-        &state.pool,
-        principal.owner_id(),
-        &computer_id,
-    )
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let snapshot =
+        computer_control::get_control_state(&state.pool, principal.owner_id(), &computer_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(control_state_response(snapshot)))
 }
 
@@ -487,10 +474,7 @@ pub async fn browser_preview(
         return Ok(StatusCode::NOT_MODIFIED.into_response());
     }
 
-    let image_base64 = cache
-        .image_jpeg
-        .as_ref()
-        .map(|bytes| BASE64.encode(bytes));
+    let image_base64 = cache.image_jpeg.as_ref().map(|bytes| BASE64.encode(bytes));
 
     let body = BrowserPreviewResponse {
         available: cache.available,
@@ -502,9 +486,7 @@ pub async fn browser_preview(
             None
         },
         image_base64,
-        captured_at: cache
-            .captured_at
-            .unwrap_or_else(|| Utc::now().to_rfc3339()),
+        captured_at: cache.captured_at.unwrap_or_else(|| Utc::now().to_rfc3339()),
         version: cache.version,
     };
 
@@ -579,7 +561,8 @@ fn bump_workspace_revision(computer: &dyn AgentComputer) -> u64 {
 fn map_computer_error(err: ComputerError) -> ApiError {
     match err {
         ComputerError::NotProvisioned => ApiError::Validation(
-            "This computer starts when your bot first uses it for work. Send a message to begin.".into(),
+            "This computer starts when your bot first uses it for work. Send a message to begin."
+                .into(),
         ),
         ComputerError::SandboxRejected(m) | ComputerError::MalformedArguments(m) => {
             ApiError::Validation(m)
@@ -600,14 +583,14 @@ fn workspace_read_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
     validate_workspace_readable_path(path).map_err(map_workspace_validation)
 }
 
-fn sort_workspace_entries(entries: Vec<agent_core::WorkspaceEntry>) -> Vec<agent_core::WorkspaceEntry> {
+fn sort_workspace_entries(
+    entries: Vec<agent_core::WorkspaceEntry>,
+) -> Vec<agent_core::WorkspaceEntry> {
     let mut entries = filter_workspace_listing(entries);
-    entries.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        }
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
     entries
 }
@@ -647,10 +630,7 @@ pub async fn workspace_list(
         .await?;
 
     let revision = computer.workspace_revision();
-    let entries = computer
-        .list_dir(&path)
-        .await
-        .map_err(map_computer_error)?;
+    let entries = computer.list_dir(&path).await.map_err(map_computer_error)?;
 
     Ok(Json(WorkspaceListResponse {
         path,
@@ -688,7 +668,9 @@ pub async fn workspace_read(
 ) -> Result<Json<WorkspaceFileResponse>, ApiError> {
     let path = workspace_read_path(&query)?;
     if path.ends_with('/') || path == "/workspace" {
-        return Err(ApiError::Validation("path must be a file, not a directory".into()));
+        return Err(ApiError::Validation(
+            "path must be a file, not a directory".into(),
+        ));
     }
 
     let computer = state
@@ -770,7 +752,8 @@ pub async fn workspace_rename(
     Path(computer_id): Path<String>,
     Json(body): Json<WorkspaceRenameRequest>,
 ) -> Result<Json<WorkspaceMutationResponse>, ApiError> {
-    let from = validate_workspace_mutation_path(body.path.trim()).map_err(map_workspace_validation)?;
+    let from =
+        validate_workspace_mutation_path(body.path.trim()).map_err(map_workspace_validation)?;
     let to = workspace_rename_target(&from, &body.new_name).map_err(map_workspace_validation)?;
 
     let computer = state

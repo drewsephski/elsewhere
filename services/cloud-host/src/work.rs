@@ -46,9 +46,16 @@ pub async fn enqueue_with_skills(
     skills: &SkillAdmissionInput,
 ) -> Result<BootstrapRunRecords, ApiError> {
     let mut tx = pool.begin().await.map_err(db_error)?;
-    let records =
-        enqueue_in_transaction(&mut tx, owner, request_id, bot_id, conversation_id, message, skills)
-            .await?;
+    let records = enqueue_in_transaction(
+        &mut tx,
+        owner,
+        request_id,
+        bot_id,
+        conversation_id,
+        message,
+        skills,
+    )
+    .await?;
     tx.commit().await.map_err(db_error)?;
     Ok(records)
 }
@@ -195,9 +202,7 @@ pub async fn enqueue_routine_in_transaction(
     let source_message_id = if conversation_is_group {
         sequence += 1;
         let system_id = Uuid::new_v4().to_string();
-        let system_body = format!(
-            "Routine \"{routine_name}\" started for {bot_display_name}."
-        );
+        let system_body = format!("Routine \"{routine_name}\" started for {bot_display_name}.");
         let system_provenance = serde_json::json!({
             "kind": "routine",
             "routineId": routine_id,
@@ -289,17 +294,19 @@ pub async fn enqueue_routine_in_transaction(
     .await
     .map_err(db_error)?;
 
-    sqlx::query("INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)")
-        .bind(request_id)
-        .bind(serde_json::json!({
-            "status": "queued",
-            "detail": "Routine work saved. Waiting for an available computer.",
-            "provenanceKind": "routine",
-            "routineId": routine_id,
-        }))
-        .execute(&mut **tx)
-        .await
-        .map_err(db_error)?;
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)",
+    )
+    .bind(request_id)
+    .bind(serde_json::json!({
+        "status": "queued",
+        "detail": "Routine work saved. Waiting for an available computer.",
+        "provenanceKind": "routine",
+        "routineId": routine_id,
+    }))
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
     sqlx::query("UPDATE conversations SET updated_at = NOW() WHERE id = $1")
         .bind(conversation_id)
         .execute(&mut **tx)
@@ -421,13 +428,12 @@ pub async fn enqueue_from_group_message_in_transaction(
         ));
     }
 
-    let skill_invocation: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT skill_invocation FROM messages WHERE id = $1",
-    )
-    .bind(source_message_id)
-    .fetch_one(&mut **tx)
-    .await
-    .map_err(db_error)?;
+    let skill_invocation: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT skill_invocation FROM messages WHERE id = $1")
+            .bind(source_message_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(db_error)?;
     let mut skill_admission = skills.clone();
     if skill_admission.explicit.is_none() {
         if let Some(v) = skill_invocation {
@@ -574,7 +580,7 @@ pub async fn enqueue_delegated_in_transaction(
         message,
         &SkillAdmissionInput::default(),
     )
-        .await?;
+    .await?;
     sqlx::query(
         "UPDATE work_queue SET delegation_id = $2, provenance_kind = 'bot_delegation' WHERE run_id = $1",
     )
@@ -641,13 +647,12 @@ pub async fn enqueue_delegation_return_in_transaction(
     }
 
     let return_request_id = format!("delegation-return:{delegation_id}");
-    if let Some(existing_run_id) = sqlx::query_scalar::<_, String>(
-        "SELECT id FROM agent_runs WHERE request_id = $1",
-    )
-    .bind(&return_request_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_error)?
+    if let Some(existing_run_id) =
+        sqlx::query_scalar::<_, String>("SELECT id FROM agent_runs WHERE request_id = $1")
+            .bind(&return_request_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_error)?
     {
         sqlx::query(
             r#"
@@ -856,9 +861,7 @@ pub async fn enqueue_delegation_return_in_transaction(
     .map_err(db_error)?;
 
     let system_message_id = Uuid::new_v4().to_string();
-    let system_body = format!(
-        "Delegated work returned from {target_bot_name} ({target_status})."
-    );
+    let system_body = format!("Delegated work returned from {target_bot_name} ({target_status}).");
     let provenance = serde_json::json!({
         "kind": "delegation_return",
         "delegationId": delegation_id,
@@ -948,12 +951,14 @@ pub async fn enqueue_delegation_return_in_transaction(
     .await
     .map_err(db_error)?;
 
-    sqlx::query("INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)")
-        .bind(&request_id)
-        .bind(serde_json::json!({"status":"queued","provenanceKind":"delegation_return"}))
-        .execute(&mut **tx)
-        .await
-        .map_err(db_error)?;
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)",
+    )
+    .bind(&request_id)
+    .bind(serde_json::json!({"status":"queued","provenanceKind":"delegation_return"}))
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
 
     sqlx::query(
         "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'bot_delegation_return_queued', $2)",
@@ -1024,9 +1029,7 @@ pub async fn claim_next(pool: &PgPool) -> Result<Option<RunExecutionInput>, sqlx
             "could not mark delegation return running"
         );
     }
-    if let Err(err) =
-        crate::routine_runs::mark_running_for_run(pool, &input.records.run_id).await
-    {
+    if let Err(err) = crate::routine_runs::mark_running_for_run(pool, &input.records.run_id).await {
         tracing::warn!(
             run_id = %input.records.run_id,
             error = %err,
@@ -1052,13 +1055,9 @@ pub async fn request_cancel(pool: &PgPool, owner: &str, run_id: &str) -> Result<
             .map_err(db_error)?;
         sqlx::query("INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'cancelled', $2)")
             .bind(&request_id).bind(serde_json::json!({"status":"cancelled"})).execute(&mut *tx).await.map_err(db_error)?;
-        if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
-            &mut tx,
-            run_id,
-            "cancelled",
-            None,
-        )
-        .await
+        if let Err(err) =
+            crate::run_lifecycle::synchronize_run_terminal_in_tx(&mut tx, run_id, "cancelled", None)
+                .await
         {
             tracing::warn!(
                 run_id = %run_id,

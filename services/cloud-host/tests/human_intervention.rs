@@ -222,21 +222,21 @@ async fn intervention_request_persists_and_emits_event() {
     });
     let events = Arc::new(NoopEvents);
     let cancel = Arc::new(AtomicBool::new(false));
-    let backend: Arc<dyn agent_core::AgentHumanIntervention> = RunScopedHumanIntervention::new(
-        service.clone(),
-        store.clone(),
-        events,
-        cancel.clone(),
-    );
+    let backend: Arc<dyn agent_core::AgentHumanIntervention> =
+        RunScopedHumanIntervention::new(service.clone(), store.clone(), events, cancel.clone());
 
     let owner_for_resolve = owner.clone();
     let pool_for_resolve = pool.clone();
     let computer_id = computer.id.clone();
     let resolve = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(400)).await;
-        cloud_host::computer_control::take_human_control(&pool_for_resolve, &owner_for_resolve, &computer_id)
-            .await
-            .unwrap();
+        cloud_host::computer_control::take_human_control(
+            &pool_for_resolve,
+            &owner_for_resolve,
+            &computer_id,
+        )
+        .await
+        .unwrap();
         service
             .resolve_pending_for_computer_handback(&owner_for_resolve, &computer_id)
             .await
@@ -261,22 +261,19 @@ async fn intervention_request_persists_and_emits_event() {
     resolve.await.unwrap();
     assert!(!outcome.intervention_id.is_empty());
 
-    let row: (String, String) = sqlx::query_as(
-        "SELECT status, message FROM human_intervention_requests WHERE id = $1",
-    )
-    .bind(&outcome.intervention_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let row: (String, String) =
+        sqlx::query_as("SELECT status, message FROM human_intervention_requests WHERE id = $1")
+            .bind(&outcome.intervention_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(row.0, "resolved");
     assert!(!row.1.contains("password"));
 
     let emitted = store.events.lock().unwrap();
-    assert!(
-        emitted
-            .iter()
-            .any(|(_, t)| t == "human_intervention_requested")
-    );
+    assert!(emitted
+        .iter()
+        .any(|(_, t)| t == "human_intervention_requested"));
 }
 
 #[tokio::test]
@@ -310,13 +307,12 @@ async fn take_control_does_not_resolve_pending_intervention() {
         .await
         .unwrap();
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM human_intervention_requests WHERE id = $1",
-    )
-    .bind(&intervention_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM human_intervention_requests WHERE id = $1")
+            .bind(&intervention_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "pending");
 }
 
@@ -398,7 +394,10 @@ async fn duplicate_pending_request_rejected() {
     .execute(&pool)
     .await
     .unwrap_err();
-    assert_eq!(err.as_database_error().and_then(|e| e.code()).as_deref(), Some("23505"));
+    assert_eq!(
+        err.as_database_error().and_then(|e| e.code()).as_deref(),
+        Some("23505")
+    );
 }
 
 #[tokio::test]
@@ -712,19 +711,15 @@ async fn host_restart_cancels_pending_interventions() {
     .await
     .unwrap();
 
-    let count = service
-        .cancel_all_pending_on_host_restart()
-        .await
-        .unwrap();
+    let count = service.cancel_all_pending_on_host_restart().await.unwrap();
     assert!(count >= 1, "expected at least one pending row cancelled");
 
-    let status: String = sqlx::query_scalar(
-        "SELECT status FROM human_intervention_requests WHERE id = $1",
-    )
-    .bind(&intervention_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM human_intervention_requests WHERE id = $1")
+            .bind(&intervention_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(status, "cancelled");
 }
 

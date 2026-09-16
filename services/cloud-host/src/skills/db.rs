@@ -1,5 +1,5 @@
-use sha2::{Digest, Sha256};
 use agent_skills::{SkillPackage, SkillPackageFile};
+use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -106,7 +106,16 @@ pub async fn create_skill_with_version(
     .execute(&mut *tx)
     .await
     .map_err(db_err)?;
-    insert_version_files(&mut tx, owner, &skill_id, &version_id, 1, package, extra_files).await?;
+    insert_version_files(
+        &mut tx,
+        owner,
+        &skill_id,
+        &version_id,
+        1,
+        package,
+        extra_files,
+    )
+    .await?;
     sqlx::query("UPDATE skills SET current_version = 1, updated_at = NOW() WHERE id = $1")
         .bind(&skill_id)
         .execute(&mut *tx)
@@ -269,10 +278,7 @@ pub async fn list_versions(
     owner: &str,
     skill_id: &str,
 ) -> Result<Vec<SkillVersionRow>, ApiError> {
-    if get_skill_for_owner(pool, owner, skill_id)
-        .await?
-        .is_none()
-    {
+    if get_skill_for_owner(pool, owner, skill_id).await?.is_none() {
         return Err(ApiError::NotFound);
     }
     let rows = sqlx::query(
@@ -370,14 +376,13 @@ pub async fn attach_bot_skill(
             return Err(ApiError::Validation("pinned version not found".into()));
         }
     }
-    let bot_ok: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
-    )
-    .bind(bot_id)
-    .bind(owner)
-    .fetch_one(pool)
-    .await
-    .map_err(db_err)?;
+    let bot_ok: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)")
+            .bind(bot_id)
+            .bind(owner)
+            .fetch_one(pool)
+            .await
+            .map_err(db_err)?;
     if !bot_ok {
         return Err(ApiError::NotFound);
     }
@@ -400,15 +405,14 @@ pub async fn detach_bot_skill(
     bot_id: &str,
     skill_id: &str,
 ) -> Result<(), ApiError> {
-    let result = sqlx::query(
-        "DELETE FROM bot_skills WHERE bot_id = $1 AND skill_id = $2 AND owner_id = $3",
-    )
-    .bind(bot_id)
-    .bind(skill_id)
-    .bind(owner)
-    .execute(pool)
-    .await
-    .map_err(db_err)?;
+    let result =
+        sqlx::query("DELETE FROM bot_skills WHERE bot_id = $1 AND skill_id = $2 AND owner_id = $3")
+            .bind(bot_id)
+            .bind(skill_id)
+            .bind(owner)
+            .execute(pool)
+            .await
+            .map_err(db_err)?;
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound);
     }
@@ -431,14 +435,13 @@ pub async fn list_bot_skills(
     owner: &str,
     bot_id: &str,
 ) -> Result<Vec<BotSkillAttachment>, ApiError> {
-    let bot_ok: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
-    )
-    .bind(bot_id)
-    .bind(owner)
-    .fetch_one(pool)
-    .await
-    .map_err(db_err)?;
+    let bot_ok: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)")
+            .bind(bot_id)
+            .bind(owner)
+            .fetch_one(pool)
+            .await
+            .map_err(db_err)?;
     if !bot_ok {
         return Err(ApiError::NotFound);
     }

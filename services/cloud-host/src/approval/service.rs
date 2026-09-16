@@ -12,8 +12,8 @@ use sqlx::PgPool;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use crate::events::cloud_event_sink::CloudEventSink;
 use crate::approval::registry::{ApprovalResolution, ApprovalWaitRegistry};
+use crate::events::cloud_event_sink::CloudEventSink;
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ToolApprovalRow {
@@ -45,7 +45,11 @@ impl ApprovalService {
         self.clone()
     }
 
-    pub async fn cancel_pending_for_run(&self, run_id: &str, reason: &str) -> Result<u64, sqlx::Error> {
+    pub async fn cancel_pending_for_run(
+        &self,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<u64, sqlx::Error> {
         let pending: Vec<(String,)> = sqlx::query_as(
             "SELECT id FROM tool_approval_requests WHERE run_id = $1 AND status = 'pending'",
         )
@@ -56,14 +60,7 @@ impl ApprovalService {
         let mut count = 0u64;
         for (id,) in pending {
             if self
-                .resolve_pending(
-                    &id,
-                    run_id,
-                    None,
-                    "cancelled",
-                    None,
-                    Some(reason),
-                )
+                .resolve_pending(&id, run_id, None, "cancelled", None, Some(reason))
                 .await?
             {
                 count += 1;
@@ -106,12 +103,11 @@ impl ApprovalService {
         approval_id: &str,
         run_id: &str,
     ) -> Result<(), sqlx::Error> {
-        let request_id: Option<(String,)> = sqlx::query_as(
-            "SELECT request_id FROM agent_runs WHERE id = $1 LIMIT 1",
-        )
-        .bind(run_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let request_id: Option<(String,)> =
+            sqlx::query_as("SELECT request_id FROM agent_runs WHERE id = $1 LIMIT 1")
+                .bind(run_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         let Some((request_id,)) = request_id else {
             return Ok(());
@@ -204,10 +200,7 @@ impl ApprovalService {
         let Some(row) = row else {
             return Ok(false);
         };
-        if self
-            .expire_pending_if_due(approval_id, &row.run_id)
-            .await?
-        {
+        if self.expire_pending_if_due(approval_id, &row.run_id).await? {
             return Ok(false);
         }
         self.resolve_pending(
@@ -321,9 +314,7 @@ impl ApprovalService {
         let resolution = match status {
             "approved" => ApprovalResolution::Approved,
             "denied" => ApprovalResolution::Denied {
-                reason: resolution_reason
-                    .unwrap_or("denied")
-                    .to_string(),
+                reason: resolution_reason.unwrap_or("denied").to_string(),
             },
             "cancelled" => ApprovalResolution::Cancelled {
                 reason: notify_reason
@@ -340,12 +331,7 @@ impl ApprovalService {
         Ok(true)
     }
 
-    async fn abort_visible_approval(
-        &self,
-        approval_id: &str,
-        run_id: &str,
-        reason: &str,
-    ) {
+    async fn abort_visible_approval(&self, approval_id: &str, run_id: &str, reason: &str) {
         let _ = self
             .resolve_pending(
                 approval_id,
@@ -475,8 +461,7 @@ impl ApprovalService {
         let sanitized = sanitize_tool_arguments(&context.tool_name, &context.arguments);
         let summary = approval_action_summary(&context.tool_name, &sanitized);
         let expires_at = Utc::now()
-            + chrono::Duration::from_std(self.timeout)
-                .unwrap_or(chrono::Duration::minutes(5));
+            + chrono::Duration::from_std(self.timeout).unwrap_or(chrono::Duration::minutes(5));
 
         let rx = self.registry.register(&approval_id);
 
@@ -516,7 +501,11 @@ impl ApprovalService {
 
         let persist_emit = async {
             let receipt = store
-                .append_run_event(&context.request_id, "approval_requested", &requested_payload)
+                .append_run_event(
+                    &context.request_id,
+                    "approval_requested",
+                    &requested_payload,
+                )
                 .await
                 .map_err(|e| ApprovalError::Internal(e.to_string()))?;
             let _ = events.emit_durable(receipt.id, "approval_requested", &requested_payload);
@@ -533,13 +522,7 @@ impl ApprovalService {
             .wait_for_resolution(&approval_id, &context.run_id, cancel, rx)
             .await;
 
-        self.finalize_mutation_approval(
-            context,
-            &approval_id,
-            resolution,
-            events,
-            store,
-        )
-        .await
+        self.finalize_mutation_approval(context, &approval_id, resolution, events, store)
+            .await
     }
 }

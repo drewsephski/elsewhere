@@ -46,16 +46,16 @@ impl RunRegistry {
 
     pub fn cancel(&self, run_id: &str) -> bool {
         if let Some(entry) = self.inner.get(run_id) {
-            entry.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            entry
+                .cancel
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             return true;
         }
         false
     }
 
     pub fn subscribe_live(&self, run_id: &str) -> Option<broadcast::Receiver<LiveRunEvent>> {
-        self.inner
-            .get(run_id)
-            .map(|entry| entry.events.subscribe())
+        self.inner.get(run_id).map(|entry| entry.events.subscribe())
     }
 }
 

@@ -301,8 +301,7 @@ pub async fn archive_run(
     Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    crate::run_archive::archive_run(&state, principal.owner_id(), &run_id)
-    .await?;
+    crate::run_archive::archive_run(&state, principal.owner_id(), &run_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

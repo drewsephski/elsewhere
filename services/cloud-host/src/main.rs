@@ -57,22 +57,19 @@ fn spawn_runtime_watchdog() {
         }
     });
 
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(CHECK_EVERY_SECS));
-            let last = TOKIO_HEARTBEAT_EPOCH_SECS.load(Ordering::Relaxed);
-            if last == 0 {
-                continue;
-            }
-            let age = epoch_secs().saturating_sub(last);
-            if age > stall_secs {
-                eprintln!(
-                    "fatal runtime_stall: tokio heartbeat stale for {}s (threshold {}s)",
-                    age,
-                    stall_secs
-                );
-                std::process::exit(1);
-            }
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(CHECK_EVERY_SECS));
+        let last = TOKIO_HEARTBEAT_EPOCH_SECS.load(Ordering::Relaxed);
+        if last == 0 {
+            continue;
+        }
+        let age = epoch_secs().saturating_sub(last);
+        if age > stall_secs {
+            eprintln!(
+                "fatal runtime_stall: tokio heartbeat stale for {}s (threshold {}s)",
+                age, stall_secs
+            );
+            std::process::exit(1);
         }
     });
 }
@@ -103,8 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             count = interrupted,
             "marked orphan runs interrupted after host restart"
         );
-        if let Err(err) =
-            cloud_host::run_lifecycle::reconcile_collaboration_lifecycle(&pool).await
+        if let Err(err) = cloud_host::run_lifecycle::reconcile_collaboration_lifecycle(&pool).await
         {
             tracing::warn!(
                 error = %err,

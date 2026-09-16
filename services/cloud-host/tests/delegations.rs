@@ -31,9 +31,16 @@ async fn enqueue_user_run(
     bot_id: &str,
     message: &str,
 ) -> cloud_host::db::queries::BootstrapRunRecords {
-    work::enqueue(pool, owner, &Uuid::new_v4().to_string(), bot_id, None, message)
-        .await
-        .unwrap()
+    work::enqueue(
+        pool,
+        owner,
+        &Uuid::new_v4().to_string(),
+        bot_id,
+        None,
+        message,
+    )
+    .await
+    .unwrap()
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -61,9 +68,16 @@ async fn owner_can_delegate_and_idempotency_is_per_invocation(pool: PgPool) {
     )
     .await
     .unwrap();
-    let second = delegation::create_delegation(&pool, &ctx, &researcher.id, "Investigate pricing", None, "none")
-        .await
-        .unwrap();
+    let second = delegation::create_delegation(
+        &pool,
+        &ctx,
+        &researcher.id,
+        "Investigate pricing",
+        None,
+        "none",
+    )
+    .await
+    .unwrap();
     assert_eq!(first.delegation_id, second.delegation_id);
     assert_eq!(first.target_run_id, second.target_run_id);
 
@@ -83,22 +97,20 @@ async fn owner_can_delegate_and_idempotency_is_per_invocation(pool: PgPool) {
     .unwrap();
     assert_ne!(first.delegation_id, another.delegation_id);
 
-    let rows: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM bot_delegations WHERE source_run_id = $1",
-    )
-    .bind(&source.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let rows: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_delegations WHERE source_run_id = $1")
+            .bind(&source.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(rows, 2);
 
-    let target_instructions: String = sqlx::query_scalar(
-        "SELECT instructions FROM work_queue WHERE run_id = $1",
-    )
-    .bind(&first.target_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let target_instructions: String =
+        sqlx::query_scalar("SELECT instructions FROM work_queue WHERE run_id = $1")
+            .bind(&first.target_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(target_instructions.contains("You are \"Researcher\""));
     assert!(target_instructions.contains("Role for Researcher"));
 }
@@ -271,11 +283,20 @@ async fn concurrent_fanout_cannot_exceed_root_limit(pool: PgPool) {
     let barrier_b = barrier.clone();
     let first = tokio::spawn(async move {
         barrier.wait().await;
-        delegation::create_delegation(&pool_a, &ctx_overflow, &helper_a, "one more", None, "none").await
+        delegation::create_delegation(&pool_a, &ctx_overflow, &helper_a, "one more", None, "none")
+            .await
     });
     let second = tokio::spawn(async move {
         barrier_b.wait().await;
-        delegation::create_delegation(&pool_b, &ctx_overflow_b, &helper_b, "one more", None, "none").await
+        delegation::create_delegation(
+            &pool_b,
+            &ctx_overflow_b,
+            &helper_b,
+            "one more",
+            None,
+            "none",
+        )
+        .await
     });
 
     let outcome_a = first.await.unwrap();
@@ -283,13 +304,12 @@ async fn concurrent_fanout_cannot_exceed_root_limit(pool: PgPool) {
     assert!(outcome_a.is_err());
     assert!(outcome_b.is_err());
 
-    let total: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM bot_delegations WHERE root_run_id = $1",
-    )
-    .bind(&source.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let total: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_delegations WHERE root_run_id = $1")
+            .bind(&source.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(total, MAX_CHILD_DELEGATIONS_PER_ROOT);
 }
 
@@ -330,13 +350,12 @@ async fn resume_source_creates_one_source_continuation(pool: PgPool) {
         .await
         .unwrap();
 
-    let target_request: String = sqlx::query_scalar(
-        "SELECT request_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&created.target_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let target_request: String =
+        sqlx::query_scalar("SELECT request_id FROM agent_runs WHERE id = $1")
+            .bind(&created.target_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
@@ -345,22 +364,20 @@ async fn resume_source_creates_one_source_continuation(pool: PgPool) {
         .await
         .unwrap();
 
-    let resume_run: Option<String> = sqlx::query_scalar(
-        "SELECT source_resume_run_id FROM bot_delegations WHERE id = $1",
-    )
-    .bind(&created.delegation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume_run: Option<String> =
+        sqlx::query_scalar("SELECT source_resume_run_id FROM bot_delegations WHERE id = $1")
+            .bind(&created.delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(resume_run.is_some());
-    let resume_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM agent_runs WHERE bot_id = $1 AND id <> $2",
-    )
-    .bind(&chief.id)
-    .bind(&source.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE bot_id = $1 AND id <> $2")
+            .bind(&chief.id)
+            .bind(&source.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(resume_count, 1);
 
     let humans: i64 = sqlx::query_scalar(
@@ -386,32 +403,24 @@ async fn on_complete_none_skips_source_resume(pool: PgPool) {
         source_request_id: source.request_id.clone(),
         tool_invocation_id: "none-1".into(),
     };
-    let created = delegation::create_delegation(
-        &pool,
-        &ctx,
-        &researcher.id,
-        "Take over",
-        None,
-        "none",
-    )
-    .await
-    .unwrap();
-    let target_request: String = sqlx::query_scalar(
-        "SELECT request_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&created.target_run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let created =
+        delegation::create_delegation(&pool, &ctx, &researcher.id, "Take over", None, "none")
+            .await
+            .unwrap();
+    let target_request: String =
+        sqlx::query_scalar("SELECT request_id FROM agent_runs WHERE id = $1")
+            .bind(&created.target_run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     delegation::sync_target_run_terminal(&pool, &target_request, "completed", None)
         .await
         .unwrap();
-    let resume: Option<String> = sqlx::query_scalar(
-        "SELECT source_resume_run_id FROM bot_delegations WHERE id = $1",
-    )
-    .bind(&created.delegation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume: Option<String> =
+        sqlx::query_scalar("SELECT source_resume_run_id FROM bot_delegations WHERE id = $1")
+            .bind(&created.delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(resume.is_none());
 }

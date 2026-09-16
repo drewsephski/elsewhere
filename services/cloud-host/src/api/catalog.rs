@@ -129,12 +129,9 @@ pub async fn create_conversation(
     if bot_id.is_empty() {
         return Err(ApiError::Validation("botId is required".into()));
     }
-    let id = crate::conversation::create_conversation_for_bot(
-        &state.pool,
-        principal.owner_id(),
-        bot_id,
-    )
-    .await?;
+    let id =
+        crate::conversation::create_conversation_for_bot(&state.pool, principal.owner_id(), bot_id)
+            .await?;
     Ok((
         axum::http::StatusCode::CREATED,
         Json(CreateConversationResponse {

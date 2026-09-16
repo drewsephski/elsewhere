@@ -38,10 +38,7 @@ impl AgentComputer for RecordingBrowserComputer {
         })
     }
 
-    async fn list_dir(
-        &self,
-        _path: &str,
-    ) -> Result<Vec<WorkspaceEntry>, ComputerError> {
+    async fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         Ok(vec![])
     }
 
@@ -110,9 +107,13 @@ async fn agent_browser_mutation_waits_until_human_returns_control() {
     let computer_id = computer.id.clone();
     let release = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(600)).await;
-        computer_control::return_control_to_bot(&pool_for_release, &owner_for_release, &computer_id)
-            .await
-            .unwrap();
+        computer_control::return_control_to_bot(
+            &pool_for_release,
+            &owner_for_release,
+            &computer_id,
+        )
+        .await
+        .unwrap();
     });
 
     let result = dispatch_tool_with_gate(
@@ -144,7 +145,10 @@ async fn human_browser_mutation_rejected_without_control() {
     let err = computer_control::require_active_human_control(&pool, &owner, &computer.id)
         .await
         .unwrap_err();
-    assert!(matches!(err, computer_control::HumanControlRequired::NotHuman));
+    assert!(matches!(
+        err,
+        computer_control::HumanControlRequired::NotHuman
+    ));
 }
 
 #[tokio::test]

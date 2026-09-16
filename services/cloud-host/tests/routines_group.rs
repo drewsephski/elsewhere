@@ -1,6 +1,10 @@
 use chrono::{Duration, Utc};
 use cloud_host::{
-    conversation, db::resources, group_context, groups, routines::{self, RoutineInput}, work,
+    conversation,
+    db::resources,
+    group_context, groups,
+    routines::{self, RoutineInput},
+    work,
 };
 use sqlx::PgPool;
 async fn bot(pool: &PgPool, owner: &str, name: &str) -> resources::BotRow {
@@ -51,6 +55,7 @@ async fn group_destination_routine_admits_researcher_only(pool: PgPool) {
         failure_policy: None,
         skill_id: None,
         pinned_skill_version: None,
+        trigger_mode: None,
     };
     let routine = routines::save(&pool, "alice", None, &input).await.unwrap();
     sqlx::query("UPDATE routines SET next_run_at = NOW() - interval '1 second' WHERE id = $1")
@@ -77,15 +82,16 @@ async fn group_destination_routine_admits_researcher_only(pool: PgPool) {
     let work = work::claim_next(&pool).await.unwrap().unwrap();
     assert_eq!(work.bot_id, researcher.id);
     assert_eq!(work.records.conversation_id, group.id);
-    assert!(work.user_message.contains("Produce the scheduled launch brief."));
+    assert!(work
+        .user_message
+        .contains("Produce the scheduled launch brief."));
 
-    let (provenance, routine_id): (String, Option<String>) = sqlx::query_as(
-        "SELECT provenance_kind, routine_id FROM work_queue WHERE run_id = $1",
-    )
-    .bind(&work.records.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (provenance, routine_id): (String, Option<String>) =
+        sqlx::query_as("SELECT provenance_kind, routine_id FROM work_queue WHERE run_id = $1")
+            .bind(&work.records.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(provenance, "routine");
     assert_eq!(routine_id.as_deref(), Some(routine.id.as_str()));
 
@@ -107,31 +113,27 @@ async fn group_destination_routine_admits_researcher_only(pool: PgPool) {
     .unwrap();
     assert_eq!(systems, 1);
 
-    let (author_kind, author_bot_id): (String, Option<String>) = sqlx::query_as(
-        "SELECT author_kind, author_bot_id FROM messages WHERE id = $1",
-    )
-    .bind(&work.records.assistant_message_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (author_kind, author_bot_id): (String, Option<String>) =
+        sqlx::query_as("SELECT author_kind, author_bot_id FROM messages WHERE id = $1")
+            .bind(&work.records.assistant_message_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(author_kind, "bot");
     assert_eq!(author_bot_id.as_deref(), Some(researcher.id.as_str()));
 
-    let recipients: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM group_message_recipients",
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let recipients: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM group_message_recipients")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(recipients, 0);
 
-    let through: Option<i64> = sqlx::query_scalar(
-        "SELECT group_context_through_sequence FROM agent_runs WHERE id = $1",
-    )
-    .bind(&work.records.run_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let through: Option<i64> =
+        sqlx::query_scalar("SELECT group_context_through_sequence FROM agent_runs WHERE id = $1")
+            .bind(&work.records.run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(through.is_some());
 
     let lines = group_context::load_group_context_lines(
@@ -190,6 +192,7 @@ async fn group_routine_fails_when_owner_bot_removed_from_group(pool: PgPool) {
         failure_policy: None,
         skill_id: None,
         pinned_skill_version: None,
+        trigger_mode: None,
     };
     let routine = routines::save(&pool, "alice", None, &input).await.unwrap();
     sqlx::query("UPDATE routines SET next_run_at = NOW() - interval '1 second' WHERE id = $1")

@@ -37,12 +37,7 @@ pub fn group_send_request_fingerprint(
     recipients.sort();
     recipients.dedup();
     let mode = routing_mode.trim().to_ascii_lowercase();
-    format!(
-        "v2|{}|{}|{}",
-        body.trim(),
-        mode,
-        recipients.join(",")
-    )
+    format!("v2|{}|{}|{}", body.trim(), mode, recipients.join(","))
 }
 
 async fn load_idempotent_group_send(
@@ -1110,7 +1105,9 @@ fn resolve_group_recipients(
     recipient_bot_ids: Option<&[String]>,
     active_bot_ids: &[String],
 ) -> Result<Vec<(String, String)>, ApiError> {
-    let everyone = mention_mode.map(|m| m.eq_ignore_ascii_case("everyone")).unwrap_or(false);
+    let everyone = mention_mode
+        .map(|m| m.eq_ignore_ascii_case("everyone"))
+        .unwrap_or(false);
     let mut resolved: Vec<String> = Vec::new();
     if everyone {
         resolved.extend(active_bot_ids.iter().cloned());
@@ -1177,14 +1174,13 @@ pub async fn send_group_message(
         if id.is_empty() {
             continue;
         }
-        let owned: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
-        )
-        .bind(id)
-        .bind(owner)
-        .fetch_one(pool)
-        .await
-        .map_err(db_error)?;
+        let owned: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)")
+                .bind(id)
+                .bind(owner)
+                .fetch_one(pool)
+                .await
+                .map_err(db_error)?;
         if !owned {
             return Err(ApiError::NotFound);
         }
@@ -1216,14 +1212,9 @@ pub async fn send_group_message(
         body.recipient_bot_ids.as_deref(),
     );
 
-    if let Some(replay) = load_idempotent_group_send(
-        pool,
-        owner,
-        conversation_id,
-        idempotency_key,
-        &fingerprint,
-    )
-    .await?
+    if let Some(replay) =
+        load_idempotent_group_send(pool, owner, conversation_id, idempotency_key, &fingerprint)
+            .await?
     {
         return Ok(replay);
     }
@@ -1237,14 +1228,9 @@ pub async fn send_group_message(
         .await
         .map_err(db_error)?;
 
-    if let Some(replay) = load_idempotent_group_send(
-        pool,
-        owner,
-        conversation_id,
-        idempotency_key,
-        &fingerprint,
-    )
-    .await?
+    if let Some(replay) =
+        load_idempotent_group_send(pool, owner, conversation_id, idempotency_key, &fingerprint)
+            .await?
     {
         tx.commit().await.map_err(db_error)?;
         return Ok(replay);

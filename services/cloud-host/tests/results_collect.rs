@@ -145,7 +145,10 @@ async fn collect_persists_summary_and_result_files(pool: PgPool) {
                 format!("{results_dir}/hello_world"),
                 b"hello from elsewhere".to_vec(),
             ),
-            (format!("{results_dir}/shot.png"), vec![0x89, 0x50, 0x4e, 0x47]),
+            (
+                format!("{results_dir}/shot.png"),
+                vec![0x89, 0x50, 0x4e, 0x47],
+            ),
         ])),
     };
 
@@ -153,13 +156,12 @@ async fn collect_persists_summary_and_result_files(pool: PgPool) {
         .await
         .expect("collect should succeed");
 
-    let names: Vec<String> = sqlx::query_scalar(
-        "SELECT name FROM work_results WHERE run_id = $1 ORDER BY name",
-    )
-    .bind(&run_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM work_results WHERE run_id = $1 ORDER BY name")
+            .bind(&run_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
     assert!(names.contains(&"summary.md".to_string()));
     assert!(names.contains(&"hello_world".to_string()));
     assert!(names.contains(&"shot.png".to_string()));

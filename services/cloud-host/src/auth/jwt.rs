@@ -73,7 +73,8 @@ impl JwtVerifier {
         validation.validate_exp = true;
         validation.leeway = 0;
 
-        let data = decode::<Claims>(token, &key, &validation).map_err(|_| ApiError::Unauthorized)?;
+        let data =
+            decode::<Claims>(token, &key, &validation).map_err(|_| ApiError::Unauthorized)?;
         if data.claims.sub.trim().is_empty() {
             return Err(ApiError::Unauthorized);
         }
@@ -127,11 +128,14 @@ impl JwtVerifier {
             let Some(y) = jwk.y.filter(|v| !v.is_empty()) else {
                 continue;
             };
-            let key = DecodingKey::from_ec_components(&x, &y).map_err(|_| ApiError::Unauthorized)?;
+            let key =
+                DecodingKey::from_ec_components(&x, &y).map_err(|_| ApiError::Unauthorized)?;
             next.insert(kid, key);
         }
         if next.is_empty() {
-            return Err(ApiError::Internal("jwks contained no usable ES256 keys".into()));
+            return Err(ApiError::Internal(
+                "jwks contained no usable ES256 keys".into(),
+            ));
         }
         *self.keys.write().await = next;
         Ok(())

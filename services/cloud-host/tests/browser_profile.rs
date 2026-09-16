@@ -67,30 +67,18 @@ async fn browser_profiles_are_persistent_per_computer_and_owner_scoped() {
         .await
         .unwrap();
 
-    let path_a1 = cloud_host::browser_profile::profile_for_computer(
-        &pool,
-        &config,
-        &owner_a,
-        &computer_a.id,
-    )
-    .await
-    .unwrap();
-    let path_a2 = cloud_host::browser_profile::profile_for_computer(
-        &pool,
-        &config,
-        &owner_a,
-        &computer_a.id,
-    )
-    .await
-    .unwrap();
-    let path_b = cloud_host::browser_profile::profile_for_computer(
-        &pool,
-        &config,
-        &owner_b,
-        &computer_b.id,
-    )
-    .await
-    .unwrap();
+    let path_a1 =
+        cloud_host::browser_profile::profile_for_computer(&pool, &config, &owner_a, &computer_a.id)
+            .await
+            .unwrap();
+    let path_a2 =
+        cloud_host::browser_profile::profile_for_computer(&pool, &config, &owner_a, &computer_a.id)
+            .await
+            .unwrap();
+    let path_b =
+        cloud_host::browser_profile::profile_for_computer(&pool, &config, &owner_b, &computer_b.id)
+            .await
+            .unwrap();
 
     assert_eq!(path_a1, path_a2);
     assert_ne!(path_a1, path_b);
@@ -104,14 +92,10 @@ async fn browser_profiles_are_persistent_per_computer_and_owner_scoped() {
     )
     .await
     .unwrap();
-    let path_a3 = cloud_host::browser_profile::profile_for_computer(
-        &pool,
-        &config,
-        &owner_a,
-        &computer_a.id,
-    )
-    .await
-    .unwrap();
+    let path_a3 =
+        cloud_host::browser_profile::profile_for_computer(&pool, &config, &owner_a, &computer_a.id)
+            .await
+            .unwrap();
     assert_ne!(path_a1, path_a3);
 
     std::fs::remove_dir_all(root).ok();
@@ -119,10 +103,7 @@ async fn browser_profiles_are_persistent_per_computer_and_owner_scoped() {
 
 #[tokio::test]
 async fn sequential_host_profile_roundtrip_preserves_session_marker() {
-    let temp = std::env::temp_dir().join(format!(
-        "elsewhere-browser-session-{}",
-        Uuid::new_v4()
-    ));
+    let temp = std::env::temp_dir().join(format!("elsewhere-browser-session-{}", Uuid::new_v4()));
     let host_profile = temp.join("profile");
     std::fs::create_dir_all(host_profile.join("Default")).unwrap();
     let marker_path = host_profile.join("Default/.session-marker");

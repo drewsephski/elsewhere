@@ -66,11 +66,13 @@ async fn completed_target_without_results_finalization_does_not_resume(pool: PgP
     .await
     .unwrap();
 
-    sqlx::query("UPDATE agent_runs SET status = 'completed', results_status = 'pending' WHERE id = $1")
-        .bind(&created.target_run_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE agent_runs SET status = 'completed', results_status = 'pending' WHERE id = $1",
+    )
+    .bind(&created.target_run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     cloud_host::delegation::sync_target_run_terminal(
         &pool,
@@ -85,13 +87,12 @@ async fn completed_target_without_results_finalization_does_not_resume(pool: PgP
     .await
     .unwrap();
 
-    let resume: Option<String> = sqlx::query_scalar(
-        "SELECT source_resume_run_id FROM bot_delegations WHERE id = $1",
-    )
-    .bind(&created.delegation_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let resume: Option<String> =
+        sqlx::query_scalar("SELECT source_resume_run_id FROM bot_delegations WHERE id = $1")
+            .bind(&created.delegation_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert!(resume.is_none());
 }
 

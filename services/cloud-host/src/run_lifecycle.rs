@@ -4,10 +4,7 @@ use serde_json::json;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
 pub fn is_terminal_run_status(status: &str) -> bool {
-    matches!(
-        status,
-        "completed" | "failed" | "cancelled" | "interrupted"
-    )
+    matches!(status, "completed" | "failed" | "cancelled" | "interrupted")
 }
 
 pub fn map_run_status_to_recipient_status(run_status: &str) -> &'static str {
@@ -287,7 +284,10 @@ async fn try_admit_delegation_return_in_tx(
 }
 
 /// Target run results reached a terminal collection state; plan handoff and maybe admit return.
-pub async fn on_target_results_finalized(pool: &PgPool, target_run_id: &str) -> Result<(), sqlx::Error> {
+pub async fn on_target_results_finalized(
+    pool: &PgPool,
+    target_run_id: &str,
+) -> Result<(), sqlx::Error> {
     let delegation_id: Option<String> = sqlx::query_scalar(
         "SELECT id FROM bot_delegations WHERE target_run_id = $1 AND return_policy = 'resume_source'",
     )
@@ -336,11 +336,7 @@ async fn sync_delegation_return_run_in_tx(
 
     let (next_status, event_type, resume_error) = match run_status {
         "completed" => ("completed", "bot_delegation_return_completed", None),
-        "cancelled" => (
-            "failed",
-            "bot_delegation_return_failed",
-            Some("cancelled"),
-        ),
+        "cancelled" => ("failed", "bot_delegation_return_failed", Some("cancelled")),
         "interrupted" => (
             "failed",
             "bot_delegation_return_failed",
@@ -477,9 +473,7 @@ pub async fn reconcile_collaboration_lifecycle(pool: &PgPool) -> Result<(), sqlx
     for delegation_id in pending_returns {
         crate::artifact_handoff::plan_transfers_for_delegation(pool, &delegation_id).await?;
         let mut tx = pool.begin().await?;
-        if !crate::artifact_handoff::delegation_return_ready_in_tx(&mut tx, &delegation_id)
-            .await?
-        {
+        if !crate::artifact_handoff::delegation_return_ready_in_tx(&mut tx, &delegation_id).await? {
             tx.rollback().await.ok();
             continue;
         }
@@ -576,7 +570,10 @@ async fn reconcile_stale_result_finalization(pool: &PgPool) -> Result<(), sqlx::
     Ok(())
 }
 
-pub async fn on_delegation_return_run_claimed(pool: &PgPool, run_id: &str) -> Result<(), sqlx::Error> {
+pub async fn on_delegation_return_run_claimed(
+    pool: &PgPool,
+    run_id: &str,
+) -> Result<(), sqlx::Error> {
     let row = sqlx::query(
         r#"
         SELECT d.id, d.source_request_id, d.resume_status

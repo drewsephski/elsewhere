@@ -1,3 +1,4 @@
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
@@ -10,10 +11,19 @@ use crate::auth::require_authenticated;
 pub fn build_router(state: AppState) -> Router {
     let protected = Router::new()
         .route("/v1/workspace", get(api::workspace::overview))
-        .route("/v1/bots/{id}/context", get(api::context_results::get_context).put(api::context_results::save_context))
+        .route(
+            "/v1/bots/{id}/context",
+            get(api::context_results::get_context).put(api::context_results::save_context),
+        )
         .route("/v1/results", get(api::context_results::list_results))
-        .route("/v1/results/{id}/download", get(api::context_results::download))
-        .route("/v1/runs/{id}/results", get(api::context_results::run_results))
+        .route(
+            "/v1/results/{id}/download",
+            get(api::context_results::download),
+        )
+        .route(
+            "/v1/runs/{id}/results",
+            get(api::context_results::run_results),
+        )
         .route(
             "/v1/routines",
             get(api::routines::list).post(api::routines::create),
@@ -32,6 +42,16 @@ pub fn build_router(state: AppState) -> Router {
         .route("/v1/routines/{id}/test", post(api::routines::test_run))
         .route("/v1/routines/{id}/run", post(api::routines::run_now))
         .route("/v1/routines/{id}/runs", get(api::routines::list_runs))
+        .route(
+            "/v1/routines/{id}/webhook",
+            get(api::routines::get_webhook)
+                .post(api::routines::create_webhook)
+                .delete(api::routines::delete_webhook),
+        )
+        .route(
+            "/v1/routines/{id}/webhook/rotate",
+            post(api::routines::rotate_webhook),
+        )
         .route("/v1/bots", get(api::bots::list).post(api::bots::create))
         .route(
             "/v1/bots/{id}",
@@ -234,6 +254,16 @@ pub fn build_router(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/health", get(api::health::health))
         .route("/ready", get(api::health::ready))
+        .merge(
+            Router::new()
+                .route(
+                    "/internal/hooks/routines/{token}",
+                    post(api::routines::admit_public_webhook),
+                )
+                .layer(DefaultBodyLimit::max(
+                    crate::routine_webhooks::WEBHOOK_MAX_BYTES,
+                )),
+        )
         .merge(protected)
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());

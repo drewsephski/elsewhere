@@ -19,7 +19,7 @@ use crate::app_state::AppState;
 use crate::bounded_text::truncate_utf8_bytes;
 use crate::codex_ops::CodexOperationKind;
 use crate::error::ApiError;
-use crate::groups::{GroupConversationDetail, get_conversation_for_owner};
+use crate::groups::{get_conversation_for_owner, GroupConversationDetail};
 use crate::run_engine_select::{
     resolve_group_route_engine, ResolveRunEngineError, SelectedRunEngine,
 };
@@ -311,9 +311,10 @@ async fn consume_model_attempt(
 
 async fn process_claimed_route(state: &AppState, claimed: ClaimedRoute) -> Result<(), String> {
     let started = Instant::now();
-    let detail = get_conversation_for_owner(&state.pool, &claimed.owner_id, &claimed.conversation_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let detail =
+        get_conversation_for_owner(&state.pool, &claimed.owner_id, &claimed.conversation_id)
+            .await
+            .map_err(|e| e.to_string())?;
     let candidates = load_route_candidates(&state.pool, &claimed.owner_id, &detail)
         .await
         .map_err(|e| e.to_string())?;
@@ -329,20 +330,18 @@ async fn process_claimed_route(state: &AppState, claimed: ClaimedRoute) -> Resul
         return Ok(());
     }
 
-    let attempt = consume_model_attempt(&state.pool, &claimed.send_id, &claimed.claim_token)
-        .await?;
-    let claimed = ClaimedRoute {
-        attempt,
-        ..claimed
-    };
+    let attempt =
+        consume_model_attempt(&state.pool, &claimed.send_id, &claimed.claim_token).await?;
+    let claimed = ClaimedRoute { attempt, ..claimed };
 
     if !claim_still_valid(&state.pool, &claimed.send_id, &claimed.claim_token).await {
         return Ok(());
     }
 
-    let transcript = build_router_transcript(&state.pool, &claimed.conversation_id, &claimed.message_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let transcript =
+        build_router_transcript(&state.pool, &claimed.conversation_id, &claimed.message_id)
+            .await
+            .map_err(|e| e.to_string())?;
     let input = RouteDecisionInput {
         message_body: claimed.message_body.clone(),
         candidates: candidates.clone(),
@@ -439,14 +438,11 @@ async fn decide_route(
                 .await
                 .map_err(|_| "codex_busy".to_string())?;
             permit.log_child_started();
-            let profile = crate::provider_profile::profile_for_owner(
-                &state.pool,
-                &state.config,
-                owner_id,
-            )
-            .await
-            .ok()
-            .flatten();
+            let profile =
+                crate::provider_profile::profile_for_owner(&state.pool, &state.config, owner_id)
+                    .await
+                    .ok()
+                    .flatten();
             let text = run_codex_group_route_decision(
                 state.config.codex_executable.clone(),
                 profile,
@@ -498,10 +494,7 @@ async fn decide_route(
 fn extract_output_text(output: &[serde_json::Value]) -> Option<String> {
     for item in output {
         if item.get("type").and_then(|v| v.as_str()) == Some("message") {
-            if let Some(text) = item
-                .pointer("/content/0/text")
-                .and_then(|v| v.as_str())
-            {
+            if let Some(text) = item.pointer("/content/0/text").and_then(|v| v.as_str()) {
                 return Some(text.to_string());
             }
         }
@@ -547,9 +540,7 @@ pub fn parse_and_validate_router_output(
             Ok(ValidatedRouteDecision {
                 mode: GroupRoutingMode::Auto,
                 bot_ids: Vec::new(),
-                decision_code: Some(
-                    canonicalize_decision_code(parsed.decision_code, "no_fit"),
-                ),
+                decision_code: Some(canonicalize_decision_code(parsed.decision_code, "no_fit")),
             })
         }
         "everyone" => {
@@ -559,9 +550,10 @@ pub fn parse_and_validate_router_output(
             Ok(ValidatedRouteDecision {
                 mode: GroupRoutingMode::Everyone,
                 bot_ids: Vec::new(),
-                decision_code: Some(
-                    canonicalize_decision_code(parsed.decision_code, "everyone_requested"),
-                ),
+                decision_code: Some(canonicalize_decision_code(
+                    parsed.decision_code,
+                    "everyone_requested",
+                )),
             })
         }
         "specific" => {
@@ -590,7 +582,10 @@ pub fn parse_and_validate_router_output(
             Ok(ValidatedRouteDecision {
                 mode: GroupRoutingMode::Specific,
                 bot_ids: ids,
-                decision_code: Some(canonicalize_decision_code(parsed.decision_code, default_code)),
+                decision_code: Some(canonicalize_decision_code(
+                    parsed.decision_code,
+                    default_code,
+                )),
             })
         }
         _ => Err("invalid_router_mode".into()),
@@ -603,11 +598,7 @@ pub async fn load_route_candidates(
     detail: &GroupConversationDetail,
 ) -> Result<Vec<RouteCandidate>, ApiError> {
     let mut out = Vec::new();
-    for participant in detail
-        .participants
-        .iter()
-        .filter(|p| p.left_at.is_none())
-    {
+    for participant in detail.participants.iter().filter(|p| p.left_at.is_none()) {
         let row = sqlx::query(
             r#"
             SELECT b.system_prompt,
@@ -634,10 +625,7 @@ pub async fn load_route_candidates(
             available,
         });
     }
-    Ok(out
-        .into_iter()
-        .filter(|c| c.available)
-        .collect())
+    Ok(out.into_iter().filter(|c| c.available).collect())
 }
 
 fn summarize_role(prompt: &str) -> String {
@@ -753,9 +741,10 @@ async fn apply_validated_decision(
         return Ok(());
     }
 
-    let detail = get_conversation_for_owner(&state.pool, &claimed.owner_id, &claimed.conversation_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let detail =
+        get_conversation_for_owner(&state.pool, &claimed.owner_id, &claimed.conversation_id)
+            .await
+            .map_err(|e| e.to_string())?;
     let fresh = load_route_candidates(&state.pool, &claimed.owner_id, &detail)
         .await
         .map_err(|e| e.to_string())?;
@@ -782,14 +771,8 @@ async fn apply_validated_decision(
     }
 
     let eligible: HashSet<String> = fresh.iter().map(|c| c.bot_id.clone()).collect();
-    let apply_result = apply_validated_decision_tx(
-        state,
-        claimed,
-        decision,
-        &eligible,
-        &fresh,
-    )
-    .await;
+    let apply_result =
+        apply_validated_decision_tx(state, claimed, decision, &eligible, &fresh).await;
 
     match apply_result {
         Ok((routing_status, selected_count)) => {
@@ -886,9 +869,11 @@ async fn apply_validated_decision_tx(
     eligible: &HashSet<String>,
     fresh_candidates: &[RouteCandidate],
 ) -> Result<(String, usize), ApplyRouteError> {
-    let mut tx = state.pool.begin().await.map_err(|e| {
-        ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
-    })?;
+    let mut tx = state
+        .pool
+        .begin()
+        .await
+        .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
     let status: Option<String> = sqlx::query_scalar(
         r#"
         SELECT routing_status FROM group_message_sends
@@ -936,9 +921,9 @@ async fn apply_validated_decision_tx(
             .execute(&mut *tx)
             .await
             .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
-            tx.commit()
-                .await
-                .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
+            tx.commit().await.map_err(|e| {
+                ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
+            })?;
             Ok(("no_response".into(), 0))
         }
         GroupRoutingMode::Everyone => {
@@ -962,10 +947,12 @@ async fn apply_validated_decision_tx(
                 .bind(group_router_model())
                 .execute(&mut *tx)
                 .await
-                .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
-                tx.commit()
-                    .await
-                    .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
+                .map_err(|e| {
+                    ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
+                })?;
+                tx.commit().await.map_err(|e| {
+                    ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
+                })?;
                 return Ok(("no_response".into(), 0));
             }
             enqueue_selected_bots(
@@ -980,11 +967,10 @@ async fn apply_validated_decision_tx(
                 claimed.message_body.trim(),
             )
             .await?;
-            finalize_resolved(&mut tx, &claimed.send_id, decision.decision_code.as_deref())
-                .await?;
-            tx.commit()
-                .await
-                .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
+            finalize_resolved(&mut tx, &claimed.send_id, decision.decision_code.as_deref()).await?;
+            tx.commit().await.map_err(|e| {
+                ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
+            })?;
             Ok(("resolved".into(), bot_ids.len()))
         }
         GroupRoutingMode::Specific | GroupRoutingMode::Auto => {
@@ -1000,11 +986,10 @@ async fn apply_validated_decision_tx(
                 claimed.message_body.trim(),
             )
             .await?;
-            finalize_resolved(&mut tx, &claimed.send_id, decision.decision_code.as_deref())
-                .await?;
-            tx.commit()
-                .await
-                .map_err(|e| ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128)))?;
+            finalize_resolved(&mut tx, &claimed.send_id, decision.decision_code.as_deref()).await?;
+            tx.commit().await.map_err(|e| {
+                ApplyRouteError::Transient(truncate_utf8_bytes(&e.to_string(), 128))
+            })?;
             Ok(("resolved".into(), decision.bot_ids.len()))
         }
     }
@@ -1231,7 +1216,10 @@ pub async fn retry_auto_route(
     Ok(())
 }
 
-pub async fn cancel_routing_for_deleted_message(pool: &PgPool, message_id: &str) -> Result<(), ApiError> {
+pub async fn cancel_routing_for_deleted_message(
+    pool: &PgPool,
+    message_id: &str,
+) -> Result<(), ApiError> {
     sqlx::query(
         r#"
         UPDATE group_message_sends

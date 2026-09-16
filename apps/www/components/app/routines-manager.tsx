@@ -40,7 +40,12 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import { CalendarClock } from "@/components/icons/lucide";
-import { formatRoutineNextRun } from "@/lib/routine-time";
+import {
+  formatRoutineNextRun,
+  formatRoutineTrigger,
+  formatWebhookLastReceived,
+} from "@/lib/routine-time";
+import { toast } from "sonner";
 
 const intervals = [
   { value: 15, label: "Every 15 minutes" },
@@ -87,6 +92,7 @@ const emptyForm = () => ({
   pinnedSkillVersion: "",
   nextRunAt: localDateTime(new Date(Date.now() + 3600_000)),
   enabled: true,
+  triggerMode: "schedule",
 });
 
 type RoutineFormState = ReturnType<typeof emptyForm>;
@@ -142,6 +148,7 @@ function routineToForm(routine: Routine): RoutineFormState {
       routine.pinnedSkillVersion != null ? String(routine.pinnedSkillVersion) : "",
     nextRunAt: localDateTime(new Date(routine.nextRunAt)),
     enabled: routine.enabled,
+    triggerMode: routine.triggerMode === "webhook" ? "webhook" : "schedule",
   };
 }
 
@@ -166,6 +173,7 @@ export function RoutinesManager() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
+  const [revealedWebhookUrl, setRevealedWebhookUrl] = useState<string | null>(null);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -210,7 +218,7 @@ export function RoutinesManager() {
     setBusy("form");
     setError(null);
     try {
-      await read<Routine>(editing ? `/v1/routines/${editing}` : "/v1/routines", {
+      const saved = await read<Routine>(editing ? `/v1/routines/${editing}` : "/v1/routines", {
         method: editing ? "PUT" : "POST",
         body: JSON.stringify({
           botId: form.botId,
@@ -228,10 +236,19 @@ export function RoutinesManager() {
             : null,
           nextRunAt: new Date(form.nextRunAt).toISOString(),
           enabled: form.enabled,
+          triggerMode: form.triggerMode,
         }),
       });
-      setForm(emptyForm());
-      setEditing(null);
+      if (saved.webhook?.webhookUrl) {
+        setRevealedWebhookUrl(saved.webhook.webhookUrl);
+        setEditing(saved.id);
+        setForm(routineToForm(saved));
+        toast.success("Webhook URL created. Copy it now — it will not be shown again.");
+      } else {
+        setForm(emptyForm());
+        setEditing(null);
+        setRevealedWebhookUrl(null);
+      }
       setNotice("Routine saved. Its work and results will appear in Work.");
       await load();
     } catch (err) {
@@ -252,8 +269,12 @@ export function RoutinesManager() {
         });
         setNotice(
           routine.enabled
-            ? "Routine paused. Assignments already started keep their own status."
-            : "Routine resumed. It will run at its next scheduled time.",
+            ? routine.triggerMode === "webhook"
+              ? "Routine paused. Incoming webhook events will not run."
+              : "Routine paused. Assignments already started keep their own status."
+            : routine.triggerMode === "webhook"
+              ? "Routine resumed. Incoming webhook events will run again."
+              : "Routine resumed. It will run at its next scheduled time.",
         );
         await load();
       } catch (err) {
@@ -284,9 +305,44 @@ export function RoutinesManager() {
     [router],
   );
 
+  async function handleCopyWebhookUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Webhook URL copied");
+    } catch {
+      toast.error("Could not copy webhook URL");
+    }
+  }
+
+  async function handleRotateWebhookUrl() {
+    if (!editing) return;
+    setBusy("form");
+    setError(null);
+    try {
+      const response = await cloudHostFetch(`/v1/routines/${editing}/webhook/rotate`, {
+        method: "POST",
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not rotate webhook URL");
+      }
+      const url = (body as { webhookUrl?: string }).webhookUrl;
+      if (url) {
+        setRevealedWebhookUrl(url);
+        toast.success("New webhook URL created. The previous URL no longer works.");
+      }
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rotate webhook URL");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const edit = useCallback((routine: Routine) => {
     setEditing(routine.id);
     setForm(routineToForm(routine));
+    setRevealedWebhookUrl(null);
     document.getElementById("routine-name")?.focus();
   }, []);
 
@@ -294,11 +350,6 @@ export function RoutinesManager() {
     (botId: string) => bots.find((bot) => bot.id === botId)?.name ?? "Bot",
     [bots],
   );
-
-  const intervalLabel = useCallback((minutes: number) => {
-    return intervals.find((interval) => interval.value === minutes)?.label ??
-      `Every ${minutes} minutes`;
-  }, []);
 
   const columns = useMemo<ColumnDef<DataGridFeatures, Routine>[]>(
     () => [
@@ -331,20 +382,23 @@ export function RoutinesManager() {
       },
       {
         id: "schedule",
-        header: "Schedule",
+        header: "Trigger",
         cell: ({ row }) => (
           <div className="text-sm">
-            <p>
-              {row.original.scheduleLabel ?? intervalLabel(row.original.intervalMinutes)} ·{" "}
-              {row.original.timezone}
-            </p>
-            {row.original.enabled ? (
+            <p>{formatRoutineTrigger(row.original)}</p>
+            {row.original.triggerMode !== "webhook" && row.original.enabled ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 Next:{" "}
                 {formatRoutineNextRun(
                   row.original.nextRunAt,
                   row.original.timezone || "UTC",
                 )}
+              </p>
+            ) : null}
+            {row.original.triggerMode === "webhook" && row.original.webhook?.lastTriggeredAt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Last received:{" "}
+                {formatWebhookLastReceived(row.original.webhook.lastTriggeredAt)}
               </p>
             ) : null}
           </div>
@@ -355,7 +409,7 @@ export function RoutinesManager() {
         header: "Status",
         cell: ({ row }) => (
           <Badge variant={row.original.enabled ? "success-light" : "warning-light"}>
-            {row.original.enabled ? "Scheduled" : "Paused"}
+            {row.original.enabled ? "Active" : "Paused"}
           </Badge>
         ),
       },
@@ -408,7 +462,7 @@ export function RoutinesManager() {
         enableSorting: false,
       },
     ],
-    [botName, busy, edit, intervalLabel, runOnce, toggle],
+    [botName, busy, edit, runOnce, toggle],
   );
 
   const table = useTable({
@@ -442,7 +496,7 @@ export function RoutinesManager() {
           loading={loading && routines.length === 0}
           toolbar={
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">Scheduled assignments for your bots.</p>
+              <p className="text-sm text-muted-foreground">Scheduled or webhook assignments for your bots.</p>
               <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
                 Refresh
               </Button>
@@ -462,7 +516,7 @@ export function RoutinesManager() {
         <FrameHeader>
           <FrameTitle>{editing ? "Edit routine" : "Create a routine"}</FrameTitle>
           <FrameDescription>
-            Server-side schedules run without your browser. Missed times combine into one run.
+            Run on a schedule, or whenever an external service sends an event to a webhook URL.
           </FrameDescription>
         </FrameHeader>
         <FramePanel>
@@ -541,6 +595,25 @@ export function RoutinesManager() {
                 placeholder="Review project files and prepare a brief with changes, blockers, and next steps."
               />
             </FormItem>
+            <FormItem>
+              <Label htmlFor="routine-trigger">Trigger</Label>
+              <Select
+                value={form.triggerMode}
+                onValueChange={(value) => {
+                  if (value) setForm({ ...form, triggerMode: value });
+                }}
+              >
+                <SelectTrigger id="routine-trigger" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="schedule">Schedule</SelectItem>
+                  <SelectItem value="webhook">Webhook</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+            {form.triggerMode === "schedule" ? (
+            <>
             <FormItem>
               <Label htmlFor="routine-schedule-kind">Schedule</Label>
               <Select
@@ -648,6 +721,78 @@ export function RoutinesManager() {
               </Select>
             </FormItem>
             <FormItem>
+              <Label htmlFor="routine-first">First run · your local time</Label>
+              <Input
+                id="routine-first"
+                type="datetime-local"
+                required={form.triggerMode === "schedule"}
+                value={form.nextRunAt}
+                onChange={(e) => setForm({ ...form, nextRunAt: e.target.value })}
+              />
+            </FormItem>
+            </>
+            ) : (
+            <div className="space-y-3 rounded-lg border border-border p-3">
+              <p className="text-sm text-muted-foreground">
+                Send a POST request to this URL to run the Routine.
+              </p>
+              {revealedWebhookUrl ? (
+                <FormItem>
+                  <Label htmlFor="routine-webhook-url">Webhook URL</Label>
+                  <Input
+                    id="routine-webhook-url"
+                    readOnly
+                    value={revealedWebhookUrl}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                </FormItem>
+              ) : editing ? (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  The full URL is shown only when it is created or rotated.
+                  {routines.find((routine) => routine.id === editing)?.webhook?.tokenHint
+                    ? ` Current ending: …${routines.find((routine) => routine.id === editing)?.webhook?.tokenHint}`
+                    : " Save this routine to generate a URL."}
+                </p>
+              ) : (
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Save this routine to generate a webhook URL.
+                </p>
+              )}
+              {formatWebhookLastReceived(
+                routines.find((routine) => routine.id === editing)?.webhook?.lastTriggeredAt,
+              ) ? (
+                <p className="text-xs text-muted-foreground">
+                  Last received:{" "}
+                  {formatWebhookLastReceived(
+                    routines.find((routine) => routine.id === editing)?.webhook?.lastTriggeredAt,
+                  )}
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!revealedWebhookUrl}
+                  onClick={() => {
+                    if (revealedWebhookUrl) void handleCopyWebhookUrl(revealedWebhookUrl);
+                  }}
+                >
+                  Copy URL
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={!editing || busy !== null}
+                  onClick={() => void handleRotateWebhookUrl()}
+                >
+                  Rotate URL
+                </Button>
+              </div>
+            </div>
+            )}
+            <FormItem>
               <Label htmlFor="routine-destination">Post results to</Label>
               <Select
                 value={form.destinationConversationId || "direct"}
@@ -674,16 +819,6 @@ export function RoutinesManager() {
                 </SelectContent>
               </Select>
             </FormItem>
-            <FormItem>
-              <Label htmlFor="routine-first">First run · your local time</Label>
-              <Input
-                id="routine-first"
-                type="datetime-local"
-                required
-                value={form.nextRunAt}
-                onChange={(e) => setForm({ ...form, nextRunAt: e.target.value })}
-              />
-            </FormItem>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="routine-enabled"
@@ -691,11 +826,15 @@ export function RoutinesManager() {
                 onCheckedChange={(checked) => setForm({ ...form, enabled: checked === true })}
               />
               <Label htmlFor="routine-enabled" className="cursor-pointer font-normal">
-                Enable scheduled work
+                {form.triggerMode === "webhook"
+                  ? "Accept incoming webhook events"
+                  : "Enable scheduled work"}
               </Label>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">
-              Missed times are combined into one assignment. Computer changes still need approval.
+              {form.triggerMode === "webhook"
+                ? "Events become normal Routine work with the same approvals, computer, and history."
+                : "Missed times are combined into one assignment. Computer changes still need approval."}
             </p>
             <div className="flex flex-wrap gap-3">
               <Button type="submit" disabled={busy !== null}>
@@ -708,6 +847,7 @@ export function RoutinesManager() {
                   onClick={() => {
                     setEditing(null);
                     setForm(emptyForm());
+                    setRevealedWebhookUrl(null);
                   }}
                 >
                   Cancel edit

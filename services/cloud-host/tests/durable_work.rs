@@ -78,7 +78,10 @@ async fn admission_is_durable_idempotent_and_owner_scoped(pool: PgPool) {
         claimed.records.instructions.contains("You are \"Scout\""),
         "queued work should snapshot bot identity at admission"
     );
-    assert!(claimed.records.instructions.contains("Keep sources with your findings"));
+    assert!(claimed
+        .records
+        .instructions
+        .contains("Keep sources with your findings"));
     assert_eq!(claimed.records.model, "gpt-5.6-luna");
     assert_eq!(
         claimed.engine_mode,
@@ -226,19 +229,17 @@ async fn explicit_skill_is_part_of_run_idempotency(pool: PgPool) {
             .is_err()
     );
 
-    assert!(
-        work::enqueue_with_skills(
-            &pool,
-            "alice",
-            key,
-            &bot.id,
-            None,
-            message,
-            &SkillAdmissionInput::default(),
-        )
-        .await
-        .is_err()
-    );
+    assert!(work::enqueue_with_skills(
+        &pool,
+        "alice",
+        key,
+        &bot.id,
+        None,
+        message,
+        &SkillAdmissionInput::default(),
+    )
+    .await
+    .is_err());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -251,13 +252,14 @@ async fn follow_up_messages_reuse_primary_conversation(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(first.conversation_id, second.conversation_id);
-    let conversation_count: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM conversations WHERE bot_id = $1 AND owner_id = $2")
-            .bind(&bot.id)
-            .bind("alice")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let conversation_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM conversations WHERE bot_id = $1 AND owner_id = $2",
+    )
+    .bind(&bot.id)
+    .bind("alice")
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(conversation_count, 1);
     let message_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM messages WHERE conversation_id = $1")

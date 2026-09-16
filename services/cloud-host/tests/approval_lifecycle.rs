@@ -33,13 +33,7 @@ impl RunOverrideGuard {
         computer: Arc<CountingComputer>,
         model: Arc<dyn ResponsesModel>,
     ) -> Self {
-        state.register_test_run_overrides(
-            &request_id,
-            TestRunOverrides {
-                computer,
-                model,
-            },
-        );
+        state.register_test_run_overrides(&request_id, TestRunOverrides { computer, model });
         Self { state, request_id }
     }
 }
@@ -187,12 +181,7 @@ async fn start_run(
     model: Arc<dyn ResponsesModel>,
     computer: Arc<CountingComputer>,
 ) -> RunOverrideGuard {
-    let guard = RunOverrideGuard::install(
-        state.clone(),
-        request_id.to_string(),
-        computer,
-        model,
-    );
+    let guard = RunOverrideGuard::install(state.clone(), request_id.to_string(), computer, model);
     let body = json!({ "botId": bot_id, "message": message });
     let resp = app
         .clone()
@@ -372,8 +361,7 @@ async fn fast_immediate_approval_does_not_lose_wakeup(pool: PgPool) {
             panic!(
                 "timed out waiting for pending approval to approve immediately \
                  (owner={owner}, request_id={request_id}, pending_count={}, writes={})",
-                pending.0,
-                writes
+                pending.0, writes
             );
         }
         if let Ok(Some((id,))) = sqlx::query_as::<_, (String,)>(
@@ -999,5 +987,4 @@ async fn approval_sse_events_ordered_and_replay_once(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(sse2.status(), axum::http::StatusCode::OK);
-
 }

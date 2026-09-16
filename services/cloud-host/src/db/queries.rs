@@ -84,12 +84,11 @@ pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
     }
 
     for (request_id, _) in &restarted {
-        if let Some(run_id) = sqlx::query_scalar::<_, String>(
-            "SELECT id FROM agent_runs WHERE request_id = $1",
-        )
-        .bind(request_id)
-        .fetch_optional(&mut *tx)
-        .await?
+        if let Some(run_id) =
+            sqlx::query_scalar::<_, String>("SELECT id FROM agent_runs WHERE request_id = $1")
+                .bind(request_id)
+                .fetch_optional(&mut *tx)
+                .await?
         {
             if let Err(err) = crate::run_lifecycle::synchronize_run_terminal_in_tx(
                 &mut tx,
@@ -116,7 +115,10 @@ pub async fn mark_interrupted_runs(pool: &PgPool) -> Result<u64, sqlx::Error> {
     Ok(restarted.len() as u64)
 }
 
-pub async fn find_run_by_id(pool: &PgPool, run_id: &str) -> Result<Option<AgentRunRow>, sqlx::Error> {
+pub async fn find_run_by_id(
+    pool: &PgPool,
+    run_id: &str,
+) -> Result<Option<AgentRunRow>, sqlx::Error> {
     sqlx::query_as(
         r#"
         SELECT id, request_id, bot_id, conversation_id, computer_id, model, status,
@@ -224,7 +226,10 @@ pub struct BootstrapRunRecords {
     pub is_new_run: bool,
 }
 
-async fn advisory_lock_request(tx: &mut Transaction<'_, Postgres>, request_id: &str) -> Result<(), sqlx::Error> {
+async fn advisory_lock_request(
+    tx: &mut Transaction<'_, Postgres>,
+    request_id: &str,
+) -> Result<(), sqlx::Error> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
         .bind(request_id)
         .execute(&mut **tx)
@@ -249,12 +254,11 @@ async fn next_message_sequence_tx(
     conversation_id: &str,
 ) -> Result<i64, sqlx::Error> {
     advisory_lock_conversation_sequence(tx, conversation_id).await?;
-    let row: (Option<i64>,) = sqlx::query_as(
-        "SELECT MAX(sequence) FROM messages WHERE conversation_id = $1",
-    )
-    .bind(conversation_id)
-    .fetch_one(&mut **tx)
-    .await?;
+    let row: (Option<i64>,) =
+        sqlx::query_as("SELECT MAX(sequence) FROM messages WHERE conversation_id = $1")
+            .bind(conversation_id)
+            .fetch_one(&mut **tx)
+            .await?;
     Ok(row.0.unwrap_or(0) + 1)
 }
 
@@ -312,7 +316,9 @@ pub async fn bootstrap_run(
             request_id: existing.request_id,
             conversation_id: existing.conversation_id,
             assistant_message_id: existing.assistant_message_id.unwrap_or_default(),
-            computer_id: existing.computer_id.unwrap_or_else(|| computer_id.to_string()),
+            computer_id: existing
+                .computer_id
+                .unwrap_or_else(|| computer_id.to_string()),
             model: existing.model,
             instructions: instructions.to_string(),
             is_new_run: false,
@@ -399,9 +405,7 @@ pub async fn bootstrap_run(
             }
             Some(_) => id.to_string(),
             None => {
-                return Err(ApiError::Validation(
-                    "conversationId does not exist".into(),
-                ));
+                return Err(ApiError::Validation("conversationId does not exist".into()));
             }
         }
     } else {

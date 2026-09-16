@@ -32,12 +32,7 @@ impl GitHubClient {
         }
     }
 
-    pub fn authorize_url(
-        &self,
-        client_id: &str,
-        redirect_uri: &str,
-        state: &str,
-    ) -> String {
+    pub fn authorize_url(&self, client_id: &str, redirect_uri: &str, state: &str) -> String {
         format!(
             "{}/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}",
             self.oauth_base,
@@ -142,7 +137,12 @@ impl GitHubClient {
         path: &str,
         git_ref: Option<&str>,
     ) -> Result<Value, String> {
-        let mut path = format!("/repos/{}/{}/contents/{}", owner, repo, path.trim_start_matches('/'));
+        let mut path = format!(
+            "/repos/{}/{}/contents/{}",
+            owner,
+            repo,
+            path.trim_start_matches('/')
+        );
         if let Some(r) = git_ref.filter(|s| !s.is_empty()) {
             path.push_str(&format!("?ref={}", urlencoding::encode(r)));
         }

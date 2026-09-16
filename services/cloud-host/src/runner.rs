@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use agent_core::{
     browser_recovery_policy_instructions, AgentComputer, AgentLoopContext, BrowserRecoverySession,
-    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore, SharedRunDeps,
-    ToolApprovalGate,
+    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore,
+    SharedRunDeps, ToolApprovalGate,
 };
 use agent_skills::append_skills_to_instructions;
 
@@ -212,8 +212,9 @@ async fn execute_run(
     events: Arc<CloudEventSink>,
     owner_id: String,
     enforce_approvals: bool,
-    #[cfg(any(test, feature = "test-utils"))]
-    run_overrides: Option<crate::app_state::TestRunOverrides>,
+    #[cfg(any(test, feature = "test-utils"))] run_overrides: Option<
+        crate::app_state::TestRunOverrides,
+    >,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     if let Ok(created_at) = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
         "SELECT created_at FROM agent_runs WHERE id = $1",
@@ -222,8 +223,7 @@ async fn execute_run(
     .fetch_one(&pool)
     .await
     {
-        let admission_to_execution_ms =
-            (chrono::Utc::now() - created_at).num_milliseconds().max(0);
+        let admission_to_execution_ms = (chrono::Utc::now() - created_at).num_milliseconds().max(0);
         tracing::info!(
             target: "elsewhere_run_phases",
             run_id = %input.records.run_id,
@@ -266,9 +266,9 @@ async fn execute_run(
     let mut codex_run_permit: Option<CodexOpsPermit> = None;
     let codex_availability = match engine_mode {
         RunEngineMode::Responses => codex_provider::CodexSubscriptionAvailability::NotInstalled,
-        RunEngineMode::Codex => codex_provider::CodexSubscriptionAvailability::Available {
-            plan_type: None,
-        },
+        RunEngineMode::Codex => {
+            codex_provider::CodexSubscriptionAvailability::Available { plan_type: None }
+        }
         RunEngineMode::Auto => {
             let permit = host_state
                 .codex_ops
@@ -333,12 +333,8 @@ async fn execute_run(
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
 
     let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
-        let run_gate = RunScopedApprovalGate::new(
-            approvals,
-            events.clone(),
-            store.clone(),
-            cancel.clone(),
-        );
+        let run_gate =
+            RunScopedApprovalGate::new(approvals, events.clone(), store.clone(), cancel.clone());
         Arc::new(BrowserHumanControlGate::wrapping_run_gate(
             run_gate,
             pool.clone(),
@@ -375,9 +371,10 @@ Browser recovery:\n\
         browser_recovery_policy_instructions(),
     ));
 
-    let skill_packages = crate::skills::load_run_skill_packages(&pool, &owner_id, &input.records.run_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let skill_packages =
+        crate::skills::load_run_skill_packages(&pool, &owner_id, &input.records.run_id)
+            .await
+            .map_err(|e| e.to_string())?;
     let skill_packages: Arc<[agent_skills::SkillPackage]> = Arc::from(skill_packages);
 
     if !skill_packages.is_empty() {
@@ -396,16 +393,18 @@ Browser recovery:\n\
         run_id: input.records.run_id.clone(),
         owner_id,
         computer_id: input.records.computer_id.clone(),
-        collaboration: Some(crate::collaboration::PostgresAgentCollaboration::new(pool.clone())),
-        connectors: host_state
-            .connector_secret_box()
-            .map(|secret_box| -> Arc<dyn agent_core::AgentConnectors> {
+        collaboration: Some(crate::collaboration::PostgresAgentCollaboration::new(
+            pool.clone(),
+        )),
+        connectors: host_state.connector_secret_box().map(
+            |secret_box| -> Arc<dyn agent_core::AgentConnectors> {
                 crate::connectors::PostgresAgentConnectors::new(
                     pool.clone(),
                     secret_box,
                     host_state.github_client.clone(),
                 )
-            }),
+            },
+        ),
         human_intervention: Some(RunScopedHumanIntervention::new(
             host_state.human_interventions.clone(),
             store.clone(),
@@ -435,22 +434,10 @@ Browser recovery:\n\
         SelectedRunEngine::ResponsesApi => {
             drop(codex_run_permit);
             #[cfg(any(test, feature = "test-utils"))]
-            let responses_result = run_responses_engine(
-                &config,
-                ctx,
-                shared,
-                input_messages,
-                run_overrides,
-            )
-            .await;
+            let responses_result =
+                run_responses_engine(&config, ctx, shared, input_messages, run_overrides).await;
             #[cfg(not(any(test, feature = "test-utils")))]
-            let responses_result = run_responses_engine(
-                &config,
-                ctx,
-                shared,
-                input_messages,
-            )
-            .await;
+            let responses_result = run_responses_engine(&config, ctx, shared, input_messages).await;
             responses_result
         }
     };
@@ -525,12 +512,12 @@ async fn run_responses_engine(
     ctx: AgentLoopContext,
     shared: SharedRunDeps,
     input: Vec<serde_json::Value>,
-    #[cfg(any(test, feature = "test-utils"))]
-    run_overrides: Option<crate::app_state::TestRunOverrides>,
+    #[cfg(any(test, feature = "test-utils"))] run_overrides: Option<
+        crate::app_state::TestRunOverrides,
+    >,
 ) -> Result<(), String> {
     #[cfg(any(test, feature = "test-utils"))]
-    let model =
-        responses_model_for_run(config, shared.cancel.clone(), run_overrides)?;
+    let model = responses_model_for_run(config, shared.cancel.clone(), run_overrides)?;
     #[cfg(not(any(test, feature = "test-utils")))]
     let model = responses_model_for_run(config, shared.cancel.clone())?;
 
@@ -568,8 +555,9 @@ async fn build_computer(
     pool: &sqlx::PgPool,
     input: &RunExecutionInput,
     owner_id: &str,
-    #[cfg(any(test, feature = "test-utils"))]
-    run_overrides: Option<&crate::app_state::TestRunOverrides>,
+    #[cfg(any(test, feature = "test-utils"))] run_overrides: Option<
+        &crate::app_state::TestRunOverrides,
+    >,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     #[cfg(any(test, feature = "test-utils"))]
     if let Some(o) = run_overrides {
@@ -607,4 +595,3 @@ pub(crate) async fn sprite_resource_for_computer(
     }
     Ok(sprite_computer::sprite_name_for_sandbox(computer_id))
 }
-

@@ -6,6 +6,7 @@ use sqlx::{PgPool, Row};
 
 use crate::error::ApiError;
 use crate::routine_runs::{self, RoutineRun};
+use crate::routine_webhooks::{self, WebhookTriggerView};
 use crate::schedule::{
     human_schedule_label, initial_next_run, next_after, parse_schedule, resume_next_run,
     ScheduleDefinition, ScheduleKind,
@@ -40,6 +41,7 @@ pub struct Routine {
     pub failure_policy: String,
     pub skill_id: Option<String>,
     pub pinned_skill_version: Option<i32>,
+    pub trigger_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,6 +67,8 @@ pub struct RoutineView {
     pub failure_policy: String,
     pub skill_id: Option<String>,
     pub pinned_skill_version: Option<i32>,
+    pub trigger_mode: String,
+    pub webhook: WebhookTriggerView,
     pub recent_runs: Vec<RoutineRun>,
 }
 
@@ -84,17 +88,23 @@ pub struct RoutineInput {
     pub failure_policy: Option<String>,
     pub skill_id: Option<String>,
     pub pinned_skill_version: Option<i32>,
+    pub trigger_mode: Option<String>,
 }
 
 impl RoutineInput {
+    pub fn trigger_mode(&self) -> Result<&str, ApiError> {
+        match self.trigger_mode.as_deref().unwrap_or("schedule") {
+            mode @ ("schedule" | "webhook") => Ok(mode),
+            _ => Err(ApiError::Validation("Unknown trigger".into())),
+        }
+    }
+
     pub fn schedule_definition(&self) -> Result<ScheduleDefinition, ApiError> {
-        let kind = self
-            .schedule_kind
-            .as_deref()
-            .unwrap_or("interval");
-        let expression = self.schedule_expression.clone().unwrap_or_else(|| {
-            self.interval_minutes.unwrap_or(60).to_string()
-        });
+        let kind = self.schedule_kind.as_deref().unwrap_or("interval");
+        let expression = self
+            .schedule_expression
+            .clone()
+            .unwrap_or_else(|| self.interval_minutes.unwrap_or(60).to_string());
         let timezone = self.timezone.as_deref().unwrap_or("UTC");
         parse_schedule(kind, &expression, timezone, self.interval_minutes)
     }
@@ -110,12 +120,17 @@ impl RoutineInput {
                 "Add an assignment of up to 100,000 bytes".into(),
             ));
         }
-        let _schedule = self.schedule_definition()?;
-        let now = Utc::now();
-        if self.next_run_at > now + chrono::Duration::days(366) {
-            return Err(ApiError::Validation(
-                "Choose a first run within the next year".into(),
-            ));
+        let trigger_mode = self.trigger_mode()?;
+        if trigger_mode == "schedule" {
+            let _schedule = self.schedule_definition()?;
+            let now = Utc::now();
+            if self.next_run_at > now + chrono::Duration::days(366) {
+                return Err(ApiError::Validation(
+                    "Choose a first run within the next year".into(),
+                ));
+            }
+        } else if self.schedule_kind.is_some() || self.schedule_expression.is_some() {
+            let _schedule = self.schedule_definition()?;
         }
         if let Some(policy) = &self.failure_policy {
             if !matches!(policy.as_str(), "pause_after_failure" | "continue") {
@@ -150,9 +165,7 @@ pub fn compose_routine_runtime_message(
     timezone: &str,
     destination_label: &str,
 ) -> String {
-    let tz: Tz = timezone
-        .parse()
-        .unwrap_or(chrono_tz::UTC);
+    let tz: Tz = timezone.parse().unwrap_or(chrono_tz::UTC);
     let local = scheduled_for.with_timezone(&tz);
     let occurrence = local.format("%Y-%m-%d %H:%M %Z").to_string();
     format!(
@@ -169,8 +182,7 @@ async fn destination_label_in_tx(
     let conversation_id = if let Some(id) = destination_conversation_id {
         id.to_string()
     } else {
-        crate::conversation::get_or_create_primary_conversation_id_in_tx(tx, owner, bot_id)
-            .await?
+        crate::conversation::get_or_create_primary_conversation_id_in_tx(tx, owner, bot_id).await?
     };
     let row = sqlx::query(
         "SELECT conversation_type, name, bot_id FROM conversations WHERE id = $1 AND owner_id = $2",
@@ -205,22 +217,26 @@ async fn validate_destination(
 }
 
 pub async fn list(pool: &PgPool, owner: &str) -> Result<Vec<RoutineView>, ApiError> {
-    let rows: Vec<Routine> =
-        sqlx::query_as("SELECT * FROM routines WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 100")
-            .bind(owner)
-            .fetch_all(pool)
-            .await
-            .map_err(db_error)?;
+    let rows: Vec<Routine> = sqlx::query_as(
+        "SELECT * FROM routines WHERE owner_id = $1 ORDER BY created_at DESC LIMIT 100",
+    )
+    .bind(owner)
+    .fetch_all(pool)
+    .await
+    .map_err(db_error)?;
     let routine_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
     let recent_by_routine =
         routine_runs::list_recent_for_routines(pool, owner, &routine_ids, 20).await?;
+    let webhook_by_routine =
+        routine_webhooks::metadata_for_routines(pool, owner, &routine_ids).await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
-        let recent_runs = recent_by_routine
+        let recent_runs = recent_by_routine.get(&row.id).cloned().unwrap_or_default();
+        let webhook = webhook_by_routine
             .get(&row.id)
             .cloned()
-            .unwrap_or_default();
-        out.push(to_view_with_recent_runs(row, recent_runs)?);
+            .unwrap_or_else(WebhookTriggerView::absent);
+        out.push(to_view_with_recent_runs(row, recent_runs, webhook)?);
     }
     Ok(out)
 }
@@ -237,14 +253,34 @@ pub async fn get(pool: &PgPool, owner: &str, id: &str) -> Result<RoutineView, Ap
 }
 
 async fn to_view(pool: &PgPool, row: Routine) -> Result<RoutineView, ApiError> {
-    let recent_runs =
-        routine_runs::list_for_routine(pool, &row.owner_id, &row.id, 20).await?;
-    to_view_with_recent_runs(row, recent_runs)
+    to_view_with_secret(pool, row, None).await
+}
+
+async fn to_view_with_secret(
+    pool: &PgPool,
+    row: Routine,
+    revealed_webhook_url: Option<String>,
+) -> Result<RoutineView, ApiError> {
+    let recent_runs = routine_runs::list_for_routine(pool, &row.owner_id, &row.id, 20).await?;
+    let mut webhook = routine_webhooks::get_for_owner(pool, &row.owner_id, &row.id).await?;
+    if let Some(url) = revealed_webhook_url {
+        webhook = webhook.with_revealed_url(url);
+    }
+    to_view_with_recent_runs(row, recent_runs, webhook)
+}
+
+fn schedule_label_for(row: &Routine, schedule: &ScheduleDefinition) -> String {
+    if row.trigger_mode == "webhook" {
+        "Webhook".into()
+    } else {
+        format!("Scheduled · {}", human_schedule_label(schedule))
+    }
 }
 
 fn to_view_with_recent_runs(
     row: Routine,
     recent_runs: Vec<RoutineRun>,
+    webhook: WebhookTriggerView,
 ) -> Result<RoutineView, ApiError> {
     let schedule = parse_schedule(
         &row.schedule_kind,
@@ -252,6 +288,7 @@ fn to_view_with_recent_runs(
         &row.timezone,
         Some(row.interval_minutes),
     )?;
+    let schedule_label = schedule_label_for(&row, &schedule);
     Ok(RoutineView {
         id: row.id,
         bot_id: row.bot_id,
@@ -265,7 +302,7 @@ fn to_view_with_recent_runs(
         schedule_kind: row.schedule_kind,
         schedule_expression: row.schedule_expression,
         timezone: row.timezone,
-        schedule_label: human_schedule_label(&schedule),
+        schedule_label,
         destination_conversation_id: row.destination_conversation_id,
         last_success_at: row.last_success_at,
         last_failure_at: row.last_failure_at,
@@ -273,6 +310,8 @@ fn to_view_with_recent_runs(
         failure_policy: row.failure_policy,
         skill_id: row.skill_id,
         pinned_skill_version: row.pinned_skill_version,
+        trigger_mode: row.trigger_mode,
+        webhook,
         recent_runs,
     })
 }
@@ -283,15 +322,31 @@ pub async fn save(
     id: Option<&str>,
     input: &RoutineInput,
 ) -> Result<RoutineView, ApiError> {
+    save_with_origin(pool, owner, id, input, None).await
+}
+
+pub async fn save_with_origin(
+    pool: &PgPool,
+    owner: &str,
+    id: Option<&str>,
+    input: &RoutineInput,
+    public_origin: Option<&str>,
+) -> Result<RoutineView, ApiError> {
     input.validate()?;
-    let schedule = input.schedule_definition()?;
+    let trigger_mode = input.trigger_mode()?;
+    let schedule = if trigger_mode == "webhook" {
+        input
+            .schedule_definition()
+            .unwrap_or_else(|_| default_webhook_placeholder_schedule())
+    } else {
+        input.schedule_definition()?
+    };
     let interval_minutes = interval_minutes_for_row(&schedule);
     let failure_policy = input
         .failure_policy
         .as_deref()
         .unwrap_or("pause_after_failure");
     let now = Utc::now();
-    let next_run_at = initial_next_run(&schedule, input.next_run_at, now)?;
 
     let mut tx = pool.begin().await.map_err(db_error)?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1))")
@@ -300,19 +355,20 @@ pub async fn save(
         .await
         .map_err(db_error)?;
 
-    if let Some(id) = id {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM routines WHERE id = $1 AND owner_id = $2)",
-        )
-        .bind(id)
-        .bind(owner)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(db_error)?;
-        if !exists {
-            return Err(ApiError::NotFound);
-        }
+    let existing: Option<Routine> = if let Some(id) = id {
+        sqlx::query_as("SELECT * FROM routines WHERE id = $1 AND owner_id = $2 FOR UPDATE")
+            .bind(id)
+            .bind(owner)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_error)?
     } else {
+        None
+    };
+    if id.is_some() && existing.is_none() {
+        return Err(ApiError::NotFound);
+    }
+    if existing.is_none() {
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM routines WHERE owner_id=$1")
             .bind(owner)
             .fetch_one(&mut *tx)
@@ -324,6 +380,15 @@ pub async fn save(
             ));
         }
     }
+
+    let next_run_at = if trigger_mode == "webhook" {
+        existing
+            .as_ref()
+            .map(|row| row.next_run_at)
+            .unwrap_or(now + chrono::Duration::days(365 * 40))
+    } else {
+        initial_next_run(&schedule, input.next_run_at, now)?
+    };
 
     let bot_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM routines WHERE owner_id = $1 AND bot_id = $2 AND ($3::text IS NULL OR id <> $3)",
@@ -376,7 +441,9 @@ pub async fn save(
                 .await?
                 .is_none()
             {
-                return Err(ApiError::Validation("Pinned skill version not found".into()));
+                return Err(ApiError::Validation(
+                    "Pinned skill version not found".into(),
+                ));
             }
         }
     }
@@ -389,8 +456,8 @@ pub async fn save(
         INSERT INTO routines (
             id, owner_id, bot_id, name, instructions, interval_minutes, next_run_at, enabled,
             schedule_kind, schedule_expression, timezone, destination_conversation_id, failure_policy,
-            skill_id, pinned_skill_version
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            skill_id, pinned_skill_version, trigger_mode
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         ON CONFLICT (id) DO UPDATE SET
             bot_id = EXCLUDED.bot_id,
             name = EXCLUDED.name,
@@ -405,6 +472,7 @@ pub async fn save(
             failure_policy = EXCLUDED.failure_policy,
             skill_id = EXCLUDED.skill_id,
             pinned_skill_version = EXCLUDED.pinned_skill_version,
+            trigger_mode = EXCLUDED.trigger_mode,
             acknowledged_run_id = CASE WHEN EXCLUDED.enabled THEN routines.last_run_id ELSE routines.acknowledged_run_id END,
             last_error = NULL,
             updated_at = NOW()
@@ -412,7 +480,7 @@ pub async fn save(
         RETURNING *
         "#,
     )
-    .bind(new_id)
+    .bind(&new_id)
     .bind(owner)
     .bind(&input.bot_id)
     .bind(input.name.trim())
@@ -427,11 +495,27 @@ pub async fn save(
     .bind(failure_policy)
     .bind(input.skill_id.as_deref())
     .bind(input.pinned_skill_version)
+    .bind(trigger_mode)
     .fetch_one(&mut *tx)
     .await
     .map_err(db_error)?;
+
+    let revealed_url = if trigger_mode == "webhook" {
+        routine_webhooks::ensure_in_tx(&mut tx, owner, &row.id)
+            .await?
+            .map(|token| routine_webhooks::public_webhook_url(public_origin, &token))
+    } else {
+        routine_webhooks::delete_in_tx(&mut tx, owner, &row.id).await?;
+        None
+    };
+
     tx.commit().await.map_err(db_error)?;
-    to_view(pool, row).await
+    to_view_with_secret(pool, row, revealed_url).await
+}
+
+fn default_webhook_placeholder_schedule() -> ScheduleDefinition {
+    parse_schedule("interval", "60", "UTC", Some(60))
+        .expect("placeholder interval schedule is valid")
 }
 
 pub async fn delete(pool: &PgPool, owner: &str, id: &str) -> Result<(), ApiError> {
@@ -454,18 +538,17 @@ pub async fn set_enabled(
     enabled: bool,
 ) -> Result<RoutineView, ApiError> {
     let mut tx = pool.begin().await.map_err(db_error)?;
-    let row: Routine = sqlx::query_as(
-        "SELECT * FROM routines WHERE id = $1 AND owner_id = $2 FOR UPDATE",
-    )
-    .bind(id)
-    .bind(owner)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(db_error)?
-    .ok_or(ApiError::NotFound)?;
+    let row: Routine =
+        sqlx::query_as("SELECT * FROM routines WHERE id = $1 AND owner_id = $2 FOR UPDATE")
+            .bind(id)
+            .bind(owner)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_error)?
+            .ok_or(ApiError::NotFound)?;
 
-    let now = Utc::now();
-    let next_run_at = if enabled {
+    let next_run_at = if enabled && row.trigger_mode != "webhook" {
+        let now = Utc::now();
         let schedule = parse_schedule(
             &row.schedule_kind,
             &row.schedule_expression,
@@ -508,6 +591,7 @@ async fn admit_routine_work(
     idempotency_key: Option<&str>,
     advance_schedule: bool,
     now: DateTime<Utc>,
+    runtime_message_override: Option<String>,
 ) -> Result<Option<String>, ApiError> {
     let schedule = parse_schedule(
         &routine.schedule_kind,
@@ -525,14 +609,13 @@ async fn admit_routine_work(
     )
     .await?;
 
-    let existing_run: Option<String> = sqlx::query_scalar::<_, Option<String>>(
-        "SELECT run_id FROM routine_runs WHERE id = $1",
-    )
-    .bind(&occurrence_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_error)?
-    .flatten();
+    let existing_run: Option<String> =
+        sqlx::query_scalar::<_, Option<String>>("SELECT run_id FROM routine_runs WHERE id = $1")
+            .bind(&occurrence_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_error)?
+            .flatten();
     if let Some(run_id) = existing_run {
         return Ok(Some(run_id));
     }
@@ -546,22 +629,30 @@ async fn admit_routine_work(
     .await?;
 
     let request_key = if trigger_kind == "scheduled" {
-        format!("routine:{}:{}", routine.id, scheduled_for.timestamp_millis())
+        format!(
+            "routine:{}:{}",
+            routine.id,
+            scheduled_for.timestamp_millis()
+        )
+    } else if let Some(key) = idempotency_key {
+        format!("routine-{trigger_kind}:{id}:{key}", id = routine.id)
     } else {
         format!(
-            "routine-{trigger_kind}:{id}:{key}",
+            "routine-{trigger_kind}:{id}:{occurrence}",
             id = routine.id,
-            key = idempotency_key.unwrap_or("anon")
+            occurrence = occurrence_id
         )
     };
 
-    let runtime_message = compose_routine_runtime_message(
-        &routine.name,
-        &routine.instructions,
-        scheduled_for,
-        &routine.timezone,
-        &destination_label,
-    );
+    let runtime_message = runtime_message_override.unwrap_or_else(|| {
+        compose_routine_runtime_message(
+            &routine.name,
+            &routine.instructions,
+            scheduled_for,
+            &routine.timezone,
+            &destination_label,
+        )
+    });
 
     sqlx::query("SAVEPOINT routine_admission")
         .execute(&mut **tx)
@@ -619,7 +710,7 @@ pub async fn tick(pool: &PgPool, now: DateTime<Utc>) -> Result<usize, ApiError> 
     for _ in 0..20 {
         let mut tx = pool.begin().await.map_err(db_error)?;
         let routine: Option<Routine> = sqlx::query_as(
-            "SELECT * FROM routines WHERE enabled AND next_run_at <= $1 ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED",
+            "SELECT * FROM routines WHERE enabled AND trigger_mode = 'schedule' AND next_run_at <= $1 ORDER BY next_run_at LIMIT 1 FOR UPDATE SKIP LOCKED",
         )
         .bind(now)
         .fetch_optional(&mut *tx)
@@ -689,6 +780,7 @@ pub async fn tick(pool: &PgPool, now: DateTime<Utc>) -> Result<usize, ApiError> 
                 None,
                 true,
                 now,
+                None,
             )
             .await
             {
@@ -711,12 +803,7 @@ pub async fn tick(pool: &PgPool, now: DateTime<Utc>) -> Result<usize, ApiError> 
     Ok(count)
 }
 
-pub async fn test_run(
-    pool: &PgPool,
-    owner: &str,
-    id: &str,
-    key: &str,
-) -> Result<String, ApiError> {
+pub async fn test_run(pool: &PgPool, owner: &str, id: &str, key: &str) -> Result<String, ApiError> {
     if key.len() > 80 {
         return Err(ApiError::Validation("Request key is too long".into()));
     }
@@ -762,35 +849,109 @@ pub async fn test_run(
     }
 
     let now = Utc::now();
-    let run_id = admit_routine_work(
-        &mut tx,
-        &routine,
-        now,
-        "test",
-        Some(key),
-        false,
-        now,
-    )
-    .await?
-    .ok_or_else(|| ApiError::Conflict("Duplicate test run".into()))?;
+    let run_id = admit_routine_work(&mut tx, &routine, now, "test", Some(key), false, now, None)
+        .await?
+        .ok_or_else(|| ApiError::Conflict("Duplicate test run".into()))?;
 
     tx.commit().await.map_err(db_error)?;
     Ok(run_id)
 }
 
-pub async fn run_now(
-    pool: &PgPool,
-    owner: &str,
-    id: &str,
-    key: &str,
-) -> Result<String, ApiError> {
+pub async fn run_now(pool: &PgPool, owner: &str, id: &str, key: &str) -> Result<String, ApiError> {
     test_run(pool, owner, id, key).await
 }
 
-pub async fn list_runs(
-    pool: &PgPool,
-    owner: &str,
-    id: &str,
-) -> Result<Vec<RoutineRun>, ApiError> {
+pub async fn list_runs(pool: &PgPool, owner: &str, id: &str) -> Result<Vec<RoutineRun>, ApiError> {
     routine_runs::list_for_routine(pool, owner, id, 20).await
+}
+
+pub async fn admit_webhook_event(
+    pool: &PgPool,
+    token: &str,
+    payload: serde_json::Value,
+    event_id: Option<&str>,
+    event_source: Option<&str>,
+) -> Result<String, ApiError> {
+    if let Some(event_id) = event_id {
+        if event_id.len() > 128 {
+            return Err(ApiError::Validation("Event id is too long".into()));
+        }
+    }
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    let Some((trigger, trigger_mode, enabled)) =
+        routine_webhooks::lookup_by_token(&mut tx, token).await?
+    else {
+        return Err(ApiError::NotFound);
+    };
+    if trigger_mode != "webhook" || !enabled {
+        return Err(ApiError::NotFound);
+    }
+
+    let routine: Routine = sqlx::query_as("SELECT * FROM routines WHERE id = $1 AND owner_id = $2")
+        .bind(&trigger.routine_id)
+        .bind(&trigger.owner_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db_error)?;
+
+    let previous: Option<String> = if let Some(id) = &routine.last_run_id {
+        sqlx::query_scalar("SELECT status FROM agent_runs WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_error)?
+    } else {
+        None
+    };
+    if routine.failure_policy == "pause_after_failure"
+        && routine.acknowledged_run_id != routine.last_run_id
+        && previous
+            .as_deref()
+            .is_some_and(|s| matches!(s, "failed" | "interrupted"))
+    {
+        sqlx::query(
+            "UPDATE routines SET enabled=FALSE, last_error='The previous assignment needs attention. Review it before resuming.', updated_at=NOW() WHERE id=$1",
+        )
+        .bind(&routine.id)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_error)?;
+        tx.commit().await.map_err(db_error)?;
+        return Err(ApiError::NotFound);
+    }
+
+    let now = Utc::now();
+    let (conversation_id, destination_label, _is_group) = destination_label_in_tx(
+        &mut tx,
+        &routine.owner_id,
+        &routine.bot_id,
+        routine.destination_conversation_id.as_deref(),
+    )
+    .await?;
+    let _ = conversation_id;
+    let runtime_message = routine_webhooks::compose_webhook_runtime_message(
+        &routine.name,
+        &routine.instructions,
+        now,
+        event_source,
+        &payload,
+        &destination_label,
+    );
+
+    let run_id = admit_routine_work(
+        &mut tx,
+        &routine,
+        now,
+        "webhook",
+        event_id,
+        false,
+        now,
+        Some(runtime_message),
+    )
+    .await?
+    .ok_or_else(|| ApiError::Conflict("Duplicate webhook event".into()))?;
+
+    routine_webhooks::mark_triggered_in_tx(&mut tx, &trigger.id, now).await?;
+    tx.commit().await.map_err(db_error)?;
+    Ok(run_id)
 }

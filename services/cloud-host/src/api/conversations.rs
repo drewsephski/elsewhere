@@ -58,8 +58,7 @@ pub async fn list_conversation_messages(
     Extension(principal): Extension<Principal>,
     Path(conversation_id): Path<String>,
 ) -> Result<Json<Vec<TranscriptMessage>>, ApiError> {
-    let messages =
-        list_messages(&state.pool, principal.owner_id(), &conversation_id).await?;
+    let messages = list_messages(&state.pool, principal.owner_id(), &conversation_id).await?;
     Ok(Json(messages))
 }
 
@@ -68,13 +67,7 @@ pub async fn delete_conversation_message(
     Extension(principal): Extension<Principal>,
     Path((conversation_id, message_id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
-    delete_transcript_message(
-        &state,
-        principal.owner_id(),
-        &conversation_id,
-        &message_id,
-    )
-    .await?;
+    delete_transcript_message(&state, principal.owner_id(), &conversation_id, &message_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

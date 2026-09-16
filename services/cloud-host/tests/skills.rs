@@ -23,7 +23,8 @@ async fn skill_version_is_immutable_on_run_snapshot() {
         .bind(&bot_id).bind(&owner).bind(&computer_id).execute(&pool).await.unwrap();
 
     let md_v1 = "---\nname: competitor-research\ndescription: v1\n---\n\nv1\n";
-    let package_v1 = SkillPackage::validate_and_build(md_v1, &[], Some("competitor-research")).unwrap();
+    let package_v1 =
+        SkillPackage::validate_and_build(md_v1, &[], Some("competitor-research")).unwrap();
     let (skill, _) = cloud_host::skills::create_skill_with_version(
         &pool,
         &owner,
@@ -59,14 +60,16 @@ async fn skill_version_is_immutable_on_run_snapshot() {
     assert!(packages[0].skill_md.contains("v1"));
 
     let md_v2 = "---\nname: competitor-research\ndescription: v2\n---\n\nv2\n";
-    let package_v2 = SkillPackage::validate_and_build(md_v2, &[], Some("competitor-research")).unwrap();
+    let package_v2 =
+        SkillPackage::validate_and_build(md_v2, &[], Some("competitor-research")).unwrap();
     cloud_host::skills::append_skill_version(&pool, &owner, &skill.id, &package_v2, &[])
         .await
         .unwrap();
 
-    let packages_after = cloud_host::skills::load_run_skill_packages(&pool, &owner, &records.run_id)
-        .await
-        .unwrap();
+    let packages_after =
+        cloud_host::skills::load_run_skill_packages(&pool, &owner, &records.run_id)
+            .await
+            .unwrap();
     assert!(packages_after[0].skill_md.contains("v1"));
 }
 
@@ -80,8 +83,7 @@ async fn skill_version_can_preserve_package_files_across_versions() {
         content_type: Some("text/plain".into()),
     };
     let md = "---\nname: packaged\ndescription: d\n---\n\nbody\n";
-    let package =
-        SkillPackage::validate_and_build(md, &[extra.clone()], Some("packaged")).unwrap();
+    let package = SkillPackage::validate_and_build(md, &[extra.clone()], Some("packaged")).unwrap();
     let (skill, _) = cloud_host::skills::create_skill_with_version(
         &pool,
         &owner,
@@ -92,24 +94,16 @@ async fn skill_version_can_preserve_package_files_across_versions() {
     .await
     .unwrap();
 
-    let inherited =
-        cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 1)
-            .await
-            .unwrap();
+    let inherited = cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 1)
+        .await
+        .unwrap();
     assert_eq!(inherited.len(), 1);
 
     let md_v2 = "---\nname: packaged\ndescription: d\n---\n\nbody v2\n";
-    let package_v2 =
-        SkillPackage::validate_and_build(md_v2, &inherited, Some("packaged")).unwrap();
-    cloud_host::skills::append_skill_version(
-        &pool,
-        &owner,
-        &skill.id,
-        &package_v2,
-        &inherited,
-    )
-    .await
-    .unwrap();
+    let package_v2 = SkillPackage::validate_and_build(md_v2, &inherited, Some("packaged")).unwrap();
+    cloud_host::skills::append_skill_version(&pool, &owner, &skill.id, &package_v2, &inherited)
+        .await
+        .unwrap();
 
     let v2_files = cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 2)
         .await
@@ -129,8 +123,8 @@ fn codex_skill_discovery_acceptance_smoke() {
     let md = "---\nname: acceptance-probe\ndescription: d\n---\n\nProbe.\n";
     let package = SkillPackage::validate_and_build(md, &[], None).unwrap();
     materialize_agents_skills(cwd.path(), &[package]).unwrap();
-    let skill_md = NativeSkillsLayout::agents_skills_root(cwd.path())
-        .join("acceptance-probe/SKILL.md");
+    let skill_md =
+        NativeSkillsLayout::agents_skills_root(cwd.path()).join("acceptance-probe/SKILL.md");
     assert!(skill_md.is_file());
 
     let output = std::process::Command::new("codex")

@@ -2,10 +2,10 @@
 
 use std::str::FromStr;
 
+use chrono::offset::LocalResult;
 use chrono::{
     DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Timelike, Utc, Weekday,
 };
-use chrono::offset::LocalResult;
 use chrono_tz::Tz;
 use saffron::Cron;
 
@@ -61,9 +61,8 @@ fn parse_time_hhmm(expression: &str) -> Result<NaiveTime, ApiError> {
     if hour > 23 || minute > 59 {
         return Err(ApiError::Validation("Time must use HH:MM format".into()));
     }
-    NaiveTime::from_hms_opt(hour, minute, 0).ok_or_else(|| {
-        ApiError::Validation("Time must use HH:MM format".into())
-    })
+    NaiveTime::from_hms_opt(hour, minute, 0)
+        .ok_or_else(|| ApiError::Validation("Time must use HH:MM format".into()))
 }
 
 fn parse_weekdays(token: &str) -> Result<Vec<Weekday>, ApiError> {
@@ -128,10 +127,9 @@ pub fn parse_schedule(
                     ApiError::Validation("Interval routines need repeat minutes".into())
                 })?
             } else {
-                expression
-                    .trim()
-                    .parse()
-                    .map_err(|_| ApiError::Validation("Interval must be a number of minutes".into()))?
+                expression.trim().parse().map_err(|_| {
+                    ApiError::Validation("Interval must be a number of minutes".into())
+                })?
             };
             if !(15..=43_200).contains(&minutes) {
                 return Err(ApiError::Validation(
@@ -145,9 +143,9 @@ pub fn parse_schedule(
             expression.trim().to_string()
         }
         ScheduleKind::Weekly => {
-            let (days, time) = expression.split_once('|').ok_or_else(|| {
-                ApiError::Validation("Weekly schedule needs DAYS|HH:MM".into())
-            })?;
+            let (days, time) = expression
+                .split_once('|')
+                .ok_or_else(|| ApiError::Validation("Weekly schedule needs DAYS|HH:MM".into()))?;
             parse_weekdays(days)?;
             parse_time_hhmm(time)?;
             format!("{}|{}", days.trim(), time.trim())
@@ -157,9 +155,8 @@ pub fn parse_schedule(
             if trimmed.is_empty() || trimmed.len() > 120 {
                 return Err(ApiError::Validation("Cron expression is invalid".into()));
             }
-            Cron::from_str(trimmed).map_err(|_| {
-                ApiError::Validation("Cron expression is invalid".into())
-            })?;
+            Cron::from_str(trimmed)
+                .map_err(|_| ApiError::Validation("Cron expression is invalid".into()))?;
             trimmed.to_string()
         }
     };
@@ -238,12 +235,7 @@ pub fn is_valid_occurrence(schedule: &ScheduleDefinition, at: DateTime<Utc>) -> 
     }
 }
 
-fn next_daily(
-    tz: Tz,
-    time: NaiveTime,
-    due: DateTime<Utc>,
-    now: DateTime<Utc>,
-) -> DateTime<Utc> {
+fn next_daily(tz: Tz, time: NaiveTime, due: DateTime<Utc>, now: DateTime<Utc>) -> DateTime<Utc> {
     let anchor = if due > now { due } else { now };
     let local = anchor.with_timezone(&tz);
     let mut date = local.date_naive();
@@ -298,9 +290,8 @@ fn next_cron(
     due: DateTime<Utc>,
     now: DateTime<Utc>,
 ) -> Result<DateTime<Utc>, ApiError> {
-    let schedule = Cron::from_str(expression).map_err(|_| {
-        ApiError::Validation("Cron expression is invalid".into())
-    })?;
+    let schedule = Cron::from_str(expression)
+        .map_err(|_| ApiError::Validation("Cron expression is invalid".into()))?;
     let anchor = if due > now { due } else { now };
     let mut probe = anchor.with_timezone(&tz) - Duration::minutes(1);
     for _ in 0..(366 * 24 * 60) {
@@ -348,7 +339,13 @@ pub fn next_after(
             let weekdays = parse_weekdays(days)?;
             let time = parse_time_hhmm(time)?;
             let calendar_due = due + Duration::seconds(1);
-            Ok(next_weekly(schedule.timezone, &weekdays, time, calendar_due, now))
+            Ok(next_weekly(
+                schedule.timezone,
+                &weekdays,
+                time,
+                calendar_due,
+                now,
+            ))
         }
         ScheduleKind::Cron => {
             let calendar_due = due + Duration::seconds(1);

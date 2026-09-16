@@ -59,7 +59,10 @@ pub async fn upsert_connected(
         .map_err(|e| ApiError::Internal(e))?;
     let now = Utc::now();
 
-    let mut tx = pool.begin().await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let connector_id: Uuid = sqlx::query_scalar(
         r#"
@@ -99,18 +102,16 @@ pub async fn upsert_connected(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    tx.commit().await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    tx.commit()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     get_for_owner(pool, owner_id, provider)
         .await?
         .ok_or(ApiError::Internal("connector missing after upsert".into()))
 }
 
-pub async fn disconnect(
-    pool: &PgPool,
-    owner_id: &str,
-    provider: &str,
-) -> Result<bool, ApiError> {
+pub async fn disconnect(pool: &PgPool, owner_id: &str, provider: &str) -> Result<bool, ApiError> {
     let now = Utc::now();
     let mut tx = pool
         .begin()

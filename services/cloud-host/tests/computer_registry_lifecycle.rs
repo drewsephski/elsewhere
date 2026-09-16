@@ -79,13 +79,7 @@ async fn archived_computer_evicts_registry_and_blocks_workspace_api() {
 
     let registry = ComputerRegistry::default();
     let connected = registry
-        .connect_sprite(
-            &state.config,
-            &pool,
-            &owner,
-            &computer.id,
-            true,
-        )
+        .connect_sprite(&state.config, &pool, &owner, &computer.id, true)
         .await;
     assert!(connected.is_ok());
 
@@ -93,16 +87,12 @@ async fn archived_computer_evicts_registry_and_blocks_workspace_api() {
     registry.evict(&owner, &computer.id);
 
     let reconnect = registry
-        .connect_sprite(
-            &state.config,
-            &pool,
-            &owner,
-            &computer.id,
-            true,
-        )
+        .connect_sprite(&state.config, &pool, &owner, &computer.id, true)
         .await;
-    assert!(matches!(reconnect, Err(cloud_host::error::ApiError::NotFound)));
-
+    assert!(matches!(
+        reconnect,
+        Err(cloud_host::error::ApiError::NotFound)
+    ));
 }
 
 #[tokio::test]
@@ -148,15 +138,13 @@ async fn registry_replaces_cache_when_provider_resource_changes() {
         .await
         .unwrap();
 
-    sqlx::query(
-        "UPDATE sandboxes SET provider_resource_id = $1 WHERE id = $2 AND owner_id = $3",
-    )
-    .bind(format!("elsewhere-swapped-{}", Uuid::new_v4()))
-    .bind(&computer.id)
-    .bind(&owner)
-    .execute(&pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE sandboxes SET provider_resource_id = $1 WHERE id = $2 AND owner_id = $3")
+        .bind(format!("elsewhere-swapped-{}", Uuid::new_v4()))
+        .bind(&computer.id)
+        .bind(&owner)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     let second = registry
         .connect_sprite(&state.config, &pool, &owner, &computer.id, true)

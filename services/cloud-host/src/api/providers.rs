@@ -292,14 +292,9 @@ async fn owner_availability_for_status(
     }
 
     if state.provider_status_cache.is_fresh(owner_id) {
-        return Ok(
-            state
-                .provider_status_cache
-                .get(owner_id)
-                .unwrap_or(CodexSubscriptionAvailability::Unavailable(
-                    "Provider status cache missing".into(),
-                )),
-        );
+        return Ok(state.provider_status_cache.get(owner_id).unwrap_or(
+            CodexSubscriptionAvailability::Unavailable("Provider status cache missing".into()),
+        ));
     }
 
     if let Some(cached) = state.provider_status_cache.get(owner_id) {
@@ -340,7 +335,9 @@ fn schedule_provider_status_refresh(state: AppState, owner_id: String) {
             ),
         };
         state.provider_status_cache.store(&owner_id, availability);
-        state.provider_status_cache.end_background_refresh(&owner_id);
+        state
+            .provider_status_cache
+            .end_background_refresh(&owner_id);
     });
 }
 
@@ -355,7 +352,11 @@ async fn owner_availability_for_status_probe(
         crate::provider_profile::profile_for_owner(&state.pool, &state.config, owner_id).await?;
     let permit = match state.codex_ops.try_acquire(CodexOperationKind::Probe) {
         Ok(permit) => permit,
-        Err(()) => return Ok(CodexSubscriptionAvailability::Unavailable(CODEX_BUSY_REASON.into())),
+        Err(()) => {
+            return Ok(CodexSubscriptionAvailability::Unavailable(
+                CODEX_BUSY_REASON.into(),
+            ))
+        }
     };
     Ok(crate::codex_ops::probe_subscription_with_profile(
         state.config.codex_executable.clone(),
@@ -401,8 +402,9 @@ mod tests {
 
     #[test]
     fn codex_busy_is_reported_without_spawning() {
-        let view =
-            map_availability(CodexSubscriptionAvailability::Unavailable(CODEX_BUSY_REASON.into()));
+        let view = map_availability(CodexSubscriptionAvailability::Unavailable(
+            CODEX_BUSY_REASON.into(),
+        ));
         assert!(!view.connected);
         assert_eq!(view.connection_state, "unavailable");
         assert_eq!(view.detail, Some("codex_busy"));

@@ -32,13 +32,7 @@ impl RunOverrideGuard {
         computer: Arc<CountingComputer>,
         model: Arc<dyn ResponsesModel>,
     ) -> Self {
-        state.register_test_run_overrides(
-            &request_id,
-            TestRunOverrides {
-                computer,
-                model,
-            },
-        );
+        state.register_test_run_overrides(&request_id, TestRunOverrides { computer, model });
         Self { state, request_id }
     }
 }
@@ -189,12 +183,8 @@ async fn read_tools_auto_allowed_without_approval_row(pool: PgPool) {
     let owner = format!("user-a-read-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
-    let _run_guard = RunOverrideGuard::install(
-        state.clone(),
-        request_id.clone(),
-        computer.clone(),
-        model,
-    );
+    let _run_guard =
+        RunOverrideGuard::install(state.clone(), request_id.clone(), computer.clone(), model);
     let computer_row = insert_computer_placeholder(&pool, &owner, "c")
         .await
         .unwrap();
@@ -275,12 +265,8 @@ async fn write_waits_for_approval_before_computer_call(pool: PgPool) {
     let owner = format!("user-a-write-{}", Uuid::new_v4());
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
-    let _run_guard = RunOverrideGuard::install(
-        state.clone(),
-        request_id.clone(),
-        computer.clone(),
-        model,
-    );
+    let _run_guard =
+        RunOverrideGuard::install(state.clone(), request_id.clone(), computer.clone(), model);
     let computer_row = insert_computer_placeholder(&pool, &owner, "c")
         .await
         .unwrap();

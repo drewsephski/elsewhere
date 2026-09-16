@@ -6,8 +6,8 @@ use agent_core::{
 };
 use async_trait::async_trait;
 
-use crate::events::cloud_event_sink::CloudEventSink;
 use crate::approval::service::ApprovalService;
+use crate::events::cloud_event_sink::CloudEventSink;
 
 pub struct RunScopedApprovalGate {
     service: ApprovalService,

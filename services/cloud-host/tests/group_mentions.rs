@@ -54,7 +54,8 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -80,16 +81,18 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
     assert_eq!(retry.message.id, send.message.id);
-    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
-        .bind(&group.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let runs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(runs, 2);
 }
 
@@ -119,7 +122,8 @@ async fn group_send_no_mention_persists_only_human(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -128,11 +132,12 @@ async fn group_send_no_mention_persists_only_human(pool: PgPool) {
         send.message.routing.as_ref().map(|r| r.status.as_str()),
         Some("pending")
     );
-    let runs: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
-        .bind(&group.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let runs: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM agent_runs WHERE conversation_id = $1")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(runs, 0);
 }
 
@@ -162,25 +167,24 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
 
-    let research_run: String = sqlx::query_scalar(
-        "SELECT run_id FROM group_message_recipients WHERE bot_id = $1",
-    )
-    .bind(&researcher.id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    let assistant_id: String = sqlx::query_scalar(
-        "SELECT assistant_message_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&research_run)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let research_run: String =
+        sqlx::query_scalar("SELECT run_id FROM group_message_recipients WHERE bot_id = $1")
+            .bind(&researcher.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let assistant_id: String =
+        sqlx::query_scalar("SELECT assistant_message_id FROM agent_runs WHERE id = $1")
+            .bind(&research_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     sqlx::query("UPDATE messages SET body = 'Finding ABC', status = 'complete' WHERE id = $1")
         .bind(&assistant_id)
         .execute(&pool)
@@ -206,7 +210,8 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -216,13 +221,12 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
         .find(|r| r.bot_id == designer.id)
         .and_then(|r| r.run_id.clone())
         .unwrap();
-    let design_assistant: String = sqlx::query_scalar(
-        "SELECT assistant_message_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&design_run)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let design_assistant: String =
+        sqlx::query_scalar("SELECT assistant_message_id FROM agent_runs WHERE id = $1")
+            .bind(&design_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let input = build_run_input_messages(
         &pool,
@@ -247,7 +251,10 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
         .iter()
         .filter(|v| v.get("content") == Some(&serde_json::json!("use findings")))
         .count();
-    assert_eq!(user_turn_count, 1, "current human turn must appear exactly once");
+    assert_eq!(
+        user_turn_count, 1,
+        "current human turn must appear exactly once"
+    );
     assert!(
         !blob.contains("use findings\n\nuse findings"),
         "current message must not appear in group context block"
@@ -280,18 +287,18 @@ async fn codex_group_input_excludes_current_human_turn(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
     let design_run = send.recipients[0].run_id.clone().unwrap();
-    let design_assistant: String = sqlx::query_scalar(
-        "SELECT assistant_message_id FROM agent_runs WHERE id = $1",
-    )
-    .bind(&design_run)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let design_assistant: String =
+        sqlx::query_scalar("SELECT assistant_message_id FROM agent_runs WHERE id = $1")
+            .bind(&design_run)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     let input = build_run_input_messages(
         &pool,
@@ -346,7 +353,8 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -361,15 +369,17 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
-    let sends: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM group_message_sends WHERE idempotency_key = $1")
-        .bind(key)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let sends: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM group_message_sends WHERE idempotency_key = $1")
+            .bind(key)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(sends, 2);
 }
 
@@ -399,7 +409,8 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap();
@@ -414,7 +425,8 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             mention_mode: None,
             routing_mode: None,
 
-            skill_invocation: None,        },
+            skill_invocation: None,
+        },
     )
     .await
     .unwrap_err();

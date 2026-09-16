@@ -8,7 +8,7 @@ import type { Routine } from "@/lib/api-types";
 import { WorkspacePageHeader } from "@/components/app/workspace-page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/reui/badge";
-import { formatRoutineNextRun } from "@/lib/routine-time";
+import { formatRoutineNextRun, formatRoutineRunTrigger, formatRoutineTrigger, formatWebhookLastReceived } from "@/lib/routine-time";
 
 export default function RoutineDetailPage() {
   const params = useParams<{ id: string }>();
@@ -69,14 +69,18 @@ export default function RoutineDetailPage() {
     <div className="mx-auto max-w-3xl space-y-8">
       <WorkspacePageHeader
         title={routine.name}
-        description={`${routine.scheduleLabel} · ${routine.timezone}`}
+        description={formatRoutineTrigger(routine)}
       />
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={routine.enabled ? "success-light" : "warning-light"}>
           {routine.enabled ? "Active" : "Paused"}
         </Badge>
         <span className="text-sm text-muted-foreground">
-          Next: {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
+          {routine.triggerMode === "webhook"
+            ? formatWebhookLastReceived(routine.webhook?.lastTriggeredAt)
+              ? `Last received ${formatWebhookLastReceived(routine.webhook?.lastTriggeredAt)}`
+              : "Waiting for the first webhook event"
+            : `Next: ${formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}`}
         </span>
       </div>
       <p className="text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
@@ -105,7 +109,7 @@ export default function RoutineDetailPage() {
                   <p className="font-medium capitalize">{run.status}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatRoutineNextRun(run.scheduledFor, routine.timezone || "UTC")} ·{" "}
-                    {run.triggerKind}
+                    {formatRoutineRunTrigger(run.triggerKind)}
                   </p>
                   {run.status === "skipped" && run.errorMessage ? (
                     <p className="text-xs text-muted-foreground">{run.errorMessage}</p>

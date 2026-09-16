@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app_state::AppState;
+use crate::approval::service::ToolApprovalRow;
 use crate::auth::Principal;
 use crate::error::ApiError;
-use crate::approval::service::ToolApprovalRow;
 use agent_core::{approval_action_summary, sanitize_tool_arguments};
 
 #[derive(Debug, Deserialize)]
@@ -95,7 +95,9 @@ pub async fn approve_approval(
     if !ok {
         return Err(ApiError::NotFound);
     }
-    Ok(Json(json!({ "approvalId": approval_id, "decision": "approved" })))
+    Ok(Json(
+        json!({ "approvalId": approval_id, "decision": "approved" }),
+    ))
 }
 
 pub async fn deny_approval(
@@ -105,11 +107,18 @@ pub async fn deny_approval(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let ok = state
         .approvals
-        .deny(principal.owner_id(), &approval_id, principal.owner_id(), None)
+        .deny(
+            principal.owner_id(),
+            &approval_id,
+            principal.owner_id(),
+            None,
+        )
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     if !ok {
         return Err(ApiError::NotFound);
     }
-    Ok(Json(json!({ "approvalId": approval_id, "decision": "denied" })))
+    Ok(Json(
+        json!({ "approvalId": approval_id, "decision": "denied" }),
+    ))
 }

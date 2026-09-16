@@ -23,9 +23,8 @@ pub fn format_delegated_user_message(
     instruction: &str,
     context: Option<&str>,
 ) -> String {
-    let mut message = format!(
-        "Delegated by {source_bot_name} from run {source_run_id}:\n{instruction}"
-    );
+    let mut message =
+        format!("Delegated by {source_bot_name} from run {source_run_id}:\n{instruction}");
     if let Some(ctx) = context.filter(|c| !c.trim().is_empty()) {
         message.push_str("\n\nAdditional context:\n");
         message.push_str(ctx.trim());
@@ -72,7 +71,9 @@ Target run:\n{target_run_id}\n"
             } else if let Some(err) = &artifact.error {
                 message.push_str(" — ");
                 message.push_str(err);
-            } else if artifact.transfer_status == "pending" || artifact.transfer_status == "transferring" {
+            } else if artifact.transfer_status == "pending"
+                || artifact.transfer_status == "transferring"
+            {
                 message.push_str(" — transfer in progress");
             }
             message.push('\n');
@@ -169,21 +170,17 @@ pub async fn create_delegation(
     }
     let instruction = instruction.trim();
     if instruction.is_empty() || instruction.len() > MAX_DELEGATION_INSTRUCTION_CHARS {
-        return Err(CollaborationError::Validation(
-            format!(
-                "instruction must be between 1 and {} characters",
-                MAX_DELEGATION_INSTRUCTION_CHARS
-            ),
-        ));
+        return Err(CollaborationError::Validation(format!(
+            "instruction must be between 1 and {} characters",
+            MAX_DELEGATION_INSTRUCTION_CHARS
+        )));
     }
     if let Some(ctx_text) = context {
         if ctx_text.len() > MAX_DELEGATION_CONTEXT_CHARS {
-            return Err(CollaborationError::Validation(
-                format!(
-                    "context must be at most {} characters",
-                    MAX_DELEGATION_CONTEXT_CHARS
-                ),
-            ));
+            return Err(CollaborationError::Validation(format!(
+                "context must be at most {} characters",
+                MAX_DELEGATION_CONTEXT_CHARS
+            )));
         }
     }
     if ctx.tool_invocation_id.is_empty() || ctx.tool_invocation_id.len() > 200 {
@@ -194,23 +191,26 @@ pub async fn create_delegation(
 
     let mut tx = pool.begin().await.map_err(db_error)?;
 
-    if let Some(result) =
-        load_delegation_by_invocation(&mut tx, &ctx.source_run_id, &ctx.tool_invocation_id, &ctx.owner_id)
-            .await?
+    if let Some(result) = load_delegation_by_invocation(
+        &mut tx,
+        &ctx.source_run_id,
+        &ctx.tool_invocation_id,
+        &ctx.owner_id,
+    )
+    .await?
     {
         tx.commit().await.map_err(db_error)?;
         return Ok(result);
     }
 
-    let source_row = sqlx::query(
-        "SELECT owner_id, bot_id FROM agent_runs WHERE id = $1 AND owner_id = $2",
-    )
-    .bind(&ctx.source_run_id)
-    .bind(&ctx.owner_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(db_error)?
-    .ok_or(CollaborationError::NotFound)?;
+    let source_row =
+        sqlx::query("SELECT owner_id, bot_id FROM agent_runs WHERE id = $1 AND owner_id = $2")
+            .bind(&ctx.source_run_id)
+            .bind(&ctx.owner_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db_error)?
+            .ok_or(CollaborationError::NotFound)?;
 
     if source_row.get::<String, _>("bot_id") != ctx.source_bot_id {
         return Err(CollaborationError::Internal(
@@ -227,9 +227,13 @@ pub async fn create_delegation(
         .await
         .map_err(db_error)?;
 
-    if let Some(result) =
-        load_delegation_by_invocation(&mut tx, &ctx.source_run_id, &ctx.tool_invocation_id, &ctx.owner_id)
-            .await?
+    if let Some(result) = load_delegation_by_invocation(
+        &mut tx,
+        &ctx.source_run_id,
+        &ctx.tool_invocation_id,
+        &ctx.owner_id,
+    )
+    .await?
     {
         tx.commit().await.map_err(db_error)?;
         return Ok(result);
@@ -242,13 +246,12 @@ pub async fn create_delegation(
         )));
     }
 
-    let child_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM bot_delegations WHERE root_run_id = $1",
-    )
-    .bind(&root_run_id)
-    .fetch_one(&mut *tx)
-    .await
-    .map_err(db_error)?;
+    let child_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM bot_delegations WHERE root_run_id = $1")
+            .bind(&root_run_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db_error)?;
     if child_count >= MAX_CHILD_DELEGATIONS_PER_ROOT {
         return Err(CollaborationError::LimitExceeded(format!(
             "At most {} delegations per root assignment",
@@ -276,12 +279,8 @@ pub async fn create_delegation(
             .await
             .map_err(db_error)?;
 
-    let user_message = format_delegated_user_message(
-        &source_bot_name,
-        &ctx.source_run_id,
-        instruction,
-        context,
-    );
+    let user_message =
+        format_delegated_user_message(&source_bot_name, &ctx.source_run_id, instruction, context);
 
     let target_request_id = format!("delegation-{delegation_id}");
 
@@ -407,13 +406,12 @@ async fn resolve_delegation_chain(
         ));
     }
 
-    let parent = sqlx::query(
-        "SELECT id, root_run_id, depth FROM bot_delegations WHERE target_run_id = $1",
-    )
-    .bind(source_run_id)
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(db_error)?;
+    let parent =
+        sqlx::query("SELECT id, root_run_id, depth FROM bot_delegations WHERE target_run_id = $1")
+            .bind(source_run_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(db_error)?;
 
     if let Some(row) = parent {
         Ok((
@@ -479,11 +477,14 @@ fn map_work_error(err: ApiError) -> CollaborationError {
         ApiError::NotFound => CollaborationError::NotFound,
         ApiError::Validation(m) => CollaborationError::Validation(m),
         ApiError::Conflict(m) => CollaborationError::Conflict(m),
-        ApiError::TooManyRequests => CollaborationError::LimitExceeded(
-            "Too much active work; try again later".into(),
-        ),
+        ApiError::TooManyRequests => {
+            CollaborationError::LimitExceeded("Too much active work; try again later".into())
+        }
         ApiError::Internal(m) => CollaborationError::Internal(m),
         ApiError::Unauthorized => CollaborationError::Internal("unauthorized".into()),
+        ApiError::PayloadTooLarge | ApiError::UnsupportedMediaType => {
+            CollaborationError::Validation("Request is not valid JSON".into())
+        }
     }
 }
 
@@ -615,7 +616,10 @@ pub async fn list_for_run(
             crate::artifact_handoff::list_artifacts_for_delegation(pool, owner, &detail.id)
                 .await
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
-        details.push(DelegationDetail { artifacts, ..detail });
+        details.push(DelegationDetail {
+            artifacts,
+            ..detail
+        });
     }
     Ok(details)
 }
@@ -647,11 +651,13 @@ pub async fn get_delegation(
     .ok_or(ApiError::NotFound)?;
 
     let detail = map_delegation_row(row);
-    let artifacts =
-        crate::artifact_handoff::list_artifacts_for_delegation(pool, owner, &detail.id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(DelegationDetail { artifacts, ..detail })
+    let artifacts = crate::artifact_handoff::list_artifacts_for_delegation(pool, owner, &detail.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(DelegationDetail {
+        artifacts,
+        ..detail
+    })
 }
 
 fn map_delegation_row(row: sqlx::postgres::PgRow) -> DelegationDetail {

@@ -136,8 +136,16 @@ pub(crate) async fn admit(
             message,
             skills,
         } => {
-            admit_human_message(tx, owner, request_id, bot_id, conversation_id, message, skills)
-                .await
+            admit_human_message(
+                tx,
+                owner,
+                request_id,
+                bot_id,
+                conversation_id,
+                message,
+                skills,
+            )
+            .await
         }
     }
 }
@@ -266,15 +274,17 @@ async fn admit_human_message(
     .execute(&mut **tx)
     .await
     .map_err(db_error)?;
-    sqlx::query("INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)")
-        .bind(request_id)
-        .bind(serde_json::json!({
-            "status": "queued",
-            "detail": "Work saved. Waiting for an available computer."
-        }))
-        .execute(&mut **tx)
-        .await
-        .map_err(db_error)?;
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'queued', $2)",
+    )
+    .bind(request_id)
+    .bind(serde_json::json!({
+        "status": "queued",
+        "detail": "Work saved. Waiting for an available computer."
+    }))
+    .execute(&mut **tx)
+    .await
+    .map_err(db_error)?;
     sqlx::query("UPDATE conversations SET updated_at = NOW() WHERE id = $1")
         .bind(&conversation_id)
         .execute(&mut **tx)

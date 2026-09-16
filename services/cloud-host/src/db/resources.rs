@@ -158,14 +158,13 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let exists: Option<(String,)> = sqlx::query_as(
-        "SELECT id FROM bots WHERE id = $1 AND owner_id = $2 FOR UPDATE",
-    )
-    .bind(bot_id)
-    .bind(owner_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let exists: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM bots WHERE id = $1 AND owner_id = $2 FOR UPDATE")
+            .bind(bot_id)
+            .bind(owner_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     if exists.is_none() {
         return Ok(false);
     }

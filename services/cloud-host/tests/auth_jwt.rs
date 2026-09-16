@@ -93,9 +93,11 @@ async fn jwt_verifier_accepts_valid_token() {
 #[tokio::test]
 async fn jwt_verifier_rejects_expired_and_bad_audience() {
     let verifier = test_verifier();
-    assert!(verifier.verify_bearer_token(&token("user-a", -3600)).await.is_err());
-    let bad_aud =
-        test_signing::user_token("user-a", TEST_JWT_ISSUER, "wrong-audience", 300);
+    assert!(verifier
+        .verify_bearer_token(&token("user-a", -3600))
+        .await
+        .is_err());
+    let bad_aud = test_signing::user_token("user-a", TEST_JWT_ISSUER, "wrong-audience", 300);
     assert!(verifier.verify_bearer_token(&bad_aud).await.is_err());
 }
 

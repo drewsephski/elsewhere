@@ -81,7 +81,8 @@ pub async fn plan_transfers_for_delegation(
     let target_run_id: String = row.get("target_run_id");
     let source_computer_id: String = row.get("source_computer_id");
     let target_computer_id: String = row.get("target_computer_id");
-    let shared = crate::run_lifecycle::bots_share_computer(&source_computer_id, &target_computer_id);
+    let shared =
+        crate::run_lifecycle::bots_share_computer(&source_computer_id, &target_computer_id);
 
     let files = sqlx::query(
         r#"
@@ -256,13 +257,12 @@ async fn execute_one_transfer(
         return Ok(());
     }
 
-    let content: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT content FROM work_results WHERE id = $1",
-    )
-    .bind(&source_result_id)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|e| e.to_string())?;
+    let content: Option<Vec<u8>> =
+        sqlx::query_scalar("SELECT content FROM work_results WHERE id = $1")
+            .bind(&source_result_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
     let Some(content) = content else {
         mark_transfer_failed(
@@ -316,10 +316,7 @@ async fn execute_one_transfer(
         return Ok(());
     }
 
-    computer
-        .ensure_ready()
-        .await
-        .map_err(|e| e.to_string())?;
+    computer.ensure_ready().await.map_err(|e| e.to_string())?;
     computer
         .write_file(&destination_path, &content)
         .await
@@ -555,7 +552,11 @@ pub async fn list_artifacts_for_delegation(
                     None
                 },
                 error: if status == "failed" {
-                    Some(error_message.or(error_code).unwrap_or_else(|| "failed".into()))
+                    Some(
+                        error_message
+                            .or(error_code)
+                            .unwrap_or_else(|| "failed".into()),
+                    )
                 } else {
                     None
                 },
@@ -603,5 +604,7 @@ pub async fn delegation_return_ready_in_tx(
         return Ok(pending == 0);
     }
 
-    Ok(crate::run_lifecycle::is_terminal_run_status(&target_run_status))
+    Ok(crate::run_lifecycle::is_terminal_run_status(
+        &target_run_status,
+    ))
 }

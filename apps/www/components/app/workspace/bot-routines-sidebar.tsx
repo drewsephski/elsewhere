@@ -6,23 +6,7 @@ import { cn } from "cn";
 import { CalendarClock, Pause, Play } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { formatRoutineNextRun } from "@/lib/routine-time";
-
-const intervalLabels: Record<number, string> = {
-  15: "Every 15 minutes",
-  60: "Every hour",
-  1440: "Every day",
-  10080: "Every 7 days",
-};
-
-function scheduleLabel(routine: Routine): string {
-  const base =
-    routine.scheduleLabel ??
-    intervalLabels[routine.intervalMinutes] ??
-    `Every ${routine.intervalMinutes} minutes`;
-  const tz = routine.timezone || "UTC";
-  return `${base} · ${tz}`;
-}
+import { formatRoutineNextRun, formatRoutineTrigger } from "@/lib/routine-time";
 
 interface BotRoutinesSidebarProps {
   botId: string;
@@ -104,8 +88,8 @@ export function BotRoutinesSidebar({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium leading-tight">{routine.name}</p>
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{scheduleLabel(routine)}</p>
-                {routine.enabled ? (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{formatRoutineTrigger(routine)}</p>
+                {routine.enabled && routine.triggerMode !== "webhook" ? (
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     Next {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
                   </p>
@@ -127,7 +111,7 @@ export function BotRoutinesSidebar({
       {!routines.length ? (
         variant === "minimal" ? (
           <p className="px-1 py-3 text-[11px] leading-snug text-muted-foreground">
-            Recurring tasks this bot runs on a schedule. Ask it in chat, or{" "}
+            Recurring tasks this bot runs on a schedule or webhook. Ask it in chat, or{" "}
             <Link
               href="/app/routines"
               className="text-foreground underline-offset-2 hover:underline"

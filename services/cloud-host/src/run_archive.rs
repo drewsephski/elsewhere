@@ -9,11 +9,7 @@ use crate::provider_profile;
 
 const ACTIVE_STATUSES: &[&str] = &["queued", "running"];
 
-pub async fn archive_run(
-    state: &AppState,
-    owner_id: &str,
-    run_id: &str,
-) -> Result<(), ApiError> {
+pub async fn archive_run(state: &AppState, owner_id: &str, run_id: &str) -> Result<(), ApiError> {
     let pool = &state.pool;
     let row = sqlx::query(
         "SELECT request_id, status, archived_at FROM agent_runs WHERE id = $1 AND owner_id = $2",
@@ -155,14 +151,13 @@ async fn archive_codex_thread_best_effort(state: &AppState, owner_id: &str, thre
         return;
     };
 
-    let profile =
-        match provider_profile::profile_for_owner(&state.pool, config, owner_id).await {
-            Ok(profile) => profile,
-            Err(err) => {
-                tracing::debug!(error = %err, "skipping Codex thread archive; profile unavailable");
-                return;
-            }
-        };
+    let profile = match provider_profile::profile_for_owner(&state.pool, config, owner_id).await {
+        Ok(profile) => profile,
+        Err(err) => {
+            tracing::debug!(error = %err, "skipping Codex thread archive; profile unavailable");
+            return;
+        }
+    };
 
     let permit = match state.codex_ops.try_acquire(CodexOperationKind::Archive) {
         Ok(permit) => permit,

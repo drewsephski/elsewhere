@@ -18,7 +18,9 @@ fn validate_computer_id(computer_id: &str) -> Result<(), ApiError> {
 
 fn browser_profiles_root(config: &Config) -> Result<&Path, ApiError> {
     let root = config.browser_profiles_dir.as_ref().ok_or_else(|| {
-        ApiError::Conflict("Browser sign-in persistence is not configured on this deployment".into())
+        ApiError::Conflict(
+            "Browser sign-in persistence is not configured on this deployment".into(),
+        )
     })?;
     if !root.is_absolute() || root.starts_with("/workspace") {
         return Err(ApiError::Internal(
@@ -68,9 +70,9 @@ fn create_profile_dir(root: &Path, profile_id: uuid::Uuid) -> Result<PathBuf, Ap
         use std::os::unix::fs::DirBuilderExt;
         builder.mode(PROFILE_DIR_MODE);
     }
-    builder.create(&path).map_err(|e| {
-        ApiError::Internal(format!("Browser profile storage unavailable: {e}"))
-    })?;
+    builder
+        .create(&path)
+        .map_err(|e| ApiError::Internal(format!("Browser profile storage unavailable: {e}")))?;
     Ok(path)
 }
 
@@ -107,13 +109,14 @@ pub async fn reset_profile_for_computer(
     ensure_computer_owned(pool, owner_id, computer_id).await?;
     let root = browser_profiles_root(config)?;
 
-    let old: Option<(uuid::Uuid,)> =
-        sqlx::query_as("SELECT profile_id FROM browser_profiles WHERE computer_id = $1 AND owner_id = $2")
-            .bind(computer_id)
-            .bind(owner_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let old: Option<(uuid::Uuid,)> = sqlx::query_as(
+        "SELECT profile_id FROM browser_profiles WHERE computer_id = $1 AND owner_id = $2",
+    )
+    .bind(computer_id)
+    .bind(owner_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let new_id = uuid::Uuid::new_v4();
     sqlx::query(

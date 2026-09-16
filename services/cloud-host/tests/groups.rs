@@ -25,9 +25,16 @@ async fn bot_with_computer(pool: &PgPool, owner: &str, name: &str) -> resources:
 #[sqlx::test(migrations = "./migrations")]
 async fn direct_conversation_authorship_migration(pool: PgPool) {
     let bot = bot_with_computer(&pool, "alice", "Designer").await;
-    let records = work::enqueue(&pool, "alice", &Uuid::new_v4().to_string(), &bot.id, None, "Hi")
-        .await
-        .unwrap();
+    let records = work::enqueue(
+        &pool,
+        "alice",
+        &Uuid::new_v4().to_string(),
+        &bot.id,
+        None,
+        "Hi",
+    )
+    .await
+    .unwrap();
     sqlx::query("UPDATE messages SET body = 'Hello back', status = 'complete' WHERE id = $1")
         .bind(&records.assistant_message_id)
         .execute(&pool)
@@ -43,13 +50,12 @@ async fn direct_conversation_authorship_migration(pool: PgPool) {
     .unwrap();
     assert_eq!(user_kind, "human");
 
-    let (author_kind, author_bot_id): (String, Option<String>) = sqlx::query_as(
-        "SELECT author_kind, author_bot_id FROM messages WHERE id = $1",
-    )
-    .bind(&records.assistant_message_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let (author_kind, author_bot_id): (String, Option<String>) =
+        sqlx::query_as("SELECT author_kind, author_bot_id FROM messages WHERE id = $1")
+            .bind(&records.assistant_message_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(author_kind, "bot");
     assert_eq!(author_bot_id.as_deref(), Some(bot.id.as_str()));
 }
@@ -152,11 +158,13 @@ async fn group_human_and_bot_authored_messages(pool: PgPool) {
     )
     .await
     .unwrap();
-    sqlx::query("UPDATE messages SET body = 'Research findings', status = 'complete' WHERE id = $1")
-        .bind(&research_run.assistant_message_id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query(
+        "UPDATE messages SET body = 'Research findings', status = 'complete' WHERE id = $1",
+    )
+    .bind(&research_run.assistant_message_id)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     let design_run = groups::enqueue_group_bot_run(
         &pool,
@@ -174,19 +182,17 @@ async fn group_human_and_bot_authored_messages(pool: PgPool) {
         .await
         .unwrap();
 
-    let transcript = groups::list_messages(&pool, "alice", &group.id).await.unwrap();
+    let transcript = groups::list_messages(&pool, "alice", &group.id)
+        .await
+        .unwrap();
     assert_eq!(transcript.len(), 5);
     assert!(transcript.iter().any(|m| m.body.contains("landing page")));
-    assert!(
-        transcript
-            .iter()
-            .any(|m| m.author_bot_name.as_deref() == Some("Researcher"))
-    );
-    assert!(
-        transcript
-            .iter()
-            .any(|m| m.author_bot_name.as_deref() == Some("Designer"))
-    );
+    assert!(transcript
+        .iter()
+        .any(|m| m.author_bot_name.as_deref() == Some("Researcher")));
+    assert!(transcript
+        .iter()
+        .any(|m| m.author_bot_name.as_deref() == Some("Designer")));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -228,19 +234,17 @@ async fn group_transcript_excludes_structured_runner_messages(pool: PgPool) {
         .unwrap();
     }
 
-    let transcript = groups::list_messages(&pool, "alice", &group.id).await.unwrap();
+    let transcript = groups::list_messages(&pool, "alice", &group.id)
+        .await
+        .unwrap();
     assert_eq!(transcript.len(), 1);
     assert_eq!(transcript[0].id, human.id);
     assert!(!transcript[0].body.contains("\"status\""));
 
-    let context = cloud_host::group_context::load_group_context_lines(
-        &pool,
-        &group.id,
-        10,
-        &bot_a.id,
-    )
-    .await
-    .unwrap();
+    let context =
+        cloud_host::group_context::load_group_context_lines(&pool, &group.id, 10, &bot_a.id)
+            .await
+            .unwrap();
     assert_eq!(context.len(), 1);
     assert_eq!(context[0].body, "Hello team");
 }
@@ -266,9 +270,14 @@ async fn per_bot_codex_threads_are_independent(pool: PgPool) {
     cloud_host::conversation::set_codex_thread_id(&pool, &group.id, &designer.id, "thread-d")
         .await
         .unwrap();
-    cloud_host::conversation::set_codex_compacted_through_turns(&pool, &group.id, &researcher.id, 24)
-        .await
-        .unwrap();
+    cloud_host::conversation::set_codex_compacted_through_turns(
+        &pool,
+        &group.id,
+        &researcher.id,
+        24,
+    )
+    .await
+    .unwrap();
 
     let r = cloud_host::conversation::get_codex_thread_id(&pool, &group.id, &researcher.id)
         .await
@@ -279,13 +288,10 @@ async fn per_bot_codex_threads_are_independent(pool: PgPool) {
     assert_eq!(r.as_deref(), Some("thread-r"));
     assert_eq!(d.as_deref(), Some("thread-d"));
 
-    let compacted = cloud_host::conversation::get_codex_compacted_through_turns(
-        &pool,
-        &group.id,
-        &designer.id,
-    )
-    .await
-    .unwrap();
+    let compacted =
+        cloud_host::conversation::get_codex_compacted_through_turns(&pool, &group.id, &designer.id)
+            .await
+            .unwrap();
     assert_eq!(compacted, 0);
 }
 
@@ -418,7 +424,9 @@ async fn group_rename_and_delete(pool: PgPool) {
         .await
         .unwrap();
 
-    groups::delete_group(&pool, "alice", &group.id).await.unwrap();
+    groups::delete_group(&pool, "alice", &group.id)
+        .await
+        .unwrap();
 
     let missing = groups::get_conversation_for_owner(&pool, "alice", &group.id)
         .await
@@ -445,5 +453,8 @@ async fn group_rename_and_delete(pool: PgPool) {
     let already_gone = groups::delete_group(&pool, "alice", &group.id)
         .await
         .unwrap_err();
-    assert!(matches!(already_gone, cloud_host::error::ApiError::NotFound));
+    assert!(matches!(
+        already_gone,
+        cloud_host::error::ApiError::NotFound
+    ));
 }

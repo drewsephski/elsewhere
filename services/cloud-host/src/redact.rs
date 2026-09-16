@@ -57,9 +57,8 @@ mod tests {
 
     #[test]
     fn error_text_never_contains_secret_names() {
-        let msg = redact_secrets(
-            "failure OPENAI_API_KEY leaked SPRITE_TOKEN ELSEWHERE_CLOUD_API_TOKEN",
-        );
+        let msg =
+            redact_secrets("failure OPENAI_API_KEY leaked SPRITE_TOKEN ELSEWHERE_CLOUD_API_TOKEN");
         assert!(!msg.contains("OPENAI_API_KEY"));
         assert!(!msg.contains("SPRITE_TOKEN"));
         assert!(!msg.contains("ELSEWHERE_CLOUD_API_TOKEN"));

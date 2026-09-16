@@ -76,9 +76,8 @@ pub async fn generate_skill_draft_from_run(
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let value: serde_json::Value = serde_json::from_str(raw.trim()).map_err(|_| {
-        ApiError::Internal("skill draft model returned invalid JSON".into())
-    })?;
+    let value: serde_json::Value = serde_json::from_str(raw.trim())
+        .map_err(|_| ApiError::Internal("skill draft model returned invalid JSON".into()))?;
     let skill_md = value
         .get("skillMd")
         .and_then(|v| v.as_str())

@@ -105,10 +105,10 @@ impl Config {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(5 * 60);
-        let enforce_tool_approvals_internal = parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS")
-            .unwrap_or(true);
-        let legacy_local_approval_bypass = parse_bool_env("ELSEWHERE_LEGACY_LOCAL_APPROVAL_BYPASS")
-            .unwrap_or(false);
+        let enforce_tool_approvals_internal =
+            parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS").unwrap_or(true);
+        let legacy_local_approval_bypass =
+            parse_bool_env("ELSEWHERE_LEGACY_LOCAL_APPROVAL_BYPASS").unwrap_or(false);
 
         let browser_enabled = match env::var("ELSEWHERE_BROWSER_ENABLED")
             .ok()
@@ -152,9 +152,7 @@ impl Config {
         let connector_secret_key = env::var("ELSEWHERE_CONNECTOR_SECRET_KEY")
             .ok()
             .filter(|v| !v.is_empty());
-        let github_client_id = env::var("GITHUB_CLIENT_ID")
-            .ok()
-            .filter(|v| !v.is_empty());
+        let github_client_id = env::var("GITHUB_CLIENT_ID").ok().filter(|v| !v.is_empty());
         let github_client_secret = env::var("GITHUB_CLIENT_SECRET")
             .ok()
             .filter(|v| !v.is_empty());
@@ -266,7 +264,9 @@ fn parse_auth_mode(raw: &str) -> Result<AuthMode, String> {
 }
 
 fn parse_bool_env(key: &str) -> Option<bool> {
-    env::var(key).ok().map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    env::var(key)
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
 }
 
 fn resolve_bind_addr(auth_mode: AuthMode) -> Result<String, String> {
@@ -368,7 +368,12 @@ mod tests {
     fn browser_profiles_dir_blank_env_is_treated_as_unset() {
         let cwd = PathBuf::from("/repo");
         assert_eq!(
-            resolve_browser_profiles_dir(Some("".into()), true, AuthMode::Hybrid, Some(cwd.clone())),
+            resolve_browser_profiles_dir(
+                Some("".into()),
+                true,
+                AuthMode::Hybrid,
+                Some(cwd.clone())
+            ),
             Some(cwd.join(".data").join("browser-profiles"))
         );
         assert_eq!(
@@ -380,7 +385,12 @@ mod tests {
     #[test]
     fn browser_profiles_dir_local_dev_defaults_under_cwd() {
         assert_eq!(
-            resolve_browser_profiles_dir(None, true, AuthMode::Hybrid, Some(PathBuf::from("/repo"))),
+            resolve_browser_profiles_dir(
+                None,
+                true,
+                AuthMode::Hybrid,
+                Some(PathBuf::from("/repo"))
+            ),
             Some(PathBuf::from("/repo/.data/browser-profiles"))
         );
         assert_eq!(
@@ -392,7 +402,12 @@ mod tests {
     #[test]
     fn browser_profiles_dir_is_none_when_browser_disabled_or_cwd_unknown() {
         assert_eq!(
-            resolve_browser_profiles_dir(None, false, AuthMode::Hybrid, Some(PathBuf::from("/repo"))),
+            resolve_browser_profiles_dir(
+                None,
+                false,
+                AuthMode::Hybrid,
+                Some(PathBuf::from("/repo"))
+            ),
             None
         );
         assert_eq!(
