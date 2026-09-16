@@ -115,7 +115,7 @@ export function ResultContentDialog({
       >
         <DialogHeader className="shrink-0 border-b border-border/70 px-5 py-4 pr-12">
           <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface-active text-foreground">
               <FileText className="size-5" aria-hidden />
             </span>
             <div className="min-w-0 pt-0.5">

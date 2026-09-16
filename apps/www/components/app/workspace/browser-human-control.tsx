@@ -60,7 +60,7 @@ export function BrowserHumanControlBar({
       <div className="flex flex-wrap items-center gap-2">
         {humanActive ? (
           <>
-            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
               You have control
             </span>
             <Button
@@ -88,7 +88,7 @@ export function BrowserHumanControlBar({
         )}
       </div>
       {error ? (
-        <p className="text-[10px] text-red-600" role="alert">
+        <p className="text-[10px] text-destructive" role="alert">
           {error}
         </p>
       ) : null}
@@ -144,7 +144,7 @@ export function BrowserHumanControlBar({
             </div>
           ) : null}
           {inputError ? (
-            <p className="text-[10px] text-red-600" role="alert">
+            <p className="text-[10px] text-destructive" role="alert">
               {inputError}
             </p>
           ) : null}

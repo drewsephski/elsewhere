@@ -59,7 +59,7 @@ export function AppShellNav({
           href={appRoutes.workspace}
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "mb-3 w-full justify-start gap-2",
+            "mb-3 w-full justify-start gap-2 rounded-lg text-[13px]",
           )}
         >
           <MessageSquare className="size-4 shrink-0" aria-hidden />
@@ -70,7 +70,7 @@ export function AppShellNav({
       {showBackToChat && isMobile ? (
         <Link
           href={appRoutes.workspace}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium"
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium"
         >
           <MessageSquare className="size-4" aria-hidden />
           Chat
@@ -78,7 +78,7 @@ export function AppShellNav({
       ) : null}
 
       {!isMobile ? (
-        <p className="mb-2 px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
           Manage
         </p>
       ) : null}
@@ -93,21 +93,16 @@ export function AppShellNav({
             key={link.href}
             href={link.href}
             className={cn(
-              "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              isMobile && "shrink-0 whitespace-nowrap",
+              "group relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              isMobile && "shrink-0 whitespace-nowrap px-3 py-2",
               active
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                ? "bg-surface-active text-foreground"
+                : "text-muted-foreground hover:bg-surface-hover hover:text-foreground",
             )}
+            aria-current={active ? "page" : undefined}
           >
-            {active && !isMobile ? (
-              <span
-                className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-primary"
-                aria-hidden
-              />
-            ) : null}
             <Icon
-              className={cn("h-4 w-4 shrink-0", active ? "text-primary" : "")}
+              className={cn("h-4 w-4 shrink-0", active ? "text-foreground" : "")}
               aria-hidden
             />
             {link.label}
@@ -119,8 +114,8 @@ export function AppShellNav({
         type="button"
         onClick={() => void handleSignOut()}
         className={cn(
-          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",
-          isMobile ? "ml-auto shrink-0" : "mt-auto",
+          "flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          isMobile ? "ml-auto shrink-0 px-3 py-2" : "mt-auto",
         )}
       >
         <LogOut className="h-4 w-4 shrink-0" aria-hidden />

@@ -97,7 +97,7 @@ export function ResultsPanel({ runId }: { runId?: string }) {
         header: "File",
         cell: ({ row }) => (
           <div className="flex min-w-0 items-start gap-2">
-            <FileText className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+            <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
             <div className="min-w-0">
               <p className="break-words text-sm font-medium">
                 {resultItemTitle(row.original.kind, row.original.name)}
@@ -153,7 +153,7 @@ export function ResultsPanel({ runId }: { runId?: string }) {
             <button
               type="button"
               onClick={() => handleOpenResult(row.original)}
-              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <ExternalLink className="size-4" aria-hidden />
               Open
@@ -200,9 +200,9 @@ export function ResultsPanel({ runId }: { runId?: string }) {
   return (
     <section className="space-y-3">
       {error ? (
-        <p className="text-sm text-red-700" role="alert">{error}</p>
+        <p className="text-sm text-destructive" role="alert">{error}</p>
       ) : null}
-      {note ? <p className="text-sm text-amber-700">{note}</p> : null}
+      {note ? <p className="text-sm text-warning">{note}</p> : null}
       <WorkspaceDataGrid
         table={table}
         recordCount={items.length}

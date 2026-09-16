@@ -112,7 +112,7 @@ export function CreateGroupDialog({
           </div>
           <p className="text-xs text-muted-foreground">{selected.length} of 2–6 selected</p>
           {error ? (
-            <p className="text-sm text-red-700" role="alert">{error}</p>
+            <p className="text-sm text-destructive" role="alert">{error}</p>
           ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

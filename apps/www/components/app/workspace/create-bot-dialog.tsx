@@ -166,7 +166,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
             ) : null}
           </FormFields>
           {error ? (
-            <p className="mt-3 text-sm text-red-700" role="alert">{error}</p>
+            <p className="mt-3 text-sm text-destructive" role="alert">{error}</p>
           ) : null}
           <DialogFooter className="mt-3">
             <Button type="button" variant="outline" onClick={onClose}>

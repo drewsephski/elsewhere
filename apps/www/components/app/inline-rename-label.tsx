@@ -110,7 +110,7 @@ export function InlineRenameLabel({
 
   const displayClassName = cn(
     "min-w-0 truncate text-left rounded-md px-0.5 -mx-0.5",
-    !nested && "hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+    !nested && "hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
     className,
   );
 

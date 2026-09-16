@@ -397,7 +397,7 @@ export function RoutinesManager() {
               {routine.lastRunId ? (
                 <Link
                   href={`/app/work/${routine.lastRunId}`}
-                  className="text-sm text-primary underline-offset-2 hover:underline"
+                  className="text-sm text-link underline-offset-2 hover:underline"
                 >
                   Latest work
                 </Link>

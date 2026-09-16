@@ -174,7 +174,7 @@ export function FloatingBrowserPreview() {
       <div
         className={cn(
           "overflow-hidden rounded-xl border border-border/60 bg-background/95 shadow-lg backdrop-blur-md",
-          dragging && "ring-2 ring-primary/25",
+          dragging && "ring-2 ring-ring/40",
         )}
       >
         <div
@@ -227,7 +227,7 @@ export function FloatingBrowserPreview() {
             addressBar={addressBar}
           />
           {controlError ? (
-            <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-red-600" role="alert">
+            <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-destructive" role="alert">
               {controlError}
             </p>
           ) : null}

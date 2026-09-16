@@ -53,15 +53,15 @@ export function WorkspaceDataGrid<TData extends object>({
       }}
       tableClassNames={{
         base: "text-sm",
-        header: "bg-white/50 text-muted-foreground",
+        header: "bg-surface-hover text-muted-foreground",
         headerRow: "border-b border-border/60",
-        bodyRow: "transition-colors hover:bg-white/55",
+        bodyRow: "transition-colors hover:bg-surface-hover",
       }}
     >
       <div className={cn("space-y-3", className)}>
         {toolbar}
         <Card
-          className="min-w-0 overflow-hidden rounded-xl border-border/70 bg-white/55 p-0 shadow-sm backdrop-blur-sm"
+          className="min-w-0 overflow-hidden rounded-xl border-border bg-card p-0"
         >
           <DataGridContainer className="min-w-0">
             <DataGridScrollArea orientation="vertical">
@@ -99,7 +99,7 @@ export function WorkspaceDataGridTabs({
             className={cn(
               "border-b-2 pb-2 text-sm font-medium transition-colors",
               active === tab.value
-                ? "border-primary text-foreground"
+                ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
             aria-current={active === tab.value ? "true" : undefined}

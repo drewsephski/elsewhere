@@ -32,10 +32,10 @@ function canArchiveRun(status: string): boolean {
 
 function statusTone(status: string): string {
   if (status === "running" || status === "queued") {
-    return "text-primary";
+    return "text-info";
   }
   if (status === "failed" || status === "interrupted") {
-    return "text-amber-800";
+    return "text-warning";
   }
   return "text-muted-foreground";
 }
@@ -221,14 +221,14 @@ export function RecentRunsPanel({
   return (
     <section className={cn("space-y-4", className)}>
       {error ? (
-        <p className="text-xs text-red-700" role="alert">{error}</p>
+        <p className="text-xs text-destructive" role="alert">{error}</p>
       ) : null}
       <WorkspaceDataGrid
         table={table}
         recordCount={runs.length}
         loading={loading && runs.length === 0}
         emptyMessage={
-          <p className="rounded-xl border border-dashed border-border/80 bg-white/40 px-4 py-8 text-center text-sm text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
             {emptyMessage}
           </p>
         }

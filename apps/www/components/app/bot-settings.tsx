@@ -151,7 +151,7 @@ export function BotSettings({
             <Button
               type="button"
               variant="outline"
-              className="text-red-700 hover:bg-red-50"
+              className="text-destructive hover:bg-destructive/10"
               disabled={busy}
               onClick={() => setDeleteOpen(true)}
             >
@@ -160,14 +160,14 @@ export function BotSettings({
           </div>
           {deleteOpen ? (
             <div
-              className="rounded-xl border border-red-200 bg-red-50/80 p-3 text-sm"
+              className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm"
               role="alertdialog"
               aria-labelledby="delete-bot-title"
             >
-              <p id="delete-bot-title" className="font-medium text-red-900">
+              <p id="delete-bot-title" className="font-medium text-destructive-foreground">
                 Delete {bot.name}?
               </p>
-              <p className="mt-1 text-xs text-red-800/90">
+              <p className="mt-1 text-xs text-destructive-foreground/90">
                 This removes the bot and its settings. Work history may remain in your account.
               </p>
               <div className="mt-3 flex gap-2">
@@ -183,7 +183,7 @@ export function BotSettings({
                 <Button
                   type="button"
                   size="sm"
-                  className="bg-red-700 text-white hover:bg-red-800"
+                  variant="destructive"
                   disabled={busy}
                   onClick={() => void handleDelete()}
                 >
@@ -196,7 +196,7 @@ export function BotSettings({
             <p role="status" className="text-sm text-muted-foreground">{notice}</p>
           ) : null}
           {error ? (
-            <p role="alert" className={embedded ? "text-xs text-red-700" : "text-sm text-red-700"}>
+            <p role="alert" className={embedded ? "text-xs text-destructive" : "text-sm text-destructive"}>
               {error}
             </p>
           ) : null}
