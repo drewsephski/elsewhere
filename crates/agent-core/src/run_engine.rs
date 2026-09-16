@@ -4,17 +4,17 @@
 //! Codex subscription runs live in `codex-provider::CodexRunEngine`.
 
 use async_trait::async_trait;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use crate::approval::{AllowAllApprovalGate, ToolApprovalGate};
+use crate::browser_recovery::BrowserRecoverySession;
+use crate::collaboration::AgentCollaboration;
 use crate::computer::AgentComputer;
+use crate::connectors::AgentConnectors;
 use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
-use crate::collaboration::AgentCollaboration;
-use crate::connectors::AgentConnectors;
-use crate::browser_recovery::BrowserRecoverySession;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 use agent_skills::SkillPackage;
 
@@ -115,10 +115,7 @@ impl RunEngine for ResponsesRunEngine {
 }
 
 /// Build `AgentLoopDeps` for the Responses API engine.
-pub fn responses_loop_deps(
-    shared: SharedRunDeps,
-    model: Arc<dyn ResponsesModel>,
-) -> AgentLoopDeps {
+pub fn responses_loop_deps(shared: SharedRunDeps, model: Arc<dyn ResponsesModel>) -> AgentLoopDeps {
     AgentLoopDeps {
         computer: shared.computer,
         store: shared.store,

@@ -246,6 +246,24 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/approvals/{id}/deny",
             post(crate::approval::api::deny_approval),
         )
+        .route(
+            "/v1/approvals/{id}/always-allow",
+            post(crate::approval::api::always_allow_approval),
+        )
+        .route(
+            "/v1/approvals/{id}/always-deny",
+            post(crate::approval::api::always_deny_approval),
+        )
+        .route(
+            "/v1/settings/permission-policies",
+            get(api::permission_policies::get_owner_policies)
+                .put(api::permission_policies::put_owner_policies),
+        )
+        .route(
+            "/v1/bots/{id}/permission-policies",
+            get(api::permission_policies::get_bot_policies)
+                .put(api::permission_policies::put_bot_policies),
+        )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_authenticated,

@@ -18,6 +18,7 @@ import {
 import { ChevronDown } from "@/components/icons/lucide";
 import { cn } from "cn";
 import { BotSkillsSettings } from "@/components/app/bot-skills-settings";
+import { PermissionPolicyEditor } from "@/components/app/permission-policy-editor";
 
 export function BotSettings({
   bot,
@@ -147,6 +148,11 @@ export function BotSettings({
             compact={embedded}
           />
           <BotSkillsSettings botId={bot.id} embedded={embedded} />
+          <PermissionPolicyEditor
+            endpoint={`/v1/bots/${bot.id}/permission-policies`}
+            mode="bot"
+            embedded={embedded}
+          />
           <p className={embedded ? "text-[11px] leading-snug text-muted-foreground" : "text-xs text-muted-foreground"}>
             {embedded
               ? "Computer changes apply to new work only."

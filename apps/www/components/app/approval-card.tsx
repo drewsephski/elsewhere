@@ -17,6 +17,10 @@ export interface ApprovalRequestedPayload {
   operationKind: string;
   summary: string;
   waitingForApproval?: boolean;
+  botId?: string;
+  botName?: string;
+  policyOverridable?: boolean;
+  policyActionLabel?: string;
 }
 
 interface ApprovalCardProps {
@@ -80,7 +84,39 @@ export function ApprovalCard({
     finally { setBusy(false); }
   }
 
+  async function handlePersistent(kind: "allow" | "deny") {
+    if (status !== "pending" || busy) {
+      return;
+    }
+    setError(null);
+    const path =
+      kind === "allow"
+        ? `/v1/approvals/${payload.approvalId}/always-allow`
+        : `/v1/approvals/${payload.approvalId}/always-deny`;
+    setBusy(true);
+    try {
+      const response = await cloudHostFetch(path, { method: "POST" });
+      if (!response.ok) {
+        throw new Error(
+          response.status === 404
+            ? "This request may have expired or been resolved. Refresh its work to see the latest status."
+            : "Could not update this Bot’s permissions. Try again.",
+        );
+      }
+      const next: ApprovalTerminalState = kind === "allow" ? "approved" : "denied";
+      setStatus(next);
+      onResolved?.(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this Bot’s permissions. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const resolved = status !== "pending";
+  const botName = payload.botName?.trim() || "this Bot";
+  const actionLabel = (payload.policyActionLabel ?? payload.tool).toLowerCase();
+  const showPersistent = payload.policyOverridable !== false && Boolean(payload.tool);
 
   return (
     <div
@@ -115,6 +151,30 @@ export function ApprovalCard({
           </span>
         ) : null}
       </div>
+      {showPersistent && !resolved ? (
+        <div className="mt-2 flex flex-col items-start gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={busy}
+            onClick={() => void handlePersistent("allow")}
+          >
+            Always allow {actionLabel} for {botName}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={busy}
+            onClick={() => void handlePersistent("deny")}
+          >
+            Always deny {actionLabel} for {botName}
+          </Button>
+        </div>
+      ) : null}
       {error ? (
         <p className="mt-2 text-xs text-destructive" role="alert">
           {error}

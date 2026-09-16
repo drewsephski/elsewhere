@@ -2,6 +2,9 @@ use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::approval::ToolRunContext;
+use crate::collaboration::CollaborationContext;
+use crate::collaboration_tools::all_openai_tool_definitions;
 use crate::computer::ComputerError;
 use crate::events::{AgentEvent, EventSink, RuntimeError};
 use crate::input::{MessageRole, MessageStatus};
@@ -10,9 +13,6 @@ use crate::model::{
     model_supports_responses_tools, CreateResponseRequest, ModelError, ResponsesModel,
 };
 use crate::run_store::{RunStore, StructuredMessageInput};
-use crate::approval::ToolRunContext;
-use crate::collaboration::CollaborationContext;
-use crate::collaboration_tools::all_openai_tool_definitions;
 use crate::tools::{ToolError, MAX_AGENT_TOOL_STEPS};
 
 pub struct AgentLoopContext {
@@ -60,11 +60,8 @@ pub async fn run_agent_loop(
         .store
         .append_run_event(&ctx.request_id, "run_started", &started_payload)
         .await?;
-    deps.events.emit_durable(
-        started_receipt.id,
-        "run_started",
-        &started_payload,
-    )?;
+    deps.events
+        .emit_durable(started_receipt.id, "run_started", &started_payload)?;
     deps.events.emit(AgentEvent::RunStarted {
         request_id: ctx.request_id.clone(),
     })?;
@@ -179,113 +176,114 @@ pub async fn run_agent_loop(
                 source_request_id: ctx.request_id.clone(),
                 tool_invocation_id: call_id.clone(),
             };
-            let tool_result = match crate::collaboration_tools::dispatch_agent_tool_with_gate_and_recovery(
-                deps.computer.as_ref(),
-                deps.collaboration.as_ref(),
-                deps.connectors.as_ref(),
-                deps.human_intervention.as_ref(),
-                &name,
-                &arguments,
-                &deps.cancel,
-                deps.approval_gate.as_ref(),
-                &tool_run,
-                Some(&collaboration_ctx),
-                deps.browser_recovery.as_ref(),
-            )
-            .await
-            {
-                Ok(value) => value,
-                Err(ToolError::Cancelled) => {
-                    finalize_cancelled(&deps, &ctx).await?;
-                    return Ok(());
-                }
-                Err(err) if matches!(err, ToolError::Denied(_)) => {
-                    let result_body = json!({
-                        "tool": name,
-                        "callId": call_id,
-                        "ok": false,
-                        "errorCode": err.code(),
-                        "error": err.message()
-                    });
-                    let _ = persist_event(
-                        &deps,
-                        &ctx,
-                        "tool_result",
-                        &result_body.to_string(),
-                        MessageStatus::Error,
-                        Some("tool_result"),
-                        &result_body,
-                    )
-                    .await;
-                    let output_string = json!({
-                        "ok": false,
-                        "errorCode": err.code(),
-                        "error": err.message()
-                    })
-                    .to_string();
-                    input.push(function_call_output_item(&call_id, &output_string));
-                    continue;
-                }
-                Err(err) if is_computer_fatal(&err) => {
-                    let result_body = json!({
-                        "tool": name,
-                        "callId": call_id,
-                        "ok": false,
-                        "errorCode": err.code(),
-                        "error": err.message()
-                    });
-                    let _ = persist_event(
-                        &deps,
-                        &ctx,
-                        "tool_result",
-                        &result_body.to_string(),
-                        MessageStatus::Error,
-                        Some("tool_result"),
-                        &result_body,
-                    )
-                    .await;
-                    fail_run(&deps, &ctx, err.code(), &err.message(), step_count).await?;
-                    return Ok(());
-                }
-                Err(err) => {
-                    let output_string = json!({
-                        "ok": false,
-                        "errorCode": err.code(),
-                        "error": err.message()
-                    })
-                    .to_string();
-                    let result_body = json!({
-                        "tool": name,
-                        "callId": call_id,
-                        "ok": false,
-                        "errorCode": err.code(),
-                        "error": err.message(),
-                        "output": output_string
-                    });
-                    let result_message = persist_event(
-                        &deps,
-                        &ctx,
-                        "tool_result",
-                        &result_body.to_string(),
-                        MessageStatus::Complete,
-                        Some("tool_result"),
-                        &result_body,
-                    )
-                    .await?;
-                    deps.events.emit(AgentEvent::ToolResult {
-                        tool: name.clone(),
-                        call_id: call_id.clone(),
-                        ok: false,
-                        output: output_string.clone(),
-                        message: Some(result_message),
-                    })?;
-                    input.push(function_call_output_item(&call_id, &output_string));
-                    continue;
-                }
-            };
+            let tool_result =
+                match crate::collaboration_tools::dispatch_agent_tool_with_gate_and_recovery(
+                    deps.computer.as_ref(),
+                    deps.collaboration.as_ref(),
+                    deps.connectors.as_ref(),
+                    deps.human_intervention.as_ref(),
+                    &name,
+                    &arguments,
+                    &deps.cancel,
+                    deps.approval_gate.as_ref(),
+                    &tool_run,
+                    Some(&collaboration_ctx),
+                    deps.browser_recovery.as_ref(),
+                )
+                .await
+                {
+                    Ok(value) => value,
+                    Err(ToolError::Cancelled) => {
+                        finalize_cancelled(&deps, &ctx).await?;
+                        return Ok(());
+                    }
+                    Err(err) if matches!(err, ToolError::Denied(_)) => {
+                        let result_body = json!({
+                            "tool": name,
+                            "callId": call_id,
+                            "ok": false,
+                            "errorCode": err.code(),
+                            "error": err.message()
+                        });
+                        let _ = persist_event(
+                            &deps,
+                            &ctx,
+                            "tool_result",
+                            &result_body.to_string(),
+                            MessageStatus::Error,
+                            Some("tool_result"),
+                            &result_body,
+                        )
+                        .await;
+                        let output_string = json!({
+                            "ok": false,
+                            "errorCode": err.code(),
+                            "error": err.message()
+                        })
+                        .to_string();
+                        input.push(function_call_output_item(&call_id, &output_string));
+                        continue;
+                    }
+                    Err(err) if is_computer_fatal(&err) => {
+                        let result_body = json!({
+                            "tool": name,
+                            "callId": call_id,
+                            "ok": false,
+                            "errorCode": err.code(),
+                            "error": err.message()
+                        });
+                        let _ = persist_event(
+                            &deps,
+                            &ctx,
+                            "tool_result",
+                            &result_body.to_string(),
+                            MessageStatus::Error,
+                            Some("tool_result"),
+                            &result_body,
+                        )
+                        .await;
+                        fail_run(&deps, &ctx, err.code(), &err.message(), step_count).await?;
+                        return Ok(());
+                    }
+                    Err(err) => {
+                        let output_string = json!({
+                            "ok": false,
+                            "errorCode": err.code(),
+                            "error": err.message()
+                        })
+                        .to_string();
+                        let result_body = json!({
+                            "tool": name,
+                            "callId": call_id,
+                            "ok": false,
+                            "errorCode": err.code(),
+                            "error": err.message(),
+                            "output": output_string
+                        });
+                        let result_message = persist_event(
+                            &deps,
+                            &ctx,
+                            "tool_result",
+                            &result_body.to_string(),
+                            MessageStatus::Complete,
+                            Some("tool_result"),
+                            &result_body,
+                        )
+                        .await?;
+                        deps.events.emit(AgentEvent::ToolResult {
+                            tool: name.clone(),
+                            call_id: call_id.clone(),
+                            ok: false,
+                            output: output_string.clone(),
+                            message: Some(result_message),
+                        })?;
+                        input.push(function_call_output_item(&call_id, &output_string));
+                        continue;
+                    }
+                };
 
-            let output_string =
-                serde_json::to_string(&tool_result).map_err(|e| RuntimeError::Validation(e.to_string()))?;
+            let output_string = serde_json::to_string(&tool_result)
+                .map_err(|e| RuntimeError::Validation(e.to_string()))?;
 
             let result_body = json!({
                 "tool": name,
@@ -343,8 +341,7 @@ async fn persist_event(
             .store
             .append_run_event(&ctx.request_id, event_type, payload)
             .await?;
-        deps.events
-            .emit_durable(receipt.id, event_type, payload)?;
+        deps.events.emit_durable(receipt.id, event_type, payload)?;
     }
     deps.store
         .persist_structured_message(StructuredMessageInput {
@@ -419,7 +416,8 @@ async fn finalize_success(
         .store
         .append_run_event(&ctx.request_id, "terminal", &terminal_payload)
         .await?;
-    deps.events.emit_durable(terminal_receipt.id, "terminal", &terminal_payload)?;
+    deps.events
+        .emit_durable(terminal_receipt.id, "terminal", &terminal_payload)?;
     deps.events.emit(AgentEvent::Terminal {
         event_type: "done".into(),
         error: None,
@@ -428,7 +426,10 @@ async fn finalize_success(
     Ok(())
 }
 
-async fn finalize_cancelled(deps: &AgentLoopDeps, ctx: &AgentLoopContext) -> Result<(), RuntimeError> {
+async fn finalize_cancelled(
+    deps: &AgentLoopDeps,
+    ctx: &AgentLoopContext,
+) -> Result<(), RuntimeError> {
     let partial = deps
         .store
         .get_assistant_message_body(&ctx.assistant_message_id)
@@ -601,7 +602,10 @@ mod tests {
             Ok(())
         }
 
-        async fn get_assistant_message_body(&self, _message_id: &str) -> Result<String, RuntimeError> {
+        async fn get_assistant_message_body(
+            &self,
+            _message_id: &str,
+        ) -> Result<String, RuntimeError> {
             Ok(String::new())
         }
     }

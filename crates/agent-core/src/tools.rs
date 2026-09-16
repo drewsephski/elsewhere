@@ -139,16 +139,7 @@ pub async fn dispatch_tool_with_gate(
     gate: &dyn ToolApprovalGate,
     run: &ToolRunContext,
 ) -> Result<Value, ToolError> {
-    dispatch_tool_with_gate_and_recovery(
-        computer,
-        name,
-        arguments,
-        cancel,
-        gate,
-        run,
-        None,
-    )
-    .await
+    dispatch_tool_with_gate_and_recovery(computer, name, arguments, cancel, gate, run, None).await
 }
 
 pub async fn dispatch_tool_with_gate_and_recovery(
@@ -170,14 +161,16 @@ pub async fn dispatch_tool_with_gate_and_recovery(
         }
     }
 
-    let args: Value = serde_json::from_str(arguments).map_err(|e| {
-        ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
-    })?;
+    let args: Value = serde_json::from_str(arguments)
+        .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
 
     validate_tool_argument_limits(name, &args)?;
 
     let approval_ctx = ToolApprovalContext::for_tool(run, name, args.clone());
-    let approval = gate.authorize(&approval_ctx).await.map_err(map_approval_error)?;
+    let approval = gate
+        .authorize(&approval_ctx)
+        .await
+        .map_err(map_approval_error)?;
     if let ApprovalDecision::Deny { reason } = approval {
         return Err(ToolError::Denied(reason));
     }
@@ -216,7 +209,9 @@ pub async fn dispatch_tool_with_gate_and_recovery(
             "workspace_read" => workspace_read(computer, &args).await,
             "workspace_write" => workspace_write(computer, &args).await,
             "workspace_exec" => workspace_exec(computer, &args).await,
-            other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
+            other => Err(ToolError::MalformedArguments(format!(
+                "unknown tool: {other}"
+            ))),
         }
     };
 
@@ -304,10 +299,7 @@ fn map_approval_error(err: ApprovalError) -> ToolError {
 
 fn validate_tool_argument_limits(name: &str, args: &Value) -> Result<(), ToolError> {
     if name == "workspace_exec" {
-        let command = args
-            .get("command")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
         if command.len() > MAX_EXEC_COMMAND_CHARS {
             return Err(ToolError::MalformedArguments(format!(
                 "command exceeds {MAX_EXEC_COMMAND_CHARS} characters"

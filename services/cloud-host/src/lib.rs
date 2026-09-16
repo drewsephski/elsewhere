@@ -9,6 +9,7 @@ pub mod db;
 pub mod error;
 pub mod events;
 pub mod finalizer;
+pub mod permission_policies;
 pub mod provider_profile;
 pub mod provider_status_cache;
 pub mod redact;

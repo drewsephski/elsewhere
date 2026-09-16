@@ -7,9 +7,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-use crate::computer::{
-    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
-};
+use crate::computer::{AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry};
 
 type ReadyFuture = futures_util::future::Shared<
     Pin<Box<dyn Future<Output = Result<ComputerInfo, ComputerError>> + Send>>,
@@ -31,7 +29,10 @@ impl ReadinessCachedComputer {
     }
 
     pub fn invalidate_readiness(&self) {
-        *self.cached_success.lock().expect("readiness cache poisoned") = None;
+        *self
+            .cached_success
+            .lock()
+            .expect("readiness cache poisoned") = None;
         // Drop any in-flight probe so the next call retries.
         if let Ok(mut slot) = self.inflight.try_lock() {
             *slot = None;
@@ -46,7 +47,12 @@ impl AgentComputer for ReadinessCachedComputer {
     }
 
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
-        if let Some(cached) = self.cached_success.lock().expect("readiness cache poisoned").clone() {
+        if let Some(cached) = self
+            .cached_success
+            .lock()
+            .expect("readiness cache poisoned")
+            .clone()
+        {
             return Ok(cached);
         }
 
@@ -61,8 +67,10 @@ impl AgentComputer for ReadinessCachedComputer {
 
         let result = shared.await;
         if result.is_ok() {
-            *self.cached_success.lock().expect("readiness cache poisoned") =
-                result.clone().ok();
+            *self
+                .cached_success
+                .lock()
+                .expect("readiness cache poisoned") = result.clone().ok();
         } else {
             *self.inflight.lock().await = None;
         }

@@ -1,12 +1,12 @@
 use serde_json::{json, Value};
 
+use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
+use crate::browser_recovery::BrowserRecoverySession;
 use crate::human_intervention::{
     is_human_intervention_tool, sanitize_human_intervention_message,
     validate_human_intervention_reason, AgentHumanIntervention, HumanInterventionContext,
     HumanInterventionError, HUMAN_INTERVENTION_REASONS,
 };
-use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
-use crate::browser_recovery::BrowserRecoverySession;
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -46,15 +46,16 @@ pub async fn dispatch_human_intervention_tool(
     browser_recovery: Option<&Arc<BrowserRecoverySession>>,
 ) -> Result<Value, ToolError> {
     if !is_human_intervention_tool(name) {
-        return Err(ToolError::MalformedArguments(format!("unknown tool: {name}")));
+        return Err(ToolError::MalformedArguments(format!(
+            "unknown tool: {name}"
+        )));
     }
     if cancel.load(Ordering::Relaxed) {
         return Err(ToolError::Cancelled);
     }
 
-    let args: Value = serde_json::from_str(arguments).map_err(|e| {
-        ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
-    })?;
+    let args: Value = serde_json::from_str(arguments)
+        .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
     let reason = args
         .get("reason")
         .and_then(|v| v.as_str())
@@ -65,14 +66,21 @@ pub async fn dispatch_human_intervention_tool(
         .ok_or_else(|| ToolError::MalformedArguments("missing message".into()))?;
 
     validate_human_intervention_reason(reason).map_err(map_human_intervention_error)?;
-    let safe_message = sanitize_human_intervention_message(message)
-        .map_err(map_human_intervention_error)?;
+    let safe_message =
+        sanitize_human_intervention_message(message).map_err(map_human_intervention_error)?;
 
-    let approval_ctx = ToolApprovalContext::for_tool(run, name, json!({
-        "reason": reason,
-        "message": safe_message.clone(),
-    }));
-    let approval = gate.authorize(&approval_ctx).await.map_err(map_approval_error)?;
+    let approval_ctx = ToolApprovalContext::for_tool(
+        run,
+        name,
+        json!({
+            "reason": reason,
+            "message": safe_message.clone(),
+        }),
+    );
+    let approval = gate
+        .authorize(&approval_ctx)
+        .await
+        .map_err(map_approval_error)?;
     if let crate::approval::ApprovalDecision::Deny { reason } = approval {
         return Err(ToolError::Denied(reason));
     }

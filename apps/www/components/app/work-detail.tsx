@@ -178,6 +178,16 @@ export function WorkDetail({ runId }: { runId: string }) {
                 summary: payload.summary,
                 tool: String(payload.tool ?? ""),
                 operationKind: String(payload.operationKind ?? ""),
+                botId: typeof payload.botId === "string" ? payload.botId : undefined,
+                botName: typeof payload.botName === "string" ? payload.botName : undefined,
+                policyOverridable:
+                  typeof payload.policyOverridable === "boolean"
+                    ? payload.policyOverridable
+                    : undefined,
+                policyActionLabel:
+                  typeof payload.policyActionLabel === "string"
+                    ? payload.policyActionLabel
+                    : undefined,
               };
               setTimeline((previous) =>
                 previous.some((item) => item.id === id) ? previous : [...previous, { id, approval }],

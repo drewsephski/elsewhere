@@ -93,6 +93,10 @@ required-features = ["test-utils"]
 name = "idor"
 required-features = ["test-utils"]
 
+[[test]]
+name = "permission_policies"
+required-features = ["test-utils"]
+
 [dev-dependencies]
 rcgen = "0.14"
 tempfile = "3"

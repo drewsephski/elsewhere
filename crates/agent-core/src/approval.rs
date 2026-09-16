@@ -279,14 +279,8 @@ mod tests {
         assert!(text.len() > 80);
         assert_eq!(truncate_str(&text, 80), "a".repeat(79));
 
-        let sanitized = sanitize_tool_arguments(
-            "browser_type",
-            &json!({"ref":"e1","text": text}),
-        );
-        assert_eq!(
-            sanitized.get("textPreview"),
-            Some(&json!("a".repeat(79)))
-        );
+        let sanitized = sanitize_tool_arguments("browser_type", &json!({"ref":"e1","text": text}));
+        assert_eq!(sanitized.get("textPreview"), Some(&json!("a".repeat(79))));
     }
 
     #[test]
@@ -296,9 +290,6 @@ mod tests {
             &json!({"path":"/workspace/a.txt","content":"hello"}),
         );
         assert_eq!(sanitized.get("contentLength"), Some(&json!(5)));
-        assert_eq!(
-            sanitized.get("contentPreview"),
-            Some(&json!("hello"))
-        );
+        assert_eq!(sanitized.get("contentPreview"), Some(&json!("hello")));
     }
 }

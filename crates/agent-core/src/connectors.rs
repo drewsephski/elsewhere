@@ -41,9 +41,7 @@ impl ConnectorError {
 
     pub fn message(&self) -> String {
         match self {
-            ConnectorError::NotConnected => {
-                "Connector is not connected for this account".into()
-            }
+            ConnectorError::NotConnected => "Connector is not connected for this account".into(),
             ConnectorError::Validation(m) => m.clone(),
             ConnectorError::Provider(m) => m.clone(),
             ConnectorError::Internal(m) => m.clone(),
@@ -77,8 +75,7 @@ mod tests {
     #[test]
     fn bound_connector_tool_result_rejects_oversized_payload() {
         let huge = "x".repeat(MAX_CONNECTOR_TOOL_RESULT_BYTES + 1);
-        let err = bound_connector_tool_result(json!({ "content": huge }))
-            .expect_err("oversized");
+        let err = bound_connector_tool_result(json!({ "content": huge })).expect_err("oversized");
         assert!(matches!(err, ConnectorError::Validation(_)));
     }
 }

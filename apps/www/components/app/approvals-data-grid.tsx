@@ -23,6 +23,10 @@ interface ApprovalListItem {
   toolKind: string;
   status: string;
   summary: string;
+  botId?: string | null;
+  botName?: string | null;
+  policyOverridable?: boolean;
+  policyActionLabel?: string;
 }
 
 export function ApprovalsDataGrid() {
@@ -77,6 +81,26 @@ export function ApprovalsDataGrid() {
     }
   }
 
+  async function handlePersistent(item: ApprovalListItem, kind: "allow" | "deny") {
+    setBusyId(item.approvalId);
+    setError(null);
+    const path =
+      kind === "allow"
+        ? `/v1/approvals/${item.approvalId}/always-allow`
+        : `/v1/approvals/${item.approvalId}/always-deny`;
+    try {
+      const response = await cloudHostFetch(path, { method: "POST" });
+      if (!response.ok) {
+        throw new Error("Could not update this Bot’s permissions. Try again.");
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this Bot’s permissions");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const columns = useMemo<ColumnDef<DataGridFeatures, ApprovalListItem>[]>(
     () => [
       {
@@ -111,24 +135,50 @@ export function ApprovalsDataGrid() {
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={busyId !== null}
-              onClick={() => void handleDecision(row.original.approvalId, "deny")}
-            >
-              Deny
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={busyId !== null}
-              onClick={() => void handleDecision(row.original.approvalId, "approve")}
-            >
-              Approve
-            </Button>
+          <div className="flex flex-col items-end gap-1">
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busyId !== null}
+                onClick={() => void handleDecision(row.original.approvalId, "deny")}
+              >
+                Deny
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={busyId !== null}
+                onClick={() => void handleDecision(row.original.approvalId, "approve")}
+              >
+                Approve
+              </Button>
+            </div>
+            {row.original.policyOverridable !== false ? (
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  disabled={busyId !== null}
+                  onClick={() => void handlePersistent(row.original, "deny")}
+                >
+                  Always deny for {row.original.botName?.trim() || "this Bot"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  disabled={busyId !== null}
+                  onClick={() => void handlePersistent(row.original, "allow")}
+                >
+                  Always allow {row.original.policyActionLabel?.toLowerCase() || "this"} for {row.original.botName?.trim() || "this Bot"}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ),
         size: 180,

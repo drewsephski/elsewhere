@@ -159,24 +159,39 @@ pub fn detect_human_blocker(snapshot_text: &str) -> Option<HumanBlockerHint> {
     ) {
         return Some(HumanBlockerHint {
             reason: "two_factor",
-            guidance: "Complete two-factor or OTP verification in the browser, then return control.",
+            guidance:
+                "Complete two-factor or OTP verification in the browser, then return control.",
         });
     }
 
     if contains_any(
         &lower,
-        &["passkey", "security key", "webauthn", "use your fingerprint", "touch id", "face id"],
+        &[
+            "passkey",
+            "security key",
+            "webauthn",
+            "use your fingerprint",
+            "touch id",
+            "face id",
+        ],
     ) {
         return Some(HumanBlockerHint {
             reason: "passkey",
-            guidance: "Complete passkey or biometric verification in the browser, then return control.",
+            guidance:
+                "Complete passkey or biometric verification in the browser, then return control.",
         });
     }
 
     if (contains_any(&lower, &["sign in", "log in", "login", "sign-in"]))
         && contains_any(
             &lower,
-            &["password", "email", "username", "forgot password", "create account"],
+            &[
+                "password",
+                "email",
+                "username",
+                "forgot password",
+                "create account",
+            ],
         )
     {
         return Some(HumanBlockerHint {
@@ -212,8 +227,10 @@ pub fn detect_human_blocker(snapshot_text: &str) -> Option<HumanBlockerHint> {
             "terms of service",
             "i agree",
         ],
-    ) && contains_any(&lower, &["permission", "consent", "cookies", "terms", "agree"])
-    {
+    ) && contains_any(
+        &lower,
+        &["permission", "consent", "cookies", "terms", "agree"],
+    ) {
         return Some(HumanBlockerHint {
             reason: "consent",
             guidance: "Make the required permission or consent choice in the browser, then return control.",
@@ -344,8 +361,8 @@ mod tests {
 
     #[test]
     fn recoverable_stale_ref_not_immediate_escalation() {
-        let kind = classify_recoverable_failure("unknown ref e3; call browser_snapshot first")
-            .unwrap();
+        let kind =
+            classify_recoverable_failure("unknown ref e3; call browser_snapshot first").unwrap();
         let plan = plan_recovery_after_failure(0, kind);
         assert!(!plan.escalation_recommended);
         assert_eq!(plan.attempts_remaining, 2);
@@ -372,7 +389,8 @@ mod tests {
     fn snapshot_after_handback_clears_mutation_gate() {
         let session = BrowserRecoverySession::new();
         session.mark_owner_handback();
-        let _ = session.on_browser_success("browser_snapshot", json!({"ok": true, "summary": "ok"}));
+        let _ =
+            session.on_browser_success("browser_snapshot", json!({"ok": true, "summary": "ok"}));
         assert!(session.preflight_browser_tool("browser_click").is_ok());
     }
 

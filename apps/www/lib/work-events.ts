@@ -58,6 +58,16 @@ export function activityText(event: string, payload: Record<string, unknown>): s
     return "You returned control to the Bot";
   }
   if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
+  if (event === "permission_policy_resolved") {
+    if (payload.decision === "allow") {
+      return null;
+    }
+    if (payload.decision === "deny") {
+      const labeled = typeof payload.tool === "string" ? toolLabel(payload.tool, payload) : null;
+      return labeled ? `Blocked: ${labeled}` : "This Bot is not allowed to do that";
+    }
+    return null;
+  }
   if (event === "queued") return "Work saved. Waiting for an available computer.";
   if (event === "host_restart") return "Work was interrupted when the runner restarted. Completed actions have not been repeated.";
   if (event === "terminal") return typeof payload.status === "string" ? workStatus(payload.status) : "Work updated";

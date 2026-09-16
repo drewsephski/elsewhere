@@ -16,6 +16,7 @@ use crate::config::Config;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::events::registry::RunRegistry;
 use crate::human_intervention::HumanInterventionService;
+use crate::permission_policies::PermissionPolicyService;
 use crate::provider_status_cache::ProviderStatusCache;
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -53,6 +54,7 @@ pub struct AppState {
     pub jwt_verifier: Option<Arc<JwtVerifier>>,
     pub codex_login_client: Arc<Mutex<Option<PendingCodexLogin>>>,
     pub approvals: ApprovalService,
+    pub permission_policies: PermissionPolicyService,
     pub human_interventions: HumanInterventionService,
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
@@ -143,6 +145,7 @@ impl AppState {
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
             timeout: Duration::from_secs(config.tool_approval_timeout_secs),
         };
+        let permission_policies = PermissionPolicyService::new(pool.clone());
         let human_interventions = HumanInterventionService {
             pool: pool.clone(),
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
@@ -162,6 +165,7 @@ impl AppState {
             jwt_verifier,
             codex_login_client: Arc::new(Mutex::new(None)),
             approvals,
+            permission_policies,
             human_interventions,
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),

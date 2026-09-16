@@ -1,9 +1,7 @@
 use serde_json::{json, Value};
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
-use crate::connectors::{
-    bound_connector_tool_result, AgentConnectors, ConnectorError,
-};
+use crate::connectors::{bound_connector_tool_result, AgentConnectors, ConnectorError};
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -160,12 +158,14 @@ pub async fn dispatch_connector_tool_with_gate(
         ToolError::MalformedArguments("connectors are not available in this run".into())
     })?;
 
-    let args: Value = serde_json::from_str(arguments).map_err(|e| {
-        ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
-    })?;
+    let args: Value = serde_json::from_str(arguments)
+        .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
 
     let approval_ctx = ToolApprovalContext::for_tool(run, name, args.clone());
-    let approval = gate.authorize(&approval_ctx).await.map_err(map_approval_error)?;
+    let approval = gate
+        .authorize(&approval_ctx)
+        .await
+        .map_err(map_approval_error)?;
     if let crate::approval::ApprovalDecision::Deny { reason } = approval {
         return Err(ToolError::Denied(reason));
     }

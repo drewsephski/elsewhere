@@ -5,7 +5,9 @@ pub fn is_internal_workspace_entry(name: &str) -> bool {
     name.starts_with(".elsewhere-")
 }
 
-pub fn filter_workspace_listing(entries: impl IntoIterator<Item = crate::computer::WorkspaceEntry>) -> Vec<crate::computer::WorkspaceEntry> {
+pub fn filter_workspace_listing(
+    entries: impl IntoIterator<Item = crate::computer::WorkspaceEntry>,
+) -> Vec<crate::computer::WorkspaceEntry> {
     entries
         .into_iter()
         .filter(|entry| !is_internal_workspace_entry(&entry.name))

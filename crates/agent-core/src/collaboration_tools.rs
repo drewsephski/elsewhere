@@ -111,18 +111,20 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
         .await;
     }
     if is_collaboration_tool(name) {
-        return dispatch_collaboration_tool(collaboration, name, arguments, cancel, gate, run, collaboration_ctx).await;
-    }
-    if is_connector_tool(name) {
-        return dispatch_connector_tool_with_gate(
-            connectors,
+        return dispatch_collaboration_tool(
+            collaboration,
             name,
             arguments,
             cancel,
             gate,
             run,
+            collaboration_ctx,
         )
         .await;
+    }
+    if is_connector_tool(name) {
+        return dispatch_connector_tool_with_gate(connectors, name, arguments, cancel, gate, run)
+            .await;
     }
     crate::tools::dispatch_tool_with_gate_and_recovery(
         computer,
@@ -151,16 +153,17 @@ async fn dispatch_collaboration_tool(
     let service = collaboration.ok_or_else(|| {
         ToolError::MalformedArguments("bot collaboration is not available in this run".into())
     })?;
-    let ctx = collaboration_ctx.ok_or_else(|| {
-        ToolError::MalformedArguments("collaboration context missing".into())
-    })?;
+    let ctx = collaboration_ctx
+        .ok_or_else(|| ToolError::MalformedArguments("collaboration context missing".into()))?;
 
-    let args: Value = serde_json::from_str(arguments).map_err(|e| {
-        ToolError::MalformedArguments(format!("invalid JSON arguments: {e}"))
-    })?;
+    let args: Value = serde_json::from_str(arguments)
+        .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
 
     let approval_ctx = ToolApprovalContext::for_tool(run, name, args.clone());
-    let approval = gate.authorize(&approval_ctx).await.map_err(map_approval_error)?;
+    let approval = gate
+        .authorize(&approval_ctx)
+        .await
+        .map_err(map_approval_error)?;
     if let crate::approval::ApprovalDecision::Deny { reason } = approval {
         return Err(ToolError::Denied(reason));
     }
@@ -171,7 +174,10 @@ async fn dispatch_collaboration_tool(
 
     let result = match name {
         "bot_list" => {
-            let bots = service.list_bots(ctx).await.map_err(map_collaboration_error)?;
+            let bots = service
+                .list_bots(ctx)
+                .await
+                .map_err(map_collaboration_error)?;
             Ok(json!({ "ok": true, "bots": bots }))
         }
         "bot_delegate" => {
@@ -205,7 +211,9 @@ async fn dispatch_collaboration_tool(
                 "detail": "Work queued for the recipient Bot. They have not finished yet."
             }))
         }
-        other => Err(ToolError::MalformedArguments(format!("unknown tool: {other}"))),
+        other => Err(ToolError::MalformedArguments(format!(
+            "unknown tool: {other}"
+        ))),
     }?;
 
     let mut envelope = result;

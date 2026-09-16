@@ -3,8 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{
-    approval_action_summary, sanitize_tool_arguments, ApprovalDecision, ApprovalError, EventSink,
-    ToolApprovalContext, ToolOperationKind,
+    approval_action_summary, is_policy_overridable_tool, policy_action_label,
+    sanitize_tool_arguments, ApprovalDecision, ApprovalError, EventSink, ToolApprovalContext,
+    ToolOperationKind,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -31,6 +32,8 @@ pub struct ToolApprovalRow {
     pub resolution_reason: Option<String>,
     pub expires_at: Option<DateTime<Utc>>,
     pub requested_at: DateTime<Utc>,
+    pub bot_id: Option<String>,
+    pub bot_name: Option<String>,
 }
 
 #[derive(Clone)]
@@ -140,12 +143,14 @@ impl ApprovalService {
         if let Some(status) = status {
             sqlx::query_as(
                 r#"
-                SELECT id, run_id, owner_id, tool_name, tool_kind, arguments_json, status,
-                       created_at, updated_at, resolved_at, resolved_by, resolution_reason,
-                       expires_at, requested_at
-                FROM tool_approval_requests
-                WHERE owner_id = $1 AND status = $2
-                ORDER BY requested_at DESC
+                SELECT a.id, a.run_id, a.owner_id, a.tool_name, a.tool_kind, a.arguments_json, a.status,
+                       a.created_at, a.updated_at, a.resolved_at, a.resolved_by, a.resolution_reason,
+                       a.expires_at, a.requested_at, r.bot_id, b.name AS bot_name
+                FROM tool_approval_requests a
+                LEFT JOIN agent_runs r ON r.id = a.run_id
+                LEFT JOIN bots b ON b.id = r.bot_id
+                WHERE a.owner_id = $1 AND a.status = $2
+                ORDER BY a.requested_at DESC
                 "#,
             )
             .bind(owner_id)
@@ -155,12 +160,14 @@ impl ApprovalService {
         } else {
             sqlx::query_as(
                 r#"
-                SELECT id, run_id, owner_id, tool_name, tool_kind, arguments_json, status,
-                       created_at, updated_at, resolved_at, resolved_by, resolution_reason,
-                       expires_at, requested_at
-                FROM tool_approval_requests
-                WHERE owner_id = $1
-                ORDER BY requested_at DESC
+                SELECT a.id, a.run_id, a.owner_id, a.tool_name, a.tool_kind, a.arguments_json, a.status,
+                       a.created_at, a.updated_at, a.resolved_at, a.resolved_by, a.resolution_reason,
+                       a.expires_at, a.requested_at, r.bot_id, b.name AS bot_name
+                FROM tool_approval_requests a
+                LEFT JOIN agent_runs r ON r.id = a.run_id
+                LEFT JOIN bots b ON b.id = r.bot_id
+                WHERE a.owner_id = $1
+                ORDER BY a.requested_at DESC
                 LIMIT 200
                 "#,
             )
@@ -177,11 +184,13 @@ impl ApprovalService {
     ) -> Result<Option<ToolApprovalRow>, sqlx::Error> {
         sqlx::query_as(
             r#"
-            SELECT id, run_id, owner_id, tool_name, tool_kind, arguments_json, status,
-                   created_at, updated_at, resolved_at, resolved_by, resolution_reason,
-                   expires_at, requested_at
-            FROM tool_approval_requests
-            WHERE id = $1 AND owner_id = $2
+            SELECT a.id, a.run_id, a.owner_id, a.tool_name, a.tool_kind, a.arguments_json, a.status,
+                   a.created_at, a.updated_at, a.resolved_at, a.resolved_by, a.resolution_reason,
+                   a.expires_at, a.requested_at, r.bot_id, b.name AS bot_name
+            FROM tool_approval_requests a
+            LEFT JOIN agent_runs r ON r.id = a.run_id
+            LEFT JOIN bots b ON b.id = r.bot_id
+            WHERE a.id = $1 AND a.owner_id = $2
             "#,
         )
         .bind(approval_id)
@@ -491,12 +500,22 @@ impl ApprovalService {
             return Err(ApprovalError::Internal(e.to_string()));
         }
 
+        let bot_name = self
+            .bot_name_for_owner(&context.owner_id, &context.bot_id)
+            .await
+            .unwrap_or(None)
+            .unwrap_or_else(|| "this Bot".into());
+        let policy_overridable = is_policy_overridable_tool(&context.tool_name);
         let requested_payload = json!({
             "approvalId": approval_id,
             "tool": context.tool_name,
             "operationKind": "mutation",
             "summary": summary,
             "waitingForApproval": true,
+            "botId": context.bot_id,
+            "botName": bot_name,
+            "policyOverridable": policy_overridable,
+            "policyActionLabel": policy_action_label(&context.tool_name),
         });
 
         let persist_emit = async {
@@ -525,4 +544,118 @@ impl ApprovalService {
         self.finalize_mutation_approval(context, &approval_id, resolution, events, store)
             .await
     }
+
+    async fn bot_name_for_owner(
+        &self,
+        owner_id: &str,
+        bot_id: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar("SELECT name FROM bots WHERE id = $1 AND owner_id = $2")
+            .bind(bot_id)
+            .bind(owner_id)
+            .fetch_optional(&self.pool)
+            .await
+    }
+
+    pub async fn persist_bot_policy_and_resolve(
+        &self,
+        owner_id: &str,
+        approval_id: &str,
+        resolved_by: &str,
+        decision: crate::permission_policies::PolicyDecision,
+    ) -> Result<PersistPolicyResolution, sqlx::Error> {
+        use crate::permission_policies::{PermissionPolicyService, PolicyDecision};
+
+        let row = self.get_for_owner(owner_id, approval_id).await?;
+        let Some(row) = row else {
+            return Ok(PersistPolicyResolution::NotFound);
+        };
+        if row.status != "pending" {
+            return Ok(PersistPolicyResolution::NotFound);
+        }
+        if self.expire_pending_if_due(approval_id, &row.run_id).await? {
+            return Ok(PersistPolicyResolution::NotFound);
+        }
+        if !is_policy_overridable_tool(&row.tool_name) {
+            return Ok(PersistPolicyResolution::NotOverridable);
+        }
+        let Some(bot_id) = row.bot_id.clone() else {
+            return Ok(PersistPolicyResolution::NotFound);
+        };
+
+        let mut tx = self.pool.begin().await?;
+        let now = Utc::now();
+        let policies = PermissionPolicyService::new(self.pool.clone());
+        policies
+            .upsert_bot_decision_in_tx(&mut tx, owner_id, &bot_id, &row.tool_name, decision, now)
+            .await?;
+
+        let status = match decision {
+            PolicyDecision::Allow => "approved",
+            PolicyDecision::Deny => "denied",
+            PolicyDecision::Ask => "approved",
+        };
+        let resolution_reason = match decision {
+            PolicyDecision::Allow => "always_allow",
+            PolicyDecision::Deny => "always_deny",
+            PolicyDecision::Ask => "user_approved",
+        };
+        let result = sqlx::query(
+            r#"
+            UPDATE tool_approval_requests
+            SET status = $3,
+                resolved_at = $4,
+                resolved_by = $5,
+                resolution_reason = $6,
+                updated_at = $4
+            WHERE id = $1
+              AND run_id = $2
+              AND owner_id = $7
+              AND status = 'pending'
+            "#,
+        )
+        .bind(approval_id)
+        .bind(&row.run_id)
+        .bind(status)
+        .bind(now)
+        .bind(resolved_by)
+        .bind(resolution_reason)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() != 1 {
+            tx.rollback().await?;
+            self.registry.drop_waiter(approval_id);
+            return Ok(PersistPolicyResolution::NotFound);
+        }
+
+        tx.commit().await?;
+
+        let resolution = match decision {
+            PolicyDecision::Deny => ApprovalResolution::Denied {
+                reason: resolution_reason.to_string(),
+            },
+            _ => ApprovalResolution::Approved,
+        };
+        self.registry.notify(approval_id, resolution);
+        Ok(PersistPolicyResolution::Applied {
+            bot_id,
+            action: row.tool_name,
+            decision: decision.as_str().to_string(),
+            approval_status: status.to_string(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PersistPolicyResolution {
+    Applied {
+        bot_id: String,
+        action: String,
+        decision: String,
+        approval_status: String,
+    },
+    NotFound,
+    NotOverridable,
 }

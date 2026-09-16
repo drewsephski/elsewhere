@@ -62,17 +62,16 @@ pub fn validate_human_intervention_reason(reason: &str) -> Result<(), HumanInter
     }
 }
 
-pub fn sanitize_human_intervention_message(message: &str) -> Result<String, HumanInterventionError> {
+pub fn sanitize_human_intervention_message(
+    message: &str,
+) -> Result<String, HumanInterventionError> {
     let trimmed = message.trim();
     if trimmed.is_empty() {
         return Err(HumanInterventionError::Validation(
             "message is required".into(),
         ));
     }
-    let collapsed = trimmed
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let collapsed = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
     if collapsed.len() > MAX_HUMAN_INTERVENTION_MESSAGE_CHARS {
         return Err(HumanInterventionError::Validation(format!(
             "message exceeds {MAX_HUMAN_INTERVENTION_MESSAGE_CHARS} characters"

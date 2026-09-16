@@ -5,9 +5,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use crate::computer::{
-    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
-};
+use crate::computer::{AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry};
 
 const MAX_CAPTURE_BYTES: usize = 256 * 1024;
 
@@ -40,7 +38,11 @@ impl FakeAgentComputer {
     }
 
     pub fn with_listing(mut self, path: &str, entries: Vec<WorkspaceEntry>) -> Self {
-        self.inner.get_mut().unwrap().listings.insert(path.to_string(), entries);
+        self.inner
+            .get_mut()
+            .unwrap()
+            .listings
+            .insert(path.to_string(), entries);
         self
     }
 
@@ -63,10 +65,7 @@ impl FakeAgentComputer {
     }
 
     pub fn with_transient_readiness_failures(mut self, count: usize) -> Self {
-        self.inner
-            .get_mut()
-            .unwrap()
-            .transient_failures_remaining = count;
+        self.inner.get_mut().unwrap().transient_failures_remaining = count;
         self
     }
 
@@ -99,7 +98,9 @@ impl AgentComputer for FakeAgentComputer {
         state.ensure_ready_calls += 1;
         if state.transient_failures_remaining > 0 {
             state.transient_failures_remaining -= 1;
-            return Err(ComputerError::GuestUnavailable("transient readiness failure".into()));
+            return Err(ComputerError::GuestUnavailable(
+                "transient readiness failure".into(),
+            ));
         }
         if !state.ready {
             return Err(ComputerError::NotProvisioned);
@@ -114,11 +115,7 @@ impl AgentComputer for FakeAgentComputer {
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let state = self.inner.lock().unwrap();
         ensure_workspace_path(path, state.reject_non_workspace_paths)?;
-        Ok(state
-            .listings
-            .get(path)
-            .cloned()
-            .unwrap_or_default())
+        Ok(state.listings.get(path).cloned().unwrap_or_default())
     }
 
     async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
@@ -174,9 +171,7 @@ mod tests {
         let err = computer.list_dir("/etc").await.unwrap_err();
         assert_eq!(
             err,
-            ComputerError::SandboxRejected(
-                "path must be under /workspace, got /etc".into()
-            )
+            ComputerError::SandboxRejected("path must be under /workspace, got /etc".into())
         );
     }
 }

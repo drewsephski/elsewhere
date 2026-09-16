@@ -15,13 +15,9 @@ pub fn compose_runtime_instruction_snapshot(input: &RuntimeIdentityInput) -> Str
     let mut sections = Vec::new();
 
     if name.is_empty() {
-        sections.push(
-            "You are an AI teammate in Elsewhere.".to_string(),
-        );
+        sections.push("You are an AI teammate in Elsewhere.".to_string());
     } else {
-        sections.push(format!(
-            "You are \"{name}\", an AI teammate in Elsewhere."
-        ));
+        sections.push(format!("You are \"{name}\", an AI teammate in Elsewhere."));
     }
 
     sections.push(

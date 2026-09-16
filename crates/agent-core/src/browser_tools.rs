@@ -100,7 +100,9 @@ pub async fn dispatch_browser_tool(
     args: &Value,
 ) -> Result<Value, ToolError> {
     if !is_browser_tool(name) {
-        return Err(ToolError::MalformedArguments(format!("not a browser tool: {name}")));
+        return Err(ToolError::MalformedArguments(format!(
+            "not a browser tool: {name}"
+        )));
     }
 
     validate_browser_args(name, args).await?;
@@ -126,9 +128,8 @@ async fn validate_browser_args(name: &str, args: &Value) -> Result<(), ToolError
         }
         "browser_screenshot" | "browser_download" => {
             let path = required_str(args, "path")?;
-            crate::workspace_entries::validate_workspace_mutation_path(path).map_err(|err| {
-                ToolError::MalformedArguments(err.into())
-            })?;
+            crate::workspace_entries::validate_workspace_mutation_path(path)
+                .map_err(|err| ToolError::MalformedArguments(err.into()))?;
             if name == "browser_download" {
                 let url = required_str(args, "url")?;
                 crate::public_http_url::validate_public_http_url(url).await?;
@@ -173,10 +174,7 @@ mod tests {
             })
         }
 
-        async fn list_dir(
-            &self,
-            _path: &str,
-        ) -> Result<Vec<WorkspaceEntry>, ComputerError> {
+        async fn list_dir(&self, _path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
             Ok(vec![])
         }
 
@@ -198,7 +196,10 @@ mod tests {
         }
 
         async fn browser_invoke(&self, action: &str, args: &Value) -> Result<Value, ComputerError> {
-            let key = format!("{action}:{}", args.get("url").and_then(|v| v.as_str()).unwrap_or(""));
+            let key = format!(
+                "{action}:{}",
+                args.get("url").and_then(|v| v.as_str()).unwrap_or("")
+            );
             if let Some(v) = self.responses.lock().unwrap().get(&key) {
                 return Ok(v.clone());
             }
@@ -262,14 +263,12 @@ mod tests {
         .unwrap_err();
         assert!(matches!(err, ToolError::MalformedArguments(_)));
 
-        assert!(
-            dispatch_browser_tool(
-                &computer,
-                "browser_screenshot",
-                &json!({"path":"/workspace/screenshots/a.png"}),
-            )
-            .await
-            .is_ok()
-        );
+        assert!(dispatch_browser_tool(
+            &computer,
+            "browser_screenshot",
+            &json!({"path":"/workspace/screenshots/a.png"}),
+        )
+        .await
+        .is_ok());
     }
 }

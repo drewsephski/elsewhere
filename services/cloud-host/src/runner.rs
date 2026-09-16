@@ -333,8 +333,13 @@ async fn execute_run(
         .bind(&input.records.computer_id).bind(&owner_id).execute(&pool).await.map_err(|e| e.to_string())?;
 
     let approval_gate: Arc<dyn ToolApprovalGate> = if enforce_approvals {
-        let run_gate =
-            RunScopedApprovalGate::new(approvals, events.clone(), store.clone(), cancel.clone());
+        let run_gate = RunScopedApprovalGate::new(
+            approvals,
+            host_state.permission_policies.clone(),
+            events.clone(),
+            store.clone(),
+            cancel.clone(),
+        );
         Arc::new(BrowserHumanControlGate::wrapping_run_gate(
             run_gate,
             pool.clone(),

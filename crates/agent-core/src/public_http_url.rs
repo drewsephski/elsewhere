@@ -54,9 +54,8 @@ pub async fn validate_public_http_url(raw_url: &str) -> Result<(), ToolError> {
     if raw_url.len() > crate::approval::MAX_BROWSER_URL_CHARS {
         return Err(ToolError::MalformedArguments("url is too long".into()));
     }
-    let parsed = url::Url::parse(raw_url).map_err(|_| {
-        ToolError::MalformedArguments("url is not a valid http(s) URL".into())
-    })?;
+    let parsed = url::Url::parse(raw_url)
+        .map_err(|_| ToolError::MalformedArguments("url is not a valid http(s) URL".into()))?;
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(ToolError::MalformedArguments(
@@ -84,9 +83,7 @@ pub async fn validate_public_http_url(raw_url: &str) -> Result<(), ToolError> {
     let port = parsed.port_or_known_default().unwrap_or(443);
     let addrs = tokio::net::lookup_host((host, port))
         .await
-        .map_err(|_| {
-            ToolError::MalformedArguments("url host could not be resolved".into())
-        })?;
+        .map_err(|_| ToolError::MalformedArguments("url host could not be resolved".into()))?;
     let mut any = false;
     for addr in addrs {
         any = true;
@@ -121,7 +118,9 @@ mod tests {
 
     #[test]
     fn unique_local_ipv6_is_blocked() {
-        assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfd12, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfd12, 0, 0, 0, 0, 0, 0, 1
+        ))));
     }
 
     #[tokio::test]

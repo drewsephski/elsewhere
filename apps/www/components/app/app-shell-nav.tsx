@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Monitor,
   Plug,
+  Settings2,
   Sparkles,
 } from "@/components/icons/lucide";
 import Link from "next/link";
@@ -26,6 +27,7 @@ const linkIcons = {
   [appRoutes.computers]: Monitor,
   [appRoutes.connectors]: Plug,
   [appRoutes.skills]: Sparkles,
+  [appRoutes.settings]: Settings2,
 } as const;
 
 interface AppShellNavProps {
