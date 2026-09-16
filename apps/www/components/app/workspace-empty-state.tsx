@@ -22,7 +22,7 @@ export function WorkspaceEmptyState({
   children,
 }: WorkspaceEmptyStateProps) {
   return (
-    <Empty className="border-border/80 bg-white/40">
+    <Empty className="border-border bg-card">
       <EmptyHeader>
         {icon ? <EmptyMedia variant="icon">{icon}</EmptyMedia> : null}
         <EmptyTitle>{title}</EmptyTitle>

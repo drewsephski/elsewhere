@@ -84,7 +84,7 @@ export function ApprovalCard({
 
   return (
     <div
-      className="my-2 rounded-lg border border-amber-500/35 bg-amber-50 p-3 text-sm shadow-sm"
+      className="my-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm"
       role="region"
       aria-label="Action approval required"
     >
@@ -116,7 +116,7 @@ export function ApprovalCard({
         ) : null}
       </div>
       {error ? (
-        <p className="mt-2 text-xs text-red-700" role="alert">
+        <p className="mt-2 text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}

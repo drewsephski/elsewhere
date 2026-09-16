@@ -75,47 +75,57 @@ export function ComputerStatePanel({
     ? "Ready for work"
     : "Provisions on first use";
   if (variant === "minimal") {
+    const screenOwner = bot?.name?.trim() ? `${bot.name.trim()}’s screen` : "Screen";
     return (
-      <section
-        className={cn("border-b border-border/60 pb-3 pt-2", className)}
-        aria-labelledby="computer-panel-title"
-      >
-        <div className="flex items-center justify-between gap-2 px-1">
-          <h2 id="computer-panel-title" className="text-sm font-semibold">
-            Computer
-          </h2>
-          <Link
-            href="/app/computers"
-            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-          >
-            Manage
-          </Link>
-        </div>
+      <section className={cn("pb-1", className)} aria-labelledby="computer-panel-title">
+        <h2 id="computer-panel-title" className="sr-only">
+          Computer
+        </h2>
 
         {!bot?.computerId ? (
-          <p className="mt-2 px-1 text-xs leading-relaxed text-muted-foreground">
-            Assign a computer in Settings so your bot can keep files between assignments.
-          </p>
-        ) : (
-          <div className="mt-1.5 space-y-2 px-1">
-            <div className="flex items-start gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-white/70">
-              <span
-                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15"
-                aria-hidden
-              >
-                <Monitor className="size-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{displayName}</p>
-                <p className="text-xs text-muted-foreground">{readyLabel}</p>
-              </div>
-            </div>
-            {bot.computerId ? <ComputerBrowserPreview className="!mt-0" /> : null}
+          <div className="flex aspect-[16/10] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 text-center">
+            <span
+              className="flex size-9 items-center justify-center rounded-xl bg-surface-active text-muted-foreground"
+              aria-hidden
+            >
+              <Monitor className="size-4" />
+            </span>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Assign a computer in Settings so your bot can keep files between assignments.
+            </p>
+            <Link
+              href="/app/computers"
+              className="text-[11px] font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              Manage computers
+            </Link>
           </div>
+        ) : (
+          <>
+            <ComputerBrowserPreview
+              caption={
+                <p className="mt-2 text-center text-[11px] text-muted-foreground">{screenOwner}</p>
+              }
+            />
+            <div className="mt-2 flex items-center justify-between gap-2 px-0.5 text-[11px] text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Monitor className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                <span className="truncate">
+                  {displayName} · {readyLabel}
+                </span>
+              </div>
+              <Link
+                href="/app/computers"
+                className="shrink-0 underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Manage
+              </Link>
+            </div>
+          </>
         )}
 
         {error ? (
-          <p className="mt-2 px-1 text-xs text-red-600" role="alert">
+          <p className="mt-2 px-0.5 text-[11px] text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -137,39 +147,37 @@ export function ComputerStatePanel({
         </Link>
       </div>
 
-      <div className="mt-3 overflow-hidden rounded-xl border border-border/80 bg-[#1a1625] text-white shadow-inner">
-        <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2">
-          <span className="size-2.5 rounded-full bg-[#ff5f57]" aria-hidden />
-          <span className="size-2.5 rounded-full bg-[#febc2e]" aria-hidden />
-          <span className="size-2.5 rounded-full bg-[#28c840]" aria-hidden />
-          <span className="ml-2 truncate text-[11px] text-white/60">
+      <div className="mt-3 overflow-hidden rounded-xl border border-border bg-[#101010] text-foreground">
+        <div className="flex items-center gap-1.5 border-b border-border px-3 py-2">
+          <Monitor className="size-3.5 text-muted-foreground" aria-hidden />
+          <span className="truncate text-[11px] text-muted-foreground">
             {displayName ?? "No computer assigned"}
           </span>
         </div>
         <div className="space-y-3 p-4">
           {!bot?.computerId ? (
-            <p className="text-sm text-white/75">
+            <p className="text-sm text-muted-foreground">
               Assign a computer in bot settings so your bot can keep files between assignments.
             </p>
           ) : (
             <>
               <div className="flex items-center gap-2 text-sm">
-                <Monitor className="size-4 text-violet-300" aria-hidden />
+                <span className="size-1.5 rounded-full bg-success" aria-hidden />
                 <span>{readyLabel}</span>
               </div>
               {activeRun ? (
-                <div className="rounded-lg bg-white/5 p-3 text-sm">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-violet-200/90">
+                <div className="rounded-lg bg-surface-hover p-3 text-sm">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Current assignment
                   </p>
-                  <p className="mt-1 line-clamp-3 text-white/90">{activeRun.task}</p>
-                  <p className="mt-2 text-xs text-white/55">
+                  <p className="mt-1 line-clamp-3 text-foreground">{activeRun.task}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
                     {workStatus(activeRun.status)}
                     {latestActivity ? ` · ${latestActivity}` : null}
                   </p>
                 </div>
               ) : (
-                <p className="text-sm text-white/65">Idle — waiting for your next message.</p>
+                <p className="text-sm text-muted-foreground">Idle — waiting for your next message.</p>
               )}
               {bot.computerId ? (
                 <ComputerBrowserPreview className="!mt-0" />
@@ -179,7 +187,7 @@ export function ComputerStatePanel({
         </div>
       </div>
       {error ? (
-        <p className="mt-2 text-xs text-red-600" role="alert">
+        <p className="mt-2 text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}

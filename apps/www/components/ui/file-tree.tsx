@@ -367,7 +367,7 @@ const Folder = forwardRef<
             className,
             {
               "bg-muted/90": isSelected && isSelectable,
-              "cursor-pointer hover:bg-white/80": isSelectable,
+              "cursor-pointer hover:bg-surface-hover": isSelectable,
               "cursor-not-allowed opacity-50": !isSelectable,
             },
           )}
@@ -379,7 +379,7 @@ const Folder = forwardRef<
         >
           {isOpen
             ? (openIcon ?? (
-                <Files className="size-3.5 shrink-0 text-amber-600/90" />
+                <Files className="size-3.5 shrink-0 text-warning/90" />
               ))
             : (closeIcon ?? (
                 <Files className="size-3.5 shrink-0 text-muted-foreground" />
@@ -445,7 +445,7 @@ const File = forwardRef<
             "bg-muted/90": isSelected && isSelectable,
           },
           isSelectable
-            ? "cursor-pointer text-foreground/90 hover:bg-white/80"
+            ? "cursor-pointer text-foreground/90 hover:bg-surface-hover"
             : "cursor-not-allowed opacity-50",
           direction === "rtl" ? "rtl" : "ltr",
           className,

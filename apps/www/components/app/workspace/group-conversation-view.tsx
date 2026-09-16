@@ -9,9 +9,17 @@ import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft } from "@/components/icons/lucide";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronLeft, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
 import {
   buildGroupSendPayload,
   GroupMentionComposer,
@@ -19,6 +27,7 @@ import {
 } from "./group-mention-composer";
 import { deleteConversationMessage, canArchiveWorkRun, archiveWorkRun } from "@/lib/archive-work-run";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
+import { StatusPill, type StatusTone } from "@/components/app/status-pill";
 
 interface GroupConversationViewProps {
   groupId: string;
@@ -37,6 +46,21 @@ function recipientStatusLabel(status: string): string {
       return "cancelled";
     default:
       return status;
+  }
+}
+
+function recipientStatusTone(status: string): StatusTone {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "running":
+      return "info";
+    case "queued":
+      return "warning";
+    case "cancelled":
+      return "destructive";
+    default:
+      return "neutral";
   }
 }
 
@@ -230,89 +254,101 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const addableBots = bots.filter(
     (bot) => !activeParticipants.some((participant) => participant.botId === bot.id),
   );
+  const canAddParticipant = addableBots.length > 0 && activeParticipants.length < 6;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Link
             href="/app"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted lg:hidden"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-hover lg:hidden"
             aria-label="Back to bots"
           >
-            <ChevronLeft className="size-5" />
+            <ChevronLeft className="size-4" />
           </Link>
-          <div className="flex -space-x-2">
+          <div className="flex shrink-0 -space-x-1.5">
             {activeParticipants.slice(0, 4).map((participant) => (
               <BotCreatureAvatar
                 key={participant.botId}
                 name={participant.name}
                 avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                size="sm"
-                className="ring-2 ring-white"
+                size="xs"
+                variant="tile"
+                className="ring-2 ring-background"
               />
             ))}
           </div>
-          <div className="min-w-0">
-            <p className="truncate font-semibold">{group?.name ?? "Group"}</p>
-            <p className="text-xs text-muted-foreground">
-              {activeParticipants.length} participants
-            </p>
-          </div>
+          <p className="truncate text-[13px] font-medium leading-tight">{group?.name ?? "Group"}</p>
+          <span className="hidden text-[11px] text-muted-foreground sm:inline">
+            · {activeParticipants.length} participants
+          </span>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+        <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {messages.map((item) =>
             item.authorKind === "human" ? (
-              <div key={item.id} className="flex flex-col items-end gap-1">
-                <UserPromptBubble sentAt={item.createdAt}>{item.body}</UserPromptBubble>
-                {canDeleteMessage(item) ? (
-                  <MessageDeleteButton
-                    onDelete={() => handleDeleteMessage(item)}
-                    label="Delete message"
-                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                  />
-                ) : null}
-                {item.recipients && item.recipients.length > 0 ? (
-                  <ul className="flex flex-wrap justify-end gap-1.5 text-[11px] text-muted-foreground">
-                    {item.recipients.map((recipient) => (
-                      <li key={recipient.botId}>
-                        {recipient.runId && recipient.status === "completed" ? (
-                          <Link
-                            href={`/app/work/${recipient.runId}`}
-                            className="rounded-full border border-border/80 bg-white px-2 py-0.5 hover:bg-muted"
-                          >
-                            {recipient.botName} — {recipientStatusLabel(recipient.status)}
-                          </Link>
-                        ) : (
-                          <span className="rounded-full border border-border/80 bg-white px-2 py-0.5">
-                            {recipient.botName} — {recipientStatusLabel(recipient.status)}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                ) : routingStatusLabel(item.routing) ? (
-                  <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
-                    <span>{routingStatusLabel(item.routing)}</span>
-                    {item.routing?.status === "failed" ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[11px]"
-                        onClick={() => void handleRetryRoute(item.id)}
-                      >
-                        Retry
-                      </Button>
-                    ) : null}
-                    {item.routing?.status === "no_response" ? (
-                      <span className="text-[10px]">@mention a Bot if you&apos;d like a response.</span>
-                    ) : null}
-                  </div>
-                ) : null}
+              <div key={item.id} className="flex flex-col items-end gap-1.5">
+                <UserPromptBubble sentAt={item.createdAt} className="items-stretch">
+                  {item.body}
+                </UserPromptBubble>
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {item.recipients && item.recipients.length > 0 ? (
+                    <ul className="flex flex-wrap justify-end gap-1.5" aria-label="Recipients">
+                      {item.recipients.map((recipient) => {
+                        const label = `${recipient.botName} · ${recipientStatusLabel(recipient.status)}`;
+                        return (
+                          <li key={recipient.botId}>
+                            {recipient.runId && recipient.status === "completed" ? (
+                              <Link
+                                href={`/app/work/${recipient.runId}`}
+                                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                              >
+                                <StatusPill tone={recipientStatusTone(recipient.status)}>
+                                  {label}
+                                </StatusPill>
+                              </Link>
+                            ) : (
+                              <StatusPill
+                                tone={recipientStatusTone(recipient.status)}
+                                live={recipient.status === "running" || recipient.status === "queued"}
+                              >
+                                {label}
+                              </StatusPill>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : routingStatusLabel(item.routing) ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2 text-[11px] text-muted-foreground">
+                      <span>{routingStatusLabel(item.routing)}</span>
+                      {item.routing?.status === "failed" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 rounded-md px-2 text-[11px]"
+                          onClick={() => void handleRetryRoute(item.id)}
+                        >
+                          Retry
+                        </Button>
+                      ) : null}
+                      {item.routing?.status === "no_response" ? (
+                        <span className="text-[10px]">@mention a Bot if you&apos;d like a response.</span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {canDeleteMessage(item) ? (
+                    <MessageDeleteButton
+                      onDelete={() => handleDeleteMessage(item)}
+                      label="Delete"
+                      className="h-6 rounded-md px-1.5 text-[11px] text-muted-foreground hover:text-destructive"
+                    />
+                  ) : null}
+                </div>
               </div>
             ) : (
               <AssistantMessageBubble
@@ -321,20 +357,21 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                   <BotCreatureAvatar
                     name={item.authorBotName ?? "Bot"}
                     avatarId={item.authorAvatarId ?? DEFAULT_BOT_AVATAR_ID}
-                    size="sm"
+                    size="xs"
+                    variant="tile"
                   />
                 }
                 footer={
                   canDeleteMessage(item) ? (
                     <MessageDeleteButton
                       onDelete={() => handleDeleteMessage(item)}
-                      label="Delete message"
-                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
+                      label="Delete"
+                      className="h-6 rounded-md px-1.5 text-[11px] text-muted-foreground hover:text-destructive"
                     />
                   ) : null
                 }
               >
-                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                <p className="mb-1 text-[11px] font-medium text-muted-foreground">
                   {item.authorBotName ?? "Bot"}
                 </p>
                 <MarkdownContent
@@ -346,64 +383,75 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         </div>
       </div>
 
-      <footer className="shrink-0 space-y-3 border-t border-border/70 bg-white/90 px-4 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
-          {activeParticipants.map((participant) => (
-            <button
-              key={participant.botId}
-              type="button"
-              className="rounded-full border border-border px-2 py-1 text-xs hover:bg-muted"
-              onClick={() => void handleRemoveParticipant(participant.botId)}
-              aria-label={`Remove ${participant.name} from group`}
-            >
-              {participant.name} ×
-            </button>
-          ))}
-          {addableBots.length > 0 && activeParticipants.length < 6 ? (
-            <select
-              className="rounded-full border border-border px-2 py-1 text-xs"
-              defaultValue=""
-              onChange={(event) => {
-                const botId = event.target.value;
-                if (botId) {
-                  void handleAddParticipant(botId);
-                  event.target.value = "";
-                }
-              }}
-              aria-label="Add participant"
-            >
-              <option value="">Add bot…</option>
-              {addableBots.map((bot) => (
-                <option key={bot.id} value={bot.id}>{bot.name}</option>
+      <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
+        <div className="mx-auto max-w-3xl space-y-2">
+          {activeParticipants.length > 0 ? (
+            <ul className="flex flex-wrap items-center gap-1.5 px-1" aria-label="Participants">
+              {activeParticipants.map((participant) => (
+                <li key={participant.botId}>
+                  <button
+                    type="button"
+                    className="group inline-flex h-6 items-center gap-1 rounded-full bg-surface-hover pl-2 pr-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-surface-active hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                    onClick={() => void handleRemoveParticipant(participant.botId)}
+                    aria-label={`Remove ${participant.name} from group`}
+                  >
+                    {participant.name}
+                    <X className="size-3 opacity-60 group-hover:opacity-100" aria-hidden />
+                  </button>
+                </li>
               ))}
-            </select>
+            </ul>
+          ) : null}
+          <ChatComposerFrame
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSubmit();
+            }}
+            canSend={Boolean(message.trim()) && !pending}
+            pending={pending}
+            leading={
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<ComposerIconButton label="Add a bot" disabled={!canAddParticipant} />}
+                >
+                  <Plus className="size-4" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-52">
+                  <DropdownMenuLabel>Add to group</DropdownMenuLabel>
+                  {addableBots.map((bot) => (
+                    <DropdownMenuItem
+                      key={bot.id}
+                      onClick={() => void handleAddParticipant(bot.id)}
+                    >
+                      <BotCreatureAvatar
+                        name={bot.name}
+                        avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                        size="xs"
+                        variant="tile"
+                      />
+                      <span className="truncate">{bot.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            }
+          >
+            <GroupMentionComposer
+              participants={group?.participants ?? []}
+              value={message}
+              onChange={(next, nextMentions) => {
+                setMessage(next);
+                setMentions(nextMentions);
+              }}
+              onSubmit={() => void handleSubmit()}
+              disabled={pending}
+              pending={pending}
+            />
+          </ChatComposerFrame>
+          {error ? (
+            <p className="px-3 text-[11px] text-destructive" role="alert">{error}</p>
           ) : null}
         </div>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleSubmit();
-          }}
-          className="mx-auto flex max-w-2xl items-end gap-2"
-        >
-          <GroupMentionComposer
-            participants={group?.participants ?? []}
-            value={message}
-            onChange={(next, nextMentions) => {
-              setMessage(next);
-              setMentions(nextMentions);
-            }}
-            onSubmit={() => void handleSubmit()}
-            disabled={pending}
-            pending={pending}
-          />
-          <Button type="submit" disabled={pending || !message.trim()}>
-            {pending ? "Sending…" : "Send"}
-          </Button>
-        </form>
-        {error ? (
-          <p className="mx-auto max-w-2xl text-xs text-red-700" role="alert">{error}</p>
-        ) : null}
       </footer>
     </div>
   );

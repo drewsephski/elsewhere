@@ -36,7 +36,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
     <section
       className={cn(
         featured
-          ? "w-full max-w-md rounded-2xl border border-border/80 bg-white/80 p-6 text-left shadow-sm backdrop-blur-sm"
+          ? "w-full max-w-md rounded-2xl border border-border bg-card p-6 text-left"
           : "surface-card",
         className,
       )}
@@ -77,10 +77,10 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
           className={cn(
             "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
             providerUnavailable
-              ? "border-amber-200/80 bg-amber-50/80 text-amber-950"
+              ? "border-warning/25 bg-warning/10 text-warning-foreground"
               : connected
-                ? "border-emerald-200/80 bg-emerald-50/90 text-emerald-950"
-                : "border-amber-200/80 bg-amber-50/80 text-amber-950",
+                ? "border-success/25 bg-success/10 text-success-foreground"
+                : "border-warning/25 bg-warning/10 text-warning-foreground",
           )}
           role="status"
         >
@@ -91,22 +91,22 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
             </>
           ) : providerUnavailable ? (
             <>
-              <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden />
               <span>ChatGPT status is temporarily unavailable — your saved pairing is unchanged</span>
             </>
           ) : connected ? (
             <>
-              <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden />
+              <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
               <span>
                 Connected
                 {status?.chatgptPlanType ? (
-                  <span className="text-emerald-800/80"> · {status.chatgptPlanType}</span>
+                  <span className="text-success-foreground/80"> · {status.chatgptPlanType}</span>
                 ) : null}
               </span>
             </>
           ) : (
             <>
-              <span className="size-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
+              <span className="size-2 shrink-0 rounded-full bg-warning" aria-hidden />
               <span>Not connected — connect to run bots on your plan</span>
             </>
           )}
@@ -169,7 +169,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
       ) : null}
 
       {challenge ? (
-        <div className="mt-5 space-y-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div className="mt-5 space-y-4 rounded-xl border border-border bg-surface-hover p-4">
           <p className="text-sm font-medium text-foreground">Finish signing in to ChatGPT</p>
           <p className="text-sm text-muted-foreground">
             Open ChatGPT, choose device sign-in, and enter this one-time code:
@@ -213,7 +213,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
       ) : null}
 
       {error ? (
-        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
+        <p className="mt-4 rounded-lg border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}

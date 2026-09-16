@@ -40,22 +40,22 @@ export function MobileSheet({
     <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label={title}>
       <button
         type="button"
-        className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
         aria-label="Close panel"
         onClick={onClose}
       />
       <div
         className={cn(
-          "absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-2xl border border-border bg-card shadow-2xl",
+          "absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-2xl border border-border bg-background shadow-2xl",
           className,
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border/80 px-4 py-3">
-          <h2 className="text-base font-semibold">{title}</h2>
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <h2 className="text-[13px] font-medium">{title}</h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            className="flex size-8 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-hover hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-5" aria-hidden />

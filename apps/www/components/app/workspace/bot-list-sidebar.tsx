@@ -21,9 +21,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Search } from "@/components/icons/lucide";
+import { ProductLogo } from "@/components/product-logo";
+import { ComposerIconButton } from "./chat-composer";
 import type { GroupListItem } from "@/lib/api-types";
 import type { WorkspaceLoadPhase } from "@/hooks/use-workspace-overview";
 import { workspaceBotsEmptyMessage } from "@/lib/workspace-load-state";
@@ -54,6 +62,11 @@ interface ContextMenuState {
 
 const menuItemClass =
   "flex w-full cursor-default items-center rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent";
+
+const navRowClass =
+  "group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+const navRowSelectedClass = "bg-surface-active";
+const navRowIdleClass = "hover:bg-surface-hover";
 
 export function BotListSidebar({
   bots,
@@ -164,10 +177,37 @@ export function BotListSidebar({
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
-      <div className="shrink-0 space-y-2.5 px-2.5 pt-2.5 sm:px-3 sm:pt-3 sm:space-y-3">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3">
+        <Link
+          href="/app"
+          className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          aria-label="Workspace home"
+        >
+          <ProductLogo size="sm" className="size-5 opacity-90" />
+        </Link>
+        {onCreateGroup ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<ComposerIconButton label="New…" className="size-7" />}
+            >
+              <Plus className="size-4" aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={onCreateBot}>New bot</DropdownMenuItem>
+              <DropdownMenuItem onClick={onCreateGroup}>New group</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <ComposerIconButton label="New bot" className="size-7" onClick={onCreateBot}>
+            <Plus className="size-4" aria-hidden />
+          </ComposerIconButton>
+        )}
+      </div>
+
+      <div className="shrink-0 space-y-2 px-2.5 pb-1">
         <div className="relative">
           <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
           <Input
@@ -175,42 +215,24 @@ export function BotListSidebar({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
-            className="h-9 rounded-xl border-border/80 bg-white/80 py-2 pr-2.5 pl-9 text-sm sm:h-10 sm:pr-3"
+            className="h-8 rounded-lg border-transparent bg-surface-raised pr-2.5 pl-8 text-[13px] placeholder:text-muted-foreground focus-visible:border-ring/40 focus-visible:ring-0 dark:bg-surface-raised"
             aria-label="Search bots"
           />
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCreateBot}
-          className="w-full gap-2 rounded-xl border-dashed border-primary/35 bg-primary/5 text-primary hover:bg-primary/10"
-        >
-          <Plus className="size-4" aria-hidden />
-          New bot
-        </Button>
-        {onCreateGroup ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCreateGroup}
-            className="w-full gap-2 rounded-xl border-border/80 bg-white/80"
-          >
-            New group
-          </Button>
-        ) : null}
         {bots.length > 0 ? (
           <div className="flex gap-3 overflow-x-auto pb-1 lg:hidden" aria-label="Quick access">
             {bots.slice(0, 5).map((bot) => (
               <Link
                 key={bot.id}
                 href={`/app/bots/${bot.id}`}
-                className="flex w-14 shrink-0 flex-col items-center gap-0.5"
+                className="flex w-14 shrink-0 flex-col items-center gap-1"
                 onContextMenu={(event) => handleContextMenu(event, bot)}
               >
                 <BotCreatureAvatar
                   name={bot.name}
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                   size="lg"
+                  variant="tile"
                 />
                 <span className="w-full truncate text-center text-[10px] font-medium">
                   {bot.name.split(" ")[0]}
@@ -221,55 +243,51 @@ export function BotListSidebar({
         ) : null}
       </div>
 
-      <div className="mt-1.5 min-h-0 flex-1 space-y-3 overflow-y-auto px-1.5 pb-2 sm:mt-2 sm:px-2">
+      <div className="mt-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
         {groups.length > 0 ? (
           <section aria-label="Groups">
-            <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Groups
-            </p>
-            <ul className="space-y-0.5">
+            <ul className="space-y-px">
               {groups.map((group) => {
                 const selected = group.id === selectedGroupId;
                 const active = group.workingRuns > 0 || group.queuedRuns > 0;
+                const participants = group.participants.filter((p) => !p.leftAt);
                 return (
                   <li key={group.id}>
                     <Link
                       href={`/app/groups/${group.id}`}
                       className={cn(
-                        "flex items-center gap-2 rounded-xl border px-2 py-1.5 transition-colors",
-                        selected
-                          ? "border-primary/12 bg-white/95 shadow-sm"
-                          : "border-transparent hover:border-border/60 hover:bg-white/80",
+                        navRowClass,
+                        selected ? navRowSelectedClass : navRowIdleClass,
                       )}
                       aria-current={selected ? "page" : undefined}
                     >
-                      <div className="flex -space-x-1.5">
-                        {group.participants
-                          .filter((p) => !p.leftAt)
-                          .slice(0, 3)
-                          .map((participant) => (
-                            <BotCreatureAvatar
-                              key={participant.botId}
-                              name={participant.name}
-                              avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                              size="sm"
-                              className="ring-1 ring-white"
-                            />
-                          ))}
+                      <div className="flex shrink-0 -space-x-2">
+                        {participants.slice(0, 3).map((participant) => (
+                          <BotCreatureAvatar
+                            key={participant.botId}
+                            name={participant.name}
+                            avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                            size="xs"
+                            variant="tile"
+                            className="ring-2 ring-surface"
+                          />
+                        ))}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1">
-                          <span className="truncate text-[13px] font-semibold">{group.name}</span>
-                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-[13px] font-medium leading-tight">
+                            {group.name}
+                          </span>
+                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
                             {formatMessageTime(group.updatedAt)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
                           {active
                             ? group.workingRuns > 0
                               ? "Working…"
                               : "Queued…"
-                            : `${group.participants.filter((p) => !p.leftAt).length} participants`}
+                            : `${participants.length} participants`}
                         </p>
                       </div>
                     </Link>
@@ -279,11 +297,8 @@ export function BotListSidebar({
             </ul>
           </section>
         ) : null}
-        <section aria-label="Bots">
-          <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Bots
-          </p>
-          <ul className="space-y-0.5" aria-label="Bots">
+        <section aria-label="Bots" className={cn(groups.length > 0 && "border-t border-border pt-2")}>
+          <ul className="space-y-px">
         {filtered.map((bot) => {
           const selected = bot.id === selectedBotId;
           const attention = presenceNeedsAttention(bot.presence);
@@ -296,18 +311,14 @@ export function BotListSidebar({
               <Link
                 href={`/app/bots/${bot.id}`}
                 onContextMenu={(event) => handleContextMenu(event, bot)}
-                className={cn(
-                  "group flex items-center gap-2 rounded-xl border px-2 py-1.5 transition-colors duration-150",
-                  selected
-                    ? "border-primary/12 bg-white/95 shadow-sm shadow-primary/[0.04]"
-                    : "border-transparent hover:border-border/60 hover:bg-white/80",
-                )}
+                className={cn(navRowClass, selected ? navRowSelectedClass : navRowIdleClass)}
                 aria-current={selected ? "page" : undefined}
               >
                 <BotCreatureAvatar
                   name={bot.name}
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                  size="md"
+                  size="sm"
+                  variant="tile"
                   animated={selected && presenceIsActive(bot.presence)}
                 />
                 <div className="min-w-0 flex-1">
@@ -316,17 +327,17 @@ export function BotListSidebar({
                       <InlineRenameLabel
                         value={bot.name}
                         onCommit={(next) => onRenameBot(bot.id, next)}
-                        className="text-[13px] font-semibold leading-tight"
+                        className="text-[13px] font-medium leading-tight"
                         inputClassName="text-[13px]"
                         ariaLabel={`Rename ${bot.name}`}
                       />
                     ) : (
-                      <span className="truncate text-[13px] font-semibold leading-tight">
+                      <span className="truncate text-[13px] font-medium leading-tight">
                         {bot.name}
                       </span>
                     )}
                     {timeLabel ? (
-                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
                         {timeLabel}
                       </span>
                     ) : null}
@@ -339,7 +350,7 @@ export function BotListSidebar({
                 </div>
                 {showAttention ? (
                   <span
-                    className="size-1.5 shrink-0 rounded-full bg-primary"
+                    className="size-1.5 shrink-0 rounded-full bg-info"
                     aria-label="Needs attention"
                   />
                 ) : null}
@@ -348,7 +359,7 @@ export function BotListSidebar({
           );
         })}
         {!filtered.length ? (
-          <li className="px-3 py-8 text-center text-sm text-muted-foreground">
+          <li className="px-3 py-8 text-center text-[13px] text-muted-foreground">
             {workspaceBotsEmptyMessage(workspacePhase, {
               query,
               workspaceError,
@@ -359,11 +370,11 @@ export function BotListSidebar({
         </section>
       </div>
 
-      <div className="shrink-0 border-t border-border/70 bg-white/50 px-2.5 py-2.5 sm:px-3 sm:py-3">{footer}</div>
+      <div className="shrink-0 px-2 pb-2 pt-1">{footer}</div>
 
       {contextMenu ? (
         <div
-          className="fixed z-[100] min-w-40 rounded-lg border border-border/80 bg-popover p-1 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+          className="fixed z-[100] min-w-40 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}
@@ -386,7 +397,7 @@ export function BotListSidebar({
             <button
               type="button"
               role="menuitem"
-              className={cn(menuItemClass, "text-red-700 hover:bg-red-50 hover:text-red-800")}
+              className={cn(menuItemClass, "text-destructive hover:bg-destructive/10 hover:text-destructive")}
               onClick={() => {
                 setDeleteBot(contextMenu.bot);
                 setActionError(null);
@@ -418,7 +429,7 @@ export function BotListSidebar({
               />
             </div>
             {actionError ? (
-              <p className="mt-2 text-sm text-red-700" role="alert">{actionError}</p>
+              <p className="mt-2 text-sm text-destructive" role="alert">{actionError}</p>
             ) : null}
             <DialogFooter className="mt-4">
               <Button type="button" variant="outline" onClick={() => setRenameBot(null)}>
@@ -441,7 +452,7 @@ export function BotListSidebar({
             </DialogDescription>
           </DialogHeader>
           {actionError ? (
-            <p className="text-sm text-red-700" role="alert">{actionError}</p>
+            <p className="text-sm text-destructive" role="alert">{actionError}</p>
           ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDeleteBot(null)}>
@@ -449,7 +460,7 @@ export function BotListSidebar({
             </Button>
             <Button
               type="button"
-              className="bg-red-700 text-white hover:bg-red-800"
+              variant="destructive"
               disabled={actionBusy}
               onClick={() => void handleDeleteConfirm()}
             >

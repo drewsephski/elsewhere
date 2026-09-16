@@ -54,7 +54,7 @@ export default function RoutineDetailPage() {
     return (
       <div className="space-y-4">
         <WorkspacePageHeader title="Routine" description={error} />
-        <Link href="/app/routines" className="text-sm text-primary underline-offset-2 hover:underline">
+        <Link href="/app/routines" className="text-sm text-link underline-offset-2 hover:underline">
           Back to routines
         </Link>
       </div>
@@ -114,7 +114,7 @@ export default function RoutineDetailPage() {
                 {run.runId ? (
                   <Link
                     href={`/app/work/${run.runId}`}
-                    className="text-primary underline-offset-2 hover:underline"
+                    className="text-link underline-offset-2 hover:underline"
                   >
                     View
                   </Link>

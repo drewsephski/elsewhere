@@ -159,7 +159,7 @@ export function ComputersManager() {
         header: "Computer",
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <Monitor className="size-4 shrink-0 text-primary" aria-hidden />
+            <Monitor className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="font-medium">{row.original.displayName}</span>
           </div>
         ),

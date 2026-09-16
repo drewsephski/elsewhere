@@ -102,8 +102,8 @@ export function BotChat({ botId }: { botId: string }) {
             <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Progress is saved. Computer changes need your approval.</p><Button type="submit" disabled={pending || !(skillInvocation?.task ?? message.trim()) || !bot?.computerId}>{pending ? "Saving work…" : "Delegate work"}</Button></div>
           </FormFields>
         </form>
-        {bot && !bot.computerId ? <p className="mt-3 text-sm text-amber-700">Assign this bot a computer before delegating work.</p> : null}
-        {error ? <p className="mt-3 text-sm text-red-700" role="alert">{error}</p> : null}
+        {bot && !bot.computerId ? <p className="mt-3 text-sm text-warning">Assign this bot a computer before delegating work.</p> : null}
+        {error ? <p className="mt-3 text-sm text-destructive" role="alert">{error}</p> : null}
       </section>
       <BotContext botId={botId} />
       <RecentRunsPanel botId={botId} />
