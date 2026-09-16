@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Monitor,
   Plug,
+  Sparkles,
 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -24,6 +25,7 @@ const linkIcons = {
   [appRoutes.routines]: CalendarClock,
   [appRoutes.computers]: Monitor,
   [appRoutes.connectors]: Plug,
+  [appRoutes.skills]: Sparkles,
 } as const;
 
 interface AppShellNavProps {

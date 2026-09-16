@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { appRoutes } from "@/lib/app-routes";
 import { Button } from "@/components/ui/button";
 import { FormItem } from "@/components/ui/form-item";
 import { Label } from "@/components/ui/label";
@@ -136,7 +138,13 @@ export function BotSkillsSettings({
           <p className="text-sm font-medium">Enabled skills</p>
           <p className="text-xs text-muted-foreground">
             Attached skills are materialized for each run on this bot. Pin a version to freeze
-            behavior.
+            behavior.{" "}
+            <Link
+              href={appRoutes.skills}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              Manage catalog
+            </Link>
           </p>
         </div>
       )}
