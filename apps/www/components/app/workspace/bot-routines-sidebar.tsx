@@ -91,7 +91,7 @@ export function BotRoutinesSidebar({
               className={cn(
                 "flex items-start gap-2",
                 variant === "minimal"
-                  ? "rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-hover"
+                  ? "rounded-md px-1 py-1.5 transition-colors hover:bg-surface-hover"
                   : "rounded-xl border border-border bg-card px-3 py-2.5",
               )}
             >
@@ -104,9 +104,9 @@ export function BotRoutinesSidebar({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium leading-tight">{routine.name}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{scheduleLabel(routine)}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{scheduleLabel(routine)}</p>
                 {routine.enabled ? (
-                  <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     Next {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
                   </p>
                 ) : null}
@@ -126,9 +126,8 @@ export function BotRoutinesSidebar({
       </ul>
       {!routines.length ? (
         variant === "minimal" ? (
-          <p className="px-3 py-6 text-center text-[11px] leading-relaxed text-muted-foreground">
-            Routines are recurring tasks this bot runs on a schedule. Ask it in chat to set one
-            up, or{" "}
+          <p className="px-1 py-3 text-[11px] leading-snug text-muted-foreground">
+            Recurring tasks this bot runs on a schedule. Ask it in chat, or{" "}
             <Link
               href="/app/routines"
               className="text-foreground underline-offset-2 hover:underline"
@@ -151,10 +150,10 @@ export function BotRoutinesSidebar({
 
   if (variant === "minimal") {
     return (
-      <div className={cn("px-0.5", className)}>
+      <div className={cn("min-w-0", className)}>
         {list}
         {routines.length ? (
-          <div className="mt-2 flex justify-end px-1">
+          <div className="mt-1.5">
             <Link
               href="/app/routines"
               className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"

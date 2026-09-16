@@ -30,7 +30,13 @@ interface BotSkillAttachment {
   currentVersion: number;
 }
 
-export function BotSkillsSettings({ botId }: { botId: string }) {
+export function BotSkillsSettings({
+  botId,
+  embedded = false,
+}: {
+  botId: string;
+  embedded?: boolean;
+}) {
   const [catalog, setCatalog] = useState<SkillSummary[]>([]);
   const [attached, setAttached] = useState<BotSkillAttachment[]>([]);
   const [attachSkillId, setAttachSkillId] = useState("");
@@ -109,36 +115,58 @@ export function BotSkillsSettings({ botId }: { botId: string }) {
     }
   }
 
+  const labelClass = embedded
+    ? "text-[11px] font-medium text-muted-foreground"
+    : undefined;
+
   return (
-    <div className="space-y-3 rounded-xl border border-border/60 p-4">
-      <div>
-        <p className="text-sm font-medium">Enabled skills</p>
-        <p className="text-xs text-muted-foreground">
-          Attached skills are materialized for each run on this bot. Pin a version to freeze
-          behavior.
+    <div
+      className={
+        embedded
+          ? "min-w-0 space-y-2"
+          : "space-y-3 rounded-xl border border-border/60 p-4"
+      }
+    >
+      {embedded ? (
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Skills run with this bot. Pin a version to freeze behavior.
         </p>
-      </div>
+      ) : (
+        <div>
+          <p className="text-sm font-medium">Enabled skills</p>
+          <p className="text-xs text-muted-foreground">
+            Attached skills are materialized for each run on this bot. Pin a version to freeze
+            behavior.
+          </p>
+        </div>
+      )}
       {attached.length ? (
-        <ul className="space-y-2 text-sm">
+        <ul className={embedded ? "space-y-0.5" : "space-y-2 text-sm"}>
           {attached.map((row) => (
             <li
               key={row.skillId}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"
+              className={
+                embedded
+                  ? "flex min-w-0 items-center gap-2 rounded-md px-1 py-1"
+                  : "flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2"
+              }
             >
-              <span>
-                {row.name}{" "}
+              <span className="min-w-0 flex-1 truncate text-[13px] leading-tight">
+                {row.name}
                 <span className="text-muted-foreground">
+                  {" "}
                   ({row.slug}
                   {row.pinnedVersion
-                    ? ` · pinned v${row.pinnedVersion}`
-                    : ` · latest v${row.currentVersion}`}
+                    ? ` · v${row.pinnedVersion}`
+                    : ` · v${row.currentVersion}`}
                   )
                 </span>
               </span>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant={embedded ? "ghost" : "outline"}
+                size={embedded ? "xs" : "sm"}
+                className={embedded ? "h-6 shrink-0 px-1.5 text-[11px] text-muted-foreground" : undefined}
                 disabled={busy}
                 onClick={() => void handleDetach(row.skillId)}
               >
@@ -148,11 +176,19 @@ export function BotSkillsSettings({ botId }: { botId: string }) {
           ))}
         </ul>
       ) : (
-        <p className="text-xs text-muted-foreground">No skills attached yet.</p>
+        <p className="text-[11px] text-muted-foreground">No skills attached yet.</p>
       )}
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <div
+        className={
+          embedded
+            ? "grid min-w-0 gap-2"
+            : "grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end"
+        }
+      >
         <FormItem>
-          <Label htmlFor="attach-skill">Add skill</Label>
+          <Label htmlFor="attach-skill" className={labelClass}>
+            Add skill
+          </Label>
           <Select
             value={attachSkillId}
             onValueChange={(value) => {
@@ -160,7 +196,12 @@ export function BotSkillsSettings({ botId }: { botId: string }) {
             }}
             disabled={busy || !available.length}
           >
-            <SelectTrigger id="attach-skill" aria-label="Skill to attach">
+            <SelectTrigger
+              id="attach-skill"
+              size={embedded ? "sm" : "default"}
+              className="w-full min-w-0"
+              aria-label="Skill to attach"
+            >
               <SelectValue placeholder={available.length ? "Choose a skill" : "No skills available"} />
             </SelectTrigger>
             <SelectContent>
@@ -172,26 +213,36 @@ export function BotSkillsSettings({ botId }: { botId: string }) {
             </SelectContent>
           </Select>
         </FormItem>
-        <FormItem>
-          <Label htmlFor="pin-version">Pin version (optional)</Label>
-          <input
-            id="pin-version"
-            className="h-9 w-full min-w-[7rem] rounded-md border border-input bg-background px-3 text-sm"
-            inputMode="numeric"
-            placeholder="Latest"
-            value={pinVersion}
-            onChange={(event) => setPinVersion(event.target.value)}
-            disabled={busy}
-            aria-label="Pinned skill version"
-          />
-        </FormItem>
-        <Button
-          type="button"
-          disabled={busy || !attachSkillId}
-          onClick={() => void handleAttach()}
-        >
-          Attach
-        </Button>
+        <div className={embedded ? "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2" : "contents"}>
+          <FormItem>
+            <Label htmlFor="pin-version" className={labelClass}>
+              {embedded ? "Pin version" : "Pin version (optional)"}
+            </Label>
+            <input
+              id="pin-version"
+              className={
+                embedded
+                  ? "h-7 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs"
+                  : "h-9 w-full min-w-[7rem] rounded-md border border-input bg-background px-3 text-sm"
+              }
+              inputMode="numeric"
+              placeholder="Latest"
+              value={pinVersion}
+              onChange={(event) => setPinVersion(event.target.value)}
+              disabled={busy}
+              aria-label="Pinned skill version"
+            />
+          </FormItem>
+          <Button
+            type="button"
+            size={embedded ? "sm" : "default"}
+            className={embedded ? "shrink-0" : undefined}
+            disabled={busy || !attachSkillId}
+            onClick={() => void handleAttach()}
+          >
+            Attach
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="text-xs text-destructive" role="alert">{error}</p>

@@ -47,14 +47,14 @@ function RailSection({
       onOpenChange={onOpenChange}
       className="group border-t border-border first:border-t-0"
     >
-      <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1 py-2.5 text-left text-xs font-medium text-foreground transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+      <CollapsibleTrigger className="flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md py-2 text-left text-[12px] font-medium text-foreground transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
         {title}
         <ChevronDown
           className="size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-open:rotate-180"
           aria-hidden
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="pb-3">{children}</CollapsibleContent>
+      <CollapsibleContent className="min-w-0 pb-2">{children}</CollapsibleContent>
     </Collapsible>
   );
 }
@@ -78,7 +78,7 @@ export function BotContextRail({
   }
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       <div className="flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
         {bot ? (
           <ComposerIconButton label="Bot settings" className="size-7" onClick={handleOpenSettings}>
@@ -92,7 +92,7 @@ export function BotContextRail({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-3">
         <ComputerStatePanel bot={bot} activeRun={activeRun} variant="minimal" />
 
         {bot ? (
@@ -102,7 +102,7 @@ export function BotContextRail({
             </RailSection>
             {bot.computerId ? (
               <RailSection title="Files">
-                <ComputerWorkspaceTree computerId={bot.computerId} className="px-0.5" />
+                <ComputerWorkspaceTree computerId={bot.computerId} />
               </RailSection>
             ) : null}
             <RailSection title="Memory">

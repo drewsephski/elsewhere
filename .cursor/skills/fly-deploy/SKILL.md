@@ -73,6 +73,7 @@ curl -sf https://elsewhere-alpha-web.fly.dev/api/health/runner
 
 - `/api/auth/ok` — web process alive (not runner reachability).
 - `/api/health/runner` — web BFF can reach runner `/ready`.
+- `fly logs -a elsewhere-alpha-runner` — the `cloud-host configuration loaded` line must show both `codex_profiles_dir=Some("/var/lib/elsewhere/codex-profiles")` and `browser_profiles_dir=Some("/var/lib/elsewhere/browser-profiles")`. A `browser_profiles_dir` under `/app/.data` means the image/config predates the volume fix and browser sign-in will fail with `Permission denied (os error 13)`.
 
 For signed-in workspace proof, one authenticated `GET /api/cloud/v1/workspace` as documented in `infra/fly/README.md`.
 

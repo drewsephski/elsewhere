@@ -23,6 +23,7 @@ interface ComputerSelectProps {
   allowEmpty?: boolean;
   emptyLabel?: string;
   unavailableId?: string | null;
+  compact?: boolean;
   className?: string;
 }
 
@@ -37,6 +38,7 @@ export function ComputerSelect({
   allowEmpty = false,
   emptyLabel = "No computer assigned",
   unavailableId,
+  compact,
   className,
 }: ComputerSelectProps) {
   const placeholder = loading ? "Loading computers…" : "Choose a computer";
@@ -60,7 +62,12 @@ export function ComputerSelect({
 
   return (
     <FormItem className={className}>
-      <Label htmlFor={id}>{label}</Label>
+      <Label
+        htmlFor={id}
+        className={compact ? "text-[11px] font-medium text-muted-foreground" : undefined}
+      >
+        {label}
+      </Label>
       <Select
         items={items}
         value={selectValue}
@@ -72,7 +79,11 @@ export function ComputerSelect({
         }}
         disabled={selectDisabled}
       >
-        <SelectTrigger id={id} className="w-full bg-card">
+        <SelectTrigger
+          id={id}
+          size={compact ? "sm" : "default"}
+          className="w-full min-w-0 bg-card"
+        >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent className="bg-card">

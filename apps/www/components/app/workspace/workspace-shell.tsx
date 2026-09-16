@@ -281,7 +281,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const contextRail = selectedBotId ? (
     <aside
       className={cn(
-        "hidden w-[min(100%,18.5rem)] shrink-0 border-l border-border bg-surface lg:flex lg:flex-col",
+        "hidden w-[min(100%,18.5rem)] min-w-0 shrink-0 overflow-hidden border-l border-border bg-surface lg:flex lg:flex-col",
         railCollapsed && "lg:hidden",
       )}
       aria-label="Bot context"

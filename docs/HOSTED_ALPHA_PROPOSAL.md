@@ -45,7 +45,7 @@ Sources checked September 14: [Fly resource pricing](https://fly.io/docs/about/p
 
 Postgres stores Elsewhere account ownership, UUID profile references, bot/computer mapping, queued/running work, events, approvals, routines, context, and bounded artifact snapshots. Better Auth uses `elsewhere_auth`, since Supabase reserves `auth` for its own service. The runner uses `elsewhere_control`. The separate `elsewhere_web` and `elsewhere_runner` roles own only their respective schemas, have bounded connections, and cannot access the other schema. They run their existing migrations; splitting owner/runtime roles further is deferred for this alpha. The Data API is disabled. Both private schemas deny Supabase client/service roles, and application tables have owner-only RLS with no client policies. Elsewhere still enforces per-user ownership in its server APIs; RLS does not replace that boundary.
 
-`ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles` is mounted only on the trusted runner. Each owner's UUID directory has mode 0700, the service runs as a dedicated non-root UID, and startup must verify the expected writable volume mount before readiness. The image, root filesystem, temporary directory, Next.js app, and Sprites must not hold the persistent profiles. Configure a restrictive umask and disable core dumps.
+`ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles` and `ELSEWHERE_BROWSER_PROFILES_DIR=/var/lib/elsewhere/browser-profiles` share the single encrypted volume mounted only on the trusted runner. Each owner's (Codex) or computer's (browser) UUID directory has mode 0700, the service runs as a dedicated non-root UID, and startup must verify the expected writable volume mount and create both roots before readiness. The image, root filesystem, working directory, temporary directory, Next.js app, and Sprites must not hold the persistent profiles. Configure a restrictive umask and disable core dumps.
 
 Codex alone performs device authorization and writes/refreshes its credential files. Elsewhere must not open, parse, log, export, or copy individual OAuth tokens. A fresh owner must never inherit the operator's account. Encryption at rest is provided by the encrypted Fly Volume; this does not protect credentials against a compromised runner process or privileged administrator. Keep Fly organization access restricted. [Fly Volume creation and encryption](https://fly.io/docs/volumes/volume-manage/).
 
@@ -71,6 +71,7 @@ ELSEWHERE_AUTH_MODE=jwt
 ELSEWHERE_RUN_ENGINE=codex
 ELSEWHERE_ALLOW_CODEX_LOGIN=true
 ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles
+ELSEWHERE_BROWSER_PROFILES_DIR=/var/lib/elsewhere/browser-profiles
 CODEX_EXECUTABLE=/usr/local/bin/codex
 ELSEWHERE_MAX_CONCURRENT_RUNS=1
 ELSEWHERE_RUN_TIMEOUT_SECS=900

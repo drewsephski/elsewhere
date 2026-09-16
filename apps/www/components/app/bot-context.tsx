@@ -40,8 +40,8 @@ export function BotContext({
     finally { setBusy(false); }
   }
   const form = (
-    <form className={embedded ? "px-1" : "mt-4"} onSubmit={(event) => void save(event)}>
-      <FormFields>
+    <form className={embedded ? "min-w-0" : "mt-4"} onSubmit={(event) => void save(event)}>
+      <FormFields className={embedded ? "min-w-0 gap-2" : undefined}>
       {!embedded ? (
         <>
           <h2 className="text-base font-semibold">What your bot should remember</h2>
@@ -51,8 +51,8 @@ export function BotContext({
           </p>
         </>
       ) : (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Saved notes for future assignments. Skip passwords and secrets.
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Notes for future work. Skip passwords and secrets.
         </p>
       )}
       <label htmlFor="bot-context" className="sr-only">
@@ -70,33 +70,31 @@ export function BotContext({
         placeholder="Audience, tone, project facts…"
         className={
           embedded
-            ? "min-h-24 w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs leading-5"
+            ? "min-h-20 w-full min-w-0 rounded-lg border border-border bg-surface-raised p-2 text-xs leading-5"
             : "min-h-32 w-full rounded-xl border border-border bg-background p-3 text-xs leading-5"
         }
       />
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center justify-end gap-2">
         {!embedded ? (
-          <p className="text-xs text-muted-foreground">Applies to future work. Approvals still apply.</p>
+          <p className="mr-auto text-xs text-muted-foreground">Applies to future work. Approvals still apply.</p>
         ) : null}
-        <div className="ml-auto flex gap-2">
-          {error ? (
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
-              Reload
-            </Button>
-          ) : null}
-          <Button type="submit" size={embedded ? "sm" : "default"} disabled={busy || !saved || content === saved.content}>
-            {busy ? (saved ? "Saving…" : "Loading…") : "Save"}
+        {error ? (
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void load()}>
+            Reload
           </Button>
-        </div>
+        ) : null}
+        <Button type="submit" size="sm" disabled={busy || !saved || content === saved.content}>
+          {busy ? (saved ? "Saving…" : "Loading…") : "Save"}
+        </Button>
       </div>
       {error ? (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-[11px] text-destructive">
           {error}
         </p>
       ) : null}
       {notice ? (
-        <p role="status" className="text-xs text-muted-foreground">
-          {notice}
+        <p role="status" className="text-[11px] text-muted-foreground">
+          {embedded ? "Saved." : notice}
         </p>
       ) : null}
       </FormFields>

@@ -469,7 +469,7 @@ export function BrowserPreviewView({
           onReturnControl={() => void humanControl.returnControl()}
           onTypeText={(text) => void handleHumanTypeText(text)}
           onPressKey={(key) => void handleHumanPressKey(key)}
-          className={isEmbedded ? "mt-1.5 flex justify-center" : "mt-1.5"}
+          className="mt-1.5"
         />
 
         {humanClickError ? (

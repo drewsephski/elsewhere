@@ -105,27 +105,32 @@ export function BotSettings({
     }
   }
 
+  const labelClass = embedded
+    ? "text-[11px] font-medium text-muted-foreground"
+    : undefined;
+
   const form = (
     <form
-      className={embedded ? "px-1" : "mt-5"}
+      className={embedded ? "min-w-0" : "mt-5"}
       onSubmit={(event) => void save(event)}
     >
-      <FormFields>
+      <FormFields className={embedded ? "min-w-0 gap-2" : undefined}>
           <FormItem>
-            <Label htmlFor="settings-name">Name</Label>
+            <Label htmlFor="settings-name" className={labelClass}>Name</Label>
             <Input
               id="settings-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={100}
               required
+              className={embedded ? "h-7 text-xs" : undefined}
             />
           </FormItem>
           <FormItem>
-            <Label htmlFor="settings-role">Role and instructions</Label>
+            <Label htmlFor="settings-role" className={labelClass}>Role and instructions</Label>
             <Textarea
               id="settings-role"
-              className="min-h-28 text-xs leading-5"
+              className={embedded ? "min-h-20 text-xs leading-5" : "min-h-28 text-xs leading-5"}
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               maxLength={16000}
@@ -139,18 +144,22 @@ export function BotSettings({
             computers={computers}
             allowEmpty
             unavailableId={computer}
+            compact={embedded}
           />
-          <BotSkillsSettings botId={bot.id} />
-          <p className="text-xs text-muted-foreground">
-            Changing computers does not move files. Queued work stays on its original computer.
+          <BotSkillsSettings botId={bot.id} embedded={embedded} />
+          <p className={embedded ? "text-[11px] leading-snug text-muted-foreground" : "text-xs text-muted-foreground"}>
+            {embedded
+              ? "Computer changes apply to new work only."
+              : "Changing computers does not move files. Queued work stays on its original computer."}
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="submit" disabled={busy || !name.trim()}>
-              {busy ? "Saving…" : "Save settings"}
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Button type="submit" size={embedded ? "sm" : "default"} disabled={busy || !name.trim()}>
+              {busy ? "Saving…" : embedded ? "Save" : "Save settings"}
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant={embedded ? "ghost" : "outline"}
+              size={embedded ? "sm" : "default"}
               className="text-destructive hover:bg-destructive/10"
               disabled={busy}
               onClick={() => setDeleteOpen(true)}
@@ -160,17 +169,17 @@ export function BotSettings({
           </div>
           {deleteOpen ? (
             <div
-              className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm"
+              className="rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm"
               role="alertdialog"
               aria-labelledby="delete-bot-title"
             >
               <p id="delete-bot-title" className="font-medium text-destructive-foreground">
                 Delete {bot.name}?
               </p>
-              <p className="mt-1 text-xs text-destructive-foreground/90">
+              <p className="mt-1 text-[11px] leading-snug text-destructive-foreground/90">
                 This removes the bot and its settings. Work history may remain in your account.
               </p>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2.5 flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -193,10 +202,12 @@ export function BotSettings({
             </div>
           ) : null}
           {notice ? (
-            <p role="status" className="text-sm text-muted-foreground">{notice}</p>
+            <p role="status" className={embedded ? "text-[11px] text-muted-foreground" : "text-sm text-muted-foreground"}>
+              {embedded ? "Saved." : notice}
+            </p>
           ) : null}
           {error ? (
-            <p role="alert" className={embedded ? "text-xs text-destructive" : "text-sm text-destructive"}>
+            <p role="alert" className={embedded ? "text-[11px] text-destructive" : "text-sm text-destructive"}>
               {error}
             </p>
           ) : null}
