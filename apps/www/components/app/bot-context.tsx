@@ -83,7 +83,7 @@ export function BotContext({
             Reload
           </Button>
         ) : null}
-        <Button type="submit" size="sm" disabled={busy || !saved || content === saved.content}>
+        <Button type="submit" size={embedded ? "sm" : "default"} disabled={busy || !saved || content === saved.content}>
           {busy ? (saved ? "Saving…" : "Loading…") : "Save"}
         </Button>
       </div>

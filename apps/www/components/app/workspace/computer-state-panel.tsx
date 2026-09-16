@@ -75,7 +75,6 @@ export function ComputerStatePanel({
     ? "Ready for work"
     : "Provisions on first use";
   if (variant === "minimal") {
-    const screenOwner = bot?.name?.trim() ? `${bot.name.trim()}’s screen` : "Screen";
     return (
       <section className={cn("pb-1", className)} aria-labelledby="computer-panel-title">
         <h2 id="computer-panel-title" className="sr-only">
@@ -105,7 +104,7 @@ export function ComputerStatePanel({
             <ComputerBrowserPreview />
             <div className="mt-1.5 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
               <p className="min-w-0 flex-1 truncate">
-                {screenOwner}
+                {displayName}
                 <span className="text-muted-foreground/80"> · {readyLabel}</span>
               </p>
               <Link
