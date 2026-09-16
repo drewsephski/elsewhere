@@ -2,25 +2,18 @@
 
 import { authClient } from "@/lib/auth-client";
 import { appRoutes } from "@/lib/app-routes";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "cn";
-import {
-  LogOut,
-  MoreHorizontal,
-  Plug,
-  Settings2,
-  type AnimatedIconHandle,
-} from "@/components/icons/lucide";
+import { LayoutGrid, LogOut, Plug, Settings2 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef } from "react";
 
 interface ProfileFooterProps {
   email: string;
@@ -28,17 +21,12 @@ interface ProfileFooterProps {
   compact?: boolean;
 }
 
+const footerRowClass =
+  "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-surface-active";
+
+/** Nav footer: a "Manage" row plus the account row that opens the account menu. */
 export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterProps) {
   const router = useRouter();
-  const accountMenuIconRef = useRef<AnimatedIconHandle>(null);
-
-  function handleAccountMenuOpenChange(open: boolean) {
-    if (open) {
-      accountMenuIconRef.current?.startAnimation();
-      return;
-    }
-    accountMenuIconRef.current?.stopAnimation();
-  }
 
   async function handleSignOut() {
     await authClient.signOut();
@@ -49,56 +37,43 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
   const initial = email.trim().charAt(0).toUpperCase() || "U";
 
   return (
-    <div className={cn("space-y-2", compact && "space-y-1")}>
-      <div className="flex items-center gap-2 rounded-xl px-1 py-1">
-        <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground sm:size-9 sm:text-sm"
-          aria-hidden
+    <div className={cn("space-y-px", compact && "space-y-0")}>
+      <Link href={appRoutes.work} className={footerRowClass}>
+        <LayoutGrid className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="truncate">Manage</span>
+      </Link>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={<button type="button" className={footerRowClass} aria-label="Account menu" />}
         >
-          {initial}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">Account</p>
-          <p className="truncate text-xs text-muted-foreground">{email}</p>
-        </div>
-        <DropdownMenu onOpenChange={handleAccountMenuOpenChange}>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="size-8 shrink-0 px-0"
-                aria-label="Account menu"
-              />
-            }
+          <span
+            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-info text-[10px] font-semibold text-white"
+            aria-hidden
           >
-            <MoreHorizontal
-              ref={accountMenuIconRef}
-              interaction="manual"
-              className="size-4"
-              aria-hidden
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem render={<Link href={appRoutes.computers} />}>
-              <Plug className="size-4" aria-hidden />
-              Computers
+            {initial}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{email}</span>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-56">
+          <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem render={<Link href={appRoutes.computers} />}>
+            <Plug className="size-4" aria-hidden />
+            Computers
+          </DropdownMenuItem>
+          {onOpenSettings ? (
+            <DropdownMenuItem onClick={onOpenSettings}>
+              <Settings2 className="size-4" aria-hidden />
+              ChatGPT connection
             </DropdownMenuItem>
-            {onOpenSettings ? (
-              <DropdownMenuItem onClick={onOpenSettings}>
-                <Settings2 className="size-4" aria-hidden />
-                ChatGPT connection
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => void handleSignOut()}>
-              <LogOut className="size-4" aria-hidden />
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          ) : null}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onClick={() => void handleSignOut()}>
+            <LogOut className="size-4" aria-hidden />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

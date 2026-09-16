@@ -2,9 +2,7 @@
 
 import type { BotSummary, GroupListItem, RunSummary } from "@/lib/api-types";
 import { useWorkspaceOverview } from "@/hooks/use-workspace-overview";
-import { siteConfig } from "@elsewhere/brand";
 import { cn } from "cn";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { BotContextRail } from "./bot-context-rail";
@@ -16,7 +14,6 @@ import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
-import { ProductLogo } from "@/components/product-logo";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
@@ -74,6 +71,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runActivityAt, setRunActivityAt] = useState<Record<string, string>>({});
@@ -229,17 +227,20 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const conversationMain = (
     <main
       className={cn(
-        "flex min-w-0 flex-1 flex-col bg-[#f8f6fc]",
+        "flex min-w-0 flex-1 flex-col bg-background",
         !showConversation && "hidden lg:flex",
       )}
     >
       {workspaceError ? (
-        <p className="shrink-0 px-4 py-2 text-xs text-amber-800" role="status">
+        <p
+          className="shrink-0 border-b border-border px-4 py-1.5 text-center text-[11px] text-warning"
+          role="status"
+        >
           {workspaceError}. Activity may be out of date.
         </p>
       ) : null}
       {workspace && !workspace.runnerReady ? (
-        <p className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+        <p className="shrink-0 border-b border-border bg-warning/8 px-4 py-1.5 text-center text-[11px] text-warning">
           Background work is temporarily unavailable. Queued assignments stay saved.
         </p>
       ) : null}
@@ -252,19 +253,21 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           onBotLoaded={handleBotLoaded}
           onRenameBot={handleRenameBot}
           onStreamRunIdChange={handleStreamRunIdChange}
+          railCollapsed={railCollapsed}
+          onExpandRail={() => setRailCollapsed(false)}
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
           {children}
           <ProviderStatusCard variant="featured" />
           <div className="max-w-md space-y-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               After ChatGPT is connected, create a bot to start chatting and running work.
             </p>
             <Button
               type="button"
               variant="outline"
-              className="rounded-full border-primary/30 bg-primary/5 text-primary hover:bg-primary/10"
+              className="rounded-full px-4"
               onClick={() => setCreateOpen(true)}
             >
               Create your first bot
@@ -278,7 +281,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const contextRail = selectedBotId ? (
     <aside
       className={cn(
-        "hidden w-[min(100%,20rem)] shrink-0 border-l border-border/70 bg-white/55 backdrop-blur-md lg:flex lg:flex-col",
+        "hidden w-[min(100%,18.5rem)] shrink-0 border-l border-border bg-surface lg:flex lg:flex-col",
+        railCollapsed && "lg:hidden",
       )}
       aria-label="Bot context"
     >
@@ -287,6 +291,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         activeRun={activeRun}
         showConnectionSettings={false}
         onBotSaved={setBot}
+        onCollapse={() => setRailCollapsed(true)}
       />
     </aside>
   ) : null;
@@ -297,20 +302,12 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         {/* Left: bot list — desktop always; mobile when no bot selected */}
         <aside
           className={cn(
-            "flex w-full flex-col border-r border-border/70 bg-white/55 backdrop-blur-md",
-            "md:max-w-[min(100%,15rem)] lg:w-56 lg:max-w-none lg:shrink-0 xl:w-60",
+            "flex w-full flex-col border-r border-border bg-surface",
+            "md:max-w-[min(100%,16rem)] lg:w-60 lg:max-w-none lg:shrink-0",
             showConversation ? "hidden lg:flex" : "flex",
           )}
           aria-label="Bots"
         >
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border/60 px-3">
-            <Link href="/app" className="flex items-center gap-2">
-              <ProductLogo size="md" />
-              <span className="text-sm font-semibold tracking-tight">
-                {siteConfig.productName}
-              </span>
-            </Link>
-          </div>
           <BotListSidebar
             bots={bots}
             groups={groups}
@@ -377,20 +374,22 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   );
 
   return (
-    <div className="app-shell-bg flex h-[100dvh] flex-col overflow-hidden text-foreground">
-      {selectedBotId ? (
-        <ActiveRunProvider runId={streamRunId}>
-          <WorkspaceBrowserPreviewLayer
-            computerId={previewComputerId}
-            enabled={previewEnabled}
-            sessionKey={previewSessionKey}
-          >
-            {workspaceBody}
-          </WorkspaceBrowserPreviewLayer>
-        </ActiveRunProvider>
-      ) : (
-        workspaceBody
-      )}
+    <div className="workspace-window flex h-[100dvh] flex-col overflow-hidden text-foreground">
+      <div className="workspace-window-frame flex min-h-0 flex-1 flex-col overflow-hidden">
+        {selectedBotId ? (
+          <ActiveRunProvider runId={streamRunId}>
+            <WorkspaceBrowserPreviewLayer
+              computerId={previewComputerId}
+              enabled={previewEnabled}
+              sessionKey={previewSessionKey}
+            >
+              {workspaceBody}
+            </WorkspaceBrowserPreviewLayer>
+          </ActiveRunProvider>
+        ) : (
+          workspaceBody
+        )}
+      </div>
     </div>
   );
 }
