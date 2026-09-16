@@ -220,7 +220,7 @@ export function BotCreatureAvatar({
         showShell
           ? "overflow-hidden rounded-2xl ring-1 ring-inset"
           : tile
-            ? "overflow-hidden rounded-full p-[11%] ring-1 ring-inset ring-white/[0.06]"
+            ? "overflow-hidden rounded-full ring-1 ring-inset ring-white/[0.06] [&>svg]:size-[78%]"
             : "overflow-visible rounded-full bg-transparent ring-0",
         SIZE_CLASS[size],
         shell,
@@ -229,7 +229,7 @@ export function BotCreatureAvatar({
       style={
         tile
           ? {
-              backgroundColor: `color-mix(in oklab, ${spec.colors.bodyDark} 34%, #101010)`,
+              backgroundColor: `color-mix(in oklab, ${spec.colors.bodyDark} 52%, #0e0e0e)`,
             }
           : undefined
       }

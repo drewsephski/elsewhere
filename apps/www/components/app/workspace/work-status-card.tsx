@@ -98,7 +98,7 @@ export function WorkStatusCard({
       </div>
 
       <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-        <p className="flex min-w-0 items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <Monitor className="size-3.5 shrink-0 opacity-80" aria-hidden />
           <span className="truncate">
             {run.botName}
@@ -109,7 +109,7 @@ export function WorkStatusCard({
               </>
             ) : null}
           </span>
-        </p>
+        </div>
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span>{timeLabel}</span>
           {duration ? <span>· {duration}</span> : null}

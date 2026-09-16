@@ -102,15 +102,18 @@ export function ComputerStatePanel({
           </div>
         ) : (
           <>
-            <ComputerBrowserPreview />
-            <p className="mt-2 text-center text-[11px] text-muted-foreground">{screenOwner}</p>
+            <ComputerBrowserPreview
+              caption={
+                <p className="mt-2 text-center text-[11px] text-muted-foreground">{screenOwner}</p>
+              }
+            />
             <div className="mt-2 flex items-center justify-between gap-2 px-0.5 text-[11px] text-muted-foreground">
-              <span className="flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <Monitor className="size-3.5 shrink-0 opacity-80" aria-hidden />
                 <span className="truncate">
                   {displayName} · {readyLabel}
                 </span>
-              </span>
+              </div>
               <Link
                 href="/app/computers"
                 className="shrink-0 underline-offset-2 hover:text-foreground hover:underline"

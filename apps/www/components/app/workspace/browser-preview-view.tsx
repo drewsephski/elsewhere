@@ -42,6 +42,8 @@ interface BrowserPreviewViewProps {
   /** Flush chrome with parent card — no extra border or outer rounding. */
   chromeAttached?: boolean;
   viewportClassName?: string;
+  /** Rendered directly under the screen card (embedded variant). */
+  caption?: ReactNode;
 }
 
 /** Dark "idle desktop" scene shown until the first frame arrives. */
@@ -177,6 +179,7 @@ export function BrowserPreviewView({
   enabled: enabledProp,
   addressBar,
   chromeAttached,
+  caption,
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
@@ -453,6 +456,8 @@ export function BrowserPreviewView({
           </div>
         ) : null}
 
+        {caption}
+
         <BrowserHumanControlBar
           enabled={enabled}
           humanActive={humanControl.humanActive}
@@ -464,7 +469,7 @@ export function BrowserPreviewView({
           onReturnControl={() => void humanControl.returnControl()}
           onTypeText={(text) => void handleHumanTypeText(text)}
           onPressKey={(key) => void handleHumanPressKey(key)}
-          className={isEmbedded ? "mt-2" : "mt-1.5"}
+          className={isEmbedded ? "mt-1.5 flex justify-center" : "mt-1.5"}
         />
 
         {humanClickError ? (

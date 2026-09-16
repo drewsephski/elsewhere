@@ -10,7 +10,8 @@ const PRODUCT_THEME_CLASS = "dark";
  * so the class has to live on the document root rather than on a wrapper.
  *
  * The inline script paints the correct theme on the server-rendered document
- * before hydration; the effect handles client-side navigation into and out of
+ * before hydration (the root `<html>` opts out of attribute hydration warnings
+ * for this reason); the effect handles client-side navigation into and out of
  * `/app` (React does not execute inline scripts it inserts itself).
  */
 export function ProductThemeScope() {

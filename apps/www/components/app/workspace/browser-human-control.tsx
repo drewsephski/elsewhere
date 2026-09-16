@@ -67,7 +67,7 @@ export function BrowserHumanControlBar({
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 text-xs"
+              className="h-6 rounded-md px-2 text-[11px]"
               disabled={loading}
               onClick={onReturnControl}
             >
@@ -78,8 +78,8 @@ export function BrowserHumanControlBar({
           <Button
             type="button"
             size="sm"
-            variant="secondary"
-            className="h-7 text-xs"
+            variant="ghost"
+            className="h-6 rounded-md px-2 text-[11px] text-muted-foreground hover:text-foreground"
             disabled={loading}
             onClick={onTakeControl}
           >
