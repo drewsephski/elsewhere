@@ -58,7 +58,7 @@ export async function POST(request: Request, context: RouteContext) {
       {
         method: "POST",
         headers,
-        body: bounded.body,
+        body: Buffer.from(bounded.body),
         signal: AbortSignal.any([request.signal, AbortSignal.timeout(45_000)]),
         cache: "no-store",
       },

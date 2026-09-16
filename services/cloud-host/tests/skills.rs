@@ -17,8 +17,8 @@ async fn skill_version_is_immutable_on_run_snapshot() {
     let owner = format!("owner-{}", uuid::Uuid::new_v4());
     let bot_id = uuid::Uuid::new_v4().to_string();
     let computer_id = uuid::Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO sandboxes (id, owner_id, provider, provider_resource_id, state) VALUES ($1,$2,'mock','r','ready')")
-        .bind(&computer_id).bind(&owner).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO sandboxes (id, owner_id, provider, provider_resource_id, state) VALUES ($1,$2,'mock',$3,'ready')")
+        .bind(&computer_id).bind(&owner).bind(&computer_id).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO bots (id, owner_id, name, system_prompt, model, computer_id) VALUES ($1,$2,'B','', 'gpt-5.6-luna', $3)")
         .bind(&bot_id).bind(&owner).bind(&computer_id).execute(&pool).await.unwrap();
 
