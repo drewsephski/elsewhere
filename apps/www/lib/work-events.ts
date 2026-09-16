@@ -1,3 +1,5 @@
+import { isSubagentEvent } from "./subagent-events";
+
 export function workStatus(status: string): string {
   return ({ queued: "Waiting", running: "Working", completed: "Finished", complete: "Finished", failed: "Needs attention", interrupted: "Interrupted", cancelled: "Stopped" } as Record<string, string>)[status] ?? status;
 }
@@ -17,6 +19,7 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     browser_request_human: "Waiting for you in the browser",
     bot_list: "Checking available Bots",
     bot_delegate: "Handing work to another Bot",
+    run_subagent: "Running a temporary helper",
   };
   const base = tools[tool];
   if (!base) {
@@ -38,6 +41,9 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
 }
 
 export function activityText(event: string, payload: Record<string, unknown>): string | null {
+  if (isSubagentEvent(event)) {
+    return null;
+  }
   if (event === "bot_delegation_queued") {
     const name = typeof payload.targetBotName === "string" ? payload.targetBotName : "another Bot";
     return `Handed work to ${name} (queued)`;

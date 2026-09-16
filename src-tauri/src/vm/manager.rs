@@ -102,20 +102,13 @@ impl VirtualMachineManager {
                     None,
                     Duration::from_secs(2),
                 ) {
-                    let ready = resp
-                        .status
-                        .map(|s| s.guest_bridge_ready)
-                        .unwrap_or(false);
+                    let ready = resp.status.map(|s| s.guest_bridge_ready).unwrap_or(false);
                     return Ok((VmLifecycleState::Running, None, ready));
                 }
                 Ok((VmLifecycleState::Running, None, false))
             }
             InternalState::Stopping => Ok((VmLifecycleState::Stopping, None, false)),
-            InternalState::Error(msg) => Ok((
-                VmLifecycleState::Error,
-                Some(msg.clone()),
-                false,
-            )),
+            InternalState::Error(msg) => Ok((VmLifecycleState::Error, Some(msg.clone()), false)),
         }
     }
 
@@ -157,7 +150,9 @@ impl VirtualMachineManager {
         let socket_path = self.layout.control_socket_path();
         let log_path = self.layout.vmm_log_path();
 
-        self.layout.ensure_directories().map_err(|e| e.to_string())?;
+        self.layout
+            .ensure_directories()
+            .map_err(|e| e.to_string())?;
 
         let mut vmm_guard = self.vmm.lock();
         if let Some(existing) = vmm_guard.as_mut() {
@@ -168,12 +163,8 @@ impl VirtualMachineManager {
         *self.last_vmm_binary.lock() = Some(vmm_binary.to_string_lossy().into());
         *vmm_guard = Some(process);
 
-        let response = vmm_client::control_request(
-            &socket_path,
-            "start",
-            None,
-            Duration::from_secs(30),
-        );
+        let response =
+            vmm_client::control_request(&socket_path, "start", None, Duration::from_secs(30));
 
         let response = match response {
             Ok(resp) => resp,
@@ -222,7 +213,8 @@ impl VirtualMachineManager {
 
         let socket_path = self.layout.control_socket_path();
         if socket_path.exists() {
-            let _ = vmm_client::control_request(&socket_path, "stop", None, Duration::from_secs(60));
+            let _ =
+                vmm_client::control_request(&socket_path, "stop", None, Duration::from_secs(60));
         }
 
         if let Some(mut process) = self.vmm.lock().take() {
@@ -288,10 +280,7 @@ impl VirtualMachineManager {
                 .unwrap_or_else(|| "guest agent did not become ready".into());
             let console = self.layout.console_log_path();
             let tail = vmm_client::tail_file(&console, 8192);
-            let mut message = format!(
-                "{base}\nGuest console log: {}",
-                console.display()
-            );
+            let mut message = format!("{base}\nGuest console log: {}", console.display());
             if let Some(tail) = tail {
                 if !tail.trim().is_empty() {
                     message.push_str("\n--- console.log (tail) ---\n");

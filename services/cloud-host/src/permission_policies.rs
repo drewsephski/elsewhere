@@ -455,6 +455,7 @@ mod tests {
         assert!(views.iter().all(|view| view.source == "default"));
         assert!(views.iter().any(|view| view.action == "workspace_write"));
         assert!(views.iter().any(|view| view.action == "bot_delegate"));
+        assert!(views.iter().any(|view| view.action == "run_subagent"));
         assert!(!views
             .iter()
             .any(|view| view.action == "browser_request_human"));

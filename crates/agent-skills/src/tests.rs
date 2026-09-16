@@ -38,11 +38,15 @@ fn absolute_path_rejected() {
 fn package_limits_enforced() {
     let md = "---\nname: tiny\ndescription: d\n---\n";
     let huge = "x".repeat(600_000);
-    let err = SkillPackage::validate_and_build(md, &[SkillPackageFile {
-        relative_path: "references/big.md".into(),
-        content: huge,
-        content_type: None,
-    }], None);
+    let err = SkillPackage::validate_and_build(
+        md,
+        &[SkillPackageFile {
+            relative_path: "references/big.md".into(),
+            content: huge,
+            content_type: None,
+        }],
+        None,
+    );
     assert!(err.is_err());
 }
 

@@ -38,9 +38,8 @@ fn tar_create_host_dir(host_profile_dir: &Path) -> Result<Vec<u8>, ComputerError
 }
 
 fn tar_extract_host_dir(host_profile_dir: &Path, bytes: &[u8]) -> Result<(), ComputerError> {
-    std::fs::create_dir_all(host_profile_dir).map_err(|e| {
-        ComputerError::ExecutionFailed(format!("host profile mkdir failed: {e}"))
-    })?;
+    std::fs::create_dir_all(host_profile_dir)
+        .map_err(|e| ComputerError::ExecutionFailed(format!("host profile mkdir failed: {e}")))?;
     let dir = host_profile_dir.to_string_lossy();
     let mut child = std::process::Command::new("tar")
         .args(["-xzf", "-", "-C", dir.as_ref()])
@@ -79,8 +78,8 @@ pub async fn hydrate_from_host(
     }
     let host_profile_dir = host_profile_dir.to_path_buf();
     let bundle = tokio::task::spawn_blocking(move || tar_create_host_dir(&host_profile_dir))
-    .await
-    .map_err(|e| ComputerError::ExecutionFailed(format!("host tar task failed: {e}")))??;
+        .await
+        .map_err(|e| ComputerError::ExecutionFailed(format!("host tar task failed: {e}")))??;
 
     restart_browser_daemon(client, baseline_policy).await?;
 
@@ -137,7 +136,10 @@ tar -czf "{GUEST_BUNDLE_PATH}" -C "{GUEST_PROFILE_DIR}" .
         )));
     }
 
-    let bundle = client.fs_read(GUEST_BUNDLE_PATH).await.map_err(map_sprite_err)?;
+    let bundle = client
+        .fs_read(GUEST_BUNDLE_PATH)
+        .await
+        .map_err(map_sprite_err)?;
     let _ = client
         .exec_http(
             &format!("rm -f \"{GUEST_BUNDLE_PATH}\""),

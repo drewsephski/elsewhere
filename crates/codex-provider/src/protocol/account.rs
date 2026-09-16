@@ -103,7 +103,9 @@ pub fn parse_login_completed_notification(
     Ok((parsed.login_id, parsed.success, parsed.error))
 }
 
-pub fn parse_rate_limits_response(value: Value) -> Result<CodexRateLimitsSnapshot, CodexProviderError> {
+pub fn parse_rate_limits_response(
+    value: Value,
+) -> Result<CodexRateLimitsSnapshot, CodexProviderError> {
     Ok(CodexRateLimitsSnapshot { raw: value })
 }
 

@@ -48,10 +48,7 @@ pub fn provision_vm(layout: &VmLayout) -> Result<(), String> {
 
 fn ensure_disk_image(layout: &VmLayout) -> Result<(), String> {
     let disk_path = layout.disk_path();
-    let force_rebuild = std::env::var("GPTBOT_FORCE_DISK_REBUILD")
-        .ok()
-        .as_deref()
-        == Some("1");
+    let force_rebuild = std::env::var("GPTBOT_FORCE_DISK_REBUILD").ok().as_deref() == Some("1");
 
     if disk_path.exists() && validate_ext4_disk(&disk_path)? && !force_rebuild {
         return Ok(());

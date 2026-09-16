@@ -1,6 +1,6 @@
 use agent_core::{
-    filter_workspace_listing, AgentComputer, ComputerError, ComputerInfo, ExecResult,
-    WorkspaceEntry, WorkspaceRevisionCounter, workspace_tool_mutation,
+    filter_workspace_listing, workspace_tool_mutation, AgentComputer, ComputerError, ComputerInfo,
+    ExecResult, WorkspaceEntry, WorkspaceRevisionCounter,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -107,12 +107,7 @@ impl SpriteComputer {
         let root = self.workspace_root.trim_end_matches('/');
         let marker = format!("{root}/.elsewhere-bootstrap");
 
-        if self
-            .client
-            .fs_write(&marker, b"1", true)
-            .await
-            .is_ok()
-        {
+        if self.client.fs_write(&marker, b"1", true).await.is_ok() {
             self.workspace_materialized.store(true, Ordering::Release);
             return Ok(());
         }
@@ -127,12 +122,7 @@ impl SpriteComputer {
             if code != 0 {
                 continue;
             }
-            if self
-                .client
-                .fs_write(&marker, b"1", true)
-                .await
-                .is_ok()
-            {
+            if self.client.fs_write(&marker, b"1", true).await.is_ok() {
                 self.workspace_materialized.store(true, Ordering::Release);
                 return Ok(());
             }
@@ -202,11 +192,7 @@ impl AgentComputer for SpriteComputer {
 
     async fn ensure_ready(&self) -> Result<ComputerInfo, ComputerError> {
         self.materialize_workspace().await?;
-        let info = self
-            .client
-            .get_sprite()
-            .await
-            .map_err(map_sprite_error)?;
+        let info = self.client.get_sprite().await.map_err(map_sprite_error)?;
 
         self.client
             .fs_write(
@@ -281,13 +267,12 @@ impl AgentComputer for SpriteComputer {
     async fn read_file(&self, path: &str) -> Result<Vec<u8>, ComputerError> {
         let path = self.normalize_path(path)?;
         self.materialize_workspace().await?;
-        self.client
-            .fs_read(&path)
-            .await
-            .map_err(|err| match err {
-                SpriteError::NotFound => ComputerError::ExecutionFailed(format!("file not found: {path}")),
-                other => map_sprite_error(other),
-            })
+        self.client.fs_read(&path).await.map_err(|err| match err {
+            SpriteError::NotFound => {
+                ComputerError::ExecutionFailed(format!("file not found: {path}"))
+            }
+            other => map_sprite_error(other),
+        })
     }
 
     async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
@@ -346,9 +331,8 @@ impl AgentComputer for SpriteComputer {
         if let Some(obj) = request.as_object_mut() {
             obj.insert("action".into(), json!(action));
         }
-        let payload = serde_json::to_string(&request).map_err(|e| {
-            ComputerError::MalformedArguments(format!("browser request JSON: {e}"))
-        })?;
+        let payload = serde_json::to_string(&request)
+            .map_err(|e| ComputerError::MalformedArguments(format!("browser request JSON: {e}")))?;
 
         let require_egress = browser_action_requires_network_egress(action);
         let stdout = invoke_browser_daemon(

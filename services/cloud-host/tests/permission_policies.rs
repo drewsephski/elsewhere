@@ -137,6 +137,36 @@ impl ScriptedModel {
         )
     }
 
+    fn subagent_then_done() -> Arc<Self> {
+        Arc::new(Self {
+            steps: Mutex::new(vec![
+                CreateResponseResult {
+                    output: vec![json!({
+                        "type": "function_call",
+                        "name": "run_subagent",
+                        "call_id": "c1",
+                        "arguments": r#"{"name":"Reviewer","task":"review the implementation"}"#
+                    })],
+                    output_text: None,
+                },
+                CreateResponseResult {
+                    output: vec![json!({
+                        "type": "message",
+                        "content": [{"type":"output_text","text":"helper findings"}]
+                    })],
+                    output_text: Some("helper findings".into()),
+                },
+                CreateResponseResult {
+                    output: vec![json!({
+                        "type": "message",
+                        "content": [{"type":"output_text","text":"parent continued"}]
+                    })],
+                    output_text: Some("parent continued".into()),
+                },
+            ]),
+        })
+    }
+
     fn calls(name: &str, arguments: &str) -> Arc<Self> {
         Arc::new(Self {
             steps: Mutex::new(vec![
@@ -933,4 +963,186 @@ async fn unattended_routine_and_webhook_use_the_same_policy_path(pool: PgPool) {
         .unwrap();
     assert!(wait_writes(&computer, 2).await);
     assert_eq!(pending_count(&pool, &owner).await, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn allow_run_subagent_returns_to_parent_without_new_bot_or_run(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    state
+        .permission_policies
+        .upsert_bot_decision(&owner, &bot_id, "run_subagent", Some(PolicyDecision::Allow))
+        .await
+        .unwrap();
+    let computer = CountingComputer::new();
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer.clone(),
+        ScriptedModel::subagent_then_done(),
+    );
+    let app = build_router(state.clone());
+    let response = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "review" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::ACCEPTED);
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner).await);
+    let helpers: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM run_subagents WHERE tool_invocation_id = 'c1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(helpers, 1);
+    let status: String =
+        sqlx::query_scalar("SELECT status FROM run_subagents WHERE tool_invocation_id = 'c1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(status, "completed");
+    let extra_bots: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM bots WHERE owner_id = $1")
+        .bind(&owner)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(extra_bots, 1);
+    let extra_runs: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM agent_runs ar JOIN bots b ON b.id = ar.bot_id WHERE b.owner_id = $1",
+    )
+    .bind(&owner)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(extra_runs, 1);
+    let helper_result: Option<String> =
+        sqlx::query_scalar("SELECT result FROM run_subagents WHERE tool_invocation_id = 'c1'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(helper_result.as_deref(), Some("helper findings"));
+    let run_status: String =
+        sqlx::query_scalar("SELECT status FROM agent_runs WHERE request_id = $1")
+            .bind(&request_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(run_status, "completed");
+    let assistant: String = sqlx::query_scalar(
+        "SELECT m.body FROM agent_runs ar JOIN messages m ON m.id = ar.assistant_message_id WHERE ar.request_id = $1",
+    )
+    .bind(&request_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(
+        assistant.contains("parent continued") || assistant.contains("helper findings"),
+        "{assistant}"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn deny_run_subagent_does_not_launch_helper(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    state
+        .permission_policies
+        .upsert_bot_decision(&owner, &bot_id, "run_subagent", Some(PolicyDecision::Deny))
+        .await
+        .unwrap();
+    let computer = CountingComputer::new();
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer,
+        ScriptedModel::calls(
+            "run_subagent",
+            r#"{"name":"Reviewer","task":"review the implementation"}"#,
+        ),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "review" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_no_active_runs(&pool, &owner).await);
+    let helpers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM run_subagents")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(helpers, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn ask_run_subagent_creates_approval_and_does_not_launch(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    let computer = CountingComputer::new();
+    let request_id = Uuid::new_v4().to_string();
+    let _guard = RunOverrideGuard::install(
+        state.clone(),
+        request_id.clone(),
+        computer,
+        ScriptedModel::calls(
+            "run_subagent",
+            r#"{"name":"Reviewer","task":"review the implementation"}"#,
+        ),
+    );
+    let app = build_router(state.clone());
+    let _ = app
+        .oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/v1/runs")
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .header("Idempotency-Key", &request_id)
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({ "botId": bot_id, "message": "review" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
+    assert!(wait_pending(&pool, &owner).await);
+    let helpers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM run_subagents")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(helpers, 0);
 }

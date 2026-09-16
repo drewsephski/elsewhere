@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use agent_core::{
-    AgentEvent, AgentLoopContext, EventSink, FakeAgentComputer, RuntimeError, RunStore,
+    AgentEvent, AgentLoopContext, EventSink, FakeAgentComputer, RunStore, RuntimeError,
     StructuredMessageInput,
 };
 use async_trait::async_trait;

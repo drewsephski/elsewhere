@@ -105,9 +105,8 @@ impl SseDecoder {
                     self.saw_done = true;
                     continue;
                 }
-                let parsed: StreamChunk = serde_json::from_str(data).map_err(|e| {
-                    AppError::Provider(format!("malformed stream chunk: {}", e))
-                })?;
+                let parsed: StreamChunk = serde_json::from_str(data)
+                    .map_err(|e| AppError::Provider(format!("malformed stream chunk: {}", e)))?;
                 for choice in parsed.choices {
                     if choice.finish_reason.is_some() {
                         self.saw_finish = true;
@@ -152,8 +151,7 @@ mod tests {
     #[test]
     fn truncated_stream_without_done_fails() {
         let mut decoder = SseDecoder::new();
-        let chunk =
-            "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n";
+        let chunk = "data: {\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n\n";
         decoder.push_chunk(chunk.as_bytes()).expect("chunk");
         let err = decoder.finish().unwrap_err();
         assert!(err.to_string().contains("completion marker"));
@@ -163,7 +161,9 @@ mod tests {
     fn done_marker_allows_finish() {
         let mut decoder = SseDecoder::new();
         decoder
-            .push_chunk(b"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+            .push_chunk(
+                b"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n",
+            )
             .expect("chunk");
         assert!(decoder.finish().is_ok());
     }

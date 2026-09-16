@@ -45,9 +45,7 @@ fn run() -> Result<(), String> {
                 }),
             })?;
             if !response.ok {
-                return Err(response
-                    .error
-                    .unwrap_or_else(|| "write failed".into()));
+                return Err(response.error.unwrap_or_else(|| "write failed".into()));
             }
             vm.stop()?;
             Ok(())
@@ -64,9 +62,7 @@ fn run() -> Result<(), String> {
                 }),
             })?;
             if !response.ok {
-                return Err(response
-                    .error
-                    .unwrap_or_else(|| "read failed".into()));
+                return Err(response.error.unwrap_or_else(|| "read failed".into()));
             }
             let stdout = response.stdout.unwrap_or_default();
             if stdout.trim() != "hello from the persistent GPT Bot computer" {

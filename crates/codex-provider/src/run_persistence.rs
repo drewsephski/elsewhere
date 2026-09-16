@@ -25,8 +25,7 @@ pub(crate) async fn persist_event(
             .store
             .append_run_event(&ctx.request_id, event_type, payload)
             .await?;
-        deps.events
-            .emit_durable(receipt.id, event_type, payload)?;
+        deps.events.emit_durable(receipt.id, event_type, payload)?;
     }
     deps.store
         .persist_structured_message(StructuredMessageInput {
@@ -171,11 +170,8 @@ pub(crate) async fn emit_run_started(
         .store
         .append_run_event(&ctx.request_id, "run_started", &started_payload)
         .await?;
-    deps.events.emit_durable(
-        started_receipt.id,
-        "run_started",
-        &started_payload,
-    )?;
+    deps.events
+        .emit_durable(started_receipt.id, "run_started", &started_payload)?;
     deps.events.emit(AgentEvent::RunStarted {
         request_id: ctx.request_id.clone(),
     })?;

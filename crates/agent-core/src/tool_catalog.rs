@@ -18,6 +18,8 @@ pub const BROWSER_TOOL_NAMES: &[&str] = &[
 
 pub const COLLABORATION_TOOL_NAMES: &[&str] = &["bot_list", "bot_delegate"];
 
+pub const SUBAGENT_TOOL_NAMES: &[&str] = &["run_subagent"];
+
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_list_repositories",
     "github_search_repositories",
@@ -55,6 +57,10 @@ pub fn is_collaboration_tool(name: &str) -> bool {
     COLLABORATION_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_subagent_tool(name: &str) -> bool {
+    SUBAGENT_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
 }
@@ -70,6 +76,7 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "browser_screenshot",
     "browser_download",
     "bot_delegate",
+    "run_subagent",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -124,7 +131,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "workspace_exec" => Some(PolicyActionGroup::Terminal),
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
-        "bot_delegate" => Some(PolicyActionGroup::Delegation),
+        "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
         name if is_connector_tool(name) => Some(PolicyActionGroup::ConnectedApps),
         _ => None,
     }
@@ -140,6 +147,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "browser_screenshot" => "Take screenshots",
         "browser_download" => "Download files",
         "bot_delegate" => "Hand off work",
+        "run_subagent" => "Run subagents",
         _ => "This action",
     }
 }
@@ -154,6 +162,7 @@ pub fn policy_denied_message(name: &str) -> String {
         "browser_screenshot" => "This Bot is not allowed to take screenshots.".into(),
         "browser_download" => "This Bot is not allowed to download files.".into(),
         "bot_delegate" => "This Bot is not allowed to hand work to another Bot.".into(),
+        "run_subagent" => "This Bot is not allowed to run subagents.".into(),
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -172,6 +181,7 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "browser_request_human",
     "bot_list",
     "bot_delegate",
+    "run_subagent",
     "github_list_repositories",
     "github_search_repositories",
     "github_get_repository",
@@ -204,5 +214,12 @@ mod tests {
         assert!(!is_policy_overridable_tool("workspace_read"));
         assert!(!is_policy_overridable_tool("github_list_repositories"));
         assert!(!is_policy_overridable_tool("not_a_tool"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"run_subagent"));
+        assert_eq!(
+            policy_action_group("run_subagent"),
+            Some(PolicyActionGroup::Delegation)
+        );
+        assert!(is_subagent_tool("run_subagent"));
+        assert!(!is_collaboration_tool("run_subagent"));
     }
 }

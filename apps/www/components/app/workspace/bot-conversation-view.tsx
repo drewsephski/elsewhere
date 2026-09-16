@@ -11,6 +11,7 @@ import type {
   RunSummary,
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
+import { SubagentCard } from "@/components/app/subagent-card";
 import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
@@ -509,6 +510,8 @@ export function BotConversationView({
                       payload={item.approval}
                       externalStatus={item.decision}
                     />
+                  ) : item.kind === "subagent" ? (
+                    <SubagentCard key={item.id} activity={item.subagent} />
                   ) : (
                     <p key={item.id} className="text-center text-[11px] text-muted-foreground">
                       {item.text}

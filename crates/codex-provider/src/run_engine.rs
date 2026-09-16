@@ -16,7 +16,6 @@ use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
 use crate::assistant_accumulator::CodexAssistantAccumulator;
 use crate::assistant_stream::AssistantDeltaCoalescer;
-use crate::run_phases::RunPhaseRecorder;
 use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
@@ -31,9 +30,10 @@ use crate::run_persistence::{
     emit_run_started, fail_run, finalize_cancelled, finalize_interrupted, finalize_success,
     flush_assistant_stream, persist_event, AssistantCheckpointState,
 };
+use crate::run_phases::RunPhaseRecorder;
 use agent_core::MessageStatus;
 
-const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. When a page requires owner login, CAPTCHA, 2FA, passkeys, credential entry, or similar human-only interaction, call browser_request_human with a short safe message — never ask the user for passwords or OTP values in chat. After the owner returns control, call browser_snapshot before continuing and reassess the page; do not assume the owner completed the step you expected. Use bot_list to discover other Bots owned by the same user and bot_delegate to queue asynchronous handoffs to them (returns immediately; does not wait for completion). Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals. Persistent workspace files live under /workspace; final user-retrievable artifacts for this assignment belong under the results directory described in your role instructions.";
+const EXECUTION_POLICY: &str = "Your computer is the Elsewhere MCP server. Use workspace_list, workspace_read, workspace_write, and workspace_exec for files and shell work. Use browser_navigate, browser_snapshot, browser_click, browser_type, browser_screenshot, and browser_download for web research inside the agent computer. When a page requires owner login, CAPTCHA, 2FA, passkeys, credential entry, or similar human-only interaction, call browser_request_human with a short safe message — never ask the user for passwords or OTP values in chat. After the owner returns control, call browser_snapshot before continuing and reassess the page; do not assume the owner completed the step you expected. Use bot_list to discover other Bots owned by the same user and bot_delegate to queue asynchronous handoffs to them (returns immediately; does not wait for completion). Use run_subagent for a temporary helper inside this assignment that has no computer and does not appear as another Bot; wait for its findings and continue this same assignment. Do not attempt to access the host environment. Request approval by invoking a protected tool: Elsewhere pauses mutations and shows the user an approval card before dispatch. Do not replace a tool call with a prose approval request or claim that an operation succeeded before its tool result. Respect denied or expired approvals. Persistent workspace files live under /workspace; final user-retrievable artifacts for this assignment belong under the results directory described in your role instructions.";
 
 const WORKSPACE_CONTRACT_MARKER: &str = "\n\nComputer workspace contract:\n";
 
@@ -150,6 +150,7 @@ impl CodexRunEngine {
             shared.connectors.clone(),
             shared.human_intervention.clone(),
             shared.browser_recovery.clone(),
+            shared.subagents.clone(),
             ctx.conversation_id.clone(),
         )
         .await
@@ -283,6 +284,8 @@ impl CodexRunEngine {
             }
         };
 
+        let client = std::sync::Arc::new(client);
+
         let account = match client.account().await {
             Ok(state) => state,
             Err(err) => {
@@ -306,7 +309,7 @@ impl CodexRunEngine {
         let instructions = compose_instructions(&ctx.instructions);
         if using_real_codex {
             if let Err(err) = ensure_codex_mcp_tool_exposure_supported() {
-                cleanup_run(client, mcp, None).await;
+                cleanup_run(&shared, client.as_ref(), mcp, None).await;
                 return map_boot_failure(&shared, &ctx, err).await;
             }
         }
@@ -323,6 +326,15 @@ impl CodexRunEngine {
             developer_instructions: Some(instructions.developer),
         };
 
+        if let Some(subagents) = &shared.subagents {
+            subagents.attach_turn_executor(std::sync::Arc::new(crate::NestedCodexTurn::new(
+                client.clone(),
+                thread_config.cwd.clone(),
+                thread_config.model.clone(),
+                shared.cancel.clone(),
+            )));
+        }
+
         let thread_id = match open_elsewhere_codex_thread(
             &client,
             &shared,
@@ -334,7 +346,7 @@ impl CodexRunEngine {
         {
             Ok(id) => id,
             Err(()) => {
-                cleanup_run(client, mcp, None).await;
+                cleanup_run(&shared, client.as_ref(), mcp, None).await;
                 return Ok(());
             }
         };
@@ -351,7 +363,7 @@ impl CodexRunEngine {
             .await
             .is_err()
         {
-            cleanup_run(client, mcp, None).await;
+            cleanup_run(&shared, client.as_ref(), mcp, None).await;
             return Ok(());
         }
 
@@ -361,13 +373,13 @@ impl CodexRunEngine {
         {
             Ok(tools) => tools,
             Err(err) => {
-                cleanup_run(client, mcp, None).await;
+                cleanup_run(&shared, client.as_ref(), mcp, None).await;
                 return map_boot_failure(&shared, &ctx, err).await;
             }
         };
         for required in ALL_AGENT_TOOL_NAMES {
             if !tools.iter().any(|name| name == required) {
-                cleanup_run(client, mcp, None).await;
+                cleanup_run(&shared, client.as_ref(), mcp, None).await;
                 fail_run(
                     &shared,
                     &ctx,
@@ -396,7 +408,7 @@ impl CodexRunEngine {
         {
             Ok(id) => id,
             Err(()) => {
-                cleanup_run(client, mcp, None).await;
+                cleanup_run(&shared, client.as_ref(), mcp, None).await;
                 return Ok(());
             }
         };
@@ -454,7 +466,7 @@ impl CodexRunEngine {
         let run_outcome = match turn_result {
             Ok(Ok(outcome)) => outcome,
             Ok(Err(err)) => {
-                cleanup_run_with_turn(client, mcp, &state).await;
+                cleanup_run_with_turn(&shared, client.as_ref(), mcp, &state).await;
                 return Err(err);
             }
             Err(_) => {
@@ -484,7 +496,7 @@ impl CodexRunEngine {
                     active.assistant.partial_output()
                 };
                 finalize_interrupted(&shared, &ctx, &partial, "run_timeout").await?;
-                cleanup_run_with_turn(client, mcp, &state).await;
+                cleanup_run_with_turn(&shared, client.as_ref(), mcp, &state).await;
                 return Ok(());
             }
         };
@@ -563,7 +575,7 @@ impl CodexRunEngine {
             }
         }
 
-        cleanup_run_with_turn(client, mcp, &state).await;
+        cleanup_run_with_turn(&shared, client.as_ref(), mcp, &state).await;
         Ok(())
     }
 }
@@ -623,9 +635,8 @@ mod instruction_tests {
     fn codex_thread_puts_identity_in_base_not_generic_chatgpt() {
         let snapshot = "You are \"Designer\", an AI teammate in Elsewhere.\n\nYour assigned role:\nDesign specialist.";
         let contract = "Per-run output directory: /workspace/results/run-1";
-        let bundle = compose_instructions(&format!(
-            "{snapshot}{WORKSPACE_CONTRACT_MARKER}{contract}"
-        ));
+        let bundle =
+            compose_instructions(&format!("{snapshot}{WORKSPACE_CONTRACT_MARKER}{contract}"));
         assert!(bundle.base.contains("Designer"));
         assert!(bundle.base.contains("assigned role"));
         assert!(!bundle.base.contains("/workspace/results/"));
@@ -807,8 +818,7 @@ fn is_stale_codex_thread_resume_error(err: &CodexProviderError) -> bool {
 }
 
 fn is_codex_active_writer_error(err: &CodexProviderError) -> bool {
-    codex_error_message_lower(err)
-        .is_some_and(|message| message.contains("active writer"))
+    codex_error_message_lower(err).is_some_and(|message| message.contains("active writer"))
 }
 
 async fn archive_codex_thread_best_effort(client: &CodexAppServerClient, thread_id: &str) {
@@ -942,7 +952,8 @@ async fn start_codex_turn(
 }
 
 async fn cleanup_run_with_turn(
-    client: CodexAppServerClient,
+    shared: &SharedRunDeps,
+    client: &CodexAppServerClient,
     mcp: ComputerMcpServer,
     state: &Arc<Mutex<TurnRunState>>,
 ) {
@@ -950,7 +961,7 @@ async fn cleanup_run_with_turn(
     let thread_id = active.thread_id.clone();
     let turn_id = active.turn_id.clone();
     drop(active);
-    cleanup_run(client, mcp, Some((thread_id, turn_id))).await;
+    cleanup_run(shared, client, mcp, Some((thread_id, turn_id))).await;
 }
 
 async fn maybe_compact_codex_thread(
@@ -975,8 +986,11 @@ async fn maybe_compact_codex_thread(
         return Ok(());
     }
     let milestone = milestone.unwrap();
-    match tokio::time::timeout(Duration::from_secs(120), client.thread_compact_start(thread_id))
-        .await
+    match tokio::time::timeout(
+        Duration::from_secs(120),
+        client.thread_compact_start(thread_id),
+    )
+    .await
     {
         Ok(Ok(())) => {
             if let Err(err) = shared
@@ -1011,10 +1025,14 @@ async fn maybe_compact_codex_thread(
 }
 
 async fn cleanup_run(
-    client: CodexAppServerClient,
+    shared: &SharedRunDeps,
+    client: &CodexAppServerClient,
     mcp: ComputerMcpServer,
     active_turn: Option<(String, String)>,
 ) {
+    if let Some(subagents) = &shared.subagents {
+        subagents.clear_turn_executor();
+    }
     if let Some((thread_id, turn_id)) = active_turn {
         let _ = client
             .turn_interrupt(&thread_id, &turn_id, Duration::from_secs(30))
@@ -1253,7 +1271,7 @@ async fn handle_item_completed(
             &mut active.checkpoint,
             Some(phases),
         )
-            .await;
+        .await;
         return Ok(());
     }
     if item_type != "mcpToolCall" {
@@ -1321,10 +1339,7 @@ async fn handle_agent_delta(
     phases: &mut RunPhaseRecorder,
     params: &Value,
 ) -> Result<(), RuntimeError> {
-    let item_id = params
-        .get("itemId")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let item_id = params.get("itemId").and_then(|v| v.as_str()).unwrap_or("");
     let delta = params.get("delta").and_then(|v| v.as_str()).unwrap_or("");
     let mut active = state.lock().await;
     active.assistant.on_agent_message_delta(params);
@@ -1422,11 +1437,9 @@ mod continuity_tests {
         assert!(!is_stale_codex_thread_resume_error(
             &CodexProviderError::Timeout("thread/resume".into())
         ));
-        assert!(is_codex_active_writer_error(
-            &CodexProviderError::Protocol(
-                "json-rpc -32600: thread abc already has an active writer".into(),
-            )
-        ));
+        assert!(is_codex_active_writer_error(&CodexProviderError::Protocol(
+            "json-rpc -32600: thread abc already has an active writer".into(),
+        )));
     }
 
     #[test]

@@ -8,6 +8,11 @@ import {
   type AssistantStreamState,
 } from "@/lib/assistant-stream";
 import { activityText } from "@/lib/work-events";
+import {
+  isSubagentEvent,
+  subagentActivityFromPayload,
+  type SubagentActivity,
+} from "@/lib/subagent-events";
 import type { ApprovalRequestedPayload, ApprovalTerminalState } from "@/components/app/approval-card";
 import {
   createContext,
@@ -20,7 +25,8 @@ import {
 
 export type RunActivityItem =
   | { id: string; kind: "text"; text: string }
-  | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState };
+  | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState }
+  | { id: string; kind: "subagent"; subagent: SubagentActivity };
 
 export type ActiveRunState = {
   runId: string | null;
@@ -237,6 +243,31 @@ export function ActiveRunProvider({
                       : item,
                   ),
                 );
+              }
+            } else if (isSubagentEvent(event.event)) {
+              const activity = subagentActivityFromPayload(payload);
+              if (activity) {
+                setTimeline((previous) => {
+                  const existing = previous.findIndex(
+                    (item) =>
+                      item.kind === "subagent" &&
+                      item.subagent.subagentId === activity.subagentId,
+                  );
+                  if (existing >= 0) {
+                    return previous.map((item, index) =>
+                      index === existing && item.kind === "subagent"
+                        ? { ...item, subagent: { ...item.subagent, ...activity } }
+                        : item,
+                    );
+                  }
+                  if (!isNew) {
+                    return previous;
+                  }
+                  return [
+                    ...previous.slice(-199),
+                    { id, kind: "subagent" as const, subagent: activity },
+                  ];
+                });
               }
             } else {
               const text = activityText(event.event, payload);

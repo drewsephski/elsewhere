@@ -67,15 +67,14 @@ fn current_version(conn: &Connection) -> Result<i32, rusqlite::Error> {
 
 fn set_version(conn: &Connection, version: i32) -> Result<(), rusqlite::Error> {
     conn.execute("DELETE FROM schema_version", [])?;
-    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [version])?;
+    conn.execute(
+        "INSERT INTO schema_version (version) VALUES (?1)",
+        [version],
+    )?;
     Ok(())
 }
 
-fn column_exists(
-    conn: &Connection,
-    table: &str,
-    column: &str,
-) -> Result<bool, rusqlite::Error> {
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, rusqlite::Error> {
     let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
     for name in rows {
@@ -236,10 +235,8 @@ mod tests {
     #[test]
     fn v2_backfill_sequence_uses_strict_id_order_at_equal_timestamps() {
         let conn = Connection::open_in_memory().expect("conn");
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);",
-        )
-        .expect("schema_version");
+        conn.execute_batch("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);")
+            .expect("schema_version");
         run_migration(&conn, 1, migrate_to_v1).expect("v1");
 
         conn.execute_batch(

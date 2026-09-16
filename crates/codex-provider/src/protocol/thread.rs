@@ -121,6 +121,7 @@ pub fn build_elsewhere_thread_start_params(
                 "browser_request_human": { "approval_mode": "approve" },
                 "bot_list": { "approval_mode": "approve" },
                 "bot_delegate": { "approval_mode": "approve" },
+                "run_subagent": { "approval_mode": "approve" },
                 "github_list_repositories": { "approval_mode": "approve" },
                 "github_search_repositories": { "approval_mode": "approve" },
                 "github_get_repository": { "approval_mode": "approve" },
@@ -302,7 +303,9 @@ pub fn assert_elsewhere_mcp_direct_exposure(params: &Value) -> Result<(), CodexP
         }
     }
 
-    if elsewhere.get("default_tools_approval_mode").and_then(|v| v.as_str())
+    if elsewhere
+        .get("default_tools_approval_mode")
+        .and_then(|v| v.as_str())
         != Some("approve")
     {
         return Err(CodexProviderError::Config(
@@ -313,7 +316,9 @@ pub fn assert_elsewhere_mcp_direct_exposure(params: &Value) -> Result<(), CodexP
     let tools = elsewhere
         .get("tools")
         .and_then(|v| v.as_object())
-        .ok_or_else(|| CodexProviderError::Config("elsewhere MCP server missing tools map".into()))?;
+        .ok_or_else(|| {
+            CodexProviderError::Config("elsewhere MCP server missing tools map".into())
+        })?;
     for tool_name in ELSEWHERE_ENABLED_MCP_TOOLS {
         let tool_cfg = tools.get(*tool_name).ok_or_else(|| {
             CodexProviderError::Config(format!("elsewhere MCP tools missing entry for {tool_name}"))
@@ -360,6 +365,15 @@ mod tests {
             !config_obj.contains_key("mcp_servers"),
             "tool-less thread must not configure MCP servers"
         );
+        let encoded = params.to_string();
+        assert!(
+            !encoded.contains("run_subagent"),
+            "tool-less helper thread must not expose run_subagent"
+        );
+        assert!(
+            !encoded.contains("mcpServers") && !encoded.contains("mcp_servers"),
+            "tool-less helper thread must not configure MCP"
+        );
     }
 
     #[test]
@@ -390,6 +404,9 @@ mod tests {
             resume.get("baseInstructions").and_then(|v| v.as_str()),
             Some(identity)
         );
-        assert_eq!(resume.get("threadId").and_then(|v| v.as_str()), Some("thread-abc"));
+        assert_eq!(
+            resume.get("threadId").and_then(|v| v.as_str()),
+            Some("thread-abc")
+        );
     }
 }

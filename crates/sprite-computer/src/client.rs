@@ -1,8 +1,8 @@
 use crate::policy::NetworkPolicyConfig;
 use crate::types::{
-    Checkpoint, CheckpointCreateBody, CheckpointRecord, CheckpointsListResponse,
-    CreateSpriteBody, ExecHttpJson, FsListResponse, NetworkPolicyBody, SpriteError, SpriteInfo,
-    SpriteRecord, StreamLine, DEFAULT_API_BASE,
+    Checkpoint, CheckpointCreateBody, CheckpointRecord, CheckpointsListResponse, CreateSpriteBody,
+    ExecHttpJson, FsListResponse, NetworkPolicyBody, SpriteError, SpriteInfo, SpriteRecord,
+    StreamLine, DEFAULT_API_BASE,
 };
 use reqwest::{Client, Method, StatusCode};
 use std::time::{Duration, Instant};
@@ -40,9 +40,7 @@ impl SpriteClientConfig {
         let token = std::env::var("SPRITE_TOKEN")
             .or_else(|_| std::env::var("SPRITES_TOKEN"))
             .map_err(|_| {
-                SpriteError::Config(
-                    "SPRITE_TOKEN (or deprecated SPRITES_TOKEN) is not set".into(),
-                )
+                SpriteError::Config("SPRITE_TOKEN (or deprecated SPRITES_TOKEN) is not set".into())
             })?;
         Ok(Self {
             base_url: std::env::var("SPRITES_API_BASE").unwrap_or_else(|_| DEFAULT_API_BASE.into()),
@@ -128,7 +126,10 @@ impl SpriteClient {
         self.create_sprite().await
     }
 
-    pub async fn set_network_policy(&self, policy: &NetworkPolicyConfig) -> Result<(), SpriteError> {
+    pub async fn set_network_policy(
+        &self,
+        policy: &NetworkPolicyConfig,
+    ) -> Result<(), SpriteError> {
         let path = format!(
             "/sprites/{}/policy/network",
             urlencoding(&self.config.sprite_name)
@@ -177,8 +178,14 @@ impl SpriteClient {
             urlencoding(&self.config.workspace_root),
             mkdir,
         );
-        self.send_raw_with_timeout(Method::PUT, &path, Some(data), false, self.config.request_timeout)
-            .await?;
+        self.send_raw_with_timeout(
+            Method::PUT,
+            &path,
+            Some(data),
+            false,
+            self.config.request_timeout,
+        )
+        .await?;
         Ok(())
     }
 
@@ -200,12 +207,16 @@ impl SpriteClient {
         parse_exec_response(&body)
     }
 
-    pub async fn create_checkpoint(&self, comment: Option<&str>) -> Result<Checkpoint, SpriteError> {
-        let path = format!("/sprites/{}/checkpoint", urlencoding(&self.config.sprite_name));
+    pub async fn create_checkpoint(
+        &self,
+        comment: Option<&str>,
+    ) -> Result<Checkpoint, SpriteError> {
+        let path = format!(
+            "/sprites/{}/checkpoint",
+            urlencoding(&self.config.sprite_name)
+        );
         let body = CheckpointCreateBody { comment };
-        let raw = self
-            .send_ndjson(Method::POST, &path, Some(body))
-            .await?;
+        let raw = self.send_ndjson(Method::POST, &path, Some(body)).await?;
         parse_checkpoint_complete(&raw)
     }
 
@@ -217,11 +228,7 @@ impl SpriteClient {
         let list: CheckpointsListResponse = self
             .send_json(Method::GET, &path, None::<&()>, true)
             .await?;
-        Ok(list
-            .checkpoints
-            .into_iter()
-            .map(Checkpoint::from)
-            .collect())
+        Ok(list.checkpoints.into_iter().map(Checkpoint::from).collect())
     }
 
     pub async fn restore_checkpoint(&self, checkpoint_id: &str) -> Result<(), SpriteError> {
@@ -300,9 +307,7 @@ impl SpriteClient {
     where
         B: serde::Serialize,
     {
-        let bytes = self
-            .send_json_body(method, path, body, false)
-            .await?;
+        let bytes = self.send_json_body(method, path, body, false).await?;
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
@@ -346,9 +351,7 @@ impl SpriteClient {
                 .timeout(timeout);
 
             if let Some(raw) = body {
-                let content_type = if method == Method::PUT
-                    && path.contains("/fs/write")
-                {
+                let content_type = if method == Method::PUT && path.contains("/fs/write") {
                     "application/octet-stream"
                 } else {
                     "application/json"
@@ -382,17 +385,30 @@ impl SpriteClient {
                     }
 
                     // Bound allocation while receiving both successful and error bodies.
-                    if response.content_length().is_some_and(|length| length > MAX_RESPONSE_BYTES as u64) {
-                        return Err(SpriteError::MalformedResponse("response body too large".into()));
+                    if response
+                        .content_length()
+                        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+                    {
+                        return Err(SpriteError::MalformedResponse(
+                            "response body too large".into(),
+                        ));
                     }
                     let mut bytes = Vec::new();
-                    while let Some(chunk) = response.chunk().await.map_err(|e| map_network(e, &self.config.token))? {
+                    while let Some(chunk) = response
+                        .chunk()
+                        .await
+                        .map_err(|e| map_network(e, &self.config.token))?
+                    {
                         if chunk.len() > MAX_RESPONSE_BYTES.saturating_sub(bytes.len()) {
-                            return Err(SpriteError::MalformedResponse("response body too large".into()));
+                            return Err(SpriteError::MalformedResponse(
+                                "response body too large".into(),
+                            ));
                         }
                         bytes.extend_from_slice(&chunk);
                     }
-                    if status.is_success() { return Ok(bytes); }
+                    if status.is_success() {
+                        return Ok(bytes);
+                    }
                     let message = String::from_utf8_lossy(&bytes);
                     let message = SpriteError::sanitize_message(&message, &self.config.token);
 
@@ -455,10 +471,7 @@ impl From<CheckpointRecord> for Checkpoint {
 }
 
 fn map_network(err: reqwest::Error, token: &str) -> SpriteError {
-    SpriteError::Network(SpriteError::sanitize_message(
-        &err.to_string(),
-        token,
-    ))
+    SpriteError::Network(SpriteError::sanitize_message(&err.to_string(), token))
 }
 
 fn urlencoding(value: &str) -> String {
@@ -470,9 +483,8 @@ pub(crate) fn parse_exec_response(body: &[u8]) -> Result<(String, String, i32), 
         return Ok((String::new(), String::new(), 0));
     }
     if body.first() == Some(&b'{') {
-        let parsed: ExecHttpJson = serde_json::from_slice(body).map_err(|e| {
-            SpriteError::MalformedResponse(format!("exec json parse failed: {e}"))
-        })?;
+        let parsed: ExecHttpJson = serde_json::from_slice(body)
+            .map_err(|e| SpriteError::MalformedResponse(format!("exec json parse failed: {e}")))?;
         return Ok((parsed.stdout, parsed.stderr, parsed.exit_code));
     }
     parse_exec_binary(body)

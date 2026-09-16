@@ -28,10 +28,11 @@ async fn mcp_tools_require_bearer_token() {
         None,
         None,
         None,
+        None,
         "conv-test".into(),
     )
-        .await
-        .expect("start");
+    .await
+    .expect("start");
 
     let client = reqwest::Client::new();
     let init_body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"0.1.0"}}}"#;
@@ -54,7 +55,11 @@ async fn mcp_tools_require_bearer_token() {
         .send()
         .await
         .expect("request");
-    assert!(authorized.status().is_success(), "status {}", authorized.status());
+    assert!(
+        authorized.status().is_success(),
+        "status {}",
+        authorized.status()
+    );
 
     server.shutdown().await;
 }
@@ -75,10 +80,11 @@ async fn fake_computer_rejects_outside_workspace_via_mcp_session() {
         None,
         None,
         None,
+        None,
         "conv-test".into(),
     )
-        .await
-        .expect("start");
+    .await
+    .expect("start");
     assert!(server.url().starts_with("http://127.0.0.1:"));
     server.shutdown().await;
 }
@@ -90,6 +96,7 @@ async fn dropping_run_revokes_its_computer_endpoint() {
         Arc::new(AllowAllApprovalGate),
         test_run(),
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
         None,
         None,

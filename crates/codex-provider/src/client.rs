@@ -64,7 +64,11 @@ impl CodexAppServerClient {
     pub async fn rate_limits(&self) -> Result<CodexRateLimitsSnapshot, CodexProviderError> {
         let result = self
             .process
-            .request("account/rateLimits/read", json!({}), DEFAULT_REQUEST_TIMEOUT)
+            .request(
+                "account/rateLimits/read",
+                json!({}),
+                DEFAULT_REQUEST_TIMEOUT,
+            )
             .await?;
         parse_rate_limits_response(result)
     }
@@ -124,10 +128,7 @@ impl CodexAppServerClient {
         timeout: Duration,
     ) -> Result<String, CodexProviderError> {
         let params = build_turn_start_params(thread_id, user_text);
-        let result = self
-            .process
-            .request("turn/start", params, timeout)
-            .await?;
+        let result = self.process.request("turn/start", params, timeout).await?;
         parse_turn_start_response(result)
     }
 
@@ -178,7 +179,7 @@ impl CodexAppServerClient {
         parse_list_mcp_status(result, server_name)
     }
 
-    pub async fn shutdown(self) -> Result<(), CodexProviderError> {
+    pub async fn shutdown(&self) -> Result<(), CodexProviderError> {
         self.process.shutdown().await
     }
 

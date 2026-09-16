@@ -18,7 +18,10 @@ pub fn native_skills_relative_dir(skill_name: &str) -> String {
 
 /// Write validated packages under `{cwd}/.agents/skills/{name}/`.
 /// Scripts and assets are stored as files only; nothing is marked executable on the host.
-pub fn materialize_agents_skills(cwd: &Path, packages: &[SkillPackage]) -> Result<(), SkillPackageError> {
+pub fn materialize_agents_skills(
+    cwd: &Path,
+    packages: &[SkillPackage],
+) -> Result<(), SkillPackageError> {
     let root = NativeSkillsLayout::agents_skills_root(cwd);
     for package in packages {
         let skill_dir = root.join(&package.frontmatter.name);

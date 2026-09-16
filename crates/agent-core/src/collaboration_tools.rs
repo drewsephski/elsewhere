@@ -5,7 +5,11 @@ use crate::collaboration::{AgentCollaboration, CollaborationContext, Collaborati
 use crate::connector_tools::dispatch_connector_tool_with_gate;
 use crate::human_intervention::is_human_intervention_tool;
 use crate::human_intervention_tools::dispatch_human_intervention_tool;
-use crate::tool_catalog::{is_collaboration_tool, is_connector_tool};
+use crate::subagent::{
+    AgentSubagents, SubagentContext, SubagentError, SubagentRequest, RUN_SUBAGENT_DESCRIPTION,
+    RUN_SUBAGENT_TOOL_NAME,
+};
+use crate::tool_catalog::{is_collaboration_tool, is_connector_tool, is_subagent_tool};
 use crate::tools::ToolError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -46,6 +50,31 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
             },
             "strict": true
         }),
+        json!({
+            "type": "function",
+            "name": RUN_SUBAGENT_TOOL_NAME,
+            "description": RUN_SUBAGENT_DESCRIPTION,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Short human-readable helper name, such as Research, Reviewer, or Planner"
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "The focused assignment for this helper"
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Optional bounded supporting context. Do not paste the entire transcript."
+                    }
+                },
+                "required": ["name", "task"],
+                "additionalProperties": false
+            },
+            "strict": true
+        }),
     ]
 }
 
@@ -74,6 +103,7 @@ pub async fn dispatch_agent_tool_with_gate(
         collaboration,
         connectors,
         human_intervention,
+        None,
         name,
         arguments,
         cancel,
@@ -90,6 +120,7 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     collaboration: Option<&Arc<dyn AgentCollaboration>>,
     connectors: Option<&Arc<dyn crate::connectors::AgentConnectors>>,
     human_intervention: Option<&Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
+    subagents: Option<&Arc<dyn AgentSubagents>>,
     name: &str,
     arguments: &str,
     cancel: &AtomicBool,
@@ -107,6 +138,18 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
             gate,
             run,
             browser_recovery,
+        )
+        .await;
+    }
+    if is_subagent_tool(name) {
+        return dispatch_subagent_tool(
+            subagents,
+            name,
+            arguments,
+            cancel,
+            gate,
+            run,
+            collaboration_ctx,
         )
         .await;
     }
@@ -223,6 +266,88 @@ async fn dispatch_collaboration_tool(
     Ok(envelope)
 }
 
+async fn dispatch_subagent_tool(
+    subagents: Option<&Arc<dyn AgentSubagents>>,
+    name: &str,
+    arguments: &str,
+    cancel: &AtomicBool,
+    gate: &dyn ToolApprovalGate,
+    run: &ToolRunContext,
+    collaboration_ctx: Option<&CollaborationContext>,
+) -> Result<Value, ToolError> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(ToolError::Cancelled);
+    }
+    let service = subagents.ok_or_else(|| {
+        ToolError::MalformedArguments("subagents are not available in this run".into())
+    })?;
+    let collab = collaboration_ctx
+        .ok_or_else(|| ToolError::MalformedArguments("subagent context missing".into()))?;
+    let args: Value = serde_json::from_str(arguments)
+        .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
+
+    let approval_ctx = ToolApprovalContext::for_tool(run, name, args.clone());
+    let approval = gate
+        .authorize(&approval_ctx)
+        .await
+        .map_err(map_approval_error)?;
+    if let crate::approval::ApprovalDecision::Deny { reason } = approval {
+        return Ok(json!({
+            "ok": false,
+            "tool": name,
+            "status": "denied",
+            "error": reason,
+            "detail": "The helper was not launched."
+        }));
+    }
+    if cancel.load(Ordering::Relaxed) {
+        return Err(ToolError::Cancelled);
+    }
+
+    let request = SubagentRequest {
+        name: required_str(&args, "name")?.to_string(),
+        task: required_str(&args, "task")?.to_string(),
+        context: args
+            .get("context")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+    };
+    let ctx = SubagentContext {
+        owner_id: collab.owner_id.clone(),
+        bot_id: collab.source_bot_id.clone(),
+        parent_run_id: collab.source_run_id.clone(),
+        parent_request_id: collab.source_request_id.clone(),
+        tool_invocation_id: collab.tool_invocation_id.clone(),
+        model: String::new(),
+        cancel: Arc::new(AtomicBool::new(cancel.load(Ordering::Relaxed))),
+    };
+    let outcome = service
+        .run_subagent(&ctx, request)
+        .await
+        .map_err(map_subagent_error)?;
+    Ok(json!({
+        "ok": outcome.status == "completed",
+        "tool": name,
+        "subagentId": outcome.subagent_id,
+        "name": outcome.name,
+        "status": outcome.status,
+        "result": outcome.result,
+        "error": outcome.error,
+        "detail": "This was a temporary helper for the current assignment, not another Bot."
+    }))
+}
+
+fn map_subagent_error(err: SubagentError) -> ToolError {
+    match err {
+        SubagentError::Cancelled => ToolError::Cancelled,
+        SubagentError::Validation(m) | SubagentError::Unsupported(m) => {
+            ToolError::MalformedArguments(m)
+        }
+        SubagentError::LimitExceeded(m) | SubagentError::Internal(m) => ToolError::Denied(m),
+    }
+}
+
 fn map_collaboration_error(err: CollaborationError) -> ToolError {
     match err {
         CollaborationError::NotFound => ToolError::Denied("Bot not found".into()),
@@ -247,4 +372,140 @@ fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())
         .ok_or_else(|| ToolError::MalformedArguments(format!("missing or empty `{key}`")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::approval::{ApprovalDecision, ApprovalError, ToolApprovalContext};
+    use crate::fake_computer::FakeAgentComputer;
+    use crate::subagent::{InMemoryAgentSubagents, SubagentTurn};
+    use async_trait::async_trait;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    struct DenyAllGate;
+
+    #[async_trait]
+    impl ToolApprovalGate for DenyAllGate {
+        async fn authorize(
+            &self,
+            _context: &ToolApprovalContext,
+        ) -> Result<ApprovalDecision, ApprovalError> {
+            Ok(ApprovalDecision::Deny {
+                reason: "This Bot is not allowed to run subagents.".into(),
+            })
+        }
+    }
+
+    struct PanicTurn;
+
+    #[async_trait]
+    impl SubagentTurn for PanicTurn {
+        async fn run_toolless(
+            &self,
+            _model: &str,
+            _developer_instructions: &str,
+            _user_prompt: &str,
+            _cancel: &AtomicBool,
+        ) -> Result<String, SubagentError> {
+            panic!("subagent executor should not run");
+        }
+    }
+
+    fn run_ctx() -> (ToolRunContext, CollaborationContext, AtomicBool) {
+        (
+            ToolRunContext {
+                run_id: "run".into(),
+                request_id: "req".into(),
+                owner_id: "owner".into(),
+                bot_id: "bot".into(),
+                computer_id: "comp".into(),
+                tool_invocation_id: Some("mcp:1".into()),
+            },
+            CollaborationContext {
+                owner_id: "owner".into(),
+                source_bot_id: "bot".into(),
+                source_run_id: "run".into(),
+                source_conversation_id: "conv".into(),
+                source_request_id: "req".into(),
+                tool_invocation_id: "mcp:1".into(),
+            },
+            AtomicBool::new(false),
+        )
+    }
+
+    #[tokio::test]
+    async fn deny_returns_clean_result_without_launching() {
+        let computer = FakeAgentComputer::new();
+        let subagents: Arc<dyn AgentSubagents> = Arc::new(InMemoryAgentSubagents::new());
+        subagents.attach_turn_executor(Arc::new(PanicTurn));
+        let (run, collab, cancel) = run_ctx();
+        let result = dispatch_agent_tool_with_gate_and_recovery(
+            &computer,
+            None,
+            None,
+            None,
+            Some(&subagents),
+            "run_subagent",
+            r#"{"name":"Reviewer","task":"check the plan"}"#,
+            &cancel,
+            &DenyAllGate,
+            &run,
+            Some(&collab),
+            None,
+        )
+        .await
+        .expect("deny is a model-facing result");
+        assert_eq!(result["ok"], false);
+        assert_eq!(result["status"], "denied");
+        assert_eq!(result["detail"], "The helper was not launched.");
+    }
+
+    struct StubTurn;
+
+    #[async_trait]
+    impl SubagentTurn for StubTurn {
+        async fn run_toolless(
+            &self,
+            _model: &str,
+            _developer_instructions: &str,
+            user_prompt: &str,
+            _cancel: &AtomicBool,
+        ) -> Result<String, SubagentError> {
+            assert!(user_prompt.contains("check the plan"));
+            Ok("looks good".into())
+        }
+    }
+
+    #[tokio::test]
+    async fn allow_runs_helper_and_returns_structured_result() {
+        let computer = FakeAgentComputer::new();
+        let subagents: Arc<dyn AgentSubagents> = Arc::new(InMemoryAgentSubagents::new());
+        subagents.attach_turn_executor(Arc::new(StubTurn));
+        let (run, collab, cancel) = run_ctx();
+        let result = dispatch_agent_tool_with_gate_and_recovery(
+            &computer,
+            None,
+            None,
+            None,
+            Some(&subagents),
+            "run_subagent",
+            r#"{"name":"Reviewer","task":"check the plan"}"#,
+            &cancel,
+            &crate::approval::AllowAllApprovalGate,
+            &run,
+            Some(&collab),
+            None,
+        )
+        .await
+        .expect("allow");
+        assert_eq!(result["ok"], true);
+        assert_eq!(result["status"], "completed");
+        assert_eq!(result["result"], "looks good");
+        assert_eq!(
+            result["detail"],
+            "This was a temporary helper for the current assignment, not another Bot."
+        );
+    }
 }

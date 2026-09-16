@@ -56,7 +56,7 @@ impl CodexProcessLaunch {
 }
 
 pub struct ManagedCodexProcess {
-    child: Option<Child>,
+    child: Mutex<Option<Child>>,
     writer: mpsc::Sender<String>,
     _stdout_task: JoinHandle<()>,
     _stderr_task: JoinHandle<()>,
@@ -107,7 +107,7 @@ impl ManagedCodexProcess {
             .ok_or_else(|| CodexProviderError::Process("app-server missing stderr".into()))?;
 
         let mut process = Self::from_async_io(stdin, stdout, stderr).await?;
-        process.child = Some(child);
+        *process.child.get_mut() = Some(child);
         Ok(process)
     }
 
@@ -174,7 +174,7 @@ impl ManagedCodexProcess {
         });
 
         Ok(Self {
-            child: None,
+            child: Mutex::new(None),
             writer: writer_tx,
             _stdout_task: stdout_task,
             _stderr_task: stderr_task,
@@ -235,8 +235,8 @@ impl ManagedCodexProcess {
             .await
     }
 
-    pub async fn shutdown(mut self) -> Result<(), CodexProviderError> {
-        if let Some(mut child) = self.child.take() {
+    pub async fn shutdown(&self) -> Result<(), CodexProviderError> {
+        if let Some(mut child) = self.child.lock().await.take() {
             let _ = child.start_kill();
             let _ = child.wait().await;
         }

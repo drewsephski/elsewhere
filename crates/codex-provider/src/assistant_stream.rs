@@ -174,7 +174,13 @@ mod tests {
 
         let once = replay_text(&chunks);
         assert_eq!(once, "hello world");
-        let twice = replay_text(&chunks.iter().chain(chunks.iter()).cloned().collect::<Vec<_>>());
+        let twice = replay_text(
+            &chunks
+                .iter()
+                .chain(chunks.iter())
+                .cloned()
+                .collect::<Vec<_>>(),
+        );
         assert_eq!(twice, "hello world");
     }
 }

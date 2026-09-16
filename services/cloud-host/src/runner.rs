@@ -4,8 +4,8 @@ use std::time::Duration;
 
 use agent_core::{
     browser_recovery_policy_instructions, AgentComputer, AgentLoopContext, BrowserRecoverySession,
-    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, RunEngine, RunStore,
-    SharedRunDeps, ToolApprovalGate,
+    ReadinessCachedComputer, ResponsesModel, ResponsesRunEngine, ResponsesSubagentTurn, RunEngine,
+    RunStore, SharedRunDeps, ToolApprovalGate,
 };
 use agent_skills::append_skills_to_instructions;
 
@@ -363,6 +363,7 @@ Include a clear final summary. File creation, shell commands, and browser mutati
 Bot collaboration:\n\
 - Use bot_list to discover other Bots owned by the same user.\n\
 - Use bot_delegate to hand durable work to a specialist asynchronously; it only queues work and returns immediately.\n\
+- Use run_subagent for a temporary helper inside this assignment. It has no computer, is not another Bot, and you wait for its findings before continuing.\n\
 - Do not delegate trivial work or repeat the same handoff unnecessarily.\n\
 - Do not claim another Bot finished work just because delegation was accepted.\n\
 - Cross-computer file paths are not shared; pass bounded text context only unless both Bots share a computer.\n\n\
@@ -417,6 +418,13 @@ Browser recovery:\n\
             cancel.clone(),
         )),
         browser_recovery: Some(Arc::new(BrowserRecoverySession::new())),
+        subagents: Some(crate::subagents::PostgresAgentSubagents::new(
+            pool.clone(),
+            store.clone(),
+            events.clone() as Arc<dyn agent_core::EventSink>,
+            cancel.clone(),
+            ctx.model.clone(),
+        )),
         skill_packages,
     };
 
@@ -530,6 +538,9 @@ async fn run_responses_engine(
         engine = "responses_api",
         "cloud-host selected Responses engine"
     );
+    if let Some(subagents) = &shared.subagents {
+        subagents.attach_turn_executor(Arc::new(ResponsesSubagentTurn::new(model.clone())));
+    }
     let engine = ResponsesRunEngine::new(model);
     engine
         .run(ctx, shared, input)

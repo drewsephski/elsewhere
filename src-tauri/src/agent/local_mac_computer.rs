@@ -1,8 +1,6 @@
-use agent_core::{
-    AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry,
-};
-use async_trait::async_trait;
 use crate::vm::{GuestRequest, VirtualMachineManager};
+use agent_core::{AgentComputer, ComputerError, ComputerInfo, ExecResult, WorkspaceEntry};
+use async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,7 +80,10 @@ fn ensure_ready_sync(vm: &VirtualMachineManager) -> Result<ComputerInfo, Compute
     })
 }
 
-fn list_dir_sync(vm: &VirtualMachineManager, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
+fn list_dir_sync(
+    vm: &VirtualMachineManager,
+    path: &str,
+) -> Result<Vec<WorkspaceEntry>, ComputerError> {
     let response = guest_call(vm, "list_dir", serde_json::json!({ "path": path }))?;
     let raw = response.stdout.unwrap_or_default();
     let parsed: Vec<GuestWorkspaceEntry> =
@@ -102,7 +103,11 @@ fn read_file_sync(vm: &VirtualMachineManager, path: &str) -> Result<Vec<u8>, Com
     Ok(response.stdout.unwrap_or_default().into_bytes())
 }
 
-fn write_file_sync(vm: &VirtualMachineManager, path: &str, data: &[u8]) -> Result<(), ComputerError> {
+fn write_file_sync(
+    vm: &VirtualMachineManager,
+    path: &str,
+    data: &[u8],
+) -> Result<(), ComputerError> {
     let content = String::from_utf8_lossy(data);
     guest_call(
         vm,

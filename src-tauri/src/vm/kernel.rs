@@ -82,7 +82,7 @@ pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
 
     if !kernel_path.exists() {
         return Err(
-            last_err.unwrap_or_else(|| "failed to download and extract Kata kernel image".into()),
+            last_err.unwrap_or_else(|| "failed to download and extract Kata kernel image".into())
         );
     }
 
@@ -91,8 +91,7 @@ pub fn ensure_linux_image(layout: &VmLayout) -> Result<(), String> {
         let _ = fs::remove_file(&kernel_path);
         return Err(format!(
             "kernel SHA-256 mismatch (expected {}, got {})",
-            KATA_KERNEL.sha256,
-            digest
+            KATA_KERNEL.sha256, digest
         ));
     }
 

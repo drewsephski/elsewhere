@@ -13,10 +13,7 @@ struct ControlRequest {
     cmd: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     payload: Option<String>,
-    #[serde(
-        rename = "timeoutSeconds",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(rename = "timeoutSeconds", skip_serializing_if = "Option::is_none")]
     timeout_seconds: Option<f64>,
 }
 
@@ -68,10 +65,17 @@ impl VmmProcess {
             .arg(config_path)
             .arg("--socket")
             .arg(socket_path)
-            .stdout(Stdio::from(log_file.try_clone().map_err(|e| e.to_string())?))
+            .stdout(Stdio::from(
+                log_file.try_clone().map_err(|e| e.to_string())?,
+            ))
             .stderr(Stdio::from(log_file))
             .spawn()
-            .map_err(|e| format!("failed to spawn gptbot-vmm at {}: {e}", vmm_binary.display()))?;
+            .map_err(|e| {
+                format!(
+                    "failed to spawn gptbot-vmm at {}: {e}",
+                    vmm_binary.display()
+                )
+            })?;
 
         wait_for_socket(socket_path, Duration::from_secs(10))?;
         if let Ok(Some(status)) = child.try_wait() {
@@ -159,7 +163,8 @@ pub fn control_request(
                 .into(),
         );
     }
-    serde_json::from_str(trimmed).map_err(|e| format!("invalid VMM response: {e} (body: {trimmed})"))
+    serde_json::from_str(trimmed)
+        .map_err(|e| format!("invalid VMM response: {e} (body: {trimmed})"))
 }
 
 fn map_io_timeout(err: std::io::Error, timeout: Duration, op: &str) -> String {

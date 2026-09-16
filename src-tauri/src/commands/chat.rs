@@ -146,12 +146,8 @@ pub async fn start_chat(
         let mut live_body = String::new();
         let mut last_checkpoint = Instant::now();
 
-        let stream_result = stream_chat_completion(
-            &api_key,
-            &model,
-            messages_for_api,
-            cancel_token,
-            |delta| {
+        let stream_result =
+            stream_chat_completion(&api_key, &model, messages_for_api, cancel_token, |delta| {
                 live_body.push_str(delta);
                 let should_checkpoint = last_checkpoint.elapsed() >= CHECKPOINT_INTERVAL;
                 if should_checkpoint {
@@ -181,9 +177,8 @@ pub async fn start_chat(
                     full_content: None,
                     message: None,
                 });
-            },
-        )
-        .await;
+            })
+            .await;
 
         let state = app_handle.state::<AppState>();
 
@@ -300,4 +295,3 @@ pub fn cancel_chat(state: State<AppState>, request_id: String) -> Result<(), App
         Err(AppError::NotFound(format!("stream {}", request_id)))
     }
 }
-

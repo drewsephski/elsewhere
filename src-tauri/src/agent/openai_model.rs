@@ -7,10 +7,7 @@ pub struct OpenAiResponsesModel {
 }
 
 impl OpenAiResponsesModel {
-    pub fn new(
-        api_key: String,
-        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    ) -> Self {
+    pub fn new(api_key: String, cancel: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
         Self {
             inner: InnerModel::new(api_key, cancel),
         }

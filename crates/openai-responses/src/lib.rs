@@ -1,6 +1,4 @@
-use agent_core::{
-    CreateResponseRequest, CreateResponseResult, ModelError, ResponsesModel,
-};
+use agent_core::{CreateResponseRequest, CreateResponseResult, ModelError, ResponsesModel};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
@@ -35,7 +33,11 @@ pub fn map_http_status_to_model_error(status: StatusCode, body: &str) -> ModelEr
 
 fn sanitize_provider_body(body: &str) -> String {
     let mut out = body.to_string();
-    for key in ["OPENAI_API_KEY", "SPRITE_TOKEN", "ELSEWHERE_CLOUD_API_TOKEN"] {
+    for key in [
+        "OPENAI_API_KEY",
+        "SPRITE_TOKEN",
+        "ELSEWHERE_CLOUD_API_TOKEN",
+    ] {
         if out.contains(key) {
             out = out.replace(key, "[redacted]");
         }

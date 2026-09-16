@@ -8,16 +8,13 @@
 
 use agent_core::{
     legacy_local_loop_deps, run_agent_loop, AgentComputer, AgentEvent, AgentLoopContext,
-    ComputerError,
-    ComputerInfo, CreateResponseResult, CreateRunParams, EventSink, ExecResult, MessageStatus,
-    PersistedMessage, ResponsesModel, RunStore, RuntimeError, StructuredMessageInput,
-    WorkspaceEntry,
+    ComputerError, ComputerInfo, CreateResponseResult, CreateRunParams, EventSink, ExecResult,
+    MessageStatus, PersistedMessage, ResponsesModel, RunStore, RuntimeError,
+    StructuredMessageInput, WorkspaceEntry,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use sprite_computer::{
-    default_deny_network_policy, SpriteComputer, SpriteComputerConfig,
-};
+use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteComputerConfig};
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -46,8 +43,7 @@ async fn run_live() -> Result<(), Box<dyn std::error::Error>> {
     let config = SpriteComputerConfig {
         base_url: std::env::var("SPRITES_API_BASE")
             .unwrap_or_else(|_| sprite_computer::DEFAULT_API_BASE.into()),
-        token: std::env::var("SPRITE_TOKEN")
-            .or_else(|_| std::env::var("SPRITES_TOKEN"))?,
+        token: std::env::var("SPRITE_TOKEN").or_else(|_| std::env::var("SPRITES_TOKEN"))?,
         sprite_name: std::env::var("ELSEWHERE_TEST_SPRITE")?,
         workspace_root: "/workspace".into(),
         request_timeout: Duration::from_secs(120),
@@ -116,7 +112,12 @@ async fn run_scripted_agent(
         instructions: String::new(),
     };
 
-    run_agent_loop(ctx, deps, vec![json!({"role":"user","content":"prove cloud"})]).await?;
+    run_agent_loop(
+        ctx,
+        deps,
+        vec![json!({"role":"user","content":"prove cloud"})],
+    )
+    .await?;
     Ok(())
 }
 

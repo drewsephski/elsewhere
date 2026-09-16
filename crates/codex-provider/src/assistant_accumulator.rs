@@ -40,7 +40,11 @@ impl CodexAssistantAccumulator {
         self.next_item_order
     }
 
-    fn new_item_state(item_id: String, phase: MessagePhase, insertion_order: u64) -> AssistantItemState {
+    fn new_item_state(
+        item_id: String,
+        phase: MessagePhase,
+        insertion_order: u64,
+    ) -> AssistantItemState {
         AssistantItemState {
             item_id,
             phase,
@@ -180,7 +184,11 @@ impl CodexAssistantAccumulator {
         self.latest_delta_for_phase(MessagePhase::Unknown, true)
     }
 
-    fn latest_delta_for_phase(&self, phase: MessagePhase, include_in_progress: bool) -> Option<String> {
+    fn latest_delta_for_phase(
+        &self,
+        phase: MessagePhase,
+        include_in_progress: bool,
+    ) -> Option<String> {
         let mut ordered: Vec<&AssistantItemState> = self.items.values().collect();
         ordered.sort_by(|a, b| {
             a.completion_order
@@ -499,12 +507,10 @@ mod tests {
         let mut acc = CodexAssistantAccumulator::default();
         apply_sequence(
             &mut acc,
-            &[
-                json!({
-                    "method": "item/completed",
-                    "params": { "item": { "type": "agentMessage", "id": "c", "phase": "commentary", "text": "noise" } }
-                }),
-            ],
+            &[json!({
+                "method": "item/completed",
+                "params": { "item": { "type": "agentMessage", "id": "c", "phase": "commentary", "text": "noise" } }
+            })],
         );
         let turn = json!({
             "turn": {

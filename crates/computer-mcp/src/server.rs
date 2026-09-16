@@ -18,8 +18,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use agent_core::{
-    AgentCollaboration, AgentConnectors, AgentComputer, AgentHumanIntervention, BrowserRecoverySession,
-    ToolApprovalGate, ToolRunContext,
+    AgentCollaboration, AgentComputer, AgentConnectors, AgentHumanIntervention, AgentSubagents,
+    BrowserRecoverySession, ToolApprovalGate, ToolRunContext,
 };
 
 use crate::error::ComputerMcpError;
@@ -45,6 +45,7 @@ impl ComputerMcpServer {
         connectors: Option<Arc<dyn AgentConnectors>>,
         human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
         browser_recovery: Option<Arc<BrowserRecoverySession>>,
+        subagents: Option<Arc<dyn AgentSubagents>>,
         source_conversation_id: String,
     ) -> Result<Self, ComputerMcpError> {
         let bearer_token = generate_bearer_token();
@@ -72,18 +73,20 @@ impl ComputerMcpServer {
             connectors,
             human_intervention,
             browser_recovery,
+            subagents,
             source_conversation_id,
         );
         let service: StreamableHttpService<ComputerHandler, LocalSessionManager> =
             StreamableHttpService::new(move || Ok(handler.clone()), Default::default(), config);
 
         let expected = bearer_token.clone();
-        let router = Router::new()
-            .nest_service("/mcp", service)
-            .layer(middleware::from_fn_with_state(
-                expected,
-                bearer_auth_middleware,
-            ));
+        let router =
+            Router::new()
+                .nest_service("/mcp", service)
+                .layer(middleware::from_fn_with_state(
+                    expected,
+                    bearer_auth_middleware,
+                ));
 
         let ct = cancel.clone();
         let join = tokio::spawn(async move {

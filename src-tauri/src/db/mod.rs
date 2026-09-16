@@ -2,8 +2,8 @@ mod schema;
 
 use crate::error::AppError;
 use crate::models::{
-    Bot, Conversation, CreateBotInput, DEFAULT_MODEL, Message, MessageRole, MessageStatus,
-    UpdateBotInput,
+    Bot, Conversation, CreateBotInput, Message, MessageRole, MessageStatus, UpdateBotInput,
+    DEFAULT_MODEL,
 };
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -157,11 +157,13 @@ When information might be outdated, say what you know and what you would verify.
         }
         let now = Self::now_ms();
         let id = Uuid::new_v4().to_string();
-        let provider = input
-            .provider
-            .unwrap_or_else(|| "openai".to_string());
+        let provider = input.provider.unwrap_or_else(|| "openai".to_string());
         let system_prompt = input.system_prompt.unwrap_or_default();
-        let computer_enabled = if input.computer_enabled.unwrap_or(true) { 1 } else { 0 };
+        let computer_enabled = if input.computer_enabled.unwrap_or(true) {
+            1
+        } else {
+            0
+        };
         self.conn.execute(
             "INSERT INTO bots (id, name, description, system_prompt, provider, model, computer_enabled, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
@@ -187,17 +189,13 @@ When information might be outdated, say what you know and what you would verify.
             .filter(|n| !n.is_empty())
             .unwrap_or(existing.name);
         let description = input.description.or(existing.description);
-        let system_prompt = input
-            .system_prompt
-            .unwrap_or(existing.system_prompt);
+        let system_prompt = input.system_prompt.unwrap_or(existing.system_prompt);
         let model = input
             .model
             .map(|m| m.trim().to_string())
             .filter(|m| !m.is_empty())
             .unwrap_or(existing.model);
-        let computer_enabled = input
-            .computer_enabled
-            .unwrap_or(existing.computer_enabled);
+        let computer_enabled = input.computer_enabled.unwrap_or(existing.computer_enabled);
         let computer_enabled_int = if computer_enabled { 1 } else { 0 };
         let now = Self::now_ms();
         self.conn.execute(
@@ -234,14 +232,19 @@ When information might be outdated, say what you know and what you would verify.
     }
 
     pub fn delete_bot(&self, id: &str) -> Result<(), AppError> {
-        let deleted = self.conn.execute("DELETE FROM bots WHERE id = ?1", params![id])?;
+        let deleted = self
+            .conn
+            .execute("DELETE FROM bots WHERE id = ?1", params![id])?;
         if deleted == 0 {
             return Err(AppError::NotFound(format!("bot {}", id)));
         }
         Ok(())
     }
 
-    pub fn get_or_create_primary_conversation(&self, bot_id: &str) -> Result<Conversation, AppError> {
+    pub fn get_or_create_primary_conversation(
+        &self,
+        bot_id: &str,
+    ) -> Result<Conversation, AppError> {
         self.get_bot(bot_id)?;
         let mut stmt = self.conn.prepare(
             "SELECT id, bot_id, title, created_at, updated_at FROM conversations WHERE bot_id = ?1 ORDER BY updated_at DESC LIMIT 1",
@@ -538,9 +541,7 @@ When information might be outdated, say what you know and what you would verify.
             })
         })
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => {
-                AppError::NotFound(format!("message {}", id))
-            }
+            rusqlite::Error::QueryReturnedNoRows => AppError::NotFound(format!("message {}", id)),
             other => AppError::Database(other),
         })
     }
@@ -692,14 +693,9 @@ mod tests {
                 Some(DEFAULT_MODEL),
             )
             .expect("assistant");
-        db.append_message_body(&assistant.id, "world").expect("append");
-        db
-            .update_message_body_and_status(
-                &assistant.id,
-                "world",
-                MessageStatus::Complete,
-                None,
-            )
+        db.append_message_body(&assistant.id, "world")
+            .expect("append");
+        db.update_message_body_and_status(&assistant.id, "world", MessageStatus::Complete, None)
             .expect("complete");
         let messages = db.list_messages(&conv.id).expect("list");
         assert_eq!(messages.len(), 2);

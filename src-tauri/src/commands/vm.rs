@@ -5,18 +5,12 @@ use tauri::State;
 
 #[tauri::command]
 pub fn vm_info(state: State<AppState>) -> Result<VmInfo, AppError> {
-    state
-        .vm
-        .info()
-        .map_err(|e| AppError::Other(e))
+    state.vm.info().map_err(|e| AppError::Other(e))
 }
 
 #[tauri::command]
 pub fn vm_provision(state: State<AppState>) -> Result<VmInfo, AppError> {
-    state
-        .vm
-        .provision()
-        .map_err(|e| AppError::Other(e))
+    state.vm.provision().map_err(|e| AppError::Other(e))
 }
 
 #[tauri::command]
@@ -52,5 +46,8 @@ pub fn vm_guest_request(
     state: State<AppState>,
     request: GuestRequest,
 ) -> Result<GuestResponse, AppError> {
-    state.vm.guest_request(request).map_err(|e| AppError::Other(e))
+    state
+        .vm
+        .guest_request(request)
+        .map_err(|e| AppError::Other(e))
 }

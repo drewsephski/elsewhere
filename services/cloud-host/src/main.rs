@@ -108,6 +108,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
     }
+    match cloud_host::subagents::reconcile_orphaned_subagents(&pool).await {
+        Ok(count) if count > 0 => {
+            tracing::warn!(
+                count,
+                "marked orphaned subagents interrupted after host restart"
+            );
+        }
+        Ok(_) => {}
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                "subagent reconciliation after restart failed"
+            );
+        }
+    }
 
     let state = AppState::new(pool.clone(), config.clone());
     let cancelled_approvals = state.approvals.cancel_all_pending_on_host_restart().await?;

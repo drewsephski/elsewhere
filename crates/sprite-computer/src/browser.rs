@@ -2,9 +2,7 @@ use agent_core::ComputerError;
 use std::time::Duration;
 
 use crate::client::SpriteClient;
-use crate::policy::{
-    browser_workload_network_policy, network_policy_matches, NetworkPolicyConfig,
-};
+use crate::policy::{browser_workload_network_policy, network_policy_matches, NetworkPolicyConfig};
 
 pub const BROWSER_ROOT: &str = "/var/elsewhere/browser";
 pub const BROWSER_CLIENT: &str = "/var/elsewhere/browser/client.mjs";
@@ -296,7 +294,9 @@ pub async fn invoke_browser_daemon(
             Err(err) => {
                 let retryable = err.to_string().contains("ERR_CONNECTION_REFUSED")
                     || err.to_string().contains("ERR_NAME_NOT_RESOLVED")
-                    || err.to_string().contains("browser daemon did not become healthy");
+                    || err
+                        .to_string()
+                        .contains("browser daemon did not become healthy");
                 if attempt == 0 && retryable {
                     let _ = restart_browser_daemon(client, baseline_policy).await;
                     last_err = Some(err);
@@ -344,10 +344,7 @@ async fn restore_and_verify_baseline_network_policy(
     client: &SpriteClient,
     baseline: &NetworkPolicyConfig,
 ) -> Result<(), ComputerError> {
-    client
-        .set_network_policy(baseline)
-        .await
-        .map_err(map_err)?;
+    client.set_network_policy(baseline).await.map_err(map_err)?;
     // Fly Sprites network policy updates are asynchronous; give deny a moment to apply.
     tokio::time::sleep(Duration::from_millis(150)).await;
     let actual = client.get_network_policy().await.map_err(map_err)?;
@@ -419,10 +416,19 @@ pub async fn read_browser_preview_cache(
         ComputerError::ExecutionFailed(format!("invalid browser preview meta: {e}"))
     })?;
     let version = meta.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
-    let etag = meta.get("etag").and_then(|v| v.as_str()).map(str::to_string);
-    let available = meta.get("available").and_then(|v| v.as_bool()).unwrap_or(false);
+    let etag = meta
+        .get("etag")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let available = meta
+        .get("available")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let url = meta.get("url").and_then(|v| v.as_str()).map(str::to_string);
-    let title = meta.get("title").and_then(|v| v.as_str()).map(str::to_string);
+    let title = meta
+        .get("title")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     let content_type = meta
         .get("contentType")
         .and_then(|v| v.as_str())
@@ -456,7 +462,9 @@ pub async fn read_browser_preview_cache(
 
 pub fn map_browser_exec_error(stdout: &str, stderr: &str, exit_code: i32) -> ComputerError {
     if exit_code == 0 {
-        return ComputerError::ExecutionFailed("browser client returned success without output".into());
+        return ComputerError::ExecutionFailed(
+            "browser client returned success without output".into(),
+        );
     }
     let detail = if stderr.trim().is_empty() {
         stdout.trim()

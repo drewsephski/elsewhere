@@ -54,6 +54,7 @@ pub struct SharedRunDeps {
     pub connectors: Option<Arc<dyn AgentConnectors>>,
     pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     pub browser_recovery: Option<Arc<BrowserRecoverySession>>,
+    pub subagents: Option<Arc<dyn crate::subagent::AgentSubagents>>,
     /// Immutable Agent Skill packages snapshotted at run admission.
     pub skill_packages: Arc<[SkillPackage]>,
 }
@@ -81,6 +82,7 @@ impl SharedRunDeps {
             connectors: None,
             human_intervention: None,
             browser_recovery: None,
+            subagents: None,
             skill_packages: Arc::from([]),
         }
     }
@@ -130,6 +132,7 @@ pub fn responses_loop_deps(shared: SharedRunDeps, model: Arc<dyn ResponsesModel>
         connectors: shared.connectors.clone(),
         human_intervention: shared.human_intervention.clone(),
         browser_recovery: shared.browser_recovery.clone(),
+        subagents: shared.subagents.clone(),
     }
 }
 

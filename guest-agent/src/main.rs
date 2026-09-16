@@ -59,8 +59,7 @@ fn run_listener() -> Result<(), String> {
         let listener = vsock_listen(GUEST_AGENT_PORT)?;
         eprintln!(
             "gptbot-guest-agent listening on vsock port {} (protocol v{})",
-            GUEST_AGENT_PORT,
-            PROTOCOL_VERSION
+            GUEST_AGENT_PORT, PROTOCOL_VERSION
         );
 
         for stream in listener.incoming() {
@@ -91,8 +90,8 @@ fn handle_connection(stream: VsockStream) -> Result<(), String> {
         return Ok(());
     }
 
-    let request: GuestRequest = serde_json::from_str(trimmed)
-        .map_err(|e| format!("invalid JSON request: {e}"))?;
+    let request: GuestRequest =
+        serde_json::from_str(trimmed).map_err(|e| format!("invalid JSON request: {e}"))?;
     let response = dispatch(&request);
     let json = serde_json::to_string(&response).map_err(|e| e.to_string())?;
     writer
@@ -259,7 +258,10 @@ fn vsock_listen(port: u32) -> Result<VsockListener, String> {
 
         let fd = unsafe { libc::socket(AF_VSOCK, SOCK_STREAM, 0) };
         if fd < 0 {
-            return Err(format!("socket failed: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "socket failed: {}",
+                std::io::Error::last_os_error()
+            ));
         }
 
         #[repr(C)]
@@ -293,7 +295,10 @@ fn vsock_listen(port: u32) -> Result<VsockListener, String> {
 
         if unsafe { libc::listen(fd, 8) } != 0 {
             unsafe { libc::close(fd) };
-            return Err(format!("listen failed: {}", std::io::Error::last_os_error()));
+            return Err(format!(
+                "listen failed: {}",
+                std::io::Error::last_os_error()
+            ));
         }
 
         Ok(VsockListener { fd })

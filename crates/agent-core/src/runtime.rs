@@ -38,6 +38,7 @@ pub struct AgentLoopDeps {
     pub connectors: Option<Arc<dyn crate::connectors::AgentConnectors>>,
     pub human_intervention: Option<Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     pub browser_recovery: Option<Arc<crate::browser_recovery::BrowserRecoverySession>>,
+    pub subagents: Option<Arc<dyn crate::subagent::AgentSubagents>>,
 }
 
 pub async fn run_agent_loop(
@@ -182,6 +183,7 @@ pub async fn run_agent_loop(
                     deps.collaboration.as_ref(),
                     deps.connectors.as_ref(),
                     deps.human_intervention.as_ref(),
+                    deps.subagents.as_ref(),
                     &name,
                     &arguments,
                     &deps.cancel,
@@ -711,6 +713,7 @@ mod tests {
             connectors: None,
             human_intervention: None,
             browser_recovery: None,
+            subagents: None,
         };
 
         let ctx = AgentLoopContext {

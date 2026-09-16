@@ -89,6 +89,7 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "bot_list" => ToolOperationKind::Read,
         "bot_delegate" => ToolOperationKind::Mutation,
+        "run_subagent" => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
         name if is_connector_tool(name) => ToolOperationKind::Read,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
@@ -153,6 +154,11 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
             "onComplete": args.get("onComplete").and_then(|v| v.as_str()).unwrap_or("resume_source")
         }),
+        "run_subagent" => json!({
+            "name": args.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+            "taskLength": args.get("task").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
+            "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
+        }),
         _ if is_collaboration_tool(tool_name) => json!({}),
         _ => json!({}),
     }
@@ -198,6 +204,13 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
             format!("Screenshot {path}")
         }
         "browser_snapshot" => "Inspect web page".into(),
+        "run_subagent" => {
+            let name = sanitized
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("helper");
+            format!("Run subagent {name}")
+        }
         other => format!("Approve {other}"),
     }
 }
@@ -249,7 +262,11 @@ mod tests {
             ToolOperationKind::Mutation
         );
         assert_eq!(
-            operation_kind_for_tool("unknown_tool"),
+            operation_kind_for_tool("bot_delegate"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("run_subagent"),
             ToolOperationKind::Mutation
         );
     }

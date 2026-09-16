@@ -11,12 +11,12 @@ use crate::client::CodexAppServerClient;
 use crate::compat::ensure_codex_mcp_tool_exposure_supported;
 use crate::error::CodexProviderError;
 use crate::process::{codex_version, which_codex_executable, CodexProcessLaunch};
+use crate::protocol::rpc::IncomingMessage;
 use crate::protocol::{
     account_auth_metadata, item_from_notification, notification_thread_turn, parse_turn_completed,
     require_chatgpt_account, turn_error_message, CodexAccountKind, ElsewhereThreadConfig,
     MCP_SERVER_NAME,
 };
-use crate::protocol::rpc::IncomingMessage;
 
 pub const DIRECT_TOOL_PROBE_PROMPT: &str = "Write /workspace/direct-tool-proof.txt containing exactly:\n\ndirect Elsewhere MCP works\n\nThen read the file and reply with exactly what it contains.";
 
@@ -75,10 +75,11 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
         None,
         None,
         None,
+        None,
         "conv-probe".into(),
     )
-        .await
-        .map_err(|e| CodexProviderError::RunEngine(e.to_string()))?;
+    .await
+    .map_err(|e| CodexProviderError::RunEngine(e.to_string()))?;
 
     let cwd = tempfile::tempdir().map_err(|e| CodexProviderError::Config(e.to_string()))?;
     let thread_config = ElsewhereThreadConfig {
@@ -135,7 +136,11 @@ pub async fn run_mcp_turn_probe(model: &str) -> Result<McpTurnProbeResult, Codex
     let mut notifications = client.notifications();
 
     let turn_id = client
-        .turn_start(&thread_id, DIRECT_TOOL_PROBE_PROMPT, Duration::from_secs(60))
+        .turn_start(
+            &thread_id,
+            DIRECT_TOOL_PROBE_PROMPT,
+            Duration::from_secs(60),
+        )
         .await?;
 
     let mut state = TurnProbeState::default();

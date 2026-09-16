@@ -29,7 +29,9 @@ pub fn parse_turn_start_response(value: Value) -> Result<String, CodexProviderEr
         .ok_or_else(|| CodexProviderError::Protocol("turn/start missing turn id".into()))
 }
 
-pub fn parse_turn_completed(params: &Value) -> Result<(String, String, String), CodexProviderError> {
+pub fn parse_turn_completed(
+    params: &Value,
+) -> Result<(String, String, String), CodexProviderError> {
     let thread_id = params
         .get("threadId")
         .and_then(|v| v.as_str())

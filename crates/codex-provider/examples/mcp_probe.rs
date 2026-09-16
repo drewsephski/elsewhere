@@ -3,24 +3,23 @@ use std::sync::Arc;
 
 use agent_core::{AllowAllApprovalGate, FakeAgentComputer, ToolRunContext};
 use codex_provider::{
-    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled, build_elsewhere_thread_start_params,
-    ensure_codex_mcp_tool_exposure_supported, which_codex_executable,
-    CodexAppServerClient, CodexProcessLaunch, ElsewhereThreadConfig, MCP_SERVER_NAME,
+    assert_elsewhere_mcp_direct_exposure, assert_host_tools_disabled,
+    build_elsewhere_thread_start_params, ensure_codex_mcp_tool_exposure_supported,
+    which_codex_executable, CodexAppServerClient, CodexProcessLaunch, ElsewhereThreadConfig,
+    MCP_SERVER_NAME,
 };
 use computer_mcp::{ComputerMcpServer, MCP_BEARER_ENV_VAR};
 
 #[tokio::main]
 async fn main() {
-    let computer = Arc::new(
-        FakeAgentComputer::new().with_listing(
-            "/workspace",
-            vec![agent_core::WorkspaceEntry {
-                name: "hello.txt".into(),
-                path: "/workspace/hello.txt".into(),
-                is_dir: false,
-            }],
-        ),
-    );
+    let computer = Arc::new(FakeAgentComputer::new().with_listing(
+        "/workspace",
+        vec![agent_core::WorkspaceEntry {
+            name: "hello.txt".into(),
+            path: "/workspace/hello.txt".into(),
+            is_dir: false,
+        }],
+    ));
 
     let run = ToolRunContext {
         run_id: "probe".into(),
@@ -39,10 +38,11 @@ async fn main() {
         None,
         None,
         None,
+        None,
         "conv-probe".into(),
     )
-        .await
-        .expect("start MCP server");
+    .await
+    .expect("start MCP server");
     println!("MCP URL: {}", mcp.url());
     println!("MCP bearer env var: {MCP_BEARER_ENV_VAR}");
 
@@ -61,8 +61,8 @@ async fn main() {
 
     let executable = which_codex_executable().expect("codex installed");
     ensure_codex_mcp_tool_exposure_supported().expect("codex MCP tool exposure support");
-    let launch = CodexProcessLaunch::from_path(executable)
-        .with_env(MCP_BEARER_ENV_VAR, mcp.bearer_token());
+    let launch =
+        CodexProcessLaunch::from_path(executable).with_env(MCP_BEARER_ENV_VAR, mcp.bearer_token());
     let client = CodexAppServerClient::launch(launch)
         .await
         .expect("launch codex app-server");

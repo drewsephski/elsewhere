@@ -119,18 +119,12 @@ fn first_ref(snapshot: &str) -> Option<String> {
 }
 
 fn snapshot_text(value: &Value) -> &str {
-    value
-        .get("snapshot")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
+    value.get("snapshot").and_then(|v| v.as_str()).unwrap_or("")
 }
 
 async fn run_browser_smoke(computer: &SpriteComputer) -> Result<(), Box<dyn std::error::Error>> {
     let navigate = computer
-        .browser_invoke(
-            "navigate",
-            &json!({ "url": "https://example.com" }),
-        )
+        .browser_invoke("navigate", &json!({ "url": "https://example.com" }))
         .await?;
     println!("browser navigate: {navigate}");
     let start_url = navigate
@@ -216,9 +210,7 @@ async fn run_browser_smoke(computer: &SpriteComputer) -> Result<(), Box<dyn std:
         .await
         .map_err(|e| format!("network policy read failed: {e}"))?;
     if !network_policy_matches(&policy, &baseline) {
-        return Err(
-            "default-deny network policy was not restored after browser smoke".into(),
-        );
+        return Err("default-deny network policy was not restored after browser smoke".into());
     }
     println!("default-deny network policy verified after browser smoke");
 

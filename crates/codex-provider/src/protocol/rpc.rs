@@ -12,10 +12,23 @@ pub enum RequestId {
 
 #[derive(Debug, Clone)]
 pub enum IncomingMessage {
-    Response { id: RequestId, result: Value },
-    Error { id: RequestId, error: JsonRpcErrorBody },
-    Notification { method: String, params: Value },
-    ServerRequest { id: RequestId, method: String, params: Value },
+    Response {
+        id: RequestId,
+        result: Value,
+    },
+    Error {
+        id: RequestId,
+        error: JsonRpcErrorBody,
+    },
+    Notification {
+        method: String,
+        params: Value,
+    },
+    ServerRequest {
+        id: RequestId,
+        method: String,
+        params: Value,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,10 +55,7 @@ pub fn parse_incoming_line(line: &str) -> Result<Option<IncomingMessage>, CodexP
             let id = parse_request_id(value.get("id"))?;
             return Ok(Some(IncomingMessage::Response {
                 id,
-                result: value
-                    .get("result")
-                    .cloned()
-                    .unwrap_or(Value::Null),
+                result: value.get("result").cloned().unwrap_or(Value::Null),
             }));
         }
         if value.get("method").is_some() {
@@ -56,11 +66,7 @@ pub fn parse_incoming_line(line: &str) -> Result<Option<IncomingMessage>, CodexP
                 .unwrap_or_default()
                 .to_string();
             let params = value.get("params").cloned().unwrap_or(Value::Null);
-            return Ok(Some(IncomingMessage::ServerRequest {
-                id,
-                method,
-                params,
-            }));
+            return Ok(Some(IncomingMessage::ServerRequest { id, method, params }));
         }
     }
 
@@ -131,16 +137,16 @@ mod tests {
 
     #[test]
     fn parses_response_and_notification() {
-        let response = parse_incoming_line(
-            r#"{"id":1,"result":{"requiresOpenaiAuth":false}}"#,
+        let response = parse_incoming_line(r#"{"id":1,"result":{"requiresOpenaiAuth":false}}"#)
+            .unwrap()
+            .unwrap();
+        assert!(matches!(response, IncomingMessage::Response { .. }));
+
+        let notification = parse_incoming_line(
+            r#"{"method":"account/login/completed","params":{"success":true}}"#,
         )
         .unwrap()
         .unwrap();
-        assert!(matches!(response, IncomingMessage::Response { .. }));
-
-        let notification = parse_incoming_line(r#"{"method":"account/login/completed","params":{"success":true}}"#)
-            .unwrap()
-            .unwrap();
         assert!(matches!(notification, IncomingMessage::Notification { .. }));
     }
 }

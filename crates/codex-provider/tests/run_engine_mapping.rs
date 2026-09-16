@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use agent_core::{
-    AgentEvent, AgentLoopContext, EventSink, FakeAgentComputer, RuntimeError, RunStore,
+    AgentEvent, AgentLoopContext, EventSink, FakeAgentComputer, RunStore, RuntimeError,
     StructuredMessageInput,
 };
 use async_trait::async_trait;
@@ -124,7 +124,10 @@ impl RunStore for MemStore {
     }
 }
 
-async fn run_with_fake(mode: FakeServerMode, cancel: Arc<AtomicBool>) -> (Vec<String>, String, String) {
+async fn run_with_fake(
+    mode: FakeServerMode,
+    cancel: Arc<AtomicBool>,
+) -> (Vec<String>, String, String) {
     let process = spawn_fake_app_server_with_mode(mode)
         .await
         .expect("fake server");
@@ -197,9 +200,11 @@ async fn maps_tool_events_and_completes() {
 
 #[tokio::test]
 async fn ignores_wrong_thread_notifications() {
-    let (labels, status, _) =
-        run_with_fake(FakeServerMode::WrongThreadNotifications, Arc::new(AtomicBool::new(false)))
-            .await;
+    let (labels, status, _) = run_with_fake(
+        FakeServerMode::WrongThreadNotifications,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await;
     assert!(!labels.iter().any(|l| l == "tool_call"));
     assert_eq!(status, "completed");
 }

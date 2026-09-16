@@ -1,5 +1,6 @@
 //! Shared tool-less Codex app-server turn (no MCP, no computer).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -17,12 +18,42 @@ use crate::protocol::{
 
 const TOOLLESS_TURN_TIMEOUT: Duration = Duration::from_secs(120);
 const TURN_START_TIMEOUT: Duration = Duration::from_secs(60);
-const LATE_NOTIFICATION_GRACE: Duration = Duration::from_secs(5);
+const LATE_NOTIFICATION_GRACE: Duration = Duration::from_millis(150);
+const INTERRUPT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Default)]
 struct ToollessTurnState {
     assistant: CodexAssistantAccumulator,
     last_turn_completed: Option<Value>,
+}
+
+pub struct ToollessTurnOptions<'a> {
+    pub cancel: Option<&'a AtomicBool>,
+    pub extra_cancel: Option<&'a AtomicBool>,
+    pub timeout: Duration,
+    pub shutdown_client: bool,
+}
+
+impl Default for ToollessTurnOptions<'_> {
+    fn default() -> Self {
+        Self {
+            cancel: None,
+            extra_cancel: None,
+            timeout: TOOLLESS_TURN_TIMEOUT,
+            shutdown_client: true,
+        }
+    }
+}
+
+fn cancelled(options: &ToollessTurnOptions<'_>) -> bool {
+    options
+        .cancel
+        .map(|flag| flag.load(Ordering::Relaxed))
+        .unwrap_or(false)
+        || options
+            .extra_cancel
+            .map(|flag| flag.load(Ordering::Relaxed))
+            .unwrap_or(false)
 }
 
 fn notification_matches_active(thread_id: &str, turn_id: &str, params: &Value) -> bool {
@@ -84,6 +115,100 @@ async fn drain_late_assistant_notifications(
     }
 }
 
+/// Run a tool-less turn on an already-authorized Codex app-server client.
+/// Does not launch a process or acquire host Codex permits.
+pub async fn run_toolless_turn_on_client(
+    client: &CodexAppServerClient,
+    config: &ToollessThreadConfig,
+    user_prompt: &str,
+    options: ToollessTurnOptions<'_>,
+) -> Result<String, CodexProviderError> {
+    config.validate()?;
+    if cancelled(&options) {
+        return Err(CodexProviderError::RunEngine("cancelled".into()));
+    }
+
+    let thread_id = client.thread_start_toolless(config).await?;
+    let mut notifications = client.notifications();
+    let turn_id = client
+        .turn_start(&thread_id, user_prompt, TURN_START_TIMEOUT)
+        .await?;
+
+    let mut state = ToollessTurnState::default();
+    let deadline = tokio::time::Instant::now() + options.timeout;
+
+    loop {
+        if cancelled(&options) {
+            let _ = client
+                .turn_interrupt(&thread_id, &turn_id, INTERRUPT_TIMEOUT)
+                .await;
+            return Err(CodexProviderError::RunEngine("cancelled".into()));
+        }
+
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            let _ = client
+                .turn_interrupt(&thread_id, &turn_id, INTERRUPT_TIMEOUT)
+                .await;
+            return Err(CodexProviderError::Timeout("toolless_turn".into()));
+        }
+
+        let message = match tokio::time::timeout(remaining, notifications.recv()).await {
+            Ok(Ok(msg)) => msg,
+            Ok(Err(RecvError::Lagged(_))) => continue,
+            Ok(Err(_)) => continue,
+            Err(_) => {
+                let _ = client
+                    .turn_interrupt(&thread_id, &turn_id, INTERRUPT_TIMEOUT)
+                    .await;
+                return Err(CodexProviderError::Timeout("toolless_turn".into()));
+            }
+        };
+
+        let IncomingMessage::Notification { method, params } = message else {
+            continue;
+        };
+        if !notification_matches_active(&thread_id, &turn_id, &params) {
+            continue;
+        }
+
+        match method.as_str() {
+            "item/started" | "item/completed" | "item/agentMessage/delta" => {
+                apply_assistant_notification(&method, &params, &mut state);
+            }
+            "turn/completed" => {
+                state.last_turn_completed = Some(params.clone());
+                let (_, _, status) = parse_turn_completed(&params)?;
+                if status != "completed" {
+                    let message = turn_error_message(&params)
+                        .unwrap_or_else(|| format!("turn ended with status={status}"));
+                    return Err(CodexProviderError::RunEngine(message));
+                }
+                drain_late_assistant_notifications(
+                    &mut notifications,
+                    &thread_id,
+                    &turn_id,
+                    &mut state,
+                )
+                .await;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    let text = state
+        .assistant
+        .canonical_success(state.last_turn_completed.as_ref());
+    if text.trim().is_empty() {
+        return Err(CodexProviderError::RunEngine(
+            "tool-less turn produced empty assistant text".into(),
+        ));
+    }
+    let _ = options.shutdown_client;
+    Ok(text)
+}
+
 pub async fn run_toolless_codex_turn(
     executable: Option<std::path::PathBuf>,
     profile: Option<std::path::PathBuf>,
@@ -109,75 +234,43 @@ pub async fn run_toolless_codex_turn(
     }
 
     let client = CodexAppServerClient::launch(launch).await?;
-    let thread_id = client.thread_start_toolless(&thread_config).await?;
-    let mut notifications = client.notifications();
-    let turn_id = client
-        .turn_start(&thread_id, user_prompt, TURN_START_TIMEOUT)
-        .await?;
-
-    let mut state = ToollessTurnState::default();
-    let deadline = tokio::time::Instant::now() + TOOLLESS_TURN_TIMEOUT;
-
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            let _ = client.shutdown().await;
-            return Err(CodexProviderError::Timeout("toolless_turn".into()));
-        }
-
-        let message = match tokio::time::timeout(remaining, notifications.recv()).await {
-            Ok(Ok(msg)) => msg,
-            Ok(Err(RecvError::Lagged(_))) => continue,
-            Ok(Err(_)) => continue,
-            Err(_) => {
-                let _ = client.shutdown().await;
-                return Err(CodexProviderError::Timeout("toolless_turn".into()));
-            }
-        };
-
-        let IncomingMessage::Notification { method, params } = message else {
-            continue;
-        };
-        if !notification_matches_active(&thread_id, &turn_id, &params) {
-            continue;
-        }
-
-        match method.as_str() {
-            "item/started" | "item/completed" | "item/agentMessage/delta" => {
-                apply_assistant_notification(&method, &params, &mut state);
-            }
-            "turn/completed" => {
-                state.last_turn_completed = Some(params.clone());
-                let (_, _, status) = parse_turn_completed(&params)?;
-                if status != "completed" {
-                    let message = turn_error_message(&params)
-                        .unwrap_or_else(|| format!("turn ended with status={status}"));
-                    let _ = client.shutdown().await;
-                    return Err(CodexProviderError::RunEngine(message));
-                }
-                drain_late_assistant_notifications(
-                    &mut notifications,
-                    &thread_id,
-                    &turn_id,
-                    &mut state,
-                )
-                .await;
-                break;
-            }
-            _ => {}
-        }
-    }
-
-    let text = state
-        .assistant
-        .canonical_success(state.last_turn_completed.as_ref());
+    let result = run_toolless_turn_on_client(
+        &client,
+        &thread_config,
+        user_prompt,
+        ToollessTurnOptions {
+            cancel: None,
+            extra_cancel: None,
+            timeout: TOOLLESS_TURN_TIMEOUT,
+            shutdown_client: true,
+        },
+    )
+    .await;
     let _ = client.shutdown().await;
+    result
+}
 
-    if text.trim().is_empty() {
-        return Err(CodexProviderError::RunEngine(
-            "tool-less turn produced empty assistant text".into(),
+#[cfg(test)]
+mod tests {
+    use super::notification_matches_active;
+    use serde_json::json;
+
+    #[test]
+    fn child_notifications_do_not_match_parent_turn() {
+        let params = json!({
+            "threadId": "thread-child",
+            "turnId": "turn-child",
+            "delta": "helper"
+        });
+        assert!(!notification_matches_active(
+            "thread-parent",
+            "turn-parent",
+            &params
+        ));
+        assert!(notification_matches_active(
+            "thread-child",
+            "turn-child",
+            &params
         ));
     }
-
-    Ok(text)
 }

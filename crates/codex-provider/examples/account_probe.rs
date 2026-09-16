@@ -1,7 +1,7 @@
+use codex_provider::CodexAccountKind;
 use codex_provider::{
     codex_version, probe_codex, which_codex_executable, CodexAppServerClient, CodexProcessLaunch,
 };
-use codex_provider::CodexAccountKind;
 
 #[tokio::main]
 async fn main() {
@@ -42,10 +42,7 @@ fn print_account(account: &codex_provider::CodexAccountState) {
         CodexAccountKind::NotLoggedIn => println!("Auth: not logged in"),
         CodexAccountKind::Other(kind) => println!("Auth: other ({kind})"),
     }
-    println!(
-        "Requires OpenAI auth: {}",
-        account.requires_openai_auth
-    );
+    println!("Requires OpenAI auth: {}", account.requires_openai_auth);
 }
 
 fn print_rate_limits(raw: &serde_json::Value) {

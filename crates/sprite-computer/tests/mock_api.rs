@@ -285,10 +285,7 @@ async fn filesystem_roundtrip_and_errors() {
         computer.read_file("/workspace/a.bin").await.unwrap(),
         vec![0, 1, 2]
     );
-    client
-        .fs_write("/workspace/x", b"abc", true)
-        .await
-        .unwrap();
+    client.fs_write("/workspace/x", b"abc", true).await.unwrap();
 }
 
 #[tokio::test]
@@ -418,10 +415,7 @@ async fn sprite_computer_enforces_workspace_boundary() {
     };
     let computer = SpriteComputer::new(config).unwrap();
     let err = computer.read_file("/etc/passwd").await.unwrap_err();
-    assert!(matches!(
-        err,
-        agent_core::ComputerError::SandboxRejected(_)
-    ));
+    assert!(matches!(err, agent_core::ComputerError::SandboxRejected(_)));
 }
 
 #[tokio::test]
@@ -580,8 +574,11 @@ async fn oversized_file_and_error_bodies_are_rejected() {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/sprites/large/fs/read"))
-            .respond_with(ResponseTemplate::new(status).set_body_bytes(vec![b'x'; 16 * 1024 * 1024 + 1]))
-            .mount(&server).await;
+            .respond_with(
+                ResponseTemplate::new(status).set_body_bytes(vec![b'x'; 16 * 1024 * 1024 + 1]),
+            )
+            .mount(&server)
+            .await;
         let client = SpriteClient::new(test_config(&server.uri(), "large")).unwrap();
         let error = client.fs_read("/workspace/large.bin").await.unwrap_err();
         assert!(error.to_string().contains("response body too large"));

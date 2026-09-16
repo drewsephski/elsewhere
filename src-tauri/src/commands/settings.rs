@@ -30,7 +30,9 @@ pub fn clear_openai_api_key(state: State<AppState>) -> Result<(), AppError> {
 }
 
 #[tauri::command]
-pub async fn list_openai_models(state: State<'_, AppState>) -> Result<Vec<ModelDescriptor>, AppError> {
+pub async fn list_openai_models(
+    state: State<'_, AppState>,
+) -> Result<Vec<ModelDescriptor>, AppError> {
     let api_key = state
         .secrets
         .get_openai_api_key()?

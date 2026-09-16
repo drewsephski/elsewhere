@@ -1,10 +1,10 @@
+use crate::db::Database;
+use crate::models::{MessageRole, MessageStatus};
 use agent_core::{
     CreateRunParams, MessageRole as CoreRole, MessageStatus as CoreStatus, PersistedMessage,
     RunEventReceipt, RunStore, RuntimeError, StructuredMessageInput,
 };
 use async_trait::async_trait;
-use crate::db::Database;
-use crate::models::{MessageRole, MessageStatus};
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::sync::Arc;
@@ -121,13 +121,8 @@ impl RunStore for SqliteRunStore {
                 CoreStatus::Interrupted => MessageStatus::Interrupted,
             };
             let db = db.lock();
-            db.update_message_body_and_status(
-                &message_id,
-                &body,
-                status,
-                error_message.as_deref(),
-            )
-            .map_err(|e| RuntimeError::Store(e.to_string()))?;
+            db.update_message_body_and_status(&message_id, &body, status, error_message.as_deref())
+                .map_err(|e| RuntimeError::Store(e.to_string()))?;
             Ok(())
         })
         .await

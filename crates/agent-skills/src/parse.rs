@@ -13,7 +13,9 @@ pub struct ValidatedSkillFrontmatter {
     pub description: String,
 }
 
-pub fn parse_skill_md(content: &str) -> Result<(ValidatedSkillFrontmatter, String), SkillPackageError> {
+pub fn parse_skill_md(
+    content: &str,
+) -> Result<(ValidatedSkillFrontmatter, String), SkillPackageError> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return Err(SkillPackageError::validation(
@@ -37,16 +39,8 @@ pub fn parse_skill_md(content: &str) -> Result<(ValidatedSkillFrontmatter, Strin
     let raw: RawFrontmatter = serde_yaml::from_str(yaml)
         .map_err(|e| SkillPackageError::validation(format!("invalid SKILL.md frontmatter: {e}")))?;
 
-    let name = raw
-        .name
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let description = raw
-        .description
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let name = raw.name.unwrap_or_default().trim().to_string();
+    let description = raw.description.unwrap_or_default().trim().to_string();
 
     if name.is_empty() {
         return Err(SkillPackageError::validation(

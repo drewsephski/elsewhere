@@ -11,6 +11,13 @@ import { MarkdownContent } from "@/components/app/markdown-content";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { ResultsPanel } from "./results-panel";
 import { activityText, workStatus } from "@/lib/work-events";
+import { SubagentCard } from "@/components/app/subagent-card";
+import {
+  isSubagentEvent,
+  subagentActivityFromPayload,
+  subagentHeadline,
+  type SubagentActivity,
+} from "@/lib/subagent-events";
 import {
   ApprovalCard,
   type ApprovalRequestedPayload,
@@ -50,6 +57,7 @@ type Activity = {
   text?: string;
   approval?: ApprovalRequestedPayload;
   decision?: ApprovalTerminalState;
+  subagent?: SubagentActivity;
 };
 
 const active = (status: string) => status === "queued" || status === "running";
@@ -63,6 +71,9 @@ function statusBadgeVariant(status: string | undefined) {
 }
 
 function timelineTitle(item: Activity) {
+  if (item.subagent) {
+    return subagentHeadline(item.subagent);
+  }
   if (item.approval) {
     return item.decision
       ? `Approval ${item.decision}`
@@ -202,6 +213,23 @@ export function WorkDetail({ runId }: { runId: string }) {
                       : item,
                   ),
                 );
+              }
+            } else if (isSubagentEvent(event.event)) {
+              const activity = subagentActivityFromPayload(payload);
+              if (activity) {
+                setTimeline((previous) => {
+                  const existing = previous.findIndex(
+                    (item) => item.subagent?.subagentId === activity.subagentId,
+                  );
+                  if (existing >= 0) {
+                    return previous.map((item, index) =>
+                      index === existing
+                        ? { ...item, subagent: { ...item.subagent, ...activity } }
+                        : item,
+                    );
+                  }
+                  return [...previous.slice(-199), { id, subagent: activity }];
+                });
               }
             } else {
               const text = activityText(event.event, payload);
@@ -473,6 +501,8 @@ export function WorkDetail({ runId }: { runId: string }) {
                   <TimelineContent>
                     {item.approval ? (
                       <ApprovalCard payload={item.approval} externalStatus={item.decision} />
+                    ) : item.subagent ? (
+                      <SubagentCard activity={item.subagent} />
                     ) : (
                       <p className="text-muted-foreground">{item.text}</p>
                     )}

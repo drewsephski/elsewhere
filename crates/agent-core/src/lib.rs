@@ -21,6 +21,7 @@ mod run_engine;
 mod run_store;
 mod runtime;
 mod runtime_identity;
+mod subagent;
 mod tool_catalog;
 mod tools;
 mod workspace_entries;
@@ -79,13 +80,22 @@ pub use run_store::{
 };
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use runtime_identity::{compose_runtime_instruction_snapshot, RuntimeIdentityInput};
+pub use subagent::{
+    bound_subagent_result, subagent_developer_instructions, subagent_task_summary,
+    subagent_user_prompt, truncate_utf8_bytes, validate_subagent_request, AgentSubagents,
+    InMemoryAgentSubagents, ResponsesSubagentTurn, SubagentContext, SubagentError, SubagentRequest,
+    SubagentResult, SubagentTurn, MAX_ACTIVE_SUBAGENTS_PER_PARENT, MAX_SUBAGENTS_PER_PARENT,
+    MAX_SUBAGENT_CONTEXT_CHARS, MAX_SUBAGENT_NAME_CHARS, MAX_SUBAGENT_RESULT_BYTES,
+    MAX_SUBAGENT_TASK_CHARS, MAX_SUBAGENT_TASK_SUMMARY_CHARS, RUN_SUBAGENT_DESCRIPTION,
+    RUN_SUBAGENT_TOOL_NAME, SUBAGENT_TURN_TIMEOUT_SECS,
+};
 pub use tool_catalog::{
     is_browser_mutation_tool, is_browser_tool, is_collaboration_tool, is_connector_tool,
     is_known_agent_tool, is_policy_non_overridable_tool, is_policy_overridable_tool,
-    policy_action_group, policy_action_label, policy_denied_message, PolicyActionGroup,
-    ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
-    CONNECTOR_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES,
-    WORKSPACE_TOOL_NAMES,
+    is_subagent_tool, policy_action_group, policy_action_label, policy_denied_message,
+    PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES,
+    COLLABORATION_TOOL_NAMES, CONNECTOR_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES,
+    POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
 };
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};

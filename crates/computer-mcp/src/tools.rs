@@ -1,32 +1,20 @@
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use agent_core::{
-    dispatch_agent_tool_with_gate_and_recovery,
-    human_intervention_openai_tool_definitions,
-    is_browser_tool,
-    is_collaboration_tool,
-    is_connector_tool,
-    is_human_intervention_tool,
-    AgentCollaboration,
-    AgentConnectors,
-    AgentComputer,
-    AgentHumanIntervention,
-    BrowserRecoverySession,
-    CollaborationContext,
-    connector_openai_tool_definitions,
-    ToolApprovalGate,
-    ToolError,
-    ToolRunContext,
+    connector_openai_tool_definitions, dispatch_agent_tool_with_gate_and_recovery,
+    human_intervention_openai_tool_definitions, is_browser_tool, is_collaboration_tool,
+    is_connector_tool, is_human_intervention_tool, is_subagent_tool, AgentCollaboration,
+    AgentComputer, AgentConnectors, AgentHumanIntervention, AgentSubagents, BrowserRecoverySession,
+    CollaborationContext, ToolApprovalGate, ToolError, ToolRunContext, RUN_SUBAGENT_DESCRIPTION,
 };
 use rmcp::{
-    ErrorData, ServerHandler,
     model::{
         CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListToolsResult,
         ServerCapabilities, ServerInfo, Tool,
     },
     service::RequestContext,
-    RoleServer,
+    ErrorData, RoleServer, ServerHandler,
 };
 use serde_json::json;
 
@@ -45,6 +33,7 @@ pub struct ComputerHandler {
     connectors: Option<Arc<dyn AgentConnectors>>,
     human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
     browser_recovery: Option<Arc<BrowserRecoverySession>>,
+    subagents: Option<Arc<dyn AgentSubagents>>,
     source_conversation_id: String,
 }
 
@@ -58,6 +47,7 @@ impl ComputerHandler {
         connectors: Option<Arc<dyn AgentConnectors>>,
         human_intervention: Option<Arc<dyn AgentHumanIntervention>>,
         browser_recovery: Option<Arc<BrowserRecoverySession>>,
+        subagents: Option<Arc<dyn AgentSubagents>>,
         source_conversation_id: String,
     ) -> Self {
         Self {
@@ -69,6 +59,7 @@ impl ComputerHandler {
             connectors,
             human_intervention,
             browser_recovery,
+            subagents,
             source_conversation_id,
         }
     }
@@ -105,6 +96,20 @@ fn collaboration_tool_definitions() -> Vec<Tool> {
                     "context": { "type": "string" }
                 },
                 "required": ["targetBotId", "instruction"],
+                "additionalProperties": false
+            })),
+        ),
+        Tool::new(
+            "run_subagent",
+            RUN_SUBAGENT_DESCRIPTION,
+            schema_object(json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "task": { "type": "string" },
+                    "context": { "type": "string" }
+                },
+                "required": ["name", "task"],
                 "additionalProperties": false
             })),
         ),
@@ -337,6 +342,7 @@ impl ServerHandler for ComputerHandler {
             self.collaboration.as_ref(),
             self.connectors.as_ref(),
             self.human_intervention.as_ref(),
+            self.subagents.as_ref(),
             &request.name,
             &args_str,
             self.cancel.as_ref(),
@@ -384,8 +390,10 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         name if is_browser_tool(name) => Ok(()),
         "bot_list" => Ok(()),
         "bot_delegate" => Ok(()),
+        "run_subagent" => Ok(()),
         name if is_human_intervention_tool(name) => Ok(()),
         name if is_collaboration_tool(name) => Ok(()),
+        name if is_subagent_tool(name) => Ok(()),
         name if is_connector_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
             "unknown tool: {other}"
@@ -418,5 +426,7 @@ mod tests {
             .collect();
         assert!(names.contains(&"workspace_list".to_string()));
         assert!(names.contains(&"workspace_exec".to_string()));
+        assert!(names.contains(&"run_subagent".to_string()));
+        assert!(names.contains(&"bot_delegate".to_string()));
     }
 }
