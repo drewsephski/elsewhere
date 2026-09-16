@@ -70,7 +70,7 @@ export function BotContext({
         placeholder="Audience, tone, project facts…"
         className={
           embedded
-            ? "min-h-24 w-full rounded-xl border border-border/80 bg-white/80 p-2.5 text-xs leading-5"
+            ? "min-h-24 w-full rounded-xl border border-border bg-surface-raised p-2.5 text-xs leading-5"
             : "min-h-32 w-full rounded-xl border border-border bg-background p-3 text-xs leading-5"
         }
       />
@@ -90,7 +90,7 @@ export function BotContext({
         </div>
       </div>
       {error ? (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className="text-xs text-destructive">
           {error}
         </p>
       ) : null}

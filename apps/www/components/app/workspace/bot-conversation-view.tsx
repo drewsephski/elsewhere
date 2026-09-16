@@ -17,17 +17,31 @@ import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
-import { workStatus } from "@/lib/work-events";
 import { archiveWorkRun, canArchiveWorkRun } from "@/lib/archive-work-run";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
+import { StatusPill } from "@/components/app/status-pill";
 import { useActiveRun } from "@/contexts/active-run-context";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, Info, MessageSquare, Monitor, PanelRight } from "@/components/icons/lucide";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ChevronLeft,
+  ChevronsLeft,
+  MessageSquare,
+  Monitor,
+  PanelRight,
+  Plus,
+} from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarkdownContent } from "@/components/app/markdown-content";
+import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
+import { WorkStatusCard } from "./work-status-card";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
 
@@ -41,6 +55,9 @@ interface BotConversationViewProps {
   onBotLoaded?: (bot: BotSummary) => void;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
   onStreamRunIdChange?: (runId: string | null) => void;
+  /** Desktop context rail is hidden; show an affordance to bring it back. */
+  railCollapsed?: boolean;
+  onExpandRail?: () => void;
 }
 
 export function BotConversationView({
@@ -49,6 +66,8 @@ export function BotConversationView({
   onBotLoaded,
   onRenameBot,
   onStreamRunIdChange,
+  railCollapsed = false,
+  onExpandRail,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -372,83 +391,83 @@ export function BotConversationView({
   }
 
   const chronologicalRuns = [...runs].reverse();
+  const canSend = Boolean(message.trim()) && Boolean(bot?.computerId) && !pending;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-2.5">
+      <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-border px-3">
+        <div className="flex min-w-0 items-center gap-2">
           <Link
             href="/app"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted lg:hidden"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-surface-hover lg:hidden"
             aria-label="Back to bots"
           >
-            <ChevronLeft className="size-5" />
+            <ChevronLeft className="size-4" />
           </Link>
           <BotCreatureAvatar
             name={bot?.name ?? "Bot"}
             avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-            size="xl"
+            size="xs"
+            variant="tile"
             animated={Boolean(streamRunId)}
           />
-          <div className="min-w-0">
-            {onRenameBot && bot ? (
-              <InlineRenameLabel
-                value={bot.name}
-                onCommit={(next) => onRenameBot(bot.id, next)}
-                className="text-base font-semibold leading-tight"
-                inputClassName="text-base"
-                ariaLabel={`Rename ${bot.name}`}
-              />
-            ) : (
-              <h1 className="truncate text-base font-semibold leading-tight">
-                {bot?.name ?? "Bot"}
-              </h1>
-            )}
-            <p className="truncate text-xs text-muted-foreground">
-              {streamRunId ? connection ?? "Working" : "Ready for your next message"}
-            </p>
-          </div>
+          {onRenameBot && bot ? (
+            <InlineRenameLabel
+              value={bot.name}
+              onCommit={(next) => onRenameBot(bot.id, next)}
+              className="text-[13px] font-medium leading-tight"
+              inputClassName="text-[13px]"
+              ariaLabel={`Rename ${bot.name}`}
+            />
+          ) : (
+            <h1 className="truncate text-[13px] font-medium leading-tight">
+              {bot?.name ?? "Bot"}
+            </h1>
+          )}
+          {streamRunId ? (
+            <StatusPill tone="info" live className="hidden sm:inline-flex">
+              {connection ?? "Working"}
+            </StatusPill>
+          ) : null}
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="hidden rounded-full sm:inline-flex"
+        <div className="flex items-center gap-0.5">
+          <ComposerIconButton
+            label="New chat"
+            className="size-7"
             disabled={startingNewChat || pending}
             onClick={() => void handleStartNewChat()}
           >
-            New chat
-          </Button>
-          <button
-            type="button"
-            onClick={() => void handleStartNewChat()}
-            disabled={startingNewChat || pending}
-            className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-50 sm:hidden"
-            aria-label="Start new chat"
-          >
-            <MessageSquare className="size-5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            onClick={onOpenContext}
-            className="flex size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted lg:hidden"
-            aria-label="Bot details"
-          >
-            <PanelRight className="size-5" />
-          </button>
+            <MessageSquare className="size-4" aria-hidden />
+          </ComposerIconButton>
           <Link
             href="/app/computers"
-            className="hidden size-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted sm:flex"
+            className="hidden size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground sm:flex"
             aria-label="Computer settings"
+            title="Computer settings"
           >
-            <Monitor className="size-5" />
+            <Monitor className="size-4" />
           </Link>
+          <ComposerIconButton
+            label="Bot details"
+            className="size-7 lg:hidden"
+            onClick={onOpenContext}
+          >
+            <PanelRight className="size-4" />
+          </ComposerIconButton>
+          {railCollapsed && onExpandRail ? (
+            <ComposerIconButton
+              label="Show details"
+              className="hidden size-7 lg:flex"
+              onClick={onExpandRail}
+            >
+              <ChevronsLeft className="size-4" />
+            </ComposerIconButton>
+          ) : null}
         </div>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+        <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
             const assistantText = isLive
@@ -459,21 +478,21 @@ export function BotConversationView({
               pendingTurn &&
               (isLive || !run.task?.trim()) &&
               run.runId === liveRunId;
+            const finished = !isLive && !runIsActive(run.status);
+            const deleteAction =
+              canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
+                <MessageDeleteButton
+                  onDelete={() => handleDeleteRun(run)}
+                  label="Delete"
+                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
+                />
+              ) : null;
 
             return (
-              <div key={run.runId} className="space-y-3">
-                <div className="flex flex-col items-end gap-1">
-                  <UserPromptBubble sentAt={run.createdAt}>
-                    {showOptimisticUser ? pendingTurn.message : run.task}
-                  </UserPromptBubble>
-                  {canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
-                    <MessageDeleteButton
-                      onDelete={() => handleDeleteRun(run)}
-                      label="Delete message"
-                      className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-                    />
-                  ) : null}
-                </div>
+              <div key={run.runId} className="space-y-2.5">
+                <UserPromptBubble sentAt={run.createdAt}>
+                  {showOptimisticUser ? pendingTurn.message : run.task}
+                </UserPromptBubble>
 
                 {isLive && liveDelegations.length > 0 ? (
                   <div className="space-y-2">
@@ -491,24 +510,15 @@ export function BotConversationView({
                       externalStatus={item.decision}
                     />
                   ) : (
-                    <p
-                      key={item.id}
-                      className="text-center text-xs text-muted-foreground"
-                    >
+                    <p key={item.id} className="text-center text-[11px] text-muted-foreground">
                       {item.text}
                     </p>
                   ),
                 )}
 
-                {!isLive && run.status !== "queued" && run.status !== "running" ? (
-                  <AssistantMessageBubble>
-                    <RunDelegationList
-                      runId={run.runId}
-                      enabled={!isLive && run.status !== "queued" && run.status !== "running"}
-                    />
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {workStatus(run.status)}
-                    </p>
+                {finished ? (
+                  <>
+                    <RunDelegationList runId={run.runId} enabled={finished} />
                     <RunAssistantSnippet
                       runId={run.runId}
                       fallbackText={
@@ -519,52 +529,42 @@ export function BotConversationView({
                           : undefined
                       }
                     />
-                    <Link
-                      href={`/app/work/${run.runId}`}
-                      className="mt-2 inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
-                    >
-                      View full progress
-                      <Info className="size-3" aria-hidden />
-                    </Link>
-                    <ChatResultCards runId={run.runId} className="mt-3" />
-                  </AssistantMessageBubble>
+                    <WorkStatusCard run={run} actions={deleteAction}>
+                      <ChatResultCards runId={run.runId} />
+                    </WorkStatusCard>
+                  </>
                 ) : null}
 
                 {isLive ? (
-                  <AssistantMessageBubble>
-                    <p className="text-xs font-medium text-primary">
-                      {workStatus(liveDetail?.status ?? run.status)}
-                    </p>
-                    {assistantStream.commentaryText ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {assistantStream.commentaryText}
-                      </p>
-                    ) : null}
-                    {assistantText ? (
-                      <div className="mt-2">
-                        <MarkdownContent text={assistantText} />
-                        {assistantStream.streaming ? (
-                          <span
-                            className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
-                            aria-hidden
-                          />
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-muted-foreground">
-                        {assistantStream.streaming
-                          ? "Composing a reply…"
-                          : "Your bot is working on this…"}
-                      </p>
-                    )}
-                    <Link
-                      href={`/app/work/${run.runId}`}
-                      className="mt-3 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
-                    >
-                      Open detailed work view
-                    </Link>
-                    <ChatResultCards runId={run.runId} className="mt-2" />
-                  </AssistantMessageBubble>
+                  <>
+                    <AssistantMessageBubble>
+                      {assistantStream.commentaryText ? (
+                        <p className="mb-1.5 text-xs text-muted-foreground">
+                          {assistantStream.commentaryText}
+                        </p>
+                      ) : null}
+                      {assistantText ? (
+                        <div>
+                          <MarkdownContent text={assistantText} />
+                          {assistantStream.streaming ? (
+                            <span
+                              className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-foreground/80 align-middle"
+                              aria-hidden
+                            />
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          {assistantStream.streaming
+                            ? "Composing a reply…"
+                            : "Your bot is working on this…"}
+                        </p>
+                      )}
+                    </AssistantMessageBubble>
+                    <WorkStatusCard run={run} status={liveDetail?.status ?? run.status}>
+                      <ChatResultCards runId={run.runId} />
+                    </WorkStatusCard>
+                  </>
                 ) : null}
               </div>
             );
@@ -576,20 +576,28 @@ export function BotConversationView({
               (pendingTurn.runId && run.runId === pendingTurn.runId) ||
               (runIsActive(run.status) && run.task?.trim() === pendingTurn.message),
           ) ? (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               <UserPromptBubble sentAt={new Date().toISOString()}>
                 {pendingTurn.message}
               </UserPromptBubble>
-              <p className="text-center text-xs text-muted-foreground">Sending…</p>
+              <p className="text-center text-[11px] text-muted-foreground">Sending…</p>
             </div>
           ) : null}
 
           {!chronologicalRuns.length && !pendingTurn ? (
-            <div className="rounded-2xl border border-dashed border-border bg-white/50 px-6 py-10 text-center">
-              <p className="text-sm font-medium">Start a conversation</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Describe the outcome you want—a report, draft, or task on your computer. Follow
-                live progress, results, and approval prompts right here in chat.
+            <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
+              <BotCreatureAvatar
+                name={bot?.name ?? "Bot"}
+                avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                size="xl"
+                variant="tile"
+              />
+              <p className="mt-4 text-[13px] font-medium text-foreground">
+                {bot?.name ? `Message ${bot.name}` : "Start a conversation"}
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Describe the outcome you want—a report, a draft, or a task on its computer.
+                Progress, results and approvals show up right here.
               </p>
             </div>
           ) : null}
@@ -598,43 +606,55 @@ export function BotConversationView({
 
       <FloatingBrowserPreview />
 
-      <footer className="shrink-0 border-t border-border/70 bg-white/90 px-4 py-3 backdrop-blur-md">
-        <form
-          onSubmit={(event) => void handleSubmit(event)}
-          className="mx-auto flex max-w-2xl items-end gap-2"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/80 bg-[#f5f3f8] px-2 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
-            <textarea
+      <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
+        <div className="mx-auto max-w-3xl">
+          <ChatComposerFrame
+            onSubmit={(event) => void handleSubmit(event)}
+            canSend={canSend}
+            pending={pending}
+            leading={
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<ComposerIconButton label="More" disabled={startingNewChat} />}
+                >
+                  <Plus className="size-4" aria-hidden />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-44">
+                  <DropdownMenuItem
+                    disabled={startingNewChat || pending}
+                    onClick={() => void handleStartNewChat()}
+                  >
+                    <MessageSquare className="size-4" aria-hidden />
+                    New chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem render={<Link href="/app/computers" />}>
+                    <Monitor className="size-4" aria-hidden />
+                    Computer settings
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            }
+          >
+            <ChatComposerTextarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               disabled={pending}
               maxLength={100000}
-              rows={1}
               placeholder={bot?.name ? `Message ${bot.name}` : "Message your bot"}
-              className="max-h-32 min-h-[2.25rem] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none"
               aria-label="Message"
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
             />
-          </div>
-          <Button type="submit" disabled={pending || !message.trim() || !bot?.computerId}>
-            {pending ? "Sending…" : "Send"}
-          </Button>
-        </form>
-        {bot && !bot.computerId ? (
-          <p className="mx-auto mt-2 max-w-2xl text-xs text-amber-800">
-            Assign a computer in bot settings before delegating work.
-          </p>
-        ) : null}
-        {error || streamError ? (
-          <p className="mx-auto mt-2 max-w-2xl text-xs text-red-700" role="alert">
-            {error ?? streamError}
-          </p>
-        ) : null}
+          </ChatComposerFrame>
+          {bot && !bot.computerId ? (
+            <p className="mt-2 px-3 text-[11px] text-warning">
+              Assign a computer in bot settings before delegating work.
+            </p>
+          ) : null}
+          {error || streamError ? (
+            <p className="mt-2 px-3 text-[11px] text-destructive" role="alert">
+              {error ?? streamError}
+            </p>
+          ) : null}
+        </div>
       </footer>
     </div>
   );

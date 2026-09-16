@@ -3,7 +3,6 @@
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import type { GroupParticipantSummary } from "@/lib/api-types";
-import { Button } from "@/components/ui/button";
 import { cn } from "cn";
 import {
   useCallback,
@@ -193,7 +192,7 @@ export function GroupMentionComposer({
   const hasEveryone = value.toLowerCase().includes("@everyone");
 
   return (
-    <div className="relative flex flex-1 flex-col gap-1">
+    <div className="relative flex min-w-0 flex-1 flex-col">
       <textarea
         ref={textareaRef}
         value={value}
@@ -201,21 +200,18 @@ export function GroupMentionComposer({
         onKeyDown={handleKeyDown}
         disabled={disabled || pending}
         rows={1}
-        placeholder="Message the group"
-        className="max-h-32 min-h-[2.25rem] w-full resize-none rounded-full border border-border/80 bg-[#f5f3f8] px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+        placeholder="Message the group — @mention a bot to direct it"
+        className="max-h-40 min-h-8 w-full resize-none bg-transparent px-1.5 py-1.5 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
         aria-label="Group message"
         aria-autocomplete="list"
         aria-controls={open ? listboxId : undefined}
         aria-expanded={open}
       />
-      <p className="px-2 text-[11px] text-muted-foreground">
-        Write normally, or @mention a Bot to direct your message.
-      </p>
       {open && options.length > 0 ? (
         <ul
           id={listboxId}
           role="listbox"
-          className="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-y-auto rounded-xl border border-border bg-white py-1 shadow-lg"
+          className="absolute bottom-full left-0 z-20 mb-3 max-h-56 w-full max-w-xs overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl"
         >
           {options.map((option, index) => (
             <li key={option.id} role="presentation">
@@ -224,8 +220,8 @@ export function GroupMentionComposer({
                 role="option"
                 aria-selected={index === activeIndex}
                 className={cn(
-                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted",
-                  index === activeIndex && "bg-muted",
+                  "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-accent",
+                  index === activeIndex && "bg-accent",
                 )}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => applySelection(option.id, option.name)}
@@ -233,7 +229,8 @@ export function GroupMentionComposer({
                 <BotCreatureAvatar
                   name={option.name}
                   avatarId={option.avatarId}
-                  size="sm"
+                  size="xs"
+                  variant="tile"
                 />
                 <span className="min-w-0 flex-1 truncate">
                   @{option.name}
@@ -247,14 +244,6 @@ export function GroupMentionComposer({
         </ul>
       ) : null}
       <input type="hidden" value={hasEveryone ? "everyone" : "specific"} readOnly />
-      <Button
-        type="button"
-        className="absolute right-0 top-0 hidden"
-        onClick={onSubmit}
-        disabled={pending || !value.trim()}
-      >
-        Send
-      </Button>
     </div>
   );
 }

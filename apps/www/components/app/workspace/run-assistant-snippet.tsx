@@ -1,5 +1,6 @@
 "use client";
 
+import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { useEffect, useState } from "react";
@@ -7,9 +8,11 @@ import { useEffect, useState } from "react";
 export function RunAssistantSnippet({
   runId,
   fallbackText,
+  className,
 }: {
   runId: string;
   fallbackText?: string | null;
+  className?: string;
 }) {
   const [text, setText] = useState<string | null>(
     fallbackText?.trim() ? fallbackText.trim() : null,
@@ -42,8 +45,8 @@ export function RunAssistantSnippet({
   }
 
   return (
-    <div className="mt-2 text-foreground/90">
+    <AssistantMessageBubble className={className}>
       <MarkdownContent text={text} />
-    </div>
+    </AssistantMessageBubble>
   );
 }

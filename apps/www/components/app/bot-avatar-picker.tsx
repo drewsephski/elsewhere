@@ -65,7 +65,7 @@ export function BotAvatarPicker({
                 {selected ? (
                   <motion.span
                     layoutId={AVATAR_SELECTION_LAYOUT_ID}
-                    className="pointer-events-none absolute inset-0 rounded-xl border-2 border-primary/45 bg-primary/10 shadow-[inset_0_0_0_1px] shadow-primary/10"
+                    className="pointer-events-none absolute inset-0 rounded-xl border-2 border-foreground/50 bg-surface-active"
                     transition={
                       reduceMotion
                         ? { duration: 0 }

@@ -36,7 +36,7 @@ export function HumanInterventionBanner({
   }
 
   return (
-    <Alert variant="warning" className="border-amber-500/40 bg-amber-500/10">
+    <Alert variant="warning" className="border-warning/30 bg-warning/10">
       <HandHelping className="size-4" aria-hidden />
       <AlertTitle>Bot needs you</AlertTitle>
       <AlertDescription className="space-y-3">

@@ -151,7 +151,7 @@ export function ApprovalsDataGrid() {
   return (
     <div className="space-y-4">
       {error ? (
-        <p className="text-sm text-red-700" role="alert">{error}</p>
+        <p className="text-sm text-destructive" role="alert">{error}</p>
       ) : null}
       <WorkspaceDataGrid
         table={table}

@@ -178,7 +178,7 @@ function WorkspaceTreeBranch({
         type="button"
         variant="ghost"
         size="xs"
-        className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-red-700"
+        className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-destructive"
         aria-label={`Delete ${entry.name}`}
         onClick={(event) => {
           event.preventDefault();
@@ -250,7 +250,7 @@ function WorkspaceTreeBranch({
         </div>
       ) : null}
       {error ? (
-        <p className="py-1 pl-1 text-[11px] text-red-600" role="alert">
+        <p className="py-1 pl-1 text-[11px] text-destructive" role="alert">
           {error}
         </p>
       ) : null}
@@ -399,7 +399,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
   return (
     <div className={cn("relative min-w-0", className)}>
       {rootError ? (
-        <p className="px-0.5 text-xs text-red-600" role="alert">
+        <p className="px-0.5 text-xs text-destructive" role="alert">
           {rootError}
         </p>
       ) : null}
@@ -413,7 +413,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
 
       <div
         className={cn(
-          "min-w-0 rounded-lg border border-border/60 bg-white/50 py-1 transition-[max-height] duration-200 ease-out",
+          "min-w-0 rounded-lg border border-border bg-card py-1 transition-[max-height] duration-200 ease-out",
           treeCompact
             ? "max-h-64 min-h-[8rem] overflow-y-auto overflow-x-hidden"
             : "overflow-x-hidden",
@@ -496,7 +496,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
           <button
             type="button"
             role="menuitem"
-            className={cn(menuItemClass, "text-red-700 hover:bg-red-50 hover:text-red-800")}
+            className={cn(menuItemClass, "text-destructive hover:bg-destructive/10 hover:text-destructive")}
             onClick={() => {
               setDeleteEntry(contextMenu.entry);
               setActionError(null);

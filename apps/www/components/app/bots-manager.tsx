@@ -48,7 +48,7 @@ export function BotsManager() {
         <FormItem><Label htmlFor="bot-instructions">Role and instructions</Label><Textarea id="bot-instructions" className="min-h-36" maxLength={16000} value={instructions} onChange={event => setInstructions(event.target.value)} /></FormItem>
         <ComputerSelect id="bot-computer" value={computerId} onValueChange={setComputerId} computers={computers} loading={loading} disabled={loading} />
         {!loading && !computers.length ? <p className="text-sm text-muted-foreground"><Link href="/app/computers" className="underline">Create a computer</Link> first. Its files will persist between assignments.</p> : null}
-        {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
         <Button type="submit" disabled={busy || !computerId || !name.trim()}>{busy ? "Creating…" : "Create bot"}</Button>
         <p className="text-xs text-muted-foreground">Powered by your ChatGPT connection.</p>
         </FormFields>

@@ -4,9 +4,10 @@ import { botCreatureSpecFromAvatar } from "@/lib/bot-avatars";
 import { getBotCreatureShellClass, getBotCreatureSpec } from "@/lib/bot-visual";
 import { cn } from "cn";
 
-export type BotCreatureAvatarSize = "sm" | "md" | "lg" | "xl" | "2xl";
+export type BotCreatureAvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
 
 const SIZE_CLASS: Record<BotCreatureAvatarSize, string> = {
+  xs: "size-5",
   sm: "size-8",
   md: "size-10",
   lg: "size-12",
@@ -23,6 +24,11 @@ interface BotCreatureAvatarProps {
   animated?: boolean;
   /** Colored tile behind the creature (legacy). Default: transparent. */
   showShell?: boolean;
+  /**
+   * `tile` places the creature on a saturated round mark tinted from its own
+   * palette — the compact identity used in the dark workspace nav and headers.
+   */
+  variant?: "plain" | "tile";
 }
 
 function CreatureFeatures({
@@ -200,10 +206,12 @@ export function BotCreatureAvatar({
   className,
   animated = false,
   showShell = false,
+  variant = "plain",
 }: BotCreatureAvatarProps) {
   const spec = avatarId ? botCreatureSpecFromAvatar(avatarId) : getBotCreatureSpec(name);
   const shell = showShell ? getBotCreatureShellClass(name) : "";
   const gradientId = useId().replace(/:/g, "");
+  const tile = variant === "tile";
 
   return (
     <span
@@ -211,11 +219,20 @@ export function BotCreatureAvatar({
         "relative inline-flex shrink-0 items-center justify-center",
         showShell
           ? "overflow-hidden rounded-2xl ring-1 ring-inset"
-          : "overflow-visible rounded-full bg-transparent ring-0",
+          : tile
+            ? "overflow-hidden rounded-full ring-1 ring-inset ring-white/[0.06] [&>svg]:size-[78%]"
+            : "overflow-visible rounded-full bg-transparent ring-0",
         SIZE_CLASS[size],
         shell,
         className,
       )}
+      style={
+        tile
+          ? {
+              backgroundColor: `color-mix(in oklab, ${spec.colors.bodyDark} 52%, #0e0e0e)`,
+            }
+          : undefined
+      }
       role="img"
       aria-label={`${name.trim() || "Assistant"} avatar`}
     >

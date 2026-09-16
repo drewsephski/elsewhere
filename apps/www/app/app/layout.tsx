@@ -1,3 +1,4 @@
+import { ProductThemeScope } from "@/components/app/product-theme-scope";
 import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -18,16 +19,19 @@ export default async function AppLayout({
   }
 
   return (
-    <Suspense
-      fallback={
-        <div className="app-shell-bg flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-          Loading workspace…
-        </div>
-      }
-    >
-      <WorkspaceAppLayout userEmail={session.user.email}>
-        {children}
-      </WorkspaceAppLayout>
-    </Suspense>
+    <>
+      <ProductThemeScope />
+      <Suspense
+        fallback={
+          <div className="app-shell-bg flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+            Loading workspace…
+          </div>
+        }
+      >
+        <WorkspaceAppLayout userEmail={session.user.email}>
+          {children}
+        </WorkspaceAppLayout>
+      </Suspense>
+    </>
   );
 }

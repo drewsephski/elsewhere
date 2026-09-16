@@ -7,14 +7,19 @@ interface UserPromptBubbleProps {
   className?: string;
 }
 
+/** Right-aligned user turn: a quiet charcoal pill with a centered timestamp above. */
 export function UserPromptBubble({ children, sentAt, className }: UserPromptBubbleProps) {
   return (
-    <div className={cn("flex w-full justify-end", className)}>
-      <div className="w-full max-w-[min(85%,42rem)] rounded-3xl rounded-br-md bg-foreground px-4 py-2.5 text-sm leading-relaxed text-primary-foreground shadow-sm">
-        <p className="whitespace-pre-wrap break-words">{children}</p>
-        {sentAt ? (
-          <p className="mt-1 text-[10px] text-white/60">{formatMessageTime(sentAt)}</p>
-        ) : null}
+    <div className={cn("flex w-full flex-col items-stretch gap-2", className)}>
+      {sentAt ? (
+        <p className="text-center text-[11px] text-muted-foreground/80">
+          {formatMessageTime(sentAt)}
+        </p>
+      ) : null}
+      <div className="flex w-full justify-end">
+        <div className="max-w-[min(78%,36rem)] rounded-xl bg-chat-user px-3.5 py-2 text-[13px] leading-relaxed text-chat-user-foreground">
+          <p className="whitespace-pre-wrap break-words">{children}</p>
+        </div>
       </div>
     </div>
   );

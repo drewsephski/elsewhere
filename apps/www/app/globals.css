@@ -5,26 +5,42 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* Fly-inspired palette */
-  --color-background: #f3f1f8;
-  --color-foreground: #2b2735;
-  --color-card: #ffffff;
-  --color-card-foreground: #2b2735;
-  --color-primary: #7c3aed;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #ede9fe;
-  --color-secondary-foreground: #5b21b6;
-  --color-muted: #ebe8f2;
-  --color-muted-foreground: #6b6578;
-  --color-accent: #f5f3ff;
-  --color-accent-foreground: #5b21b6;
-  --color-border: #e4e0ec;
-  --color-input: #e4e0ec;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #2b2735;
-  --color-ring: #8b5cf6;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
+  /*
+   * Core palette is variable-mapped so `.dark` (the signed-in product
+   * workspace) and `:root` (marketing + auth, Fly-inspired light) can share
+   * the same utility classes.
+   */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+
+  /* Product-surface tokens (chat workspace) */
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-chat-user: var(--chat-user);
+  --color-chat-user-foreground: var(--chat-user-foreground);
+  --color-chat-assistant: var(--chat-assistant);
+  --color-link: var(--link);
+  --color-code: var(--code-foreground);
+  --color-code-background: var(--code-background);
 
   /* Legacy brand tokens → mapped to new system */
   --color-brand-dark: #2b2735;
@@ -205,25 +221,26 @@
   }
 }
 
+/* Marketing + auth surfaces: Fly-inspired light palette (unchanged). */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --background: #f3f1f8;
+  --foreground: #2b2735;
+  --card: #ffffff;
+  --card-foreground: #2b2735;
+  --popover: #ffffff;
+  --popover-foreground: #2b2735;
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+  --secondary: #ede9fe;
+  --secondary-foreground: #5b21b6;
+  --muted: #ebe8f2;
+  --muted-foreground: #6b6578;
+  --accent: #f5f3ff;
+  --accent-foreground: #5b21b6;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #e4e0ec;
+  --input: #e4e0ec;
+  --ring: #8b5cf6;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -239,57 +256,130 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
   --destructive-foreground: var(--color-red-800);
-  --success: var(--color-emerald-500);
+  --success: #10b981;
   --success-foreground: var(--color-emerald-900);
   --info: var(--color-violet-500);
   --info-foreground: var(--color-violet-900);
-  --warning: var(--color-yellow-500);
+  --warning: #f59e0b;
   --warning-foreground: var(--color-yellow-900);
   --invert: var(--color-zinc-900);
   --invert-foreground: var(--color-zinc-50);
+
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-hover: rgba(43, 39, 53, 0.04);
+  --surface-active: rgba(43, 39, 53, 0.07);
+  --chat-user: #2b2735;
+  --chat-user-foreground: #ffffff;
+  --chat-assistant: #ffffff;
+  --link: #7c3aed;
+  --code-foreground: #5b21b6;
+  --code-background: rgba(124, 58, 237, 0.08);
 }
 
+/*
+ * Signed-in product workspace: premium near-black desktop-chat palette.
+ * Page ≈ #0c0c0c, panels/cards ≈ #161616–#1a1a1a, hairline borders,
+ * bright neutral primary, saturated status accents.
+ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  color-scheme: dark;
+  --background: #0c0c0c;
+  --foreground: #ececec;
+  --card: #161616;
+  --card-foreground: #ececec;
+  --popover: #1b1b1b;
+  --popover-foreground: #ececec;
+  --primary: #f2f2f2;
+  --primary-foreground: #111111;
+  --secondary: #262626;
+  --secondary-foreground: #ececec;
+  --muted: #1c1c1c;
+  --muted-foreground: #8d8d8d;
+  --accent: #202020;
+  --accent-foreground: #f4f4f4;
+  --destructive: #f26d6d;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: rgba(255, 255, 255, 0.35);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-  --destructive-foreground: var(--color-red-600);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-600);
-  --info: var(--color-violet-500);
-  --info-foreground: var(--color-violet-600);
-  --warning: var(--color-yellow-500);
-  --warning-foreground: var(--color-yellow-600);
-  --invert: var(--color-zinc-700);
-  --invert-foreground: var(--color-zinc-50);
+  --sidebar: #0c0c0c;
+  --sidebar-foreground: #ececec;
+  --sidebar-primary: #f2f2f2;
+  --sidebar-primary-foreground: #111111;
+  --sidebar-accent: #202020;
+  --sidebar-accent-foreground: #f4f4f4;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(255, 255, 255, 0.35);
+  --destructive-foreground: #ffb4b4;
+  --success: #3ecf8e;
+  --success-foreground: #86e7ba;
+  --info: #63a4ff;
+  --info-foreground: #a3c8ff;
+  --warning: #f5b543;
+  --warning-foreground: #fad48a;
+  --invert: #f2f2f2;
+  --invert-foreground: #111111;
+
+  --surface: #0c0c0c;
+  --surface-raised: #171717;
+  --surface-hover: rgba(255, 255, 255, 0.045);
+  --surface-active: rgba(255, 255, 255, 0.075);
+  --chat-user: #2b2b2b;
+  --chat-user-foreground: #f2f2f2;
+  --chat-assistant: #171717;
+  --link: #63a4ff;
+  --code-foreground: #f0876b;
+  --code-background: rgba(255, 255, 255, 0.06);
+}
+
+.dark .app-shell-bg,
+.dark .marketing-bg {
+  background-image: none;
+}
+
+.dark .surface-card,
+.dark .surface-panel,
+.dark .workspace-rail-card {
+  border-color: var(--color-border);
+  background-color: var(--color-card);
+  box-shadow: none;
+}
+
+.dark * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+.dark ::selection {
+  background: rgba(99, 164, 255, 0.35);
+}
+
+/* Rounded "window shell" that frames the three-column workspace. */
+.workspace-window {
+  background-color: #050505;
+}
+
+@media (min-width: 1024px) {
+  .workspace-window {
+    padding: 0.5rem;
+  }
+
+  .workspace-window > .workspace-window-frame {
+    border-radius: 0.875rem;
+    border: 1px solid var(--color-border);
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.6),
+      0 24px 60px -30px rgba(0, 0, 0, 0.9);
+  }
+}
+
+.workspace-window-frame {
+  background-color: var(--color-background);
 }
 
 @keyframes bot-bob {
@@ -304,7 +394,23 @@
 
 .prose-chat {
   line-height: 1.55;
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.prose-chat a {
+  color: var(--color-link);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+.prose-chat a:hover {
+  text-decoration: underline;
+}
+
+.prose-chat strong {
+  font-weight: 600;
+  color: var(--color-foreground);
 }
 
 .prose-chat > :first-child {
@@ -354,7 +460,7 @@
 .prose-chat blockquote {
   margin: 0.75em 0;
   padding-left: 0.85rem;
-  border-left: 3px solid color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+  border-left: 2px solid color-mix(in oklab, var(--color-foreground) 25%, var(--color-border));
   color: var(--color-muted-foreground);
 }
 
@@ -384,25 +490,28 @@
 }
 
 .prose-chat pre {
-  background: var(--color-muted);
+  background: var(--color-code-background);
   border: 1px solid var(--color-border);
-  border-radius: 0.5rem;
+  border-radius: 0.625rem;
   padding: 0.75rem 1rem;
   overflow-x: auto;
   font-family: var(--font-geist-mono, ui-monospace, monospace);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  color: var(--color-foreground);
 }
 
 .prose-chat code {
   font-family: var(--font-geist-mono, ui-monospace, monospace);
   font-size: 0.85em;
-  background: color-mix(in oklab, var(--color-muted) 85%, transparent);
-  padding: 0.1em 0.35em;
-  border-radius: 0.25rem;
+  color: var(--color-code);
+  background: var(--color-code-background);
+  padding: 0.12em 0.4em;
+  border-radius: 0.3rem;
 }
 
 .prose-chat pre code {
   background: transparent;
+  color: inherit;
   padding: 0;
 }
 

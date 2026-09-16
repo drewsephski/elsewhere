@@ -24,13 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "cn";
-import {
-  ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
-  Monitor,
-  PanelRight,
-} from "@/components/icons/lucide";
+import { ArrowUpRight, Monitor, PanelRight } from "@/components/icons/lucide";
 import { useMemo, useState, type ReactNode } from "react";
 
 export type BrowserPreviewVariant = "embedded" | "floating" | "work";
@@ -48,34 +42,25 @@ interface BrowserPreviewViewProps {
   /** Flush chrome with parent card — no extra border or outer rounding. */
   chromeAttached?: boolean;
   viewportClassName?: string;
+  /** Rendered directly under the screen card (embedded variant). */
+  caption?: ReactNode;
 }
 
+/** Dark "idle desktop" scene shown until the first frame arrives. */
 function BrowserIdleScene({ enabled }: { enabled: boolean }) {
   return (
-    <div
-      className="absolute inset-0 overflow-hidden bg-[#e8ecf4]"
-      aria-hidden
-    >
-      <div
-        className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_50%_0%,#ffffff_0%,#e4eaf5_45%,#d4dce8_100%)]"
-      />
-      <div
-        className="absolute -left-[20%] top-[8%] h-[55%] w-[70%] rounded-full bg-[#c8d8f0]/40 blur-3xl"
-      />
-      <div
-        className="absolute -right-[15%] top-[25%] h-[45%] w-[55%] rounded-full bg-[#dfe8f8]/70 blur-2xl"
-      />
-      <div className="absolute inset-x-[12%] bottom-[18%] top-[22%] rounded-md border border-white/60 bg-white/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-[2px]" />
+    <div className="absolute inset-0 overflow-hidden bg-[#111111]" aria-hidden>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_95%_at_28%_-10%,#3b3b3b_0%,#1f1f1f_42%,#0f0f0f_100%)]" />
+      <div className="absolute -left-[12%] top-[18%] h-[70%] w-[64%] -rotate-[16deg] rounded-full bg-white/[0.05] blur-2xl" />
+      <div className="absolute -right-[18%] bottom-[-10%] h-[55%] w-[60%] rounded-full bg-white/[0.03] blur-3xl" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center">
-        <div
-          className="flex size-11 items-center justify-center rounded-2xl bg-white/70 shadow-sm ring-1 ring-black/[0.06]"
-        >
-          <Monitor className="size-5 text-[#6b7280]" aria-hidden />
+        <div className="flex size-9 items-center justify-center rounded-xl bg-white/[0.06] ring-1 ring-white/[0.08]">
+          <Monitor className="size-4 text-muted-foreground" aria-hidden />
         </div>
-        <p className="max-w-[14rem] text-[11px] font-medium leading-snug text-[#4b5563]">
+        <p className="max-w-[13rem] text-[11px] leading-snug text-muted-foreground">
           {enabled
             ? "Live view appears when your bot opens a page."
-            : "Send a message to watch the browser here."}
+            : "Send a message to watch the screen here."}
         </p>
       </div>
     </div>
@@ -88,7 +73,7 @@ function PreviewChrome({
   enabled,
   addressLabel,
   compact,
-  subtle,
+  bare,
   className,
   addressBar,
   attached,
@@ -100,7 +85,8 @@ function PreviewChrome({
   enabled: boolean;
   addressLabel: string;
   compact?: boolean;
-  subtle?: boolean;
+  /** No title bar — just the rounded screen (rail card). */
+  bare?: boolean;
   className?: string;
   addressBar?: ReactNode;
   attached?: boolean;
@@ -109,119 +95,78 @@ function PreviewChrome({
 }) {
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
 
-  if (subtle) {
-    return (
-      <div className={cn("text-left", compact ? "max-w-full" : "w-full", className)}>
-        <div
-          className={cn(
-            "overflow-hidden bg-background/80",
-            attached
-              ? "rounded-none border-0 shadow-none"
-              : "rounded-lg border border-border/45 shadow-sm",
-          )}
-        >
+  return (
+    <div className={cn("text-left", compact ? "max-w-full" : "w-full", className)}>
+      <div
+        className={cn(
+          "overflow-hidden bg-card",
+          attached ? "rounded-none border-0" : "rounded-xl border border-border",
+        )}
+      >
+        {bare ? null : (
           <div
             className={cn(
-              "flex items-center gap-1.5 border-b border-border/40 bg-muted/30 px-2",
+              "flex items-center gap-1.5 border-b border-border bg-surface-hover px-2",
               compact ? "py-1" : "py-1.5",
               addressBar && "gap-2",
             )}
           >
             <div className="flex shrink-0 items-center gap-1" aria-hidden>
-              <span className="size-1.5 rounded-full bg-[#ff5f57]/80" />
-              <span className="size-1.5 rounded-full bg-[#febc2e]/80" />
-              <span className="size-1.5 rounded-full bg-[#28c840]/80" />
+              <span className="size-1.5 rounded-full bg-white/20" />
+              <span className="size-1.5 rounded-full bg-white/20" />
+              <span className="size-1.5 rounded-full bg-white/20" />
             </div>
             {addressBar ? (
               <div className="min-w-0 flex-1">{addressBar}</div>
             ) : (
-              <span className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
                 {addressLabel}
               </span>
             )}
           </div>
-          <div
-            className={cn(
-              "relative w-full overflow-hidden bg-[#e8ecf4]",
-              compact ? "aspect-[16/11]" : "aspect-[16/10]",
-              viewportClassName,
-            )}
-          >
-            {loading && showPlaceholder ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/30">
-                <Spinner className="size-4 text-muted-foreground" />
-              </div>
-            ) : null}
-            {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
-            {children}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={cn("text-left", compact ? "max-w-full" : "w-full", className)}>
-      <div
-        className={cn(
-          "rounded-[14px] bg-gradient-to-b from-[#ececf1] via-[#e3e3e8] to-[#d8d8de] p-[5px] shadow-[0_8px_24px_-8px_rgba(15,23,42,0.22),0_2px_6px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.08]",
-          compact && "shadow-md",
         )}
-      >
-        <div className="overflow-hidden rounded-[10px] bg-[#1c1c1e] p-[3px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]">
-          <div className="overflow-hidden rounded-[7px] bg-[#f5f5f7]">
-            <div
-              className={cn(
-                "flex items-center gap-1.5 border-b border-black/[0.06] bg-[linear-gradient(180deg,#fafafa_0%,#f0f0f2_100%)] px-2",
-                compact ? "py-1" : "py-1.5",
-              )}
-            >
-              <div className="flex shrink-0 items-center gap-1" aria-hidden>
-                <span className="size-[9px] rounded-full bg-[#ff5f57] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
-                <span className="size-[9px] rounded-full bg-[#febc2e] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
-                <span className="size-[9px] rounded-full bg-[#28c840] shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)]" />
-              </div>
-              <div className="flex min-w-0 flex-1 items-center gap-1">
-                <div className="flex shrink-0 items-center gap-0.5 text-[#9ca3af]" aria-hidden>
-                  <ChevronLeft className="size-3 opacity-50" />
-                  <ChevronRight className="size-3 opacity-35" />
-                </div>
-                <div
-                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-black/[0.06] bg-white px-2 py-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
-                >
-                  <span
-                    className="shrink-0 text-[9px] text-[#9ca3af]"
-                    aria-hidden
-                  >
-                    🔒
-                  </span>
-                  <span className="truncate text-[10px] text-[#374151]">{addressLabel}</span>
-                </div>
-              </div>
-            </div>
-            <div
-              className={cn(
-                "relative w-full overflow-hidden bg-[#e8ecf4]",
-                compact ? "aspect-[16/11]" : "aspect-[16/10]",
-                viewportClassName,
-              )}
-            >
-              {loading && showPlaceholder ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/40 backdrop-blur-[1px]">
-                  <Spinner className="size-5 text-[#6b7280]" />
-                </div>
-              ) : null}
-              {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
-              {children}
-            </div>
-          </div>
-        </div>
         <div
-          className="mx-auto mt-[3px] h-[5px] w-[42%] rounded-b-md bg-gradient-to-b from-[#c4c4c9] to-[#a8a8ae] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
-          aria-hidden
-        />
+          className={cn(
+            "relative w-full overflow-hidden bg-[#111111]",
+            compact ? "aspect-[16/11]" : "aspect-[16/10]",
+            viewportClassName,
+          )}
+        >
+          {loading && showPlaceholder ? (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+              <Spinner className="size-4 text-muted-foreground" />
+            </div>
+          ) : null}
+          {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
+          {children}
+        </div>
       </div>
     </div>
+  );
+}
+
+function OverlayIconButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      aria-label={label}
+      title={label}
+      className="flex size-6 items-center justify-center rounded-md bg-black/55 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/75 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+    >
+      {children}
+    </button>
   );
 }
 
@@ -234,6 +179,7 @@ export function BrowserPreviewView({
   enabled: enabledProp,
   addressBar,
   chromeAttached,
+  caption,
 }: BrowserPreviewViewProps) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
@@ -296,7 +242,7 @@ export function BrowserPreviewView({
   const hasImage = Boolean(frame?.available && frame?.imageDataUrl);
   const pipOpen = ctx?.pipOpen ?? false;
   const isWork = variant === "work";
-  const useSubtleChrome = variant === "embedded" || variant === "floating" || isWork;
+  const isEmbedded = variant === "embedded";
   const chromeCompact = variant === "floating" || isWork;
 
   function handleOpenDialog() {
@@ -385,7 +331,6 @@ export function BrowserPreviewView({
           addressBar={addressBar}
           attached={chromeAttached}
           compact
-          subtle
         >
           {frame?.imageDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -405,17 +350,22 @@ export function BrowserPreviewView({
     );
   }
 
-  if (variant === "embedded" && pipOpen) {
+  if (isEmbedded && pipOpen) {
     return (
-      <div className={cn("mt-3 space-y-2 px-1", className)}>
-        <p className="text-[11px] text-muted-foreground">
-          Preview is floating — drag it anywhere or{" "}
+      <div
+        className={cn(
+          "flex aspect-[16/10] flex-col items-center justify-center rounded-xl border border-dashed border-border px-5 text-center",
+          className,
+        )}
+      >
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Preview is floating over the chat.{" "}
           <button
             type="button"
             className="font-medium text-foreground underline-offset-2 hover:underline"
             onClick={() => ctx?.dockPip()}
           >
-            dock to sidebar
+            Dock it here
           </button>
           .
         </p>
@@ -427,48 +377,12 @@ export function BrowserPreviewView({
     <>
       <div
         className={cn(
-          variant === "embedded" ? "mt-0" : "space-y-2",
+          isEmbedded ? "group/screen relative" : "space-y-2",
           isWork && "mx-auto w-full max-w-xs sm:max-w-sm",
           className,
         )}
       >
-        {!isWork ? (
-          <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/90">
-              Live browser
-            </p>
-            <div className="flex flex-wrap items-center gap-1">
-              {variant === "embedded" && hasImage && ctx ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                  onClick={() => ctx.openPip()}
-                  aria-label="Float browser preview over chat"
-                >
-                  <PanelRight className="size-3.5" aria-hidden />
-                  Float
-                </Button>
-              ) : null}
-              {hasImage ? (
-                <>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                    onClick={handleOpenDialog}
-                    aria-label="Expand browser preview"
-                  >
-                    <ArrowUpRight className="size-3.5" aria-hidden />
-                    Expand
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          </div>
-        ) : (
+        {isWork ? (
           <div className="mb-1 flex items-center justify-between gap-2 px-0.5">
             <p className="text-[10px] font-medium text-muted-foreground">Browser</p>
             {hasImage ? (
@@ -484,26 +398,13 @@ export function BrowserPreviewView({
               </Button>
             ) : null}
           </div>
-        )}
-
-        <BrowserHumanControlBar
-          enabled={enabled}
-          humanActive={humanControl.humanActive}
-          loading={humanControl.loading}
-          inputBusy={humanInputBusy || humanClickBusy}
-          error={humanControl.error}
-          inputError={humanInputError}
-          onTakeControl={() => void humanControl.takeControl()}
-          onReturnControl={() => void humanControl.returnControl()}
-          onTypeText={(text) => void handleHumanTypeText(text)}
-          onPressKey={(key) => void handleHumanPressKey(key)}
-          className="mb-1.5"
-        />
+        ) : null}
 
         <button
           type="button"
           className={cn(
-            "group relative w-full text-left",
+            "group relative block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+            isEmbedded && "rounded-xl",
             hasImage && !humanControl.humanActive ? "cursor-zoom-in" : "cursor-default",
           )}
           onClick={handleOpenDialog}
@@ -515,7 +416,7 @@ export function BrowserPreviewView({
             loading={loading}
             enabled={enabled}
             addressLabel={addressLabel}
-            subtle={useSubtleChrome}
+            bare={isEmbedded}
             compact={chromeCompact}
             viewportClassName={isWork ? "aspect-[16/10] max-h-36 sm:max-h-40" : undefined}
           >
@@ -533,9 +434,7 @@ export function BrowserPreviewView({
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
             {hasImage ? (
-              <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100"
-              >
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
                 <p className="truncate text-[10px] text-white/85">
                   {frame?.title || host || "Live page"}
                 </p>
@@ -544,14 +443,43 @@ export function BrowserPreviewView({
           </PreviewChrome>
         </button>
 
+        {isEmbedded && hasImage ? (
+          <div className="absolute top-2 right-2 z-[3] flex items-center gap-1 opacity-0 transition-opacity group-hover/screen:opacity-100 focus-within:opacity-100">
+            {ctx ? (
+              <OverlayIconButton label="Float preview over chat" onClick={() => ctx.openPip()}>
+                <PanelRight className="size-3.5" aria-hidden />
+              </OverlayIconButton>
+            ) : null}
+            <OverlayIconButton label="Expand preview" onClick={handleOpenDialog}>
+              <ArrowUpRight className="size-3.5" aria-hidden />
+            </OverlayIconButton>
+          </div>
+        ) : null}
+
+        {caption}
+
+        <BrowserHumanControlBar
+          enabled={enabled}
+          humanActive={humanControl.humanActive}
+          loading={humanControl.loading}
+          inputBusy={humanInputBusy || humanClickBusy}
+          error={humanControl.error}
+          inputError={humanInputError}
+          onTakeControl={() => void humanControl.takeControl()}
+          onReturnControl={() => void humanControl.returnControl()}
+          onTypeText={(text) => void handleHumanTypeText(text)}
+          onPressKey={(key) => void handleHumanPressKey(key)}
+          className={isEmbedded ? "mt-1.5 flex justify-center" : "mt-1.5"}
+        />
+
         {humanClickError ? (
-          <p className="mt-1.5 px-1 text-[11px] text-red-600" role="alert">
+          <p className="mt-1.5 px-1 text-[11px] text-destructive" role="alert">
             {humanClickError}
           </p>
         ) : null}
         {browserToolError ? (
           <div className="mt-1.5 space-y-1.5 px-1" role="alert">
-            <p className="text-[11px] text-red-600">{browserToolError}</p>
+            <p className="text-[11px] text-destructive">{browserToolError}</p>
             {ctx?.refresh ? (
               <Button
                 type="button"
@@ -566,7 +494,7 @@ export function BrowserPreviewView({
           </div>
         ) : null}
         {error && !browserToolError ? (
-          <p className="mt-1.5 px-1 text-[11px] text-red-600" role="alert">
+          <p className="mt-1.5 px-1 text-[11px] text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -574,7 +502,7 @@ export function BrowserPreviewView({
 
       <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
         <DialogContent className="flex max-h-[92vh] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="border-b border-border/70 px-4 py-3 text-left">
+          <DialogHeader className="border-b border-border px-4 py-3 text-left">
             <DialogTitle className="truncate text-base">
               {frame?.title || host || "Live browser"}
             </DialogTitle>
@@ -582,7 +510,7 @@ export function BrowserPreviewView({
               {frame?.url ?? "Updates every few seconds while work is in progress."}
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto bg-[#0f0d14] p-2 sm:p-3">
+          <div className="min-h-0 flex-1 overflow-auto bg-black p-2 sm:p-3">
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img

@@ -47,7 +47,7 @@ export function ConfirmAlertDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         {error ? (
-          <p className="text-sm text-red-700" role="alert">
+          <p className="text-sm text-destructive" role="alert">
             {error}
           </p>
         ) : null}
@@ -58,7 +58,7 @@ export function ConfirmAlertDialog({
             disabled={pending}
             className={cn(
               destructive &&
-                "bg-red-700 text-white hover:bg-red-800 disabled:opacity-50",
+                "bg-destructive/15 text-destructive hover:bg-destructive/25 disabled:opacity-50",
             )}
             onClick={() => void onConfirm()}
           >

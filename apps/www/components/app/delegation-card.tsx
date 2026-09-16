@@ -117,7 +117,7 @@ export function DelegationCard({ delegation, sourceBotName }: DelegationCardProp
                 {artifact.transferStatus === "completed" ? (
                   <a
                     href={`/v1/results/${artifact.resultId}/download`}
-                    className="text-primary hover:underline"
+                    className="text-link hover:underline"
                   >
                     Download
                   </a>
@@ -145,7 +145,7 @@ export function DelegationCard({ delegation, sourceBotName }: DelegationCardProp
               {resumeRunId ? (
                 <Link
                   href={`/app/work/${resumeRunId}`}
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="text-sm font-medium text-link hover:underline"
                 >
                   View follow-up
                 </Link>
@@ -176,7 +176,7 @@ export function DelegationCard({ delegation, sourceBotName }: DelegationCardProp
               {resumeRunId ? (
                 <Link
                   href={`/app/work/${resumeRunId}`}
-                  className="text-sm font-medium text-primary hover:underline"
+                  className="text-sm font-medium text-link hover:underline"
                 >
                   View follow-up
                 </Link>
