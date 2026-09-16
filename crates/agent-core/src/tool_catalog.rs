@@ -31,6 +31,12 @@ pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_get_pull_request",
 ];
 
+pub const CONNECTED_APPS_TOOL_NAMES: &[&str] = &[
+    "connected_apps_search_tools",
+    "connected_apps_load_tool",
+    "connected_apps_execute_tool",
+];
+
 pub const ALL_COMPUTER_TOOL_NAMES: &[&str] = &[
     "workspace_list",
     "workspace_read",
@@ -61,8 +67,20 @@ pub fn is_subagent_tool(name: &str) -> bool {
     SUBAGENT_TOOL_NAMES.contains(&name)
 }
 
-pub fn is_connector_tool(name: &str) -> bool {
+pub fn is_github_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
+}
+
+pub fn is_connected_apps_tool(name: &str) -> bool {
+    CONNECTED_APPS_TOOL_NAMES.contains(&name)
+}
+
+pub fn is_connector_tool(name: &str) -> bool {
+    is_github_connector_tool(name) || is_connected_apps_tool(name)
+}
+
+pub fn is_connected_apps_execute_tool(name: &str) -> bool {
+    name == "connected_apps_execute_tool"
 }
 
 /// Mutation tools that owners may persistently allow, ask, or deny.
@@ -132,7 +150,9 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
-        name if is_connector_tool(name) => Some(PolicyActionGroup::ConnectedApps),
+        name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
+            Some(PolicyActionGroup::ConnectedApps)
+        }
         _ => None,
     }
 }
@@ -148,6 +168,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "browser_download" => "Download files",
         "bot_delegate" => "Hand off work",
         "run_subagent" => "Run subagents",
+        "connected_apps_execute_tool" => "Use a connected app",
         _ => "This action",
     }
 }
@@ -163,6 +184,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "browser_download" => "This Bot is not allowed to download files.".into(),
         "bot_delegate" => "This Bot is not allowed to hand work to another Bot.".into(),
         "run_subagent" => "This Bot is not allowed to run subagents.".into(),
+        "connected_apps_execute_tool" => {
+            "This Bot is not allowed to use this connected app.".into()
+        }
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -190,6 +214,9 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_get_issue",
     "github_list_pull_requests",
     "github_get_pull_request",
+    "connected_apps_search_tools",
+    "connected_apps_load_tool",
+    "connected_apps_execute_tool",
 ];
 
 #[cfg(test)]
@@ -213,8 +240,17 @@ mod tests {
         assert!(is_policy_non_overridable_tool("browser_request_human"));
         assert!(!is_policy_overridable_tool("workspace_read"));
         assert!(!is_policy_overridable_tool("github_list_repositories"));
+        assert!(!is_policy_overridable_tool("connected_apps_execute_tool"));
         assert!(!is_policy_overridable_tool("not_a_tool"));
+        assert_eq!(CONNECTED_APPS_TOOL_NAMES.len(), 3);
         assert!(ALL_AGENT_TOOL_NAMES.contains(&"run_subagent"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"connected_apps_search_tools"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"connected_apps_load_tool"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"connected_apps_execute_tool"));
+        assert_eq!(
+            policy_action_group("connected_apps_execute_tool"),
+            Some(PolicyActionGroup::ConnectedApps)
+        );
         assert_eq!(
             policy_action_group("run_subagent"),
             Some(PolicyActionGroup::Delegation)

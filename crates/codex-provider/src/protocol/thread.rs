@@ -107,30 +107,7 @@ pub fn build_elsewhere_thread_start_params(
             "enabled_tools": enabled_tools,
             "omit_tools_from": omit_tools_from,
             "default_tools_approval_mode": "approve",
-            "tools": {
-                "workspace_list": { "approval_mode": "approve" },
-                "workspace_read": { "approval_mode": "approve" },
-                "workspace_write": { "approval_mode": "approve" },
-                "workspace_exec": { "approval_mode": "approve" },
-                "browser_navigate": { "approval_mode": "approve" },
-                "browser_snapshot": { "approval_mode": "approve" },
-                "browser_click": { "approval_mode": "approve" },
-                "browser_type": { "approval_mode": "approve" },
-                "browser_screenshot": { "approval_mode": "approve" },
-                "browser_download": { "approval_mode": "approve" },
-                "browser_request_human": { "approval_mode": "approve" },
-                "bot_list": { "approval_mode": "approve" },
-                "bot_delegate": { "approval_mode": "approve" },
-                "run_subagent": { "approval_mode": "approve" },
-                "github_list_repositories": { "approval_mode": "approve" },
-                "github_search_repositories": { "approval_mode": "approve" },
-                "github_get_repository": { "approval_mode": "approve" },
-                "github_get_file_contents": { "approval_mode": "approve" },
-                "github_list_issues": { "approval_mode": "approve" },
-                "github_get_issue": { "approval_mode": "approve" },
-                "github_list_pull_requests": { "approval_mode": "approve" },
-                "github_get_pull_request": { "approval_mode": "approve" }
-            }
+            "tools": elsewhere_mcp_tool_approval_map()
         }
     });
 
@@ -169,6 +146,14 @@ pub fn build_elsewhere_thread_resume_params(
 
 pub fn parse_thread_resume_response(value: Value) -> Result<String, CodexProviderError> {
     parse_thread_start_response(value)
+}
+
+fn elsewhere_mcp_tool_approval_map() -> Value {
+    let mut tools = serde_json::Map::new();
+    for name in ALL_AGENT_TOOL_NAMES {
+        tools.insert((*name).to_string(), json!({ "approval_mode": "approve" }));
+    }
+    Value::Object(tools)
 }
 
 pub fn parse_thread_start_response(value: Value) -> Result<String, CodexProviderError> {
@@ -369,6 +354,10 @@ mod tests {
         assert!(
             !encoded.contains("run_subagent"),
             "tool-less helper thread must not expose run_subagent"
+        );
+        assert!(
+            !encoded.contains("connected_apps_execute_tool"),
+            "tool-less helper thread must not expose connected-app tools"
         );
         assert!(
             !encoded.contains("mcpServers") && !encoded.contains("mcp_servers"),

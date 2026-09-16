@@ -428,5 +428,16 @@ mod tests {
         assert!(names.contains(&"workspace_exec".to_string()));
         assert!(names.contains(&"run_subagent".to_string()));
         assert!(names.contains(&"bot_delegate".to_string()));
+        assert!(names.contains(&"connected_apps_search_tools".to_string()));
+        assert!(names.contains(&"connected_apps_load_tool".to_string()));
+        assert!(names.contains(&"connected_apps_execute_tool".to_string()));
+        assert!(names.contains(&"github_list_repositories".to_string()));
+        assert_eq!(
+            names
+                .iter()
+                .filter(|n| n.starts_with("connected_apps_"))
+                .count(),
+            3
+        );
     }
 }

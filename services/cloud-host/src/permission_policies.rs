@@ -136,7 +136,7 @@ impl PermissionPolicyService {
             });
         }
 
-        if let Some(row) = self.load_bot_policy(owner_id, bot_id, action).await? {
+        if let Some(row) = self.load_bot_policy(owner_id, bot_id, action, "").await? {
             return Ok(ResolvedPolicy {
                 action: action.to_string(),
                 decision: parse_stored_decision(&row.decision),
@@ -145,7 +145,7 @@ impl PermissionPolicyService {
             });
         }
 
-        if let Some(row) = self.load_owner_policy(owner_id, action).await? {
+        if let Some(row) = self.load_owner_policy(owner_id, action, "").await? {
             return Ok(ResolvedPolicy {
                 action: action.to_string(),
                 decision: parse_stored_decision(&row.decision),
@@ -162,22 +162,62 @@ impl PermissionPolicyService {
         })
     }
 
+    pub async fn resolve_scoped(
+        &self,
+        owner_id: &str,
+        bot_id: &str,
+        action: &str,
+        scope_key: &str,
+    ) -> Result<ResolvedPolicy, sqlx::Error> {
+        if scope_key.is_empty() {
+            return self.resolve(owner_id, bot_id, action).await;
+        }
+        // Never honor an unscoped Allow for connected-app execute.
+        if let Some(row) = self
+            .load_bot_policy(owner_id, bot_id, action, scope_key)
+            .await?
+        {
+            return Ok(ResolvedPolicy {
+                action: action.to_string(),
+                decision: parse_stored_decision(&row.decision),
+                source: PolicySource::Bot,
+                overridable: true,
+            });
+        }
+        if let Some(row) = self.load_owner_policy(owner_id, action, scope_key).await? {
+            return Ok(ResolvedPolicy {
+                action: action.to_string(),
+                decision: parse_stored_decision(&row.decision),
+                source: PolicySource::Owner,
+                overridable: true,
+            });
+        }
+        Ok(ResolvedPolicy {
+            action: action.to_string(),
+            decision: PolicyDecision::Ask,
+            source: PolicySource::Default,
+            overridable: true,
+        })
+    }
+
     async fn load_bot_policy(
         &self,
         owner_id: &str,
         bot_id: &str,
         action: &str,
+        scope_key: &str,
     ) -> Result<Option<PolicyRow>, sqlx::Error> {
         sqlx::query_as(
             r#"
             SELECT action_key, decision
             FROM bot_permission_policies
-            WHERE owner_id = $1 AND bot_id = $2 AND action_key = $3
+            WHERE owner_id = $1 AND bot_id = $2 AND action_key = $3 AND scope_key = $4
             "#,
         )
         .bind(owner_id)
         .bind(bot_id)
         .bind(action)
+        .bind(scope_key)
         .fetch_optional(&self.pool)
         .await
     }
@@ -186,16 +226,18 @@ impl PermissionPolicyService {
         &self,
         owner_id: &str,
         action: &str,
+        scope_key: &str,
     ) -> Result<Option<PolicyRow>, sqlx::Error> {
         sqlx::query_as(
             r#"
             SELECT action_key, decision
             FROM owner_permission_policies
-            WHERE owner_id = $1 AND action_key = $2
+            WHERE owner_id = $1 AND action_key = $2 AND scope_key = $3
             "#,
         )
         .bind(owner_id)
         .bind(action)
+        .bind(scope_key)
         .fetch_optional(&self.pool)
         .await
     }
@@ -288,10 +330,10 @@ impl PermissionPolicyService {
                 sqlx::query(
                     r#"
                     INSERT INTO owner_permission_policies (
-                        id, owner_id, action_key, decision, resource_scope, created_at, updated_at
+                        id, owner_id, action_key, decision, resource_scope, scope_key, created_at, updated_at
                     )
-                    VALUES ($1, $2, $3, $4, NULL, NOW(), NOW())
-                    ON CONFLICT (owner_id, action_key)
+                    VALUES ($1, $2, $3, $4, NULL, '', NOW(), NOW())
+                    ON CONFLICT (owner_id, action_key, scope_key)
                     DO UPDATE SET decision = EXCLUDED.decision, updated_at = NOW()
                     "#,
                 )
@@ -341,10 +383,10 @@ impl PermissionPolicyService {
                 sqlx::query(
                     r#"
                     INSERT INTO bot_permission_policies (
-                        id, owner_id, bot_id, action_key, decision, resource_scope, created_at, updated_at
+                        id, owner_id, bot_id, action_key, decision, resource_scope, scope_key, created_at, updated_at
                     )
-                    VALUES ($1, $2, $3, $4, $5, NULL, NOW(), NOW())
-                    ON CONFLICT (bot_id, action_key)
+                    VALUES ($1, $2, $3, $4, $5, NULL, '', NOW(), NOW())
+                    ON CONFLICT (bot_id, action_key, scope_key)
                     DO UPDATE SET decision = EXCLUDED.decision, updated_at = NOW()
                     WHERE bot_permission_policies.owner_id = EXCLUDED.owner_id
                     "#,
@@ -370,16 +412,19 @@ impl PermissionPolicyService {
         action: &str,
         decision: PolicyDecision,
         now: DateTime<Utc>,
+        scope_key: &str,
+        resource_scope: Option<serde_json::Value>,
     ) -> Result<(), sqlx::Error> {
         let id = Uuid::new_v4().to_string();
         sqlx::query(
             r#"
             INSERT INTO bot_permission_policies (
-                id, owner_id, bot_id, action_key, decision, resource_scope, created_at, updated_at
+                id, owner_id, bot_id, action_key, decision, resource_scope, scope_key, created_at, updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, NULL, $6, $6)
-            ON CONFLICT (bot_id, action_key)
-            DO UPDATE SET decision = EXCLUDED.decision, updated_at = EXCLUDED.updated_at
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+            ON CONFLICT (bot_id, action_key, scope_key)
+            DO UPDATE SET decision = EXCLUDED.decision, updated_at = EXCLUDED.updated_at,
+                resource_scope = EXCLUDED.resource_scope
             WHERE bot_permission_policies.owner_id = EXCLUDED.owner_id
             "#,
         )
@@ -388,6 +433,8 @@ impl PermissionPolicyService {
         .bind(bot_id)
         .bind(action)
         .bind(decision.as_str())
+        .bind(resource_scope)
+        .bind(scope_key)
         .bind(now)
         .execute(&mut **tx)
         .await?;

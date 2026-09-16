@@ -28,8 +28,9 @@ mod workspace_entries;
 
 pub use approval::{
     approval_action_summary, operation_kind_for_tool, sanitize_tool_arguments,
-    AllowAllApprovalGate, ApprovalDecision, ApprovalError, ToolApprovalContext, ToolApprovalGate,
-    ToolOperationKind, ToolRunContext, MAX_EXEC_COMMAND_CHARS,
+    AllowAllApprovalGate, ApprovalDecision, ApprovalError, ConnectedAppApprovalInfo,
+    ToolApprovalContext, ToolApprovalGate, ToolOperationKind, ToolRunContext,
+    MAX_EXEC_COMMAND_CHARS,
 };
 pub use browser_recovery::{
     browser_recovery_policy_instructions, classify_recoverable_failure, detect_human_blocker,
@@ -51,7 +52,10 @@ pub use computer::{
 };
 pub use connector_tools::connector_openai_tool_definitions;
 pub use connectors::{
-    bound_connector_tool_result, AgentConnectors, ConnectorError, MAX_CONNECTOR_TOOL_RESULT_BYTES,
+    bound_connector_tool_result, truncate_connector_tool_result, AgentConnectors, ConnectorError,
+    ConnectorToolDefinition, ConnectorToolRoute, CONNECTED_APPS_EXECUTE_TOOL,
+    CONNECTED_APPS_LOAD_TOOL, CONNECTED_APPS_SEARCH_TOOL, MAX_CONNECTED_APP_DESCRIPTION_CHARS,
+    MAX_CONNECTED_APP_SEARCH_LIMIT, MAX_CONNECTOR_TOOL_RESULT_BYTES,
 };
 pub use events::{AgentEvent, EventSink, RuntimeError};
 pub use fake_computer::FakeAgentComputer;
@@ -90,12 +94,14 @@ pub use subagent::{
     RUN_SUBAGENT_TOOL_NAME, SUBAGENT_TURN_TIMEOUT_SECS,
 };
 pub use tool_catalog::{
-    is_browser_mutation_tool, is_browser_tool, is_collaboration_tool, is_connector_tool,
-    is_known_agent_tool, is_policy_non_overridable_tool, is_policy_overridable_tool,
-    is_subagent_tool, policy_action_group, policy_action_label, policy_denied_message,
-    PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES, BROWSER_TOOL_NAMES,
-    COLLABORATION_TOOL_NAMES, CONNECTOR_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES,
-    POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
+    is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
+    is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
+    is_github_connector_tool, is_known_agent_tool, is_policy_non_overridable_tool,
+    is_policy_overridable_tool, is_subagent_tool, policy_action_group, policy_action_label,
+    policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES,
+    BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES, CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES,
+    POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
+    WORKSPACE_TOOL_NAMES,
 };
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};

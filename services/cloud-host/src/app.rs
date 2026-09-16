@@ -164,6 +164,38 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/connectors/github/oauth/complete",
             post(api::connectors::github_oauth_complete),
         )
+        .route(
+            "/v1/connectors/installs",
+            get(api::installs::list_installs_handler),
+        )
+        .route(
+            "/v1/connectors/installs/mcp",
+            post(api::installs::create_mcp),
+        )
+        .route(
+            "/v1/connectors/installs/openapi",
+            post(api::installs::create_openapi),
+        )
+        .route(
+            "/v1/connectors/installs/oauth/complete",
+            post(api::installs::oauth_complete),
+        )
+        .route(
+            "/v1/connectors/installs/{id}",
+            get(api::installs::get_install_handler).delete(api::installs::delete_install_handler),
+        )
+        .route(
+            "/v1/connectors/installs/{id}/enabled",
+            post(api::installs::set_enabled),
+        )
+        .route(
+            "/v1/connectors/installs/{id}/rediscover",
+            post(api::installs::rediscover),
+        )
+        .route(
+            "/v1/connectors/installs/{id}/oauth/start",
+            post(api::installs::oauth_start),
+        )
         .route("/v1/providers/status", get(api::providers::status))
         .route(
             "/v1/providers/codex/login/start",

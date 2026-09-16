@@ -1146,3 +1146,79 @@ async fn ask_run_subagent_creates_approval_and_does_not_launch(pool: PgPool) {
         .unwrap();
     assert_eq!(helpers, 0);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn connected_app_mutation_uses_exact_scoped_policy_not_global_allow(pool: PgPool) {
+    use cloud_host::permission_policies::{PermissionPolicyService, PolicyDecision, PolicySource};
+
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    sqlx::query(
+        r#"
+        INSERT INTO bot_permission_policies (
+            id, owner_id, bot_id, action_key, decision, resource_scope, scope_key, created_at, updated_at
+        )
+        VALUES
+            ($1, $2, $3, 'connected_apps_execute_tool', 'allow', '{}'::jsonb, '', NOW(), NOW()),
+            ($4, $2, $3, 'connected_apps_execute_tool', 'allow', '{"installId":"inst-a","remoteTool":"create_doc"}'::jsonb,
+             'install:inst-a/tool:create_doc', NOW(), NOW()),
+            ($5, $2, $3, 'connected_apps_execute_tool', 'deny', '{"installId":"inst-a","remoteTool":"delete_doc"}'::jsonb,
+             'install:inst-a/tool:delete_doc', NOW(), NOW())
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&owner)
+    .bind(&bot_id)
+    .bind(Uuid::new_v4().to_string())
+    .bind(Uuid::new_v4().to_string())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let policies = PermissionPolicyService::new(pool);
+    let unscoped = policies
+        .resolve(&owner, &bot_id, "connected_apps_execute_tool")
+        .await
+        .unwrap();
+    assert_eq!(unscoped.decision, PolicyDecision::Ask);
+    assert!(!unscoped.overridable);
+
+    let allowed = policies
+        .resolve_scoped(
+            &owner,
+            &bot_id,
+            "connected_apps_execute_tool",
+            "install:inst-a/tool:create_doc",
+        )
+        .await
+        .unwrap();
+    assert_eq!(allowed.decision, PolicyDecision::Allow);
+    assert_eq!(allowed.source, PolicySource::Bot);
+
+    let denied = policies
+        .resolve_scoped(
+            &owner,
+            &bot_id,
+            "connected_apps_execute_tool",
+            "install:inst-a/tool:delete_doc",
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.decision, PolicyDecision::Deny);
+
+    let other_tool = policies
+        .resolve_scoped(
+            &owner,
+            &bot_id,
+            "connected_apps_execute_tool",
+            "install:inst-a/tool:other",
+        )
+        .await
+        .unwrap();
+    assert_eq!(other_tool.decision, PolicyDecision::Ask);
+
+    assert!(
+        PermissionPolicyService::validate_overridable_action("connected_apps_execute_tool")
+            .is_err()
+    );
+}

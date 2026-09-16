@@ -5,7 +5,7 @@ use std::time::Duration;
 use agent_core::{
     approval_action_summary, is_policy_overridable_tool, policy_action_label,
     sanitize_tool_arguments, ApprovalDecision, ApprovalError, EventSink, ToolApprovalContext,
-    ToolOperationKind,
+    ToolOperationKind, CONNECTED_APPS_EXECUTE_TOOL,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -505,17 +505,36 @@ impl ApprovalService {
             .await
             .unwrap_or(None)
             .unwrap_or_else(|| "this Bot".into());
-        let policy_overridable = is_policy_overridable_tool(&context.tool_name);
+        let policy_overridable =
+            is_policy_overridable_tool(&context.tool_name) || context.connected_app.is_some();
         let requested_payload = json!({
             "approvalId": approval_id,
             "tool": context.tool_name,
             "operationKind": "mutation",
-            "summary": summary,
+            "summary": if let Some(app) = &context.connected_app {
+                format!(
+                    "{bot_name} wants to use {}: {}",
+                    app.app_name, app.remote_tool
+                )
+            } else {
+                summary.clone()
+            },
             "waitingForApproval": true,
             "botId": context.bot_id,
             "botName": bot_name,
             "policyOverridable": policy_overridable,
-            "policyActionLabel": policy_action_label(&context.tool_name),
+            "policyActionLabel": if context.connected_app.is_some() {
+                context
+                    .connected_app
+                    .as_ref()
+                    .map(|app| format!("{} in {}", app.remote_tool, app.app_name))
+                    .unwrap_or_else(|| policy_action_label(&context.tool_name).to_string())
+            } else {
+                policy_action_label(&context.tool_name).to_string()
+            },
+            "connectedAppName": context.connected_app.as_ref().map(|a| a.app_name.clone()),
+            "connectedToolName": context.connected_app.as_ref().map(|a| a.remote_tool.clone()),
+            "argumentSummary": context.arguments.get("argumentSummary"),
         });
 
         let persist_emit = async {
@@ -576,18 +595,54 @@ impl ApprovalService {
         if self.expire_pending_if_due(approval_id, &row.run_id).await? {
             return Ok(PersistPolicyResolution::NotFound);
         }
-        if !is_policy_overridable_tool(&row.tool_name) {
+        if !is_policy_overridable_tool(&row.tool_name)
+            && row.tool_name != CONNECTED_APPS_EXECUTE_TOOL
+        {
             return Ok(PersistPolicyResolution::NotOverridable);
         }
         let Some(bot_id) = row.bot_id.clone() else {
             return Ok(PersistPolicyResolution::NotFound);
         };
 
+        let (scope_key, resource_scope) = if row.tool_name == CONNECTED_APPS_EXECUTE_TOOL {
+            let install_id = row
+                .arguments_json
+                .get("installId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let remote_tool = row
+                .arguments_json
+                .get("remoteTool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if install_id.is_empty() || remote_tool.is_empty() {
+                return Ok(PersistPolicyResolution::NotOverridable);
+            }
+            (
+                format!("install:{install_id}/tool:{remote_tool}"),
+                Some(json!({
+                    "installId": install_id,
+                    "remoteTool": remote_tool
+                })),
+            )
+        } else {
+            (String::new(), None)
+        };
+
         let mut tx = self.pool.begin().await?;
         let now = Utc::now();
         let policies = PermissionPolicyService::new(self.pool.clone());
         policies
-            .upsert_bot_decision_in_tx(&mut tx, owner_id, &bot_id, &row.tool_name, decision, now)
+            .upsert_bot_decision_in_tx(
+                &mut tx,
+                owner_id,
+                &bot_id,
+                &row.tool_name,
+                decision,
+                now,
+                &scope_key,
+                resource_scope,
+            )
             .await?;
 
         let status = match decision {

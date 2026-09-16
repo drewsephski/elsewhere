@@ -4,9 +4,9 @@ export default function ConnectorsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Connectors</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Integrations</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Link external services so Bots can use structured read APIs instead of browser automation.
+          Apps and tools your Bots can use.
         </p>
       </div>
       <ConnectorsManager />

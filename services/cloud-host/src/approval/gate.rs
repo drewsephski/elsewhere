@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use agent_core::{
     ApprovalDecision, ApprovalError, EventSink, ToolApprovalContext, ToolApprovalGate,
-    ToolOperationKind,
+    ToolOperationKind, CONNECTED_APPS_EXECUTE_TOOL,
 };
 use async_trait::async_trait;
 use serde_json::json;
@@ -74,11 +74,23 @@ impl ToolApprovalGate for RunScopedApprovalGate {
             return Err(ApprovalError::Cancelled);
         }
 
-        let resolved = self
-            .policies
-            .resolve(&context.owner_id, &context.bot_id, &context.tool_name)
-            .await
-            .map_err(|e| ApprovalError::Internal(e.to_string()))?;
+        let resolved = if let Some(app) = &context.connected_app {
+            let scope_key = format!("install:{}/tool:{}", app.install_id, app.remote_tool);
+            self.policies
+                .resolve_scoped(
+                    &context.owner_id,
+                    &context.bot_id,
+                    CONNECTED_APPS_EXECUTE_TOOL,
+                    &scope_key,
+                )
+                .await
+                .map_err(|e| ApprovalError::Internal(e.to_string()))?
+        } else {
+            self.policies
+                .resolve(&context.owner_id, &context.bot_id, &context.tool_name)
+                .await
+                .map_err(|e| ApprovalError::Internal(e.to_string()))?
+        };
 
         if resolved.overridable {
             match resolved.decision {

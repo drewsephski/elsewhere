@@ -5,7 +5,11 @@ pub const MAX_EXEC_COMMAND_CHARS: usize = 500;
 pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
-use crate::tool_catalog::{is_browser_tool, is_collaboration_tool, is_connector_tool};
+use crate::connectors::ConnectorToolDefinition;
+use crate::tool_catalog::{
+    is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool, is_connected_apps_tool,
+    is_github_connector_tool,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -24,6 +28,14 @@ pub struct ToolRunContext {
     pub tool_invocation_id: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectedAppApprovalInfo {
+    pub install_id: String,
+    pub app_name: String,
+    pub remote_tool: String,
+    pub read_only: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct ToolApprovalContext {
     pub run_id: String,
@@ -34,6 +46,7 @@ pub struct ToolApprovalContext {
     pub tool_name: String,
     pub operation_kind: ToolOperationKind,
     pub arguments: Value,
+    pub connected_app: Option<ConnectedAppApprovalInfo>,
 }
 
 impl ToolApprovalContext {
@@ -47,6 +60,36 @@ impl ToolApprovalContext {
             tool_name: tool_name.to_string(),
             operation_kind: operation_kind_for_tool(tool_name),
             arguments: sanitize_tool_arguments(tool_name, &arguments),
+            connected_app: None,
+        }
+    }
+
+    pub fn for_connected_app_execute(
+        run: &ToolRunContext,
+        tool: &ConnectorToolDefinition,
+        call_args: &Value,
+    ) -> Self {
+        let info = ConnectedAppApprovalInfo {
+            install_id: tool.install_id.clone(),
+            app_name: tool.source.clone(),
+            remote_tool: tool.name.clone(),
+            read_only: tool.read_only,
+        };
+        let operation_kind = if tool.read_only {
+            ToolOperationKind::Read
+        } else {
+            ToolOperationKind::Mutation
+        };
+        Self {
+            run_id: run.run_id.clone(),
+            request_id: run.request_id.clone(),
+            owner_id: run.owner_id.clone(),
+            bot_id: run.bot_id.clone(),
+            computer_id: run.computer_id.clone(),
+            tool_name: crate::connectors::CONNECTED_APPS_EXECUTE_TOOL.to_string(),
+            operation_kind,
+            arguments: sanitize_connected_app_execute_arguments(&info, call_args),
+            connected_app: Some(info),
         }
     }
 }
@@ -91,7 +134,11 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "bot_delegate" => ToolOperationKind::Mutation,
         "run_subagent" => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
-        name if is_connector_tool(name) => ToolOperationKind::Read,
+        name if is_github_connector_tool(name) => ToolOperationKind::Read,
+        name if is_connected_apps_tool(name) && !is_connected_apps_execute_tool(name) => {
+            ToolOperationKind::Read
+        }
+        "connected_apps_execute_tool" => ToolOperationKind::Mutation,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "browser_snapshot" => ToolOperationKind::Read,
         "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
@@ -159,9 +206,94 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "taskLength": args.get("task").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
             "contextLength": args.get("context").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
         }),
+        "connected_apps_search_tools" | "connected_apps_load_tool" => json!({
+            "query": args.get("query").and_then(|v| v.as_str()).unwrap_or(""),
+            "source": args.get("source").and_then(|v| v.as_str()).unwrap_or(""),
+            "toolId": args.get("toolId").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        "connected_apps_execute_tool" => {
+            let info = ConnectedAppApprovalInfo {
+                install_id: args
+                    .get("installId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                app_name: args
+                    .get("appName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("connected app")
+                    .to_string(),
+                remote_tool: args
+                    .get("remoteTool")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                read_only: args
+                    .get("readOnly")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
+            };
+            let call_args = args.get("arguments").unwrap_or(args);
+            sanitize_connected_app_execute_arguments(&info, call_args)
+        }
         _ if is_collaboration_tool(tool_name) => json!({}),
         _ => json!({}),
     }
+}
+
+fn sanitize_connected_app_execute_arguments(
+    info: &ConnectedAppApprovalInfo,
+    call_args: &Value,
+) -> Value {
+    json!({
+        "installId": info.install_id,
+        "appName": info.app_name,
+        "remoteTool": info.remote_tool,
+        "readOnly": info.read_only,
+        "argumentSummary": summarize_connected_app_args(call_args)
+    })
+}
+
+fn summarize_connected_app_args(args: &Value) -> Value {
+    let Some(obj) = args.as_object() else {
+        return json!({});
+    };
+    let mut out = serde_json::Map::new();
+    for (key, value) in obj.iter().take(12) {
+        let lower = key.to_ascii_lowercase();
+        if lower.contains("token")
+            || lower.contains("secret")
+            || lower.contains("password")
+            || lower.contains("authorization")
+            || lower.contains("cookie")
+            || lower.contains("apikey")
+            || lower.contains("api_key")
+        {
+            out.insert(key.clone(), json!("[redacted]"));
+            continue;
+        }
+        match value {
+            Value::String(s) => {
+                out.insert(key.clone(), json!(truncate_str(s, 80)));
+            }
+            Value::Number(n) => {
+                out.insert(key.clone(), json!(n));
+            }
+            Value::Bool(b) => {
+                out.insert(key.clone(), json!(b));
+            }
+            Value::Null => {
+                out.insert(key.clone(), json!(null));
+            }
+            Value::Array(items) => {
+                out.insert(key.clone(), json!({ "itemCount": items.len() }));
+            }
+            Value::Object(map) => {
+                out.insert(key.clone(), json!({ "fieldCount": map.len() }));
+            }
+        }
+    }
+    json!(out)
 }
 
 pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
@@ -211,6 +343,17 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .unwrap_or("helper");
             format!("Run subagent {name}")
         }
+        "connected_apps_execute_tool" => {
+            let app = sanitized
+                .get("appName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("a connected app");
+            let tool = sanitized
+                .get("remoteTool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("tool");
+            format!("Use {app}: {tool}")
+        }
         other => format!("Approve {other}"),
     }
 }
@@ -236,6 +379,18 @@ mod tests {
         assert_eq!(
             operation_kind_for_tool("github_list_repositories"),
             ToolOperationKind::Read
+        );
+        assert_eq!(
+            operation_kind_for_tool("connected_apps_search_tools"),
+            ToolOperationKind::Read
+        );
+        assert_eq!(
+            operation_kind_for_tool("connected_apps_load_tool"),
+            ToolOperationKind::Read
+        );
+        assert_eq!(
+            operation_kind_for_tool("connected_apps_execute_tool"),
+            ToolOperationKind::Mutation
         );
         assert_eq!(
             operation_kind_for_tool("workspace_list"),
@@ -284,6 +439,7 @@ mod tests {
                 tool_name: "workspace_exec".into(),
                 operation_kind: ToolOperationKind::Mutation,
                 arguments: json!({"command":"echo hi"}),
+                connected_app: None,
             })
             .await
             .expect("authorize");

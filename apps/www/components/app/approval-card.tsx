@@ -21,6 +21,9 @@ export interface ApprovalRequestedPayload {
   botName?: string;
   policyOverridable?: boolean;
   policyActionLabel?: string;
+  connectedAppName?: string;
+  connectedToolName?: string;
+  argumentSummary?: Record<string, unknown>;
 }
 
 interface ApprovalCardProps {
@@ -116,7 +119,8 @@ export function ApprovalCard({
   const resolved = status !== "pending";
   const botName = payload.botName?.trim() || "this Bot";
   const actionLabel = (payload.policyActionLabel ?? payload.tool).toLowerCase();
-  const showPersistent = payload.policyOverridable !== false && Boolean(payload.tool);
+  const showPersistent = payload.policyOverridable === true;
+  const argumentSummary = payload.argumentSummary;
 
   return (
     <div
@@ -126,6 +130,17 @@ export function ApprovalCard({
     >
       <p className="font-medium text-foreground">Approval required</p>
       <p className="mt-1 text-foreground/85">{payload.summary}</p>
+      {payload.connectedAppName ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {botName} · {payload.connectedAppName}
+          {payload.connectedToolName ? ` · ${payload.connectedToolName}` : ""}
+        </p>
+      ) : null}
+      {argumentSummary && Object.keys(argumentSummary).length > 0 ? (
+        <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-background/40 p-2 text-xs text-foreground/80">
+          {JSON.stringify(argumentSummary, null, 2)}
+        </pre>
+      ) : null}
       <p className="mt-1 text-xs text-muted-foreground">Approve this action once. Your bot will wait for your decision.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
