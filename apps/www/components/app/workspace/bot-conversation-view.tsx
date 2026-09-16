@@ -449,8 +449,7 @@ export function BotConversationView({
           <BotCreatureAvatar
             name={bot?.name ?? "Bot"}
             avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-            size="xs"
-            variant="tile"
+            size="sm"
             animated={Boolean(streamRunId)}
           />
           {onRenameBot && bot ? (
@@ -589,6 +588,13 @@ export function BotConversationView({
                             undefined
                           : undefined
                       }
+                      leading={
+                        <BotCreatureAvatar
+                          name={bot?.name ?? "Bot"}
+                          avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                          size="xs"
+                        />
+                      }
                     />
                     <WorkStatusCard run={run} actions={deleteAction}>
                       <ChatResultCards runId={run.runId} />
@@ -598,7 +604,15 @@ export function BotConversationView({
 
                 {isLive ? (
                   <>
-                    <AssistantMessageBubble>
+                    <AssistantMessageBubble
+                      leading={
+                        <BotCreatureAvatar
+                          name={bot?.name ?? "Bot"}
+                          avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                          size="xs"
+                        />
+                      }
+                    >
                       {assistantStream.commentaryText ? (
                         <p className="mb-1.5 text-xs text-muted-foreground">
                           {assistantStream.commentaryText}
@@ -653,15 +667,13 @@ export function BotConversationView({
               <BotCreatureAvatar
                 name={bot?.name ?? "Bot"}
                 avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                size="xl"
-                variant="tile"
+                size="2xl"
               />
               <p className="mt-4 text-[13px] font-medium text-foreground">
                 {bot?.name ? `Message ${bot.name}` : "Start a conversation"}
               </p>
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Describe the outcome you want—a report, a draft, or a task on its computer.
-                Progress, results and approvals show up right here.
+                Describe the outcome you want—a report, results and approvals show up right here.
               </p>
             </div>
           ) : null}

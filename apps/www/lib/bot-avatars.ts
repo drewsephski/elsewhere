@@ -1,5 +1,27 @@
 import type { BotCreatureKind, BotCreatureColors, BotCreatureSpec } from "@/lib/bot-visual";
 
+export const JOB_BOT_IMAGES = {
+  writer: "/marketing/job-bots/writer.png",
+  researcher: "/marketing/job-bots/researcher.png",
+  analyst: "/marketing/job-bots/analyst.png",
+  finance: "/marketing/job-bots/finance.png",
+  engineer: "/marketing/job-bots/engineer.png",
+  designer: "/marketing/job-bots/designer.png",
+  marketing: "/marketing/job-bots/marketing.png",
+  chiefOfStaff: "/marketing/job-bots/chief-of-staff.png",
+} as const;
+
+const JOB_BOT_IMAGE_LIST: string[] = [
+  JOB_BOT_IMAGES.researcher,
+  JOB_BOT_IMAGES.writer,
+  JOB_BOT_IMAGES.analyst,
+  JOB_BOT_IMAGES.finance,
+  JOB_BOT_IMAGES.engineer,
+  JOB_BOT_IMAGES.designer,
+  JOB_BOT_IMAGES.marketing,
+  JOB_BOT_IMAGES.chiefOfStaff,
+];
+
 export interface BotAvatarPreset {
   id: string;
   label: string;
@@ -7,6 +29,8 @@ export interface BotAvatarPreset {
   suggestedName: string;
   /** Prefilled role / instructions in the create dialog */
   suggestedRole: string;
+  /** Job-bot illustration used in chat, pickers, and the landing roster. */
+  image: string;
   kind: BotCreatureKind;
   colors: BotCreatureColors;
   expression: number;
@@ -20,13 +44,14 @@ const base = {
   pupil: "#0F172A",
 } as const;
 
-export const DEFAULT_BOT_AVATAR_ID = "sky-wisp";
+export const DEFAULT_BOT_AVATAR_ID = "berry-puff";
 
-export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
+const ALL_BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
   {
     id: "sky-wisp",
     label: "Sky",
     suggestedName: "CEO",
+    image: JOB_BOT_IMAGES.chiefOfStaff,
     suggestedRole:
       "You are my CEO bot. Clarify goals, prioritize what matters, delegate crisply, and summarize decisions and tradeoffs. Push back when plans are vague. Ask for approval before external commitments or spend.",
     kind: "wisp",
@@ -48,6 +73,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "violet-kitty",
     label: "Violet",
     suggestedName: "Designer",
+    image: JOB_BOT_IMAGES.designer,
     suggestedRole:
       "You are my design specialist. Inspect live interfaces with browser tools and screenshots when visual context matters. Propose concrete layout, hierarchy, typography, and UX copy changes; keep accessibility and responsive behavior in mind. Save specs, assets, and annotated screenshots to this assignment's results folder and explain your design rationale.",
     kind: "kitty",
@@ -69,6 +95,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "amber-puff",
     label: "Amber",
     suggestedName: "Researcher",
+    image: JOB_BOT_IMAGES.researcher,
     suggestedRole:
       "You are my research specialist. Use browser tools to gather sources, compare options, and write concise briefs with citations. Save links, notes, and exports to this assignment's results folder. Flag uncertainty and separate facts from assumptions.",
     kind: "puff",
@@ -90,6 +117,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "emerald-bunny",
     label: "Emerald",
     suggestedName: "Project Manager",
+    image: JOB_BOT_IMAGES.chiefOfStaff,
     suggestedRole:
       "You are my project manager. Break work into steps, track dependencies, and keep stakeholders updated with clear status notes saved to the results folder. Surface risks early and propose realistic timelines.",
     kind: "bunny",
@@ -111,6 +139,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "rose-sprout",
     label: "Rose",
     suggestedName: "Writer",
+    image: JOB_BOT_IMAGES.writer,
     suggestedRole:
       "You are my writing specialist. Draft clear, on-brand copy and refine tone for the audience. Save drafts and final versions to this assignment's results folder and call out open questions before publishing.",
     kind: "sprout",
@@ -132,6 +161,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "teal-wisp",
     label: "Teal",
     suggestedName: "Engineer",
+    image: JOB_BOT_IMAGES.engineer,
     suggestedRole:
       "You are my engineering specialist. Implement and verify changes on the computer workspace, run checks when possible, and document diffs and test results. Save code artifacts and logs to this assignment's results folder. Ask for approval before destructive or production-impacting steps.",
     kind: "wisp",
@@ -153,6 +183,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "coral-puff",
     label: "Coral",
     suggestedName: "Marketing",
+    image: JOB_BOT_IMAGES.marketing,
     suggestedRole:
       "You are my marketing bot. Shape messaging, campaigns, and launch narratives. Tie ideas to audience pain points and measurable outcomes.",
     kind: "puff",
@@ -174,6 +205,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "indigo-kitty",
     label: "Indigo",
     suggestedName: "Analyst",
+    image: JOB_BOT_IMAGES.analyst,
     suggestedRole:
       "You are my analyst bot. Turn data and notes into insights, charts, and recommendations. Show your work and highlight what would change your conclusion.",
     kind: "kitty",
@@ -195,6 +227,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "lime-sprout",
     label: "Lime",
     suggestedName: "Support",
+    image: JOB_BOT_IMAGES.writer,
     suggestedRole:
       "You are my support bot. Answer questions clearly, troubleshoot step by step, and escalate when human judgment is needed. Stay patient and precise.",
     kind: "sprout",
@@ -216,6 +249,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "slate-bunny",
     label: "Slate",
     suggestedName: "Finance",
+    image: JOB_BOT_IMAGES.finance,
     suggestedRole:
       "You are my finance bot. Model costs, budgets, and scenarios. Be conservative with assumptions and flag compliance-sensitive areas for human review.",
     kind: "bunny",
@@ -237,6 +271,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "sunset-sprout",
     label: "Sunset",
     suggestedName: "Creative Director",
+    image: JOB_BOT_IMAGES.designer,
     suggestedRole:
       "You are my creative director bot. Set visual and narrative direction, critique work constructively, and keep brand consistency across deliverables.",
     kind: "sprout",
@@ -258,6 +293,7 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
     id: "berry-puff",
     label: "Berry",
     suggestedName: "Chief of Staff",
+    image: JOB_BOT_IMAGES.chiefOfStaff,
     suggestedRole:
       "You are my chief of staff bot. Coordinate priorities, prep briefings, and follow through on open loops. Keep useful files on your computer and explain results clearly.",
     kind: "puff",
@@ -277,13 +313,60 @@ export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = [
   },
 ];
 
-const presetById = new Map(BOT_AVATAR_PRESETS.map((preset) => [preset.id, preset]));
+const PICKER_AVATAR_IDS = [
+  "amber-puff",
+  "rose-sprout",
+  "indigo-kitty",
+  "slate-bunny",
+  "teal-wisp",
+  "violet-kitty",
+  "coral-puff",
+  "berry-puff",
+] as const;
+
+export const BOT_AVATAR_PRESETS: BotAvatarPreset[] = PICKER_AVATAR_IDS.map(
+  (id) => ALL_BOT_AVATAR_PRESETS.find((preset) => preset.id === id)!,
+);
+
+const presetById = new Map(ALL_BOT_AVATAR_PRESETS.map((preset) => [preset.id, preset]));
+
+function hashName(name: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < name.length; i += 1) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 
 export function getBotAvatarPreset(avatarId: string | null | undefined): BotAvatarPreset {
   if (avatarId && presetById.has(avatarId)) {
     return presetById.get(avatarId)!;
   }
   return presetById.get(DEFAULT_BOT_AVATAR_ID)!;
+}
+
+export function botAvatarImage(
+  avatarId?: string | null,
+  name?: string,
+): string {
+  if (avatarId && presetById.has(avatarId)) {
+    return presetById.get(avatarId)!.image;
+  }
+
+  const trimmed = name?.trim() ?? "";
+  if (trimmed) {
+    const needle = trimmed.toLowerCase();
+    const named = ALL_BOT_AVATAR_PRESETS.find(
+      (preset) => preset.suggestedName.toLowerCase() === needle,
+    );
+    if (named) {
+      return named.image;
+    }
+    return JOB_BOT_IMAGE_LIST[hashName(trimmed) % JOB_BOT_IMAGE_LIST.length]!;
+  }
+
+  return getBotAvatarPreset(DEFAULT_BOT_AVATAR_ID).image;
 }
 
 export function botAvatarFormDefaults(avatarId: string): {

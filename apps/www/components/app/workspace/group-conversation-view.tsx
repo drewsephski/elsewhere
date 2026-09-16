@@ -387,7 +387,6 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                     name={item.authorBotName ?? "Bot"}
                     avatarId={item.authorAvatarId ?? DEFAULT_BOT_AVATAR_ID}
                     size="xs"
-                    variant="tile"
                   />
                 }
                 footer={
@@ -470,7 +469,6 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                         name={bot.name}
                         avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                         size="xs"
-                        variant="tile"
                       />
                       <span className="truncate">{bot.name}</span>
                     </DropdownMenuItem>

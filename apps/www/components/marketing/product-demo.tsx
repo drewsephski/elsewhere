@@ -188,7 +188,7 @@ export function ProductDemo({ onGetStarted }: ProductDemoProps) {
 
             <div ref={threadRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
               {thread.map((message) => (
-                <DemoBubble key={message.id} message={message} />
+                <DemoBubble key={message.id} message={message} bot={selected} />
               ))}
             </div>
 
@@ -473,25 +473,7 @@ function ComputerPanel({
   );
 }
 
-function DemoBubble({ message }: { message: DemoMessage }) {
-  if (message.checklist) {
-    return (
-      <div className="max-w-[92%] rounded-2xl bg-[#1c1c1c] px-3.5 py-3 text-[13.5px] text-white/85">
-        <ul className="space-y-1.5">
-          {message.checklist.map((item) => (
-            <li key={item.label} className="flex items-start gap-2">
-              <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
-              <span>
-                <span className="font-medium text-white">{item.label}</span>
-                <span className="text-white/45"> → {item.detail}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
+function DemoBubble({ message, bot }: { message: DemoMessage; bot: DemoBot }) {
   if (message.role === "user") {
     return (
       <div className="ml-auto max-w-[80%] rounded-2xl bg-[#f2f2f2] px-3.5 py-2.5 text-[13.5px] leading-5 text-[#111]">
@@ -500,9 +482,28 @@ function DemoBubble({ message }: { message: DemoMessage }) {
     );
   }
 
+  const body = message.checklist ? (
+    <ul className="space-y-1.5">
+      {message.checklist.map((item) => (
+        <li key={item.label} className="flex items-start gap-2">
+          <Check className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
+          <span>
+            <span className="font-medium text-white">{item.label}</span>
+            <span className="text-white/45"> → {item.detail}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    message.text
+  );
+
   return (
-    <div className="max-w-[92%] rounded-2xl bg-[#1c1c1c] px-3.5 py-2.5 text-[13.5px] leading-5 text-white/85">
-      {message.text}
+    <div className="flex max-w-[92%] items-end gap-2">
+      <DemoBotAvatar name={bot.name} image={bot.image} size="xs" />
+      <div className="min-w-0 rounded-2xl bg-[#1c1c1c] px-3.5 py-2.5 text-[13.5px] leading-5 text-white/85">
+        {body}
+      </div>
     </div>
   );
 }

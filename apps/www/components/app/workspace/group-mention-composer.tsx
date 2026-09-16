@@ -230,7 +230,6 @@ export function GroupMentionComposer({
                   name={option.name}
                   avatarId={option.avatarId}
                   size="xs"
-                  variant="tile"
                 />
                 <span className="min-w-0 flex-1 truncate">
                   @{option.name}

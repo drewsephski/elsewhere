@@ -274,7 +274,6 @@ export function BotListSidebar({
                   name={bot.name}
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                   size="lg"
-                  variant="tile"
                 />
                 <span className="w-full truncate text-center text-[10px] font-medium">
                   {bot.name.split(" ")[0]}
@@ -379,7 +378,6 @@ export function BotListSidebar({
                   name={bot.name}
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                   size="sm"
-                  variant="tile"
                   animated={selected && presenceIsActive(bot.presence)}
                 />
                 <div className="min-w-0 flex-1">

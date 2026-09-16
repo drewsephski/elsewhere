@@ -38,7 +38,7 @@ export function BotAvatarPicker({
       <LayoutGroup id="bot-avatar-picker">
         <div
           className={cn(
-            "grid grid-cols-4 sm:grid-cols-6",
+            "grid grid-cols-4",
             compact ? "gap-1.5 p-1.5" : "gap-2.5 p-1",
           )}
           role="radiogroup"
@@ -82,7 +82,7 @@ export function BotAvatarPicker({
                   <BotCreatureAvatar
                     name={preset.suggestedName}
                     avatarId={preset.id}
-                    size={compact ? "sm" : "md"}
+                    size={compact ? "md" : "lg"}
                   />
                   <span
                     className={cn(
@@ -92,11 +92,6 @@ export function BotAvatarPicker({
                   >
                     {preset.suggestedName}
                   </span>
-                  {!compact ? (
-                    <span className="w-full truncate text-center text-[9px] text-muted-foreground">
-                      {preset.label}
-                    </span>
-                  ) : null}
                 </span>
               </button>
             );

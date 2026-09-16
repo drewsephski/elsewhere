@@ -3,16 +3,18 @@
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export function RunAssistantSnippet({
   runId,
   fallbackText,
   className,
+  leading,
 }: {
   runId: string;
   fallbackText?: string | null;
   className?: string;
+  leading?: ReactNode;
 }) {
   const [text, setText] = useState<string | null>(
     fallbackText?.trim() ? fallbackText.trim() : null,
@@ -45,7 +47,7 @@ export function RunAssistantSnippet({
   }
 
   return (
-    <AssistantMessageBubble className={className}>
+    <AssistantMessageBubble className={className} leading={leading}>
       <MarkdownContent text={text} />
     </AssistantMessageBubble>
   );
