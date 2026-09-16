@@ -139,19 +139,12 @@ impl Config {
                 }
             });
 
-        let browser_profiles_dir = env::var("ELSEWHERE_BROWSER_PROFILES_DIR")
-            .ok()
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-            .or_else(|| {
-                if browser_enabled {
-                    std::env::current_dir()
-                        .ok()
-                        .map(|cwd| cwd.join(".data").join("browser-profiles"))
-                } else {
-                    None
-                }
-            });
+        let browser_profiles_dir = resolve_browser_profiles_dir(
+            env::var("ELSEWHERE_BROWSER_PROFILES_DIR").ok(),
+            browser_enabled,
+            auth_mode,
+            std::env::current_dir().ok(),
+        );
 
         let bind_addr = resolve_bind_addr(auth_mode)?;
         validate_bind_addr(auth_mode, &bind_addr)?;
@@ -226,6 +219,37 @@ impl Config {
 
 fn which_codex_on_path() -> Option<PathBuf> {
     codex_provider::which_codex_executable().ok()
+}
+
+/// Host-only root for durable Chromium sign-in profiles.
+///
+/// `ELSEWHERE_BROWSER_PROFILES_DIR` always wins. Hosted deployments must set it to an absolute
+/// path on a persistent volume that the service user can write after privileges drop; the Fly
+/// config (`infra/fly/runner.toml`) is the source of truth for the alpha runner. The
+/// working-directory fallback exists only for local development: inside a container it resolves
+/// to something like `/app/.data/browser-profiles`, which is neither durable nor creatable by the
+/// non-root service user, so any non-hybrid deployment relying on it gets a startup warning.
+fn resolve_browser_profiles_dir(
+    env_value: Option<String>,
+    browser_enabled: bool,
+    auth_mode: AuthMode,
+    cwd: Option<PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(explicit) = env_value.filter(|v| !v.trim().is_empty()) {
+        return Some(PathBuf::from(explicit));
+    }
+    if !browser_enabled {
+        return None;
+    }
+    let fallback = cwd.map(|cwd| cwd.join(".data").join("browser-profiles"));
+    if auth_mode != AuthMode::Hybrid {
+        tracing::warn!(
+            browser_profiles_dir = ?fallback,
+            "ELSEWHERE_BROWSER_PROFILES_DIR is unset; falling back to the working directory. \
+             Hosted runners must point it at a persistent host-only volume path"
+        );
+    }
+    fallback
 }
 
 fn require_env(key: &str) -> Result<String, String> {
@@ -321,6 +345,59 @@ mod tests {
         assert_eq!(
             parse_bool_env("ELSEWHERE_ENFORCE_TOOL_APPROVALS").unwrap_or(true),
             true
+        );
+    }
+
+    #[test]
+    fn browser_profiles_dir_env_override_wins_in_every_mode() {
+        let hosted = PathBuf::from("/var/lib/elsewhere/browser-profiles");
+        for mode in [AuthMode::Jwt, AuthMode::Hybrid, AuthMode::InternalToken] {
+            assert_eq!(
+                resolve_browser_profiles_dir(
+                    Some(hosted.to_string_lossy().into_owned()),
+                    true,
+                    mode,
+                    Some(PathBuf::from("/app")),
+                ),
+                Some(hosted.clone())
+            );
+        }
+    }
+
+    #[test]
+    fn browser_profiles_dir_blank_env_is_treated_as_unset() {
+        let cwd = PathBuf::from("/repo");
+        assert_eq!(
+            resolve_browser_profiles_dir(Some("".into()), true, AuthMode::Hybrid, Some(cwd.clone())),
+            Some(cwd.join(".data").join("browser-profiles"))
+        );
+        assert_eq!(
+            resolve_browser_profiles_dir(Some("   ".into()), true, AuthMode::Hybrid, Some(cwd)),
+            Some(PathBuf::from("/repo/.data/browser-profiles"))
+        );
+    }
+
+    #[test]
+    fn browser_profiles_dir_local_dev_defaults_under_cwd() {
+        assert_eq!(
+            resolve_browser_profiles_dir(None, true, AuthMode::Hybrid, Some(PathBuf::from("/repo"))),
+            Some(PathBuf::from("/repo/.data/browser-profiles"))
+        );
+        assert_eq!(
+            resolve_browser_profiles_dir(None, true, AuthMode::Jwt, Some(PathBuf::from("/app"))),
+            Some(PathBuf::from("/app/.data/browser-profiles"))
+        );
+    }
+
+    #[test]
+    fn browser_profiles_dir_is_none_when_browser_disabled_or_cwd_unknown() {
+        assert_eq!(
+            resolve_browser_profiles_dir(None, false, AuthMode::Hybrid, Some(PathBuf::from("/repo"))),
+            None
+        );
+        assert_eq!(
+            resolve_browser_profiles_dir(None, true, AuthMode::Jwt, None),
+            None
         );
     }
 }

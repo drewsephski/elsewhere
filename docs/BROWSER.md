@@ -29,6 +29,18 @@ Refs stay valid while the browser daemon keeps the same page open. A new `browse
 
 `ELSEWHERE_BROWSER_ENABLED=false` disables browser bootstrap and tool dispatch on the host.
 
+## Sign-in persistence (host-only browser profiles)
+
+Each computer's Chromium user data (cookies, `localStorage`, saved sign-ins) is bundled from the Sprite into a **host-only** directory on the runner and restored on the next session, so sign-ins survive Sprite restarts and runner deploys. `services/cloud-host/src/browser_profile.rs` maps `computer_id → profile UUID` in `browser_profiles` and stores bytes under `ELSEWHERE_BROWSER_PROFILES_DIR/<profile-uuid>/` (mode 0700). The owner-only **Reset browser sign-in** endpoint rotates the UUID, deletes the host bytes, and clears the guest profile.
+
+| Environment | `ELSEWHERE_BROWSER_PROFILES_DIR` | Notes |
+| --- | --- | --- |
+| Fly alpha runner | `/var/lib/elsewhere/browser-profiles` | Set in `infra/fly/runner.toml` (source of truth) and as an image default in `Dockerfile.runner`. Lives on the same encrypted volume as `codex-profiles`; `runner-entrypoint.sh` refuses to start unless the env matches this path, then creates it `0700 elsewhere:elsewhere` and verifies it is writable **before** dropping to UID 10001. |
+| Other hosted / self-hosted | absolute path on a persistent volume | Must be set explicitly. The service user must be able to write it after privilege drop; the runner cannot create the root itself. Never under `/workspace`, the image rootfs, or a temp dir. |
+| Local hybrid dev | unset → `<repo>/.data/browser-profiles` | Convenience default only. Non-hybrid modes that fall back to the working directory log a startup warning. |
+
+Symptom of a misconfigured or missing root: `Browser profile storage unavailable: Permission denied (os error 13)` when a computer first uses the browser (the host tried to create `<cwd>/.data/browser-profiles` as the unprivileged service user). Fix the env/volume; do not widen permissions on the container filesystem.
+
 ## Network and safety
 
 - http(s) only; blocks loopback, RFC1918, link-local, CGNAT (`100.64.0.0/10`), metadata hostnames, and private IPv6 at validation (Rust + guest) and on page subrequests (daemon route guard)
@@ -70,4 +82,5 @@ After CI passes, run the hosted Luna acceptance prompt (three public sites, snap
 - Tool catalog & dispatch: `crates/agent-core/src/tool_catalog.rs`, `browser_tools.rs`, `public_http_url.rs`, `tools.rs`, `approval.rs`
 - Sprite adapter: `crates/sprite-computer/src/browser.rs`, `computer.rs`, `policy.rs`
 - MCP mirror: `crates/computer-mcp/src/tools.rs`
-- Hosted config: `ELSEWHERE_BROWSER_ENABLED` in `services/cloud-host/src/config.rs`
+- Hosted config: `ELSEWHERE_BROWSER_ENABLED`, `ELSEWHERE_BROWSER_PROFILES_DIR` in `services/cloud-host/src/config.rs`; host profile storage in `browser_profile.rs`
+- Fly runner volume layout: `infra/fly/runner.toml`, `infra/fly/runner-entrypoint.sh`

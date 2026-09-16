@@ -29,7 +29,7 @@ docker build --platform linux/amd64 -f infra/fly/Dockerfile.web \
 
 Build sequentially on a laptop and check free disk first. Use at least several GB of free space and stop builds before the host disk fills. Docker's source context is allowlisted and excludes `.env*`, personal profiles, Git metadata, dependencies, and local build output. Never send the whole local environment to Fly. Build images contain only placeholder auth configuration; runtime secrets are separate.
 
-The runner image pins Codex 0.154.0 and Rust 1.94. Its build runs the app-server protocol probe, a real MCP configuration parse with an invalid-exposure negative control, and a Linux device-schema/handshake check in a disposable disconnected profile. It must not use the operator's personal Codex directory or API key. Record the final image digests in the acceptance report. The web image runs as `node`; runner startup validates the actual mount, creates its 0700 profile directory, disables core dumps, and drops to UID 10001 before launching the service.
+The runner image pins Codex 0.154.0 and Rust 1.94. Its build runs the app-server protocol probe, a real MCP configuration parse with an invalid-exposure negative control, and a Linux device-schema/handshake check in a disposable disconnected profile. It must not use the operator's personal Codex directory or API key. Record the final image digests in the acceptance report. The web image runs as `node`; runner startup validates the actual mount, creates both 0700 profile roots on the volume (`/var/lib/elsewhere/codex-profiles` for Codex/ChatGPT credentials and `/var/lib/elsewhere/browser-profiles` for durable browser sign-ins), verifies each is writable by the service user, disables core dumps, and drops to UID 10001 before launching the service. `runner.toml` is the source of truth for `ELSEWHERE_CODEX_PROFILES_DIR` and `ELSEWHERE_BROWSER_PROFILES_DIR`; the entrypoint refuses to start if either env points anywhere else, because cloud-host cannot create those roots after the privilege drop (the symptom is `Browser profile storage unavailable: Permission denied (os error 13)`).
 
 Before publishing, run the web image with 512 MB and an isolated local test database: verify missing/incorrect invitation rejection, a valid disposable signup, a subsequent authenticated request, and no OOM kills. Run the runner image without a mount and require startup failure, then with a disposable mounted directory and local test DB to verify readiness and shutdown. Never run destructive tests against hosted Supabase.
 
@@ -44,7 +44,7 @@ fly volumes create codex_profiles -a elsewhere-alpha-runner --region ord \
   --size 3 --snapshot-retention 7 --scheduled-snapshots --yes
 ```
 
-Volumes are encrypted by default; never add `--no-encryption`. Stage each service's secret values through `fly secrets import --stage` using stdin. Runtime DB URLs require `sslmode=verify-full` and `sslrootcert=/app/infra/certs/supabase-prod-ca-2021.crt`.
+The volume is named `codex_profiles` for historical reasons but is mounted at `/var/lib/elsewhere` and holds **both** profile roots (`codex-profiles/` and `browser-profiles/`); do not create a second volume for browser state. Volumes are encrypted by default; never add `--no-encryption`. Stage each service's secret values through `fly secrets import --stage` using stdin. Runtime DB URLs require `sslmode=verify-full` and `sslrootcert=/app/infra/certs/supabase-prod-ca-2021.crt`.
 
 | App | Secrets |
 | --- | --- |

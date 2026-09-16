@@ -10,7 +10,10 @@ kill_timeout = 300
   ELSEWHERE_AUTH_MODE = "jwt"
   ELSEWHERE_RUN_ENGINE = "codex"
   ELSEWHERE_ALLOW_CODEX_LOGIN = "true"
+  # Both durable profile roots live on the encrypted volume mounted below. The entrypoint
+  # refuses to start unless they match these paths, then creates them 0700 for UID 10001.
   ELSEWHERE_CODEX_PROFILES_DIR = "/var/lib/elsewhere/codex-profiles"
+  ELSEWHERE_BROWSER_PROFILES_DIR = "/var/lib/elsewhere/browser-profiles"
   ELSEWHERE_MAX_CONCURRENT_RUNS = "1"
   ELSEWHERE_RUN_TIMEOUT_SECS = "900"
   ELSEWHERE_TOOL_APPROVAL_TIMEOUT_SECS = "300"

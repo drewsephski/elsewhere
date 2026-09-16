@@ -53,6 +53,7 @@ Approved scope is two Fly Machines, one encrypted 3 GB volume, and at most one n
 | Deploy runner/web with this pass | Browser bootstrap v3 + preview cache module on acceptance Sprite | **Pending deploy** |
 | Hosted BFF smoke | Full signed-in flow via `/api/cloud/*`; confirm private `.internal` runner path | **Pending** |
 | Remove public runner ingress | After BFF smoke; re-smoke web-only | **Pending** |
+| Browser profile storage on volume | Runner boots with `ELSEWHERE_BROWSER_PROFILES_DIR=/var/lib/elsewhere/browser-profiles` (entrypoint creates it 0700 for UID 10001); first browser use on a computer creates `<volume>/browser-profiles/<uuid>` with no `Permission denied (os error 13)`; sign-in survives a runner redeploy | **Pending deploy** (fix on `main`; previous image defaulted to `/app/.data/browser-profiles`) |
 | Browser acceptance (Luna) | example.com → snapshot → click → form type → screenshot/result; default-deny restored | **Pending** |
 | Preview after tool results | Live preview frames update after successful browser tools | **Pending** |
 | Latency (`elsewhere_run_phases`) | Text Luna, browser Luna, Codex follow-up TTFT breakdown | **Pending measurement** |

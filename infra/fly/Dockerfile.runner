@@ -34,7 +34,8 @@ COPY infra/certs /app/infra/certs
 COPY --chmod=755 infra/fly/runner-entrypoint.sh /usr/local/bin/runner-entrypoint
 COPY infra/fly/check-codex.mjs /app/check-codex.mjs
 ENV CODEX_EXECUTABLE=/usr/local/bin/codex \
-    ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles
+    ELSEWHERE_CODEX_PROFILES_DIR=/var/lib/elsewhere/codex-profiles \
+    ELSEWHERE_BROWSER_PROFILES_DIR=/var/lib/elsewhere/browser-profiles
 RUN gosu elsewhere /usr/local/bin/schema_probe
 RUN gosu elsewhere /usr/local/bin/skills_discovery_probe
 RUN gosu elsewhere node /app/check-codex.mjs
