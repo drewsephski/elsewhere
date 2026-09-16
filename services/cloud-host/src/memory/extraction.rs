@@ -365,6 +365,7 @@ async fn load_request(
         source_run_id: job.source_run_id.clone(),
         engine_kind: job.engine_kind.clone(),
         user_message: truncate(
+            // Typed owner text only. Attachment/document bodies must not enter automatic memory.
             row.get::<Option<String>, _>("user_message")
                 .unwrap_or_default()
                 .as_str(),

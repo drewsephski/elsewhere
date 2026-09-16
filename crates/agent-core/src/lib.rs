@@ -1,6 +1,8 @@
 //! Portable Elsewhere agent runtime — no Tauri, SQLite, or VM dependencies.
 
 mod approval;
+mod attachment_tools;
+mod attachments;
 mod browser_recovery;
 mod browser_tools;
 mod collaboration;
@@ -21,11 +23,14 @@ mod public_http_url;
 mod readiness_cache;
 mod run_engine;
 mod run_store;
+mod run_user_input;
 mod runtime;
 mod runtime_identity;
 mod subagent;
 mod tool_catalog;
 mod tools;
+mod user_question;
+mod user_question_tools;
 mod workspace_entries;
 
 pub use approval::{
@@ -33,6 +38,14 @@ pub use approval::{
     AllowAllApprovalGate, ApprovalDecision, ApprovalError, ConnectedAppApprovalInfo,
     ToolApprovalContext, ToolApprovalGate, ToolOperationKind, ToolRunContext,
     MAX_EXEC_COMMAND_CHARS,
+};
+pub use attachment_tools::{
+    attachment_openai_tool_definitions, dispatch_attachment_tool, ATTACHMENT_LIST_DESCRIPTION,
+    ATTACHMENT_LIST_TOOL_NAME, ATTACHMENT_READ_DESCRIPTION, ATTACHMENT_READ_TOOL_NAME,
+};
+pub use attachments::{
+    AgentAttachments, AttachmentError, AttachmentTextPage, InMemoryAttachments,
+    MAX_ATTACHMENT_READ_BYTES,
 };
 pub use browser_recovery::{
     browser_recovery_policy_instructions, classify_recoverable_failure, detect_human_blocker,
@@ -92,6 +105,12 @@ pub use run_engine::{
 pub use run_store::{
     CreateRunParams, PersistedMessage, RunEventReceipt, RunStore, StructuredMessageInput,
 };
+pub use run_user_input::{
+    attachment_workspace_path, AttachmentDescriptor, AttachmentKind, RunUserInput,
+    ATTACHMENT_SAFETY_CONTRACT, MAX_ATTACHMENTS_PER_MESSAGE, MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENT_TOTAL_BYTES, MAX_INLINE_DOCUMENT_BYTES, STAGED_ATTACHMENT_TTL_HOURS,
+    UNTRUSTED_DOCUMENT_PREFACE,
+};
 pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use runtime_identity::{
     compose_runtime_instruction_snapshot, RuntimeIdentityInput, RuntimeMemoryFact,
@@ -106,17 +125,25 @@ pub use subagent::{
     RUN_SUBAGENT_TOOL_NAME, SUBAGENT_TURN_TIMEOUT_SECS,
 };
 pub use tool_catalog::{
-    is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
+    is_attachment_tool, is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
     is_github_connector_tool, is_known_agent_tool, is_memory_tool, is_policy_non_overridable_tool,
-    is_policy_overridable_tool, is_subagent_tool, policy_action_group, policy_action_label,
-    policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES,
-    BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES, CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES,
-    MEMORY_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES,
-    SUBAGENT_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
+    is_policy_overridable_tool, is_subagent_tool, is_user_question_tool, policy_action_group,
+    policy_action_label, policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES,
+    ALL_COMPUTER_TOOL_NAMES, ATTACHMENT_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
+    CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES, MEMORY_TOOL_NAMES,
+    POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
+    USER_QUESTION_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
 };
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};
+pub use user_question::{
+    validate_user_question, AgentUserQuestion, UserQuestionContext, UserQuestionError,
+    UserQuestionOutcome, UserQuestionRequest, ASK_USER_DESCRIPTION, ASK_USER_TOOL_NAME,
+    MAX_ASK_USER_OPTIONS, MAX_ASK_USER_OPTION_CHARS, MAX_ASK_USER_PER_RUN,
+    MAX_ASK_USER_QUESTION_CHARS, MIN_ASK_USER_OPTIONS,
+};
+pub use user_question_tools::{dispatch_user_question_tool, user_question_openai_tool_definitions};
 pub use workspace_entries::{
     filter_workspace_listing, is_internal_workspace_entry, normalize_workspace_path,
     validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,

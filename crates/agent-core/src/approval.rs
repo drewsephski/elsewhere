@@ -7,8 +7,8 @@ pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
 use crate::connectors::ConnectorToolDefinition;
 use crate::tool_catalog::{
-    is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool, is_connected_apps_tool,
-    is_github_connector_tool,
+    is_attachment_tool, is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool,
+    is_connected_apps_tool, is_github_connector_tool, is_user_question_tool,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +137,8 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "remember" => ToolOperationKind::Mutation,
         "forget_memory" => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
+        name if is_user_question_tool(name) => ToolOperationKind::Read,
+        name if is_attachment_tool(name) => ToolOperationKind::Read,
         name if is_github_connector_tool(name) => ToolOperationKind::Read,
         name if is_connected_apps_tool(name) && !is_connected_apps_execute_tool(name) => {
             ToolOperationKind::Read
@@ -220,6 +222,16 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         }),
         "forget_memory" => json!({
             "memoryId": args.get("memoryId").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        "ask_user" => json!({
+            "question": truncate_str(args.get("question").and_then(|v| v.as_str()).unwrap_or(""), 240),
+            "optionCount": args.get("options").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0)
+        }),
+        "attachment_list" => json!({}),
+        "attachment_read" => json!({
+            "attachmentId": args.get("attachmentId").and_then(|v| v.as_str()).unwrap_or(""),
+            "offset": args.get("offset").and_then(|v| v.as_u64()),
+            "limit": args.get("limit").and_then(|v| v.as_u64())
         }),
         "connected_apps_search_tools" | "connected_apps_load_tool" => json!({
             "query": args.get("query").and_then(|v| v.as_str()).unwrap_or(""),

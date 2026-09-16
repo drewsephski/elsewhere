@@ -44,13 +44,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { ListTree } from "lucide-react";
-import { HumanInterventionBanner } from "@/components/app/human-intervention-banner";
+import { UserQuestionCard, type UserQuestionPayload, userQuestionFromPayload } from "@/components/app/user-question-card";
+import { MessageAttachmentList } from "@/components/app/workspace/message-attachments";
 import {
   fetchHumanInterventionStatus,
   type PendingHumanIntervention,
 } from "@/lib/human-intervention";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 import { BrowserPreviewView } from "@/components/app/workspace/browser-preview-view";
+import { HumanInterventionBanner } from "./human-intervention-banner";
 
 type Activity = {
   id: string;
@@ -58,6 +60,7 @@ type Activity = {
   approval?: ApprovalRequestedPayload;
   decision?: ApprovalTerminalState;
   subagent?: SubagentActivity;
+  question?: UserQuestionPayload;
 };
 
 const active = (status: string) => status === "queued" || status === "running";
@@ -71,6 +74,9 @@ function statusBadgeVariant(status: string | undefined) {
 }
 
 function timelineTitle(item: Activity) {
+  if (item.question) {
+    return item.question.status === "answered" ? "Choice saved" : "Needs a choice";
+  }
   if (item.subagent) {
     return subagentHeadline(item.subagent);
   }
@@ -214,6 +220,33 @@ export function WorkDetail({ runId }: { runId: string }) {
                   ),
                 );
               }
+            } else if (event.event === "user_question_requested") {
+              const question = userQuestionFromPayload(runId, payload);
+              if (question) {
+                setTimeline((previous) =>
+                  previous.some((item) => item.question?.questionId === question.questionId)
+                    ? previous
+                    : [...previous, { id, question }],
+                );
+              }
+            } else if (event.event === "user_question_answered") {
+              const selectedIndex =
+                typeof payload.selectedIndex === "number" ? payload.selectedIndex : null;
+              setTimeline((previous) =>
+                previous.map((item) => {
+                  if (!item.question || item.question.questionId !== payload.questionId) {
+                    return item;
+                  }
+                  return {
+                    ...item,
+                    question: {
+                      ...item.question,
+                      selectedIndex,
+                      status: "answered",
+                    },
+                  };
+                }),
+              );
             } else if (isSubagentEvent(event.event)) {
               const activity = subagentActivityFromPayload(payload);
               if (activity) {
@@ -437,6 +470,16 @@ export function WorkDetail({ runId }: { runId: string }) {
             {detail ? "No assignment text saved for this work." : "Loading assignment…"}
           </p>
         )}
+        {detail?.attachments && detail.attachments.length > 0 ? (
+          <Frame spacing="sm">
+            <FrameHeader>
+              <FrameTitle>Inputs</FrameTitle>
+            </FrameHeader>
+            <FramePanel>
+              <MessageAttachmentList attachments={detail.attachments} align="start" />
+            </FramePanel>
+          </Frame>
+        ) : null}
         {detail?.memories && detail.memories.length > 0 ? (
           <details className="rounded-lg border border-border bg-surface-raised p-3 text-xs">
             <summary className="cursor-pointer font-medium text-foreground">
@@ -523,6 +566,8 @@ export function WorkDetail({ runId }: { runId: string }) {
                       <ApprovalCard payload={item.approval} externalStatus={item.decision} />
                     ) : item.subagent ? (
                       <SubagentCard activity={item.subagent} />
+                    ) : item.question ? (
+                      <UserQuestionCard question={item.question} />
                     ) : (
                       <p className="text-muted-foreground">{item.text}</p>
                     )}

@@ -1,6 +1,7 @@
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::path::Path;
 
-use agent_core::RuntimeError;
+use agent_core::{AttachmentKind, RuntimeError, SharedRunDeps};
 
 pub fn user_text_from_run_input(input: &[Value]) -> Result<String, RuntimeError> {
     let mut segments = Vec::new();
@@ -44,6 +45,7 @@ fn extract_user_text(item: &Value) -> Result<Option<String>, RuntimeError> {
                             text.push_str(chunk);
                         }
                     }
+                    Some("input_image") | Some("image") | Some("localImage") => {}
                     other => {
                         return Err(RuntimeError::Validation(format!(
                             "unsupported user content part type: {other:?}"
@@ -62,4 +64,55 @@ fn extract_user_text(item: &Value) -> Result<Option<String>, RuntimeError> {
         )),
         None => Ok(None),
     }
+}
+
+pub async fn build_codex_turn_input(
+    shared: &SharedRunDeps,
+    cwd: &Path,
+    fallback_text: &str,
+) -> Result<Vec<Value>, RuntimeError> {
+    let text = if !shared.user_input.text.trim().is_empty() {
+        shared.user_input.text.clone()
+    } else {
+        fallback_text.to_string()
+    };
+    let mut input = Vec::new();
+    if !text.trim().is_empty() {
+        input.push(json!({"type": "text", "text": text}));
+    }
+    let inbox = cwd.join("elsewhere-inputs");
+    for descriptor in &shared.user_input.attachments {
+        if descriptor.kind != AttachmentKind::Image {
+            continue;
+        }
+        let backend = shared.attachments.as_ref().ok_or_else(|| {
+            RuntimeError::Validation("image attachments require an attachment store".into())
+        })?;
+        let (loaded, bytes) = backend
+            .load_image_bytes(&descriptor.id)
+            .await
+            .map_err(|e| RuntimeError::Validation(format!("attachment image: {e:?}")))?;
+        std::fs::create_dir_all(&inbox)
+            .map_err(|e| RuntimeError::Validation(format!("attachment temp dir: {e}")))?;
+        let ext = loaded.kind.extension(&loaded.mime_type);
+        let id8: String = loaded
+            .id
+            .chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .take(8)
+            .collect();
+        let path = inbox.join(format!("{id8}.{ext}"));
+        std::fs::write(&path, bytes)
+            .map_err(|e| RuntimeError::Validation(format!("write local image: {e}")))?;
+        input.push(json!({
+            "type": "localImage",
+            "path": format!("elsewhere-inputs/{id8}.{ext}")
+        }));
+    }
+    if input.is_empty() {
+        return Err(RuntimeError::Validation(
+            "Codex run requires text or at least one image attachment".into(),
+        ));
+    }
+    Ok(input)
 }

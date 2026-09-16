@@ -5,6 +5,8 @@ import { cn } from "cn";
 import {
   forwardRef,
   type ButtonHTMLAttributes,
+  type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -17,10 +19,21 @@ interface ChatComposerFrameProps {
   leading?: ReactNode;
   /** The input itself; defaults are provided by `ChatComposerTextarea`. */
   children: ReactNode;
+  /** Optional staged file previews rendered above the input row. */
+  attachments?: ReactNode;
+  /** When set, the composer accepts drag/drop and clipboard image paste. */
+  onFiles?: (files: File[]) => void;
   canSend: boolean;
   pending?: boolean;
   sendLabel?: string;
   className?: string;
+}
+
+function filesFromTransfer(data: DataTransfer | null): File[] {
+  if (!data) {
+    return [];
+  }
+  return Array.from(data.files ?? []);
 }
 
 /**
@@ -31,19 +44,56 @@ export function ChatComposerFrame({
   onSubmit,
   leading,
   children,
+  attachments,
+  onFiles,
   canSend,
   pending = false,
   sendLabel = "Send message",
   className,
 }: ChatComposerFrameProps) {
+  function handleDragOver(event: DragEvent<HTMLFormElement>) {
+    if (!onFiles) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDrop(event: DragEvent<HTMLFormElement>) {
+    if (!onFiles) {
+      return;
+    }
+    event.preventDefault();
+    const files = filesFromTransfer(event.dataTransfer);
+    if (files.length) {
+      onFiles(files);
+    }
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLFormElement>) {
+    if (!onFiles) {
+      return;
+    }
+    const files = filesFromTransfer(event.clipboardData);
+    if (files.length) {
+      event.preventDefault();
+      onFiles(files);
+    }
+  }
+
   return (
     <form
       onSubmit={onSubmit}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
       className={cn(
-        "flex w-full items-end gap-1.5 rounded-[1.375rem] border border-border bg-card px-2 py-1.5 transition-colors focus-within:border-ring/40",
+        "flex w-full flex-col gap-1.5 rounded-[1.375rem] border border-border bg-card px-2 py-1.5 transition-colors focus-within:border-ring/40",
         className,
       )}
     >
+      {attachments}
+      <div className="flex w-full items-end gap-1.5">
       {leading ? <div className="flex shrink-0 items-center self-end pb-0.5">{leading}</div> : null}
       <div className="flex min-w-0 flex-1 items-center">{children}</div>
       <button
@@ -60,6 +110,7 @@ export function ChatComposerFrame({
       >
         <ArrowUp className={cn("size-4", pending && "animate-pulse")} aria-hidden />
       </button>
+      </div>
     </form>
   );
 }

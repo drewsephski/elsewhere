@@ -8,6 +8,7 @@ import type {
   CreateConversationResponse,
   CreateRunResponse,
   DelegationSummary,
+  MessageAttachment,
   RunSummary,
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
@@ -28,18 +29,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  ChevronLeft,
-  ChevronsLeft,
-  MessageSquare,
-  Monitor,
-  PanelRight,
-  Plus,
-} from "@/components/icons/lucide";
+import { ChevronLeft, ChevronsLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
+import {
+  ComposerAttachmentStrip,
+  COMPOSER_FILE_ACCEPT,
+  composerCanSend,
+  readyAttachmentIds,
+  useComposerAttachments,
+} from "./composer-attachments";
+import { MessageAttachmentList } from "./message-attachments";
+import { UserQuestionCard } from "@/components/app/user-question-card";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
@@ -80,12 +83,18 @@ export function BotConversationView({
   const [pendingTurn, setPendingTurn] = useState<{
     idempotencyKey: string;
     message: string;
+    attachmentIds: string[];
+    attachments?: MessageAttachment[];
     runId?: string;
   } | null>(null);
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
   const [liveDelegations, setLiveDelegations] = useState<DelegationSummary[]>([]);
-  const requestRef = useRef<{ message: string; key: string } | null>(null);
+  const requestRef = useRef<{
+    fingerprint: string;
+    key: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerFiles = useComposerAttachments(botId ? { botId } : null);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {
@@ -238,6 +247,7 @@ export function BotConversationView({
     setError(null);
     setPendingTurn(null);
     setLiveRunId(null);
+    composerFiles.reset();
     void (async () => {
       try {
         const id = await resolveConversationId();
@@ -311,6 +321,7 @@ export function BotConversationView({
       setRuns([]);
       setLiveRunId(null);
       setMessage("");
+      composerFiles.reset();
       requestRef.current = null;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start a new chat");
@@ -321,26 +332,48 @@ export function BotConversationView({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (pending || !message.trim() || !bot?.computerId) {
+    const attachmentIds = readyAttachmentIds(composerFiles.files);
+    const stagedAttachments = composerFiles.files
+      .filter((file) => file.status === "ready" && file.attachment)
+      .map((file) => file.attachment!);
+    if (
+      pending ||
+      !bot?.computerId ||
+      !composerCanSend(message, composerFiles.files)
+    ) {
       return;
     }
     setError(null);
     const trimmed = message.trim();
+    const fingerprint = `${trimmed}|${attachmentIds.join(",")}`;
     const idempotencyKey =
-      requestRef.current?.message === trimmed
+      requestRef.current?.fingerprint === fingerprint
         ? requestRef.current.key
         : crypto.randomUUID();
-    requestRef.current = { message: trimmed, key: idempotencyKey };
-    setPendingTurn({ idempotencyKey, message: trimmed });
+    requestRef.current = { fingerprint, key: idempotencyKey };
+    setPendingTurn({
+      idempotencyKey,
+      message: trimmed,
+      attachmentIds,
+      attachments: stagedAttachments,
+    });
     setMessage("");
     setPending(true);
     try {
-      const payload: { botId: string; message: string; conversationId?: string } = {
+      const payload: {
+        botId: string;
+        message: string;
+        conversationId?: string;
+        attachmentIds?: string[];
+      } = {
         botId,
         message: trimmed,
       };
       if (conversationId) {
         payload.conversationId = conversationId;
+      }
+      if (attachmentIds.length) {
+        payload.attachmentIds = attachmentIds;
       }
       const response = await cloudHostFetch("/v1/runs", {
         method: "POST",
@@ -357,9 +390,16 @@ export function BotConversationView({
       setPendingTurn((previous) =>
         previous
           ? { ...previous, runId: created.runId }
-          : { idempotencyKey, message: trimmed, runId: created.runId },
+          : {
+              idempotencyKey,
+              message: trimmed,
+              attachmentIds,
+              attachments: stagedAttachments,
+              runId: created.runId,
+            },
       );
       requestRef.current = null;
+      composerFiles.reset();
       const rows = await loadRuns(created.conversationId);
       const runVisible =
         rows?.some((run) => run.runId === created.runId) ??
@@ -392,7 +432,8 @@ export function BotConversationView({
   }
 
   const chronologicalRuns = [...runs].reverse();
-  const canSend = Boolean(message.trim()) && Boolean(bot?.computerId) && !pending;
+  const canSend =
+    composerCanSend(message, composerFiles.files) && Boolean(bot?.computerId) && !pending;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -491,7 +532,18 @@ export function BotConversationView({
 
             return (
               <div key={run.runId} className="space-y-2.5">
-                <UserPromptBubble sentAt={run.createdAt}>
+                <UserPromptBubble
+                  sentAt={run.createdAt}
+                  extra={
+                    <MessageAttachmentList
+                      attachments={
+                        showOptimisticUser
+                          ? (pendingTurn.attachments ?? [])
+                          : (run.attachments ?? [])
+                      }
+                    />
+                  }
+                >
                   {showOptimisticUser ? pendingTurn.message : run.task}
                 </UserPromptBubble>
 
@@ -512,6 +564,12 @@ export function BotConversationView({
                     />
                   ) : item.kind === "subagent" ? (
                     <SubagentCard key={item.id} activity={item.subagent} />
+                  ) : item.kind === "question" ? (
+                    <UserQuestionCard
+                      key={item.id}
+                      question={item.question}
+                      botName={bot?.name}
+                    />
                   ) : (
                     <p key={item.id} className="text-center text-[11px] text-muted-foreground">
                       {item.text}
@@ -580,7 +638,10 @@ export function BotConversationView({
               (runIsActive(run.status) && run.task?.trim() === pendingTurn.message),
           ) ? (
             <div className="space-y-2.5">
-              <UserPromptBubble sentAt={new Date().toISOString()}>
+              <UserPromptBubble
+                sentAt={new Date().toISOString()}
+                extra={<MessageAttachmentList attachments={pendingTurn.attachments ?? []} />}
+              >
                 {pendingTurn.message}
               </UserPromptBubble>
               <p className="text-center text-[11px] text-muted-foreground">Sending…</p>
@@ -615,6 +676,13 @@ export function BotConversationView({
             onSubmit={(event) => void handleSubmit(event)}
             canSend={canSend}
             pending={pending}
+            onFiles={(files) => void composerFiles.addFiles(files)}
+            attachments={
+              <ComposerAttachmentStrip
+                files={composerFiles.files}
+                onRemove={composerFiles.removeFile}
+              />
+            }
             leading={
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -623,6 +691,13 @@ export function BotConversationView({
                   <Plus className="size-4" aria-hidden />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-44">
+                  <DropdownMenuItem
+                    disabled={startingNewChat || pending || composerFiles.files.length >= 4}
+                    onClick={() => composerFiles.inputRef.current?.click()}
+                  >
+                    <FileText className="size-4" aria-hidden />
+                    Add files
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     disabled={startingNewChat || pending}
                     onClick={() => void handleStartNewChat()}
@@ -638,6 +713,18 @@ export function BotConversationView({
               </DropdownMenu>
             }
           >
+            <input
+              ref={composerFiles.inputRef}
+              type="file"
+              className="hidden"
+              accept={COMPOSER_FILE_ACCEPT}
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                void composerFiles.addFiles(files);
+              }}
+            />
             <ChatComposerTextarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}

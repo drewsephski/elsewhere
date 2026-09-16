@@ -16,11 +16,19 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, Plus, X } from "@/components/icons/lucide";
+import { ChevronLeft, FileText, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
+import {
+  ComposerAttachmentStrip,
+  COMPOSER_FILE_ACCEPT,
+  composerCanSend,
+  readyAttachmentIds,
+  useComposerAttachments,
+} from "./composer-attachments";
+import { MessageAttachmentList } from "./message-attachments";
 import {
   buildGroupSendPayload,
   GroupMentionComposer,
@@ -103,6 +111,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [mentions, setMentions] = useState<MentionToken[]>([]);
   const [pending, setPending] = useState(false);
   const idempotencyRef = useRef<string | null>(null);
+  const composerFiles = useComposerAttachments({ conversationId: groupId });
 
   const activeParticipants = useMemo(
     () => group?.participants.filter((p) => !p.leftAt) ?? [],
@@ -144,7 +153,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   }, [loadMessages]);
 
   async function handleSubmit() {
-    if (!message.trim() || pending) {
+    const attachmentIds = readyAttachmentIds(composerFiles.files);
+    if (!composerCanSend(message, composerFiles.files) || pending) {
       return;
     }
     setPending(true);
@@ -163,6 +173,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           recipientBotIds: payload.recipientBotIds,
           mentionMode: payload.mentionMode,
           routingMode: payload.routingMode,
+          attachmentIds,
         }),
       });
       const body = await response.json();
@@ -170,6 +181,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         throw new Error(body.error ?? "Could not send message");
       }
       idempotencyRef.current = null;
+      composerFiles.reset();
       await loadMessages();
     } catch (err) {
       setMessage(trimmed);
@@ -304,7 +316,11 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           {messages.map((item) =>
             item.authorKind === "human" ? (
               <div key={item.id} className="flex flex-col items-end gap-1.5">
-                <UserPromptBubble sentAt={item.createdAt} className="items-stretch">
+                <UserPromptBubble
+                  sentAt={item.createdAt}
+                  className="items-stretch"
+                  extra={<MessageAttachmentList attachments={item.attachments ?? []} />}
+                >
                   {item.body}
                 </UserPromptBubble>
                 <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -420,16 +436,30 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
               event.preventDefault();
               void handleSubmit();
             }}
-            canSend={Boolean(message.trim()) && !pending}
+            canSend={composerCanSend(message, composerFiles.files) && !pending}
             pending={pending}
+            onFiles={(files) => void composerFiles.addFiles(files)}
+            attachments={
+              <ComposerAttachmentStrip
+                files={composerFiles.files}
+                onRemove={composerFiles.removeFile}
+              />
+            }
             leading={
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  render={<ComposerIconButton label="Add a bot" disabled={!canAddParticipant} />}
+                  render={<ComposerIconButton label="Add" />}
                 >
                   <Plus className="size-4" aria-hidden />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-52">
+                  <DropdownMenuItem
+                    disabled={pending || composerFiles.files.length >= 4}
+                    onClick={() => composerFiles.inputRef.current?.click()}
+                  >
+                    <FileText className="size-4" aria-hidden />
+                    Add files
+                  </DropdownMenuItem>
                   <DropdownMenuLabel>Add to group</DropdownMenuLabel>
                   {addableBots.map((bot) => (
                     <DropdownMenuItem
@@ -449,6 +479,18 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
               </DropdownMenu>
             }
           >
+            <input
+              ref={composerFiles.inputRef}
+              type="file"
+              className="hidden"
+              accept={COMPOSER_FILE_ACCEPT}
+              multiple
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = "";
+                void composerFiles.addFiles(files);
+              }}
+            />
             <GroupMentionComposer
               participants={group?.participants ?? []}
               value={message}

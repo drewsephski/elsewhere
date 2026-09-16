@@ -33,6 +33,8 @@ pub struct ProductCreateRunRequest {
     pub conversation_id: Option<String>,
     pub message: String,
     pub skill_invocation: Option<SkillInvocationInput>,
+    #[serde(default)]
+    pub attachment_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,6 +86,7 @@ pub struct RunDetailResponse {
     pub origin_provider: Option<String>,
     pub origin_label: Option<String>,
     pub memories: Vec<crate::memory::RunMemorySnapshot>,
+    pub attachments: Vec<agent_core::AttachmentDescriptor>,
 }
 
 pub async fn create_run(
@@ -118,7 +121,7 @@ async fn create_product_run(
     request_id: String,
     body: ProductCreateRunRequest,
 ) -> Result<(StatusCode, Json<CreateRunResponse>), ApiError> {
-    if body.message.trim().is_empty() {
+    if body.message.trim().is_empty() && body.attachment_ids.is_empty() {
         return Err(ApiError::Validation("message cannot be empty".into()));
     }
     if body.bot_id.trim().is_empty() {
@@ -133,7 +136,7 @@ async fn create_product_run(
         });
     }
 
-    let records = crate::work::enqueue_with_skills(
+    let records = crate::work::enqueue_with_skills_and_attachments(
         &state.pool,
         principal.owner_id(),
         &request_id,
@@ -141,6 +144,7 @@ async fn create_product_run(
         body.conversation_id.as_deref(),
         body.message.trim(),
         &skills,
+        &body.attachment_ids,
     )
     .await?;
     let run = find_run_for_owner(&state.pool, principal.owner_id(), &records.run_id)
@@ -285,6 +289,7 @@ pub async fn get_run(
 
     let memories =
         crate::memory::run_memory_snapshots(&state.pool, principal.owner_id(), &run.id).await?;
+    let attachments = crate::attachments::store::list_for_run(&state.pool, &run.id).await?;
 
     Ok(Json(RunDetailResponse {
         task,
@@ -307,6 +312,7 @@ pub async fn get_run(
             run.origin_provider.as_deref(),
         ),
         memories,
+        attachments,
     }))
 }
 
@@ -338,6 +344,10 @@ pub async fn cancel_run(
             .await;
         let _ = state
             .human_interventions
+            .cancel_pending_for_run(&run_id, "run_cancelled")
+            .await;
+        let _ = state
+            .user_questions
             .cancel_pending_for_run(&run_id, "run_cancelled")
             .await;
     }

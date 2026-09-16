@@ -55,6 +55,7 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -82,6 +83,7 @@ async fn group_send_routes_without_duplicate_human_messages(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -123,6 +125,7 @@ async fn group_send_no_mention_persists_only_human(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -168,6 +171,7 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -211,6 +215,7 @@ async fn designer_sees_researcher_in_group_context(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -288,6 +293,7 @@ async fn codex_group_input_excludes_current_human_turn(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -354,6 +360,7 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -370,6 +377,7 @@ async fn group_idempotency_scoped_to_conversation(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -410,6 +418,7 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -426,6 +435,7 @@ async fn group_idempotency_conflicts_on_payload_mismatch(pool: PgPool) {
             routing_mode: None,
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await

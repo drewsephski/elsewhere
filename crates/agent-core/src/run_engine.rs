@@ -15,6 +15,7 @@ use crate::connectors::AgentConnectors;
 use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
+use crate::run_user_input::RunUserInput;
 use crate::runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 use agent_skills::SkillPackage;
 
@@ -56,6 +57,10 @@ pub struct SharedRunDeps {
     pub browser_recovery: Option<Arc<BrowserRecoverySession>>,
     pub subagents: Option<Arc<dyn crate::subagent::AgentSubagents>>,
     pub memory: Option<Arc<dyn crate::memory::AgentMemory>>,
+    pub attachments: Option<Arc<dyn crate::attachments::AgentAttachments>>,
+    pub user_questions: Option<Arc<dyn crate::user_question::AgentUserQuestion>>,
+    /// Provider-neutral user text plus immutable attachment descriptors for this run.
+    pub user_input: RunUserInput,
     /// Immutable Agent Skill packages snapshotted at run admission.
     pub skill_packages: Arc<[SkillPackage]>,
 }
@@ -85,6 +90,9 @@ impl SharedRunDeps {
             browser_recovery: None,
             subagents: None,
             memory: None,
+            attachments: None,
+            user_questions: None,
+            user_input: RunUserInput::from_text(""),
             skill_packages: Arc::from([]),
         }
     }
@@ -136,6 +144,8 @@ pub fn responses_loop_deps(shared: SharedRunDeps, model: Arc<dyn ResponsesModel>
         browser_recovery: shared.browser_recovery.clone(),
         subagents: shared.subagents.clone(),
         memory: shared.memory.clone(),
+        attachments: shared.attachments.clone(),
+        user_questions: shared.user_questions.clone(),
     }
 }
 

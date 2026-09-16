@@ -33,6 +33,9 @@ pub struct RunSummaryResponse {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     pub archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[sqlx(skip)]
+    #[serde(default)]
+    pub attachments: Vec<agent_core::AttachmentDescriptor>,
 }
 
 pub async fn list_runs(
@@ -61,6 +64,15 @@ pub async fn list_runs(
         .fetch_all(&state.pool)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let run_ids: Vec<String> = rows.iter().map(|row| row.run_id.clone()).collect();
+    let mut by_run = crate::attachments::store::list_for_runs(&state.pool, &run_ids).await?;
+    let rows = rows
+        .into_iter()
+        .map(|mut row| {
+            row.attachments = by_run.remove(&row.run_id).unwrap_or_default();
+            row
+        })
+        .collect();
     Ok(Json(rows))
 }
 

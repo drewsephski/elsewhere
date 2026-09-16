@@ -7,9 +7,10 @@ use crate::process::{CodexProcessLaunch, ManagedCodexProcess, DEFAULT_REQUEST_TI
 use crate::protocol::{
     build_elsewhere_thread_resume_params, build_elsewhere_thread_start_params,
     build_toolless_thread_start_params, build_turn_interrupt_params, build_turn_start_params,
-    parse_account_response, parse_list_mcp_status, parse_rate_limits_response,
-    parse_thread_resume_response, parse_thread_start_response, parse_turn_start_response,
-    CodexAccountState, CodexRateLimitsSnapshot, ElsewhereThreadConfig, ToollessThreadConfig,
+    build_turn_start_params_with_input, parse_account_response, parse_list_mcp_status,
+    parse_rate_limits_response, parse_thread_resume_response, parse_thread_start_response,
+    parse_turn_start_response, CodexAccountState, CodexRateLimitsSnapshot, ElsewhereThreadConfig,
+    ToollessThreadConfig,
 };
 
 const CLIENT_NAME: &str = "elsewhere";
@@ -128,6 +129,17 @@ impl CodexAppServerClient {
         timeout: Duration,
     ) -> Result<String, CodexProviderError> {
         let params = build_turn_start_params(thread_id, user_text);
+        let result = self.process.request("turn/start", params, timeout).await?;
+        parse_turn_start_response(result)
+    }
+
+    pub async fn turn_start_with_input(
+        &self,
+        thread_id: &str,
+        input: Vec<serde_json::Value>,
+        timeout: Duration,
+    ) -> Result<String, CodexProviderError> {
+        let params = build_turn_start_params_with_input(thread_id, input);
         let result = self.process.request("turn/start", params, timeout).await?;
         parse_turn_start_response(result)
     }

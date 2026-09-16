@@ -23,6 +23,9 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     recall_memory: "Looking up remembered context",
     remember: "Saving a memory",
     forget_memory: "Forgetting a memory",
+    ask_user: "Waiting for your choice",
+    attachment_list: "Reviewing attachments",
+    attachment_read: "Reading an attachment",
   };
   const base = tools[tool];
   if (!base) {
@@ -65,6 +68,9 @@ export function activityText(event: string, payload: Record<string, unknown>): s
   }
   if (event === "human_intervention_resolved") {
     return "You returned control to the Bot";
+  }
+  if (event === "user_question_requested" || event === "user_question_answered" || event === "user_question_cancelled") {
+    return null;
   }
   if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
   if (event === "permission_policy_resolved") {

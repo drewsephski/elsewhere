@@ -88,6 +88,8 @@ pub struct AppendHumanMessageRequest {
     pub mention_mode: Option<String>,
     pub routing_mode: Option<String>,
     pub skill_invocation: Option<serde_json::Value>,
+    #[serde(default)]
+    pub attachment_ids: Vec<String>,
 }
 
 pub async fn append_human_message_handler(
@@ -115,6 +117,7 @@ pub async fn append_human_message_handler(
             mention_mode: body.mention_mode,
             routing_mode: body.routing_mode,
             skill_invocation: body.skill_invocation,
+            attachment_ids: body.attachment_ids,
         },
     )
     .await?;

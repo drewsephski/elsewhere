@@ -19,6 +19,7 @@ use crate::events::registry::RunRegistry;
 use crate::human_intervention::HumanInterventionService;
 use crate::permission_policies::PermissionPolicyService;
 use crate::provider_status_cache::ProviderStatusCache;
+use crate::user_questions::UserQuestionService;
 
 #[cfg(any(test, feature = "test-utils"))]
 #[derive(Clone)]
@@ -57,6 +58,7 @@ pub struct AppState {
     pub approvals: ApprovalService,
     pub permission_policies: PermissionPolicyService,
     pub human_interventions: HumanInterventionService,
+    pub user_questions: UserQuestionService,
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub group_route_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
@@ -167,6 +169,10 @@ impl AppState {
             pool: pool.clone(),
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
         };
+        let user_questions = UserQuestionService {
+            pool: pool.clone(),
+            registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
+        };
         let connector_secret_box = config
             .connector_secret_key
             .as_deref()
@@ -187,6 +193,7 @@ impl AppState {
             approvals,
             permission_policies,
             human_interventions,
+            user_questions,
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             group_route_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),

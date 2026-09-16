@@ -14,6 +14,7 @@ pub use thread::{
     parse_thread_start_response, ElsewhereThreadConfig, ToollessThreadConfig, MCP_SERVER_NAME,
 };
 pub use turn::{
-    build_turn_interrupt_params, build_turn_start_params, item_from_notification,
-    notification_thread_turn, parse_turn_completed, parse_turn_start_response, turn_error_message,
+    build_turn_interrupt_params, build_turn_start_params, build_turn_start_params_with_input,
+    item_from_notification, notification_thread_turn, parse_turn_completed,
+    parse_turn_start_response, turn_error_message,
 };

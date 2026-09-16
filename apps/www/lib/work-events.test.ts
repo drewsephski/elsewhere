@@ -23,12 +23,12 @@ describe("permission policy activity", () => {
     ).toBe("Blocked: Writing a file");
   });
 
-  it("does not flatten subagent events into generic timeline text", () => {
+  it("does not flatten user questions into generic timeline text", () => {
     expect(
-      activityText("subagent_started", {
-        subagentId: "sa-1",
-        name: "Reviewer",
-        status: "running",
+      activityText("user_question_requested", {
+        questionId: "q1",
+        question: "Pick one?",
+        options: ["A", "B"],
       }),
     ).toBeNull();
   });

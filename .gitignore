@@ -37,3 +37,6 @@ target/
 .data/
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
+
+# Tool scratch directories (e.g. Codex schema dumps)
+.tmp-*/

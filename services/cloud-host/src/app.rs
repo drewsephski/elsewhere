@@ -285,6 +285,14 @@ pub fn build_router(state: AppState) -> Router {
             "/v1/runs/{id}/human-intervention",
             get(crate::human_intervention::api::get_run_human_intervention),
         )
+        .route(
+            "/v1/runs/{id}/question",
+            get(crate::user_questions::get_run_user_question),
+        )
+        .route(
+            "/v1/runs/{id}/questions/{question_id}/answer",
+            post(crate::user_questions::answer_user_question),
+        )
         .route("/v1/runs/{id}/cancel", post(api::runs::cancel_run))
         .route("/v1/runs/{id}/archive", post(api::runs::archive_run))
         .route("/v1/runs/{id}/events", get(api::runs::run_events_sse))
@@ -319,6 +327,8 @@ pub fn build_router(state: AppState) -> Router {
             get(api::permission_policies::get_bot_policies)
                 .put(api::permission_policies::put_bot_policies),
         )
+        .merge(crate::attachments::api::upload_routes())
+        .merge(crate::attachments::api::download_routes())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_authenticated,

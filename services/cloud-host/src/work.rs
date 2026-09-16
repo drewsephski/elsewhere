@@ -57,6 +57,34 @@ pub async fn enqueue_with_skills(
     Ok(records)
 }
 
+pub async fn enqueue_with_skills_and_attachments(
+    pool: &PgPool,
+    owner: &str,
+    request_id: &str,
+    bot_id: &str,
+    conversation_id: Option<&str>,
+    message: &str,
+    skills: &SkillAdmissionInput,
+    attachment_ids: &[String],
+) -> Result<BootstrapRunRecords, ApiError> {
+    let mut tx = pool.begin().await.map_err(db_error)?;
+    let records = crate::work_admission::admit(
+        &mut tx,
+        owner,
+        request_id,
+        crate::work_admission::WorkAdmissionIntent::HumanMessage {
+            bot_id,
+            conversation_id,
+            message,
+            skills,
+            attachment_ids,
+        },
+    )
+    .await?;
+    tx.commit().await.map_err(db_error)?;
+    Ok(records)
+}
+
 pub async fn enqueue_in_transaction(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     owner: &str,
@@ -75,6 +103,7 @@ pub async fn enqueue_in_transaction(
             conversation_id,
             message,
             skills,
+            attachment_ids: &[],
         },
     )
     .await
@@ -331,10 +360,23 @@ pub async fn enqueue_from_group_message_in_transaction(
     user_message: &str,
     skills: &SkillAdmissionInput,
 ) -> Result<BootstrapRunRecords, ApiError> {
-    if user_message.trim().is_empty() || user_message.len() > 100_000 {
+    if user_message.len() > 100_000 {
         return Err(ApiError::Validation(
             "Work must contain between 1 and 100,000 bytes".into(),
         ));
+    }
+    if user_message.trim().is_empty() {
+        let attachment_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM message_attachments WHERE message_id = $1")
+                .bind(source_message_id)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(db_error)?;
+        if attachment_count == 0 {
+            return Err(ApiError::Validation(
+                "Work must contain between 1 and 100,000 bytes".into(),
+            ));
+        }
     }
     if request_id.len() > 200 {
         return Err(ApiError::Validation("Idempotency key is too long".into()));
@@ -511,6 +553,12 @@ pub async fn enqueue_from_group_message_in_transaction(
     persist_run_skills_for_admission(tx, owner, bot_id, &run_id, &skill_admission).await?;
     crate::memory::snapshot::persist_run_memories(tx, owner, bot_id, &run_id, &snapshot.memories)
         .await?;
+    crate::attachments::store::snapshot_message_attachments_onto_run(
+        tx,
+        source_message_id,
+        &run_id,
+    )
+    .await?;
 
     Ok(BootstrapRunRecords {
         run_id,

@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
+use crate::attachment_tools::dispatch_attachment_tool;
 use crate::collaboration::{AgentCollaboration, CollaborationContext, CollaborationError};
 use crate::connector_tools::dispatch_connector_tool_with_gate;
 use crate::human_intervention::is_human_intervention_tool;
@@ -12,9 +13,11 @@ use crate::subagent::{
     RUN_SUBAGENT_TOOL_NAME,
 };
 use crate::tool_catalog::{
-    is_collaboration_tool, is_connector_tool, is_memory_tool, is_subagent_tool,
+    is_attachment_tool, is_collaboration_tool, is_connector_tool, is_memory_tool, is_subagent_tool,
+    is_user_question_tool,
 };
 use crate::tools::ToolError;
+use crate::user_question_tools::dispatch_user_question_tool;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -85,6 +88,8 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
 pub fn all_openai_tool_definitions() -> Vec<Value> {
     let mut tools = crate::tools::openai_tool_definitions();
     tools.extend(crate::human_intervention_tools::human_intervention_openai_tool_definitions());
+    tools.extend(crate::user_question_tools::user_question_openai_tool_definitions());
+    tools.extend(crate::attachment_tools::attachment_openai_tool_definitions());
     tools.extend(collaboration_openai_tool_definitions());
     tools.extend(crate::connector_tools::connector_openai_tool_definitions());
     tools.extend(crate::memory_tools::memory_openai_tool_definitions());
@@ -110,6 +115,8 @@ pub async fn dispatch_agent_tool_with_gate(
         human_intervention,
         None,
         None,
+        None,
+        None,
         name,
         arguments,
         cancel,
@@ -128,6 +135,8 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     human_intervention: Option<&Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     subagents: Option<&Arc<dyn AgentSubagents>>,
     memory: Option<&Arc<dyn crate::memory::AgentMemory>>,
+    attachments: Option<&Arc<dyn crate::attachments::AgentAttachments>>,
+    user_questions: Option<&Arc<dyn crate::user_question::AgentUserQuestion>>,
     name: &str,
     arguments: &str,
     cancel: &AtomicBool,
@@ -147,6 +156,13 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
             browser_recovery,
         )
         .await;
+    }
+    if is_user_question_tool(name) {
+        return dispatch_user_question_tool(user_questions, name, arguments, cancel, gate, run)
+            .await;
+    }
+    if is_attachment_tool(name) {
+        return dispatch_attachment_tool(attachments, name, arguments, cancel, gate, run).await;
     }
     if is_memory_tool(name) {
         let memory_ctx = collaboration_ctx.map(|ctx| MemoryContext {
@@ -475,6 +491,8 @@ mod tests {
             None,
             Some(&subagents),
             None,
+            None,
+            None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,
             &cancel,
@@ -518,6 +536,8 @@ mod tests {
             None,
             None,
             Some(&subagents),
+            None,
+            None,
             None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,

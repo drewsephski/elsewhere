@@ -22,6 +22,10 @@ pub const SUBAGENT_TOOL_NAMES: &[&str] = &["run_subagent"];
 
 pub const MEMORY_TOOL_NAMES: &[&str] = &["recall_memory", "remember", "forget_memory"];
 
+pub const ATTACHMENT_TOOL_NAMES: &[&str] = &["attachment_list", "attachment_read"];
+
+pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
+
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_list_repositories",
     "github_search_repositories",
@@ -73,6 +77,14 @@ pub fn is_memory_tool(name: &str) -> bool {
     MEMORY_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_attachment_tool(name: &str) -> bool {
+    ATTACHMENT_TOOL_NAMES.contains(&name)
+}
+
+pub fn is_user_question_tool(name: &str) -> bool {
+    USER_QUESTION_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_github_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
 }
@@ -106,7 +118,12 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
-pub const POLICY_NON_OVERRIDABLE_TOOL_NAMES: &[&str] = &["browser_request_human"];
+pub const POLICY_NON_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
+    "browser_request_human",
+    "ask_user",
+    "attachment_list",
+    "attachment_read",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyActionGroup {
@@ -219,6 +236,9 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "browser_screenshot",
     "browser_download",
     "browser_request_human",
+    "ask_user",
+    "attachment_list",
+    "attachment_read",
     "bot_list",
     "bot_delegate",
     "run_subagent",
@@ -257,6 +277,13 @@ mod tests {
         }
         assert!(!is_policy_overridable_tool("browser_request_human"));
         assert!(is_policy_non_overridable_tool("browser_request_human"));
+        assert!(!is_policy_overridable_tool("ask_user"));
+        assert!(is_policy_non_overridable_tool("ask_user"));
+        assert!(!is_policy_overridable_tool("attachment_list"));
+        assert!(!is_policy_overridable_tool("attachment_read"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"ask_user"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"attachment_list"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"attachment_read"));
         assert!(!is_policy_overridable_tool("workspace_read"));
         assert!(!is_policy_overridable_tool("github_list_repositories"));
         assert!(!is_policy_overridable_tool("connected_apps_execute_tool"));

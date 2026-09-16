@@ -25,6 +25,7 @@ pub fn group_send_request_fingerprint(
     body: &str,
     routing_mode: &str,
     recipient_bot_ids: Option<&[String]>,
+    attachment_ids: &[String],
 ) -> String {
     let mut recipients: Vec<String> = recipient_bot_ids
         .map(|ids| {
@@ -37,7 +38,12 @@ pub fn group_send_request_fingerprint(
     recipients.sort();
     recipients.dedup();
     let mode = routing_mode.trim().to_ascii_lowercase();
-    format!("v2|{}|{}|{}", body.trim(), mode, recipients.join(","))
+    let mut fingerprint = format!("v2|{}|{}|{}", body.trim(), mode, recipients.join(","));
+    if !attachment_ids.is_empty() {
+        fingerprint.push_str("|att:");
+        fingerprint.push_str(&attachment_ids.join(","));
+    }
+    fingerprint
 }
 
 async fn load_idempotent_group_send(
@@ -141,6 +147,8 @@ pub struct TranscriptMessage {
     pub recipients: Option<Vec<MessageRecipient>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routing: Option<MessageRouting>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub attachments: Vec<agent_core::AttachmentDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -263,6 +271,7 @@ pub async fn list_messages(
             run_id: row.get("run_id"),
             recipients: None,
             routing: None,
+            attachments: Vec::new(),
         })
         .collect();
 
@@ -332,7 +341,7 @@ pub async fn list_messages(
             });
     }
 
-    Ok(messages
+    let mut messages: Vec<TranscriptMessage> = messages
         .into_iter()
         .map(|mut m| {
             if m.author_kind == "human" {
@@ -341,7 +350,15 @@ pub async fn list_messages(
             }
             m
         })
-        .collect())
+        .collect();
+    let attachment_ids: Vec<String> = messages.iter().map(|m| m.id.clone()).collect();
+    let attached = crate::attachments::store::list_for_messages(pool, &attachment_ids).await?;
+    for message in &mut messages {
+        if let Some(items) = attached.get(&message.id) {
+            message.attachments = items.clone();
+        }
+    }
+    Ok(messages)
 }
 
 pub async fn list_groups(
@@ -1001,6 +1018,7 @@ pub async fn append_human_message(
         run_id: None,
         recipients: None,
         routing: None,
+        attachments: Vec::new(),
     })
 }
 
@@ -1091,6 +1109,8 @@ pub struct SendGroupMessageRequest {
     pub mention_mode: Option<String>,
     pub routing_mode: Option<String>,
     pub skill_invocation: Option<serde_json::Value>,
+    #[serde(default)]
+    pub attachment_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1156,7 +1176,7 @@ pub async fn send_group_message(
         return Err(ApiError::Validation("not a group conversation".into()));
     }
     let trimmed = body.body.trim();
-    if trimmed.is_empty() || trimmed.len() > 100_000 {
+    if (trimmed.is_empty() && body.attachment_ids.is_empty()) || trimmed.len() > 100_000 {
         return Err(ApiError::Validation(
             "message must be between 1 and 100,000 bytes".into(),
         ));
@@ -1210,6 +1230,7 @@ pub async fn send_group_message(
         trimmed,
         routing_mode.as_str(),
         body.recipient_bot_ids.as_deref(),
+        &body.attachment_ids,
     );
 
     if let Some(replay) =
@@ -1263,6 +1284,18 @@ pub async fn send_group_message(
     .await
     .map_err(db_error)?;
 
+    if !body.attachment_ids.is_empty() {
+        let staged = crate::attachments::store::load_staged_for_admission(
+            &mut tx,
+            owner,
+            None,
+            Some(conversation_id),
+            &body.attachment_ids,
+        )
+        .await?;
+        crate::attachments::store::attach_to_message_only(&mut tx, &message_id, &staged).await?;
+    }
+
     let candidate_fingerprint = if routing_mode == GroupRoutingMode::Auto {
         Some(crate::group_router::candidate_fingerprint(
             &crate::group_router::load_route_candidates(pool, owner, &detail).await?,
@@ -1314,6 +1347,12 @@ pub async fn send_group_message(
             &message_id,
             trimmed,
             &SkillAdmissionInput::default(),
+        )
+        .await?;
+        crate::attachments::store::snapshot_message_attachments_onto_run(
+            &mut tx,
+            &message_id,
+            &records.run_id,
         )
         .await?;
         sqlx::query(
@@ -1377,6 +1416,7 @@ pub async fn send_group_message(
                 },
                 error_code: None,
             }),
+            attachments: Vec::new(),
         },
         recipients: recipients_out,
     })

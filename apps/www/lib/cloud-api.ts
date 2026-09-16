@@ -56,9 +56,9 @@ export async function cloudHostFetch(
 ): Promise<Response> {
   const { timeoutMs, ...requestInit } = init;
   const headers = new Headers(requestInit.headers);
-  if (requestInit.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
+    if (requestInit.body && !(requestInit.body instanceof FormData) && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+    }
 
   const signals: AbortSignal[] = [];
   if (requestInit.signal) {

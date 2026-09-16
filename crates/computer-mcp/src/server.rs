@@ -18,8 +18,9 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use agent_core::{
-    AgentCollaboration, AgentComputer, AgentConnectors, AgentHumanIntervention, AgentMemory,
-    AgentSubagents, BrowserRecoverySession, ToolApprovalGate, ToolRunContext,
+    AgentAttachments, AgentCollaboration, AgentComputer, AgentConnectors, AgentHumanIntervention,
+    AgentMemory, AgentSubagents, AgentUserQuestion, BrowserRecoverySession, ToolApprovalGate,
+    ToolRunContext,
 };
 
 use crate::error::ComputerMcpError;
@@ -47,6 +48,8 @@ impl ComputerMcpServer {
         browser_recovery: Option<Arc<BrowserRecoverySession>>,
         subagents: Option<Arc<dyn AgentSubagents>>,
         memory: Option<Arc<dyn AgentMemory>>,
+        attachments: Option<Arc<dyn AgentAttachments>>,
+        user_questions: Option<Arc<dyn AgentUserQuestion>>,
         source_conversation_id: String,
     ) -> Result<Self, ComputerMcpError> {
         let bearer_token = generate_bearer_token();
@@ -76,6 +79,8 @@ impl ComputerMcpServer {
             browser_recovery,
             subagents,
             memory,
+            attachments,
+            user_questions,
             source_conversation_id,
         );
         let service: StreamableHttpService<ComputerHandler, LocalSessionManager> =

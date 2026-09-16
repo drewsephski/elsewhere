@@ -44,6 +44,18 @@ export interface RunSummary {
   startedAt: string | null;
   finishedAt: string | null;
   archivedAt?: string | null;
+  attachments?: MessageAttachment[];
+}
+
+export interface MessageAttachment {
+  id: string;
+  originalName: string;
+  safeName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  workspacePath?: string;
+  kind: "image" | "pdf" | "text" | string;
 }
 
 export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "createdAt"> {
@@ -55,6 +67,7 @@ export interface RunDetail extends Omit<RunSummary, "task" | "botName" | "create
   originProvider?: string | null;
   originLabel?: string | null;
   memories?: RunMemoryFact[];
+  attachments?: MessageAttachment[];
 }
 
 export interface RunMemoryFact {
@@ -125,6 +138,7 @@ export interface TranscriptMessage {
   runId?: string | null;
   recipients?: MessageRecipient[];
   routing?: MessageRouting | null;
+  attachments?: MessageAttachment[];
 }
 
 export interface GroupListItem {

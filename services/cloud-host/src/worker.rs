@@ -50,6 +50,10 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
                 .human_interventions
                 .cancel_pending_for_run(&run_id, "run_cancelled")
                 .await;
+            let _ = state
+                .user_questions
+                .cancel_pending_for_run(&run_id, "run_cancelled")
+                .await;
         }
         if !state.draining.load(std::sync::atomic::Ordering::SeqCst) {
             crate::routines::tick(&state.pool, chrono::Utc::now())
@@ -79,6 +83,9 @@ pub async fn run(state: AppState, leadership: &mut PgConnection) -> Result<(), S
         }
         if let Err(err) = crate::memory::tick_extraction(&state).await {
             tracing::warn!(error = %err, "memory extraction tick failed");
+        }
+        if let Err(err) = crate::attachments::store::expire_unused_staged(&state.pool).await {
+            tracing::warn!(error = %err, "staged attachment expiry failed");
         }
         *state
             .runner_heartbeat

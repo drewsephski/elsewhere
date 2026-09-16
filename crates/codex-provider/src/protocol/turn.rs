@@ -3,12 +3,19 @@ use serde_json::{json, Value};
 use crate::error::CodexProviderError;
 
 pub fn build_turn_start_params(thread_id: &str, user_text: &str) -> Value {
-    json!({
-        "threadId": thread_id,
-        "input": [{
+    build_turn_start_params_with_input(
+        thread_id,
+        vec![json!({
             "type": "text",
             "text": user_text
-        }]
+        })],
+    )
+}
+
+pub fn build_turn_start_params_with_input(thread_id: &str, input: Vec<Value>) -> Value {
+    json!({
+        "threadId": thread_id,
+        "input": input
     })
 }
 

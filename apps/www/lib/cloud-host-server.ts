@@ -377,7 +377,9 @@ async function forwardCloudHostRequest(
   const { request, upstreamPath, search, headers, requestId } = options;
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const isEventStream = upstreamPath.endsWith("/events");
-  const upstreamTimeoutMs = isEventStream ? 0 : DEFAULT_API_TIMEOUT_MS;
+  const isUpload =
+    request.method === "POST" && upstreamPath.includes("/attachments");
+  const upstreamTimeoutMs = isEventStream ? 0 : isUpload ? 90_000 : DEFAULT_API_TIMEOUT_MS;
   const upstreamSignal =
     upstreamTimeoutMs > 0
       ? AbortSignal.any([request.signal, AbortSignal.timeout(upstreamTimeoutMs)])

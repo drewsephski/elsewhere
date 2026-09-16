@@ -199,6 +199,90 @@ async fn maps_tool_events_and_completes() {
 }
 
 #[tokio::test]
+async fn image_bearing_turn_uses_local_image_input() {
+    let process = spawn_fake_app_server_with_mode(FakeServerMode::EchoUserInput)
+        .await
+        .expect("fake server");
+    let engine = CodexRunEngine::new(CodexRunEngineConfig {
+        startup_timeout: std::time::Duration::from_secs(5),
+        turn_timeout: std::time::Duration::from_secs(5),
+        ..CodexRunEngineConfig::default()
+    });
+    let events = Arc::new(RecordingEvents {
+        events: Mutex::new(vec![]),
+    });
+    let store = Arc::new(MemStore::new());
+    store
+        .runs
+        .lock()
+        .unwrap()
+        .insert("req-1".into(), ("pending".into(), 0));
+    let mut png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    png.extend_from_slice(&[0; 16]);
+    let descriptor = agent_core::AttachmentDescriptor {
+        id: "aaaaaaaa".into(),
+        original_name: "shot.png".into(),
+        safe_name: "shot.png".into(),
+        mime_type: "image/png".into(),
+        size_bytes: png.len() as u64,
+        sha256: "abc".into(),
+        workspace_path: "/workspace/inputs/run-1/00-aaaaaaaa.png".into(),
+        kind: agent_core::AttachmentKind::Image,
+    };
+    let mut deps = agent_core::SharedRunDeps::allow_all_approval(
+        Arc::new(FakeAgentComputer::new()),
+        store.clone(),
+        events.clone(),
+        Arc::new(AtomicBool::new(false)),
+        "run-1".into(),
+        "owner".into(),
+        "comp-1".into(),
+    );
+    deps.attachments = Some(Arc::new(agent_core::InMemoryAttachments::new(vec![(
+        descriptor.clone(),
+        png,
+    )])));
+    deps.user_input = agent_core::RunUserInput {
+        text: "describe this".into(),
+        attachments: vec![descriptor],
+    };
+    let ctx = AgentLoopContext {
+        request_id: "req-1".into(),
+        conversation_id: "conv-1".into(),
+        assistant_message_id: "asst-1".into(),
+        bot_id: "bot-1".into(),
+        model: "gpt-5.6-luna".into(),
+        instructions: "test".into(),
+    };
+    let _ = engine
+        .run_with_managed_process(
+            ctx,
+            deps,
+            vec![json!({"role":"user","content":"describe this"})],
+            process,
+        )
+        .await;
+    let assistant = store.assistant_body.lock().unwrap().clone();
+    assert!(
+        assistant.contains("localImage"),
+        "expected fake server to echo native image input, got {assistant}"
+    );
+}
+
+#[tokio::test]
+async fn ask_user_fake_turn_continues_with_selected_option() {
+    let (labels, status, assistant) = run_with_fake(
+        FakeServerMode::AskUserThenContinue,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await;
+    assert!(labels.iter().any(|l| l == "tool_call"));
+    assert!(labels.iter().any(|l| l == "tool_result"));
+    assert_eq!(status, "completed");
+    assert!(assistant.contains("Staging"));
+}
+
+#[tokio::test]
 async fn ignores_wrong_thread_notifications() {
     let (labels, status, _) = run_with_fake(
         FakeServerMode::WrongThreadNotifications,

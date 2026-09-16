@@ -208,6 +208,16 @@ pub async fn enqueue_owner_attention(
     kind_label: &str,
     web_origin: Option<&str>,
 ) -> Result<bool, ApiError> {
+    enqueue_owner_attention_with_detail(pool, run_id, kind_label, None, web_origin).await
+}
+
+pub async fn enqueue_owner_attention_with_detail(
+    pool: &PgPool,
+    run_id: &str,
+    kind_label: &str,
+    detail: Option<&str>,
+    web_origin: Option<&str>,
+) -> Result<bool, ApiError> {
     let row = sqlx::query(
         r#"
         SELECT r.id, r.owner_id, r.conversation_id, r.origin_kind, r.origin_provider, b.name AS bot_name
@@ -238,6 +248,10 @@ pub async fn enqueue_owner_attention(
     let label = origin_label(&origin_kind, origin_provider.as_deref());
     let _ = label;
     let mut body = format!("{bot_name} needs your {kind_label} in Elsewhere.");
+    if let Some(detail) = detail.map(str::trim).filter(|v| !v.is_empty()) {
+        body.push_str("\n");
+        body.push_str(detail);
+    }
     if let Some(url) = url {
         body.push_str("\n");
         body.push_str(&url);

@@ -63,10 +63,18 @@ pub async fn spawn_fake_app_server_with_mode(
             let role = state.role_for_turn(&thread_id, &turn_id);
             let emit_state = state.clone();
             let emit_writer = writer.clone();
+            let turn_params = params.clone();
             tokio::spawn(async move {
-                if let Err(err) =
-                    emit_turn_sequence(emit_writer, emit_state, mode, role, thread_id, turn_id)
-                        .await
+                if let Err(err) = emit_turn_sequence(
+                    emit_writer,
+                    emit_state,
+                    mode,
+                    role,
+                    thread_id,
+                    turn_id,
+                    turn_params,
+                )
+                .await
                 {
                     tracing::debug!("fake app-server turn sequence ended: {err}");
                 }
@@ -85,6 +93,8 @@ pub enum FakeServerMode {
     TurnInterrupted,
     WrongThreadNotifications,
     NestedChildWhileParentTurnOpen,
+    EchoUserInput,
+    AskUserThenContinue,
 }
 
 struct FakeServerState {
@@ -230,7 +240,75 @@ async fn emit_turn_sequence(
     role: TurnRole,
     thread_id: String,
     turn_id: String,
+    params: serde_json::Value,
 ) -> Result<(), CodexProviderError> {
+    if mode == FakeServerMode::EchoUserInput {
+        let input = params
+            .get("input")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let has_image = input
+            .iter()
+            .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("localImage"));
+        let summary = if has_image {
+            "native localImage received"
+        } else {
+            "text-only user input"
+        };
+        return emit_text_turn(&writer, mode, &thread_id, &turn_id, summary, false).await;
+    }
+
+    if mode == FakeServerMode::AskUserThenContinue {
+        write_notification(
+            &writer,
+            "item/started",
+            serde_json::json!({
+                "threadId": thread_id,
+                "turnId": turn_id,
+                "item": {
+                    "type": "mcpToolCall",
+                    "id": "item-ask",
+                    "server": "elsewhere",
+                    "tool": "ask_user",
+                    "arguments": {
+                        "question": "Which environment should I deploy to?",
+                        "options": ["Staging", "Production", "Don't deploy"]
+                    },
+                    "status": "inProgress"
+                }
+            }),
+        )
+        .await?;
+        write_notification(
+            &writer,
+            "item/completed",
+            serde_json::json!({
+                "threadId": thread_id,
+                "turnId": turn_id,
+                "item": {
+                    "type": "mcpToolCall",
+                    "id": "item-ask",
+                    "server": "elsewhere",
+                    "tool": "ask_user",
+                    "status": "completed",
+                    "success": true,
+                    "durationMs": 20,
+                    "result": { "selectedIndex": 0, "selectedOption": "Staging" }
+                }
+            }),
+        )
+        .await?;
+        return emit_text_turn(
+            &writer,
+            mode,
+            &thread_id,
+            &turn_id,
+            "Deploying to Staging",
+            false,
+        )
+        .await;
+    }
     if mode == FakeServerMode::NestedChildWhileParentTurnOpen && role == TurnRole::Parent {
         let notified = state.child_done.notified();
         if state.child_finished.load(Ordering::SeqCst) == 0 {
@@ -382,7 +460,9 @@ async fn emit_standard_turn(
         FakeServerMode::HappyPath
         | FakeServerMode::TextOnly
         | FakeServerMode::WrongThreadNotifications
-        | FakeServerMode::NestedChildWhileParentTurnOpen => "completed",
+        | FakeServerMode::NestedChildWhileParentTurnOpen
+        | FakeServerMode::EchoUserInput
+        | FakeServerMode::AskUserThenContinue => "completed",
         FakeServerMode::TurnFailed => "failed",
         FakeServerMode::TurnInterrupted => "interrupted",
     };

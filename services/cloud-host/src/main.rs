@@ -142,6 +142,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "cancelled stale human interventions after host restart"
         );
     }
+    let interrupted_questions = state
+        .user_questions
+        .interrupt_all_pending_on_host_restart()
+        .await?;
+    if interrupted_questions > 0 {
+        tracing::warn!(
+            count = interrupted_questions,
+            "interrupted stale user questions after host restart"
+        );
+    }
     let app = build_router(state.clone());
 
     let worker_state = state.clone();

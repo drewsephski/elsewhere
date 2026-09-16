@@ -14,6 +14,8 @@ import {
   type SubagentActivity,
 } from "@/lib/subagent-events";
 import type { ApprovalRequestedPayload, ApprovalTerminalState } from "@/components/app/approval-card";
+import type { UserQuestionPayload } from "@/components/app/user-question-card";
+import { userQuestionFromPayload } from "@/components/app/user-question-card";
 import {
   createContext,
   useContext,
@@ -26,7 +28,8 @@ import {
 export type RunActivityItem =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState }
-  | { id: string; kind: "subagent"; subagent: SubagentActivity };
+  | { id: string; kind: "subagent"; subagent: SubagentActivity }
+  | { id: string; kind: "question"; question: UserQuestionPayload };
 
 export type ActiveRunState = {
   runId: string | null;
@@ -244,6 +247,49 @@ export function ActiveRunProvider({
                   ),
                 );
               }
+            } else if (event.event === "user_question_requested") {
+              const question = userQuestionFromPayload(runId ?? "", payload);
+              if (question) {
+                setTimeline((previous) =>
+                  previous.some(
+                    (item) =>
+                      item.kind === "question" &&
+                      item.question.questionId === question.questionId,
+                  )
+                    ? previous
+                    : [...previous, { id, kind: "question", question }],
+                );
+              }
+            } else if (event.event === "user_question_answered") {
+              const selectedIndex =
+                typeof payload.selectedIndex === "number" ? payload.selectedIndex : null;
+              setTimeline((previous) =>
+                previous.map((item) =>
+                  item.kind === "question" &&
+                  item.question.questionId === payload.questionId
+                    ? {
+                        ...item,
+                        question: {
+                          ...item.question,
+                          selectedIndex,
+                          status: "answered",
+                        },
+                      }
+                    : item,
+                ),
+              );
+            } else if (event.event === "user_question_cancelled") {
+              setTimeline((previous) =>
+                previous.map((item) =>
+                  item.kind === "question" &&
+                  item.question.questionId === payload.questionId
+                    ? {
+                        ...item,
+                        question: { ...item.question, status: "cancelled" },
+                      }
+                    : item,
+                ),
+              );
             } else if (isSubagentEvent(event.event)) {
               const activity = subagentActivityFromPayload(payload);
               if (activity) {

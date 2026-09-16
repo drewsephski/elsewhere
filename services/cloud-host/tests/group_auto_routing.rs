@@ -141,6 +141,7 @@ async fn auto_send_admits_pending_without_runs(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -202,6 +203,7 @@ async fn router_selects_researcher(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -261,6 +263,7 @@ async fn explicit_mention_skips_router_and_resolves_immediately(pool: PgPool) {
             routing_mode: Some("specific".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -299,6 +302,7 @@ async fn delete_pending_auto_message_cancels_route(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -358,6 +362,7 @@ async fn auto_engine_ignores_empty_provider_cache(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -427,6 +432,7 @@ async fn removed_selected_bot_before_apply_requeues_route(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -507,6 +513,7 @@ async fn retry_resets_attempts_after_max_failures(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await
@@ -617,6 +624,7 @@ async fn everyone_routes_to_all_eligible_bots(pool: PgPool) {
             routing_mode: Some("auto".into()),
 
             skill_invocation: None,
+            attachment_ids: vec![],
         },
     )
     .await

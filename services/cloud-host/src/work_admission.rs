@@ -27,8 +27,16 @@ pub(crate) struct BotExecutionSnapshot {
     pub memories: Vec<RetrievedMemory>,
 }
 
-pub(crate) fn validate_admission_message(message: &str) -> Result<(), ApiError> {
-    if message.trim().is_empty() || message.len() > 100_000 {
+pub(crate) fn validate_admission_message(
+    message: &str,
+    attachment_count: usize,
+) -> Result<(), ApiError> {
+    if message.len() > 100_000 {
+        return Err(ApiError::Validation(
+            "Work must contain between 1 and 100,000 bytes".into(),
+        ));
+    }
+    if message.trim().is_empty() && attachment_count == 0 {
         return Err(ApiError::Validation(
             "Work must contain between 1 and 100,000 bytes".into(),
         ));
@@ -134,6 +142,7 @@ pub(crate) enum WorkAdmissionIntent<'a> {
         conversation_id: Option<&'a str>,
         message: &'a str,
         skills: &'a SkillAdmissionInput,
+        attachment_ids: &'a [String],
     },
     ChannelMessage {
         bot_id: &'a str,
@@ -156,6 +165,7 @@ pub(crate) async fn admit(
             conversation_id,
             message,
             skills,
+            attachment_ids,
         } => {
             admit_human_message(
                 tx,
@@ -167,6 +177,7 @@ pub(crate) async fn admit(
                 skills,
                 "web",
                 None,
+                attachment_ids,
             )
             .await
         }
@@ -187,6 +198,7 @@ pub(crate) async fn admit(
                 skills,
                 "channel",
                 Some(origin_provider),
+                &[],
             )
             .await
         }
@@ -203,11 +215,13 @@ async fn admit_human_message(
     skills: &SkillAdmissionInput,
     origin_kind: &str,
     origin_provider: Option<&str>,
+    attachment_ids: &[String],
 ) -> Result<BootstrapRunRecords, ApiError> {
-    validate_admission_message(message)?;
+    validate_admission_message(message, attachment_ids.len())?;
     validate_request_id(request_id)?;
     acquire_owner_request_locks(tx, owner, request_id).await?;
 
+    let attachment_fp = crate::attachments::store::fingerprint(attachment_ids);
     if let Some(row) = sqlx::query(
         "SELECT r.*, q.instructions, q.user_message FROM agent_runs r LEFT JOIN work_queue q ON q.run_id = r.id WHERE request_id = $1",
     )
@@ -219,9 +233,15 @@ async fn admit_human_message(
         if row.get::<String, _>("owner_id") != owner {
             return Err(ApiError::NotFound);
         }
+        let stored_fp = crate::attachments::store::attachment_ids_for_run_in_tx(
+            tx,
+            &row.get::<String, _>("id"),
+        )
+        .await?;
         if row.get::<String, _>("bot_id") != bot_id
             || row.get::<Option<String>, _>("user_message").as_deref() != Some(message.trim())
             || conversation_id.is_some_and(|id| id != row.get::<String, _>("conversation_id"))
+            || crate::attachments::store::fingerprint(&stored_fp) != attachment_fp
         {
             return Err(ApiError::Conflict(
                 "This request key was already used for different work".into(),
@@ -344,6 +364,24 @@ async fn admit_human_message(
         .map_err(db_error)?;
     persist_run_skills_for_admission(tx, owner, bot_id, &run_id, skills).await?;
     persist_run_memories(tx, owner, bot_id, &run_id, &snapshot.memories).await?;
+
+    if !attachment_ids.is_empty() {
+        let staged = crate::attachments::store::load_staged_for_admission(
+            tx,
+            owner,
+            Some(bot_id),
+            Some(&conversation_id),
+            attachment_ids,
+        )
+        .await?;
+        crate::attachments::store::attach_to_message_and_run(
+            tx,
+            &user_message_id,
+            &run_id,
+            &staged,
+        )
+        .await?;
+    }
 
     Ok(BootstrapRunRecords {
         run_id,
