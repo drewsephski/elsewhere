@@ -127,7 +127,7 @@ export function ResultContentDialog({
           </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-[#faf9fc] px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-background px-5 py-4">
           {content.status === "loading" ? (
             <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
               <Spinner className="size-5" />
@@ -177,7 +177,7 @@ export function ResultContentDialog({
           ) : null}
 
           {content.status === "error" ? (
-            <p className="py-8 text-center text-sm text-red-700" role="alert">
+            <p className="py-8 text-center text-sm text-destructive" role="alert">
               {content.message}
             </p>
           ) : null}
@@ -201,7 +201,7 @@ export function ResultOpenButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
         className,
       )}
       aria-label={`${label} file`}

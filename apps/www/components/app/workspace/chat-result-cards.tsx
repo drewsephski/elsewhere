@@ -54,30 +54,22 @@ export function ChatResultCards({
 
   return (
     <>
-      <div
-        className={cn(
-          "flex flex-col gap-1 border-t border-border/50 pt-2",
-          className,
-        )}
-      >
+      <ul className={cn("flex flex-col gap-1", className)} aria-label="Results">
         {items.map((item) => (
-          <div
+          <li
             key={item.id}
-            className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/20 px-2 py-1"
+            className="flex items-center gap-1.5 rounded-lg bg-surface-hover px-2 py-1 transition-colors hover:bg-surface-active"
           >
             <button
               type="button"
               onClick={() => handleOpen(item)}
-              className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs transition-colors rounded-md -my-0.5 py-0.5 pr-1 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-0.5 pr-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
-              <FileText
-                className="size-3.5 shrink-0 text-primary/80"
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate font-medium text-foreground/90">
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground">
                 {resultItemTitle(item.kind, item.name)}
               </span>
-              <span className="shrink-0 text-[11px] text-muted-foreground">
+              <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
                 {formatBytes(item.size)}
               </span>
             </button>
@@ -85,9 +77,9 @@ export function ChatResultCards({
               onClick={() => handleOpen(item)}
               className="rounded-md px-1.5 py-0.5 text-[11px]"
             />
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
 
       <ResultContentDialog
         open={viewerOpen}
