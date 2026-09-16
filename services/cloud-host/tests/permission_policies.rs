@@ -337,6 +337,23 @@ async fn wait_writes(computer: &CountingComputer, expected: usize) -> bool {
     false
 }
 
+async fn wait_no_active_runs(pool: &PgPool, owner: &str) -> bool {
+    for _ in 0..50 {
+        tokio::time::sleep(StdDuration::from_millis(100)).await;
+        let active: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM agent_runs WHERE owner_id = $1 AND status IN ('queued', 'running')",
+        )
+        .bind(owner)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if active == 0 {
+            return true;
+        }
+    }
+    false
+}
+
 async fn policy_event_count(pool: &PgPool, request_id: &str, decision: &str) -> i64 {
     sqlx::query_scalar(
         r#"
@@ -868,6 +885,7 @@ async fn unattended_routine_and_webhook_use_the_same_policy_path(pool: PgPool) {
             .unwrap();
         assert!(wait_writes(&computer, 1).await);
         assert_eq!(pending_count(&pool, &owner).await, 0);
+        assert!(wait_no_active_runs(&pool, &owner).await);
     }
 
     let webhook = routines::save(
