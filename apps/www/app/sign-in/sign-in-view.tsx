@@ -3,16 +3,18 @@
 import { ProductLogo } from "@/components/product-logo";
 import { siteConfig } from "@elsewhere/brand";
 import { authClient } from "@/lib/auth-client";
+import { authModeFromPathname, authModeToggleHref } from "@/lib/auth-mode";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 export function SignInView() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const resetSuccess = searchParams.get("reset") === "success";
   const [email, setEmail] = useState("");
@@ -20,7 +22,7 @@ export function SignInView() {
   const [name, setName] = useState("");
   const [invitation, setInvitation] = useState("");
   const invitationRequired = process.env.NEXT_PUBLIC_ELSEWHERE_ALPHA_INVITE_REQUIRED === "1";
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const mode = authModeFromPathname(pathname);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -48,6 +50,8 @@ export function SignInView() {
       }
       router.push("/app");
       router.refresh();
+    } catch {
+      setError(mode === "sign-up" ? "Sign up failed. Please try again." : "Sign in failed. Please try again.");
     } finally {
       setPending(false);
     }
@@ -55,10 +59,17 @@ export function SignInView() {
 
   async function handleGoogleSignIn() {
     setError(null);
-    await authClient.signIn.social({
-      provider: "google",
-      callbackURL: "/app",
-    });
+    setPending(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/app",
+      });
+    } catch {
+      setError("Google sign-in failed. Please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   const googleEnabled =
@@ -162,19 +173,19 @@ export function SignInView() {
             type="button"
             variant="outline"
             className="mt-3 w-full"
+            disabled={pending}
             onClick={handleGoogleSignIn}
           >
-            Continue with Google
+            {pending ? "Working…" : "Continue with Google"}
           </Button>
         ) : null}
 
-        <button
-          type="button"
-          className="mt-6 text-sm text-primary underline-offset-4 hover:underline"
-          onClick={() => setMode(mode === "sign-in" ? "sign-up" : "sign-in")}
+        <Link
+          href={authModeToggleHref(mode)}
+          className="mt-6 inline-block text-sm text-primary underline-offset-4 hover:underline"
         >
           {mode === "sign-in" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-        </button>
+        </Link>
 
         <Link
           href="/"

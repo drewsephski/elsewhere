@@ -46,6 +46,7 @@ import {
   formatWebhookLastReceived,
 } from "@/lib/routine-time";
 import { toast } from "sonner";
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 
 const intervals = [
   { value: 15, label: "Every 15 minutes" },
@@ -185,6 +186,7 @@ export function RoutinesManager() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [revealedWebhookUrl, setRevealedWebhookUrl] = useState<string | null>(null);
+  const [confirmRotateWebhook, setConfirmRotateWebhook] = useState(false);
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -802,7 +804,7 @@ export function RoutinesManager() {
                     routines.find((routine) => routine.id === editing)?.triggerMode !==
                       "webhook"
                   }
-                  onClick={() => void handleRotateWebhookUrl()}
+                  onClick={() => setConfirmRotateWebhook(true)}
                 >
                   Rotate URL
                 </Button>
@@ -875,6 +877,26 @@ export function RoutinesManager() {
           </form>
         </FramePanel>
       </Frame>
+      <ConfirmAlertDialog
+        open={confirmRotateWebhook}
+        onOpenChange={(open) => {
+          if (!open && busy === null) {
+            setConfirmRotateWebhook(false);
+          }
+        }}
+        title="Rotate webhook URL?"
+        description="The previous URL stops working immediately. Any integrations still using it will fail until you update them with the new URL."
+        confirmLabel="Rotate URL"
+        pendingLabel="Rotating…"
+        destructive
+        pending={busy === "form"}
+        onConfirm={() => {
+          void (async () => {
+            await handleRotateWebhookUrl();
+            setConfirmRotateWebhook(false);
+          })();
+        }}
+      />
     </div>
   );
 }

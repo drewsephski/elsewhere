@@ -12,8 +12,10 @@ import {
   dataGridFeatures,
   type DataGridFeatures,
 } from "@/components/reui/data-grid/data-grid";
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { messageActionCopy } from "@/lib/message-action-copy";
 import {
   ColumnDef,
   PaginationState,
@@ -54,6 +56,8 @@ export function RecentRunsPanel({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const archiveCopy = messageActionCopy("archive");
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -114,6 +118,7 @@ export function RecentRunsPanel({
         throw new Error(body?.error ?? "Could not archive work");
       }
       await load();
+      setConfirmArchiveId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not archive work");
     } finally {
@@ -190,7 +195,7 @@ export function RecentRunsPanel({
               className="text-muted-foreground hover:text-foreground"
               disabled={archivingId !== null}
               aria-label={`Archive ${row.original.task}`}
-              onClick={() => void handleArchive(row.original.runId)}
+              onClick={() => setConfirmArchiveId(row.original.runId)}
             >
               <Archive className="size-4" aria-hidden />
             </Button>
@@ -247,6 +252,25 @@ export function RecentRunsPanel({
             }
           />
         }
+      />
+      <ConfirmAlertDialog
+        open={confirmArchiveId !== null}
+        onOpenChange={(open) => {
+          if (!open && archivingId === null) {
+            setConfirmArchiveId(null);
+          }
+        }}
+        title="Archive this work?"
+        description="You can find it again under Work → Archived."
+        confirmLabel={archiveCopy.confirmLabel}
+        pendingLabel={archiveCopy.pendingLabel}
+        destructive={archiveCopy.destructive}
+        pending={archivingId !== null}
+        onConfirm={() => {
+          if (confirmArchiveId) {
+            void handleArchive(confirmArchiveId);
+          }
+        }}
       />
     </section>
   );

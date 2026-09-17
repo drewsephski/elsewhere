@@ -23,8 +23,9 @@ fn browser_profiles_root(config: &Config) -> Result<&Path, ApiError> {
         )
     })?;
     if !root.is_absolute() || root.starts_with("/workspace") {
-        return Err(ApiError::Internal(
-            "Browser profiles require an absolute host-only directory".into(),
+        return Err(ApiError::Conflict(
+            "Browser profiles require ELSEWHERE_BROWSER_PROFILES_DIR to be an absolute path on a host-only volume (not inside an agent sandbox); e.g. $HOME/.elsewhere/browser-profiles"
+                .into(),
         ));
     }
     Ok(root.as_path())

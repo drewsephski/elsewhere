@@ -200,6 +200,14 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     setBot(loaded);
   }, []);
 
+  const handleBotSaved = useCallback(
+    (updated: BotSummary) => {
+      setBot(updated);
+      void refresh();
+    },
+    [refresh],
+  );
+
   const handleDeleteBot = useCallback(
     async (botId: string) => {
       const response = await cloudHostFetch(`/v1/bots/${botId}`, { method: "DELETE" });
@@ -304,6 +312,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           botId={selectedBotId}
           onOpenContext={() => setContextSheetOpen(true)}
           onBotLoaded={handleBotLoaded}
+          syncedBot={bot}
           onRenameBot={handleRenameBot}
           onStreamRunIdChange={handleStreamRunIdChange}
           railCollapsed={railCollapsed}
@@ -343,7 +352,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         bot={bot}
         activeRun={activeRun}
         showConnectionSettings={false}
-        onBotSaved={setBot}
+        onBotSaved={handleBotSaved}
         onCollapse={() => setRailCollapsed(true)}
       />
     </aside>
@@ -410,7 +419,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             bot={bot}
             activeRun={activeRun}
             showConnectionSettings={false}
-            onBotSaved={setBot}
+            onBotSaved={handleBotSaved}
           />
         ) : null}
       </MobileSheet>

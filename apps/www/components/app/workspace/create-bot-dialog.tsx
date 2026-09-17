@@ -18,7 +18,6 @@ import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -160,9 +159,21 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
               disabled={loading}
             />
             {!loading && !computers.length ? (
-              <p className="text-sm text-muted-foreground">
-                <Link href="/app/computers" className="underline">Create a computer</Link> first.
-              </p>
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                <p className="text-sm text-muted-foreground">
+                  Bots need a computer to work on. Create one first, then come back.
+                </p>
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    onClose();
+                    router.push("/app/computers");
+                  }}
+                >
+                  Create a computer
+                </Button>
+              </div>
             ) : null}
           </FormFields>
           {error ? (

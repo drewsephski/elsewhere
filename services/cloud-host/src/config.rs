@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use agent_core::DEFAULT_MODEL;
 
@@ -130,25 +130,26 @@ impl Config {
             .map(PathBuf::from)
             .or_else(|| which_codex_on_path());
 
+        let cwd = std::env::current_dir().ok();
         let codex_profiles_dir = env::var("ELSEWHERE_CODEX_PROFILES_DIR")
             .ok()
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
             .or_else(|| {
                 if allow_codex_login && auth_mode == AuthMode::Hybrid {
-                    std::env::current_dir()
-                        .ok()
+                    cwd.as_ref()
                         .map(|cwd| cwd.join(".data").join("codex-profiles"))
                 } else {
                     None
                 }
-            });
+            })
+            .map(|path| resolve_to_absolute(path, cwd.as_deref()));
 
         let browser_profiles_dir = resolve_browser_profiles_dir(
             env::var("ELSEWHERE_BROWSER_PROFILES_DIR").ok(),
             browser_enabled,
             auth_mode,
-            std::env::current_dir().ok(),
+            cwd,
         );
 
         let bind_addr = resolve_bind_addr(auth_mode)?;
@@ -243,6 +244,20 @@ fn which_codex_on_path() -> Option<PathBuf> {
     codex_provider::which_codex_executable().ok()
 }
 
+/// Resolve a configured path to absolute form without touching the filesystem.
+/// Relative paths join against `cwd` when available; absolute paths are unchanged.
+/// If relative and `cwd` is unknown, the relative path is returned as-is so later
+/// host-only checks can surface a clear operator error.
+fn resolve_to_absolute(path: PathBuf, cwd: Option<&Path>) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else if let Some(cwd) = cwd {
+        cwd.join(path)
+    } else {
+        path
+    }
+}
+
 /// Host-only root for durable Chromium sign-in profiles.
 ///
 /// `ELSEWHERE_BROWSER_PROFILES_DIR` always wins. Hosted deployments must set it to an absolute
@@ -251,19 +266,23 @@ fn which_codex_on_path() -> Option<PathBuf> {
 /// working-directory fallback exists only for local development: inside a container it resolves
 /// to something like `/app/.data/browser-profiles`, which is neither durable nor creatable by the
 /// non-root service user, so any non-hybrid deployment relying on it gets a startup warning.
+/// Relative env values are resolved against `cwd` before storage on Config.
 fn resolve_browser_profiles_dir(
     env_value: Option<String>,
     browser_enabled: bool,
     auth_mode: AuthMode,
     cwd: Option<PathBuf>,
 ) -> Option<PathBuf> {
+    let cwd_ref = cwd.as_deref();
     if let Some(explicit) = env_value.filter(|v| !v.trim().is_empty()) {
-        return Some(PathBuf::from(explicit));
+        return Some(resolve_to_absolute(PathBuf::from(explicit), cwd_ref));
     }
     if !browser_enabled {
         return None;
     }
-    let fallback = cwd.map(|cwd| cwd.join(".data").join("browser-profiles"));
+    let fallback = cwd
+        .as_ref()
+        .map(|cwd| cwd.join(".data").join("browser-profiles"));
     if auth_mode != AuthMode::Hybrid {
         tracing::warn!(
             browser_profiles_dir = ?fallback,
@@ -437,6 +456,38 @@ mod tests {
         assert_eq!(
             resolve_browser_profiles_dir(None, true, AuthMode::Jwt, None),
             None
+        );
+    }
+
+    #[test]
+    fn resolve_to_absolute_joins_relative_against_cwd() {
+        assert_eq!(
+            resolve_to_absolute(
+                PathBuf::from(".data/codex-profiles"),
+                Some(Path::new("/repo"))
+            ),
+            PathBuf::from("/repo/.data/codex-profiles")
+        );
+        assert_eq!(
+            resolve_to_absolute(PathBuf::from("/abs/codex"), Some(Path::new("/repo"))),
+            PathBuf::from("/abs/codex")
+        );
+        assert_eq!(
+            resolve_to_absolute(PathBuf::from("relative"), None),
+            PathBuf::from("relative")
+        );
+    }
+
+    #[test]
+    fn relative_browser_profiles_dir_env_resolves_against_cwd() {
+        assert_eq!(
+            resolve_browser_profiles_dir(
+                Some(".data/browser-profiles".into()),
+                true,
+                AuthMode::Hybrid,
+                Some(PathBuf::from("/repo")),
+            ),
+            Some(PathBuf::from("/repo/.data/browser-profiles"))
         );
     }
 }

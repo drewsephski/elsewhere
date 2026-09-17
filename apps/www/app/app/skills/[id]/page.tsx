@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { cloudHostErrorMessage, cloudHostFetch } from "@/lib/cloud-api";
+import {
+  formatSkillValidationError,
+  parseSkillFrontmatterName,
+  SKILL_NAME_RULES,
+  validateSkillName,
+} from "@/lib/skill-frontmatter";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +39,7 @@ export default function SkillDetailPage() {
   const [skillMd, setSkillMd] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [startRename, setStartRename] = useState(false);
@@ -54,18 +61,54 @@ export default function SkillDetailPage() {
     })();
   }, [skillId]);
 
+  const frontmatterName = useMemo(
+    () => parseSkillFrontmatterName(skillMd),
+    [skillMd],
+  );
+
+  const nameFieldError = useMemo(() => {
+    if (frontmatterName == null) {
+      return null;
+    }
+    const patternError = validateSkillName(frontmatterName);
+    if (patternError) {
+      return patternError;
+    }
+    if (skill && frontmatterName !== skill.slug) {
+      return `Frontmatter name must match this skill's slug (${skill.slug}).`;
+    }
+    return null;
+  }, [frontmatterName, skill]);
+
   async function handleSaveVersion() {
     if (saving) return;
     setSaving(true);
     setMessage(null);
     setError(null);
+    setFieldError(null);
+
+    if (nameFieldError) {
+      setFieldError(nameFieldError);
+      setError(nameFieldError);
+      setSaving(false);
+      return;
+    }
+
     try {
       const response = await cloudHostFetch(`/v1/skills/${skillId}/versions`, {
         method: "POST",
         body: JSON.stringify({ skillMd }),
       });
       if (!response.ok) {
-        setError("Validation failed. Check the SKILL.md frontmatter and try again.");
+        const raw = await cloudHostErrorMessage(
+          response,
+          "Validation failed. Check the SKILL.md frontmatter and try again.",
+        );
+        const formatted = formatSkillValidationError(raw);
+        setError(formatted);
+        if (/slug|name must|lowercase|hyphen/i.test(formatted)) {
+          setFieldError(formatted);
+        }
         return;
       }
       setMessage("Saved a new version.");
@@ -205,12 +248,28 @@ export default function SkillDetailPage() {
         </Alert>
       ) : null}
 
-      <Textarea
-        value={skillMd}
-        onChange={(event) => setSkillMd(event.target.value)}
-        className="min-h-[min(60vh,32rem)] font-mono text-xs leading-5"
-        aria-label="SKILL.md editor"
-      />
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">{SKILL_NAME_RULES}</p>
+        <Textarea
+          value={skillMd}
+          onChange={(event) => {
+            setSkillMd(event.target.value);
+            setFieldError(null);
+            setError(null);
+          }}
+          className="min-h-[min(60vh,32rem)] font-mono text-xs leading-5"
+          aria-label="SKILL.md editor"
+          aria-invalid={Boolean(fieldError || nameFieldError)}
+          aria-describedby={
+            fieldError || nameFieldError ? "skill-md-name-error" : undefined
+          }
+        />
+        {fieldError || nameFieldError ? (
+          <p id="skill-md-name-error" role="alert" className="text-sm text-destructive">
+            {fieldError ?? nameFieldError}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

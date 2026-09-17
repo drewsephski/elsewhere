@@ -2,6 +2,7 @@
 export const appRoutes = {
   workspace: "/app",
   signIn: "/sign-in",
+  signUp: "/sign-up",
   createBot: "/app?create=1",
   computers: "/app/computers",
   routines: "/app/routines",

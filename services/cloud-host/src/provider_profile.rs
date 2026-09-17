@@ -16,8 +16,9 @@ pub async fn profile_for_owner(
         ApiError::Conflict("ChatGPT connection is not configured on this deployment".into())
     })?;
     if !root.is_absolute() || root.starts_with("/workspace") {
-        return Err(ApiError::Internal(
-            "ChatGPT profiles require an absolute host-only directory".into(),
+        return Err(ApiError::Conflict(
+            "ChatGPT profiles require ELSEWHERE_CODEX_PROFILES_DIR to be an absolute path on a host-only volume (not inside an agent sandbox); e.g. $HOME/.elsewhere/codex-profiles"
+                .into(),
         ));
     }
     let (profile_id,): (uuid::Uuid,) = sqlx::query_as(
