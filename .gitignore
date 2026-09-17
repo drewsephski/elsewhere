@@ -40,3 +40,6 @@ tsconfig.tsbuildinfo
 
 # Tool scratch directories (e.g. Codex schema dumps)
 .tmp-*/
+
+# pstack verification proof (keep local; do not commit screenshots)
+.cursor/skills/verify-elsewhere/evidence/
