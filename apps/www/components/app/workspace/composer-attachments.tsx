@@ -3,7 +3,7 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { MessageAttachment } from "@/lib/api-types";
 import { X } from "@/components/icons/lucide";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 export const COMPOSER_FILE_ACCEPT =
   "image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,text/markdown,text/csv,application/json,.jpg,.jpeg,.png,.webp,.gif,.pdf,.txt,.md,.csv,.json";
@@ -161,7 +161,7 @@ export function useComposerAttachments(target: { botId: string } | { conversatio
     [files.length, target],
   );
 
-  function removeFile(localId: string) {
+  const removeFile = useCallback((localId: string) => {
     setFiles((previous) => {
       const item = previous.find((file) => file.localId === localId);
       if (item?.previewUrl) {
@@ -169,9 +169,9 @@ export function useComposerAttachments(target: { botId: string } | { conversatio
       }
       return previous.filter((file) => file.localId !== localId);
     });
-  }
+  }, []);
 
-  function reset() {
+  const reset = useCallback(() => {
     setFiles((previous) => {
       for (const item of previous) {
         if (item.previewUrl) {
@@ -180,7 +180,10 @@ export function useComposerAttachments(target: { botId: string } | { conversatio
       }
       return [];
     });
-  }
+  }, []);
 
-  return { files, addFiles, removeFile, reset, inputRef };
+  return useMemo(
+    () => ({ files, addFiles, removeFile, reset, inputRef }),
+    [files, addFiles, removeFile, reset],
+  );
 }

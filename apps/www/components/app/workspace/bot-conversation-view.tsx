@@ -35,6 +35,7 @@ import {
 import { ChevronLeft, ChevronsLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
@@ -106,9 +107,11 @@ export function BotConversationView({
   const stickToBottomRef = useRef(true);
   const loadScopeRef = useRef(createLoadScopeRef());
   const [conversationLoading, setConversationLoading] = useState(true);
-  const composerFiles = useComposerAttachments(botId ? { botId } : null);
+  const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments(
+    botId ? { botId } : null,
+  );
 
-  useLayoutEffect(() => {
+  const handleBotIdentityChange = useCallback(() => {
     bumpLoadScope(loadScopeRef.current);
     setRuns([]);
     setConversationId(null);
@@ -120,8 +123,10 @@ export function BotConversationView({
     setConversationLoading(true);
     stickToBottomRef.current = true;
     requestRef.current = null;
-    composerFiles.reset();
-  }, [botId, composerFiles]);
+    resetComposerAttachments();
+  }, [resetComposerAttachments]);
+
+  useConversationIdentityLayout(botId, handleBotIdentityChange);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {
@@ -389,7 +394,7 @@ export function BotConversationView({
       setRuns([]);
       setLiveRunId(null);
       setMessage("");
-      composerFiles.reset();
+      resetComposerAttachments();
       requestRef.current = null;
     } catch (err) {
       setError(formatUserFacingError(err, "Could not start a new chat"));
@@ -466,7 +471,7 @@ export function BotConversationView({
             },
       );
       requestRef.current = null;
-      composerFiles.reset();
+      resetComposerAttachments();
       const rows = await loadRuns(created.conversationId, loadScopeRef.current.current);
       const runVisible =
         rows?.some((run) => run.runId === created.runId) ??

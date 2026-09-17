@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronLeft, FileText, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { toast } from "sonner";
 import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
 import {
@@ -109,9 +110,11 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [transcriptLoading, setTranscriptLoading] = useState(true);
   const idempotencyRef = useRef<string | null>(null);
   const loadScopeRef = useRef(createLoadScopeRef());
-  const composerFiles = useComposerAttachments({ conversationId: groupId });
+  const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments({
+    conversationId: groupId,
+  });
 
-  useLayoutEffect(() => {
+  const handleGroupIdentityChange = useCallback(() => {
     bumpLoadScope(loadScopeRef.current);
     setGroup(null);
     setMessages([]);
@@ -119,8 +122,10 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     setMentions([]);
     setTranscriptLoading(true);
     idempotencyRef.current = null;
-    composerFiles.reset();
-  }, [groupId, composerFiles]);
+    resetComposerAttachments();
+  }, [resetComposerAttachments]);
+
+  useConversationIdentityLayout(groupId, handleGroupIdentityChange);
 
   const activeParticipants = useMemo(
     () => group?.participants.filter((p) => !p.leftAt) ?? [],
@@ -215,7 +220,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         throw new Error(body.error ?? "Could not send message");
       }
       idempotencyRef.current = null;
-      composerFiles.reset();
+      resetComposerAttachments();
       await loadMessages(loadScopeRef.current.current);
     } catch (err) {
       setMessage(trimmed);
