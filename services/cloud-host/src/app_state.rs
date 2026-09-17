@@ -26,7 +26,9 @@ use crate::user_questions::UserQuestionService;
 #[cfg(any(test, feature = "test-utils"))]
 #[derive(Clone)]
 pub struct TestRunOverrides {
-    pub computer: Arc<dyn AgentComputer>,
+    /// When set, bypasses `build_computer` (hosted resolver). When `None`, the run uses
+    /// `ComputerRegistry::connect_agent_computer` (provider-neutral path).
+    pub computer: Option<Arc<dyn AgentComputer>>,
     pub model: Arc<dyn ResponsesModel>,
 }
 

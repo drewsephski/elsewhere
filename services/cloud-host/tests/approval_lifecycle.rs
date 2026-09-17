@@ -33,7 +33,13 @@ impl RunOverrideGuard {
         computer: Arc<CountingComputer>,
         model: Arc<dyn ResponsesModel>,
     ) -> Self {
-        state.register_test_run_overrides(&request_id, TestRunOverrides { computer, model });
+        state.register_test_run_overrides(
+            &request_id,
+            TestRunOverrides {
+                computer: Some(computer),
+                model,
+            },
+        );
         Self { state, request_id }
     }
 }

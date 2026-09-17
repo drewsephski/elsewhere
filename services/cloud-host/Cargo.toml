@@ -136,3 +136,7 @@ tokio-tungstenite = { version = "0.26", default-features = false, features = ["c
 [[test]]
 name = "local_mac_remote"
 required-features = ["test-utils"]
+
+[[test]]
+name = "local_mac_bot_run_routing"
+required-features = ["test-utils"]

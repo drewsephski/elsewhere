@@ -29,6 +29,11 @@ pub struct ComputerRegistry {
 }
 
 impl ComputerRegistry {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn cached_sprite_count(&self) -> usize {
+        self.sprites.len()
+    }
+
     pub fn evict(&self, owner_id: &str, computer_id: &str) {
         self.sprites
             .remove(&(owner_id.to_string(), computer_id.to_string()));
@@ -180,8 +185,7 @@ impl ComputerRegistry {
             .await?)
     }
 
-    /// Provider-neutral computer resolver. Bot runs still use `connect_sprite`
-    /// via `runner::build_computer`; this seam is for the next local-Mac slice.
+    /// Provider-neutral computer resolver (`fly_sprite` → Sprite, `local_mac` → outbound Mac session).
     pub async fn connect_agent_computer(
         &self,
         config: &Config,

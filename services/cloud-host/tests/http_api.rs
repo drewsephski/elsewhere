@@ -195,7 +195,7 @@ async fn http_auth_and_idempotent_run() {
     let _run_guard = RunOverrideGuard::install_default(
         state.clone(),
         TestRunOverrides {
-            computer: Arc::new(MockComputer),
+            computer: Some(Arc::new(MockComputer)),
             model: Arc::new(ScriptedModel {
                 steps: Mutex::new(vec![CreateResponseResult {
                     output: vec![json!({
@@ -250,7 +250,7 @@ fn install_fast_mock(state: AppState) -> RunOverrideGuard {
     RunOverrideGuard::install_default(
         state,
         TestRunOverrides {
-            computer: Arc::new(MockComputer),
+            computer: Some(Arc::new(MockComputer)),
             model: Arc::new(ScriptedModel {
                 steps: Mutex::new(vec![CreateResponseResult {
                     output: vec![json!({
@@ -306,7 +306,7 @@ async fn concurrency_cap_returns_429_when_saturated() {
     let _run_guard = RunOverrideGuard::install_default(
         state.clone(),
         TestRunOverrides {
-            computer: Arc::new(MockComputer),
+            computer: Some(Arc::new(MockComputer)),
             model: Arc::new(SlowScriptedModel {
                 delay: Duration::from_secs(3),
                 inner: ScriptedModel {
