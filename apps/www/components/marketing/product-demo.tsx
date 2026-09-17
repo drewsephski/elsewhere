@@ -101,7 +101,7 @@ export function ProductDemo({ onGetStarted }: ProductDemoProps) {
 
   return (
     <section id="demo" className="landing-shell mt-10 md:mt-14">
-      <div className="dark relative flex h-[min(78dvh,680px)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-white/8 bg-[#0c0c0c] shadow-[0_20px_56px_-28px_rgba(43,39,53,0.35)]">
+      <div className="dark relative flex h-[min(78dvh,680px)] min-h-[520px] flex-col overflow-hidden rounded-[20px] border border-white/10 bg-[#0c0c0c] shadow-[0_20px_50px_-24px_rgba(43,39,53,0.45)]">
         <div className="flex shrink-0 items-center gap-2 border-b border-white/8 px-4 py-3">
           <span className="size-2.5 rounded-full bg-[#ff5f57]" aria-hidden />
           <span className="size-2.5 rounded-full bg-[#febc2e]" aria-hidden />
@@ -110,7 +110,7 @@ export function ProductDemo({ onGetStarted }: ProductDemoProps) {
         </div>
 
         <div className="relative flex min-h-0 flex-1">
-          <aside className="hidden min-h-0 w-[220px] shrink-0 flex-col border-r border-white/8 sm:flex lg:w-[248px]">
+          <aside className="hidden min-h-0 w-[220px] shrink-0 flex flex-col border-r border-white/8 sm:flex lg:w-[248px]">
             <BotList
               bots={filteredBots}
               selectedId={selected.id}
@@ -357,7 +357,7 @@ function BotList({
           aria-label="Search bots"
         />
       </label>
-      <ul className="landing-demo-sidebar-scroll min-h-0 flex-1 space-y-0.5 px-2 pb-2">
+      <ul className="demo-sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
         {bots.map((bot) => {
           const active = bot.id === selectedId;
           return (

@@ -1,6 +1,6 @@
 import { siteConfig } from "@elsewhere/brand";
+import { GitHubMark } from "@/components/icons/github-mark";
 import { ProductLogo } from "@/components/product-logo";
-import { GitHubIcon } from "@/components/icons/github";
 import { appRoutes } from "@/lib/app-routes";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ export function LandingFooter() {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-[14px] text-muted-foreground transition-colors hover:text-foreground"
               >
-                <GitHubIcon className="size-3.5" />
+                <GitHubMark className="size-3.5 shrink-0" aria-hidden />
                 {link.label}
               </a>
             ) : (

@@ -21,7 +21,7 @@ const cloudPoints = [
 export function CompareSection() {
   return (
     <section id="open-source" className="landing-shell mt-20 md:mt-28">
-      <p className="text-[12px] font-medium tracking-[0.14em] uppercase text-brand-dark/45">Open source</p>
+      <p className="landing-eyebrow">Open source</p>
       <h2 className="mt-2 max-w-2xl text-[32px] leading-9 font-medium tracking-[-0.02em] text-brand-dark md:text-[42px] md:leading-[48px] md:tracking-[-0.84px]">
         No pricing page. Just the work.
       </h2>
@@ -37,7 +37,7 @@ export function CompareSection() {
                 macOS app for local computers
               </p>
             </div>
-            <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+            <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
               Coming soon
             </span>
           </div>
@@ -68,7 +68,7 @@ export function CompareSection() {
                 We run the computers. You bring ChatGPT.
               </p>
             </div>
-            <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-[12px] font-medium text-brand-dark/70">
+            <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
               Live
             </span>
           </div>

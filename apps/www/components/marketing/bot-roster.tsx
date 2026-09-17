@@ -3,7 +3,7 @@ import { ROSTER_BOTS } from "@/lib/marketing/landing";
 export function BotRoster() {
   return (
     <section id="roster" className="landing-shell mt-20 md:mt-28">
-      <p className="text-[12px] font-medium tracking-[0.14em] uppercase text-brand-dark/45">Bot templates</p>
+      <p className="landing-eyebrow">Bot templates</p>
       <h2 className="mt-2 max-w-2xl text-[32px] leading-9 font-medium tracking-[-0.02em] text-brand-dark md:text-[42px] md:leading-[48px] md:tracking-[-0.84px]">
         Give each bot a job
       </h2>
