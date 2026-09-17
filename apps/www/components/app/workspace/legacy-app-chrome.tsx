@@ -21,7 +21,7 @@ export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
               href="/app"
               className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
-              <ProductLogo size="sm" className="size-5 opacity-90" />
+              <ProductLogo size="md" className="opacity-90" />
               <span className="text-[13px] font-medium tracking-tight">
                 {siteConfig.productName}
               </span>

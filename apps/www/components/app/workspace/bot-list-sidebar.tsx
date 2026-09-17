@@ -223,7 +223,7 @@ export function BotListSidebar({
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           aria-label="Workspace home"
         >
-          <ProductLogo size="sm" className="size-5 opacity-90" />
+          <ProductLogo size="md" className="opacity-90" />
         </Link>
         {onCreateGroup ? (
           <DropdownMenu>
