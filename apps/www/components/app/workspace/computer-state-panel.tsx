@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ComputerBrowserPreview } from "./computer-browser-preview";
 import type { BrowserPreviewHandle } from "./browser-preview-view";
+import { isLocalMacProvider } from "@/lib/computer-kind";
 
 interface ComputerStatePanelProps {
   bot: BotSummary | null;
@@ -104,7 +105,9 @@ export function ComputerStatePanel({
           </div>
         ) : (
           <>
-            <ComputerBrowserPreview ref={previewRef} />
+            {isLocalMacProvider(computer?.provider ?? "") ? null : (
+              <ComputerBrowserPreview ref={previewRef} />
+            )}
             <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[12px]">
               <p className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground" title={displayName ?? undefined}>
                 <span

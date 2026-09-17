@@ -98,6 +98,10 @@ name = "idor"
 required-features = ["test-utils"]
 
 [[test]]
+name = "local_mac_pairing"
+required-features = ["test-utils"]
+
+[[test]]
 name = "permission_policies"
 required-features = ["test-utils"]
 

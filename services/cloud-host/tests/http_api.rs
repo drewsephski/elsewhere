@@ -150,6 +150,7 @@ fn test_config() -> Config {
         slack_signing_secret: None,
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
+        local_mac_credential_key: None,
     }
 }
 

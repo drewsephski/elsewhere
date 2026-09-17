@@ -63,21 +63,22 @@ impl ComputerRegistry {
         owner_id: &str,
         computer_id: &str,
     ) -> Result<(), ApiError> {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(
-                SELECT 1 FROM sandboxes
-                WHERE id = $1 AND owner_id = $2 AND state <> 'archived'
-            )",
+        let provider: Option<String> = sqlx::query_scalar(
+            "SELECT provider FROM sandboxes
+             WHERE id = $1 AND owner_id = $2 AND state <> 'archived'",
         )
         .bind(computer_id)
         .bind(owner_id)
-        .fetch_one(pool)
+        .fetch_optional(pool)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-        if !exists {
-            return Err(ApiError::NotFound);
+        match provider.as_deref() {
+            None => Err(ApiError::NotFound),
+            Some(crate::local_mac::PROVIDER) => Err(ApiError::Validation(
+                "This Mac is not available for hosted Sprite operations yet.".into(),
+            )),
+            Some(_) => Ok(()),
         }
-        Ok(())
     }
 
     fn build_sprite(

@@ -13,6 +13,7 @@ export const appRoutes = {
   channels: "/app/channels",
   skills: "/app/skills",
   settings: "/app/settings",
+  pairMac: "/pair/mac",
 } as const;
 
 /** Order matches `marketingFeatures` in @elsewhere/brand. */

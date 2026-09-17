@@ -111,6 +111,7 @@ fn test_config(slack_api_base: Option<String>) -> Config {
         slack_signing_secret: Some(SIGNING_SECRET.into()),
         slack_oauth_redirect_uri: Some("http://localhost:3000/app/channels/slack/callback".into()),
         slack_api_base: slack_api_base.unwrap_or_else(|| "https://slack.com/api".into()),
+        local_mac_credential_key: None,
     }
 }
 

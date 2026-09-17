@@ -2,6 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ComputerSummary } from "@/lib/api-types";
+import { computerProviderLabel, isLocalMacProvider } from "@/lib/computer-kind";
 import { WorkspaceDataGrid } from "@/components/app/workspace-data-grid";
 import { WorkspaceEmptyState } from "@/components/app/workspace-empty-state";
 import {
@@ -166,6 +167,16 @@ export function ComputersManager() {
         size: 220,
       },
       {
+        id: "kind",
+        header: "Kind",
+        cell: ({ row }) => (
+          <span className="text-muted-foreground">
+            {computerProviderLabel(row.original.provider)}
+          </span>
+        ),
+        size: 120,
+      },
+      {
         id: "status",
         header: "Status",
         cell: ({ row }) => (
@@ -184,6 +195,7 @@ export function ComputersManager() {
         header: "",
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
+            {isLocalMacProvider(row.original.provider) ? null : (
             <Button
               type="button"
               variant="ghost"
@@ -199,6 +211,7 @@ export function ComputersManager() {
             >
               Reset browser sign-in
             </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

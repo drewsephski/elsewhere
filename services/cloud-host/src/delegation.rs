@@ -477,7 +477,7 @@ fn map_work_error(err: ApiError) -> CollaborationError {
         ApiError::NotFound => CollaborationError::NotFound,
         ApiError::Validation(m) => CollaborationError::Validation(m),
         ApiError::Conflict(m) => CollaborationError::Conflict(m),
-        ApiError::TooManyRequests => {
+        ApiError::TooManyRequests | ApiError::RateLimited(_) => {
             CollaborationError::LimitExceeded("Too much active work; try again later".into())
         }
         ApiError::Internal(m) => CollaborationError::Internal(m),

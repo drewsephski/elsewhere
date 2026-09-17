@@ -24,6 +24,9 @@ kill_timeout = 300
   ELSEWHERE_JWT_JWKS_URL = "https://elsewhere-alpha-web.fly.dev/api/auth/jwks"
   ELSEWHERE_WEB_ORIGIN = "https://elsewhere-alpha-web.fly.dev"
   RUST_LOG = "cloud_host=info,codex_provider=info,sprite_computer=info,elsewhere_codex_ops=info"
+  # HMAC key for local Mac pairing secrets and durable device credentials.
+  # Set as a Fly secret (base64-encoded 32 bytes). Required in jwt mode.
+  # ELSEWHERE_LOCAL_MAC_CREDENTIAL_KEY
 
 [[mounts]]
   source = "codex_profiles"

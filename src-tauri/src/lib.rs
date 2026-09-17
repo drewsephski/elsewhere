@@ -66,6 +66,8 @@ pub fn run() {
             commands::get_api_key_status,
             commands::set_openai_api_key,
             commands::clear_openai_api_key,
+            commands::get_elsewhere_pairing_status,
+            commands::start_elsewhere_pairing,
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,

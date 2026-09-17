@@ -1,6 +1,6 @@
 use rusqlite::Connection;
 
-const CURRENT_SCHEMA_VERSION: i32 = 4;
+const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -23,6 +23,9 @@ pub fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     }
     if current_version(conn)? < 4 {
         run_migration(conn, 4, migrate_to_v4)?;
+    }
+    if current_version(conn)? < 5 {
+        run_migration(conn, 5, migrate_to_v5)?;
     }
 
     let final_version = current_version(conn)?;
@@ -162,6 +165,18 @@ fn migrate_to_v2(conn: &Connection) -> Result<(), rusqlite::Error> {
         ",
     )?;
 
+    Ok(())
+}
+
+fn migrate_to_v5(conn: &Connection) -> Result<(), rusqlite::Error> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL
+        );
+        ",
+    )?;
     Ok(())
 }
 

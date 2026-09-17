@@ -47,6 +47,9 @@ pub struct Config {
     pub slack_signing_secret: Option<String>,
     pub slack_oauth_redirect_uri: Option<String>,
     pub slack_api_base: String,
+    /// HMAC key for local Mac pairing secrets and durable device credentials.
+    /// Required in JWT/production mode. No insecure production fallback.
+    pub local_mac_credential_key: Option<[u8; 32]>,
 }
 
 impl Config {
@@ -179,6 +182,19 @@ impl Config {
             .ok()
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "https://slack.com/api".into());
+        let local_mac_credential_key = match env::var("ELSEWHERE_LOCAL_MAC_CREDENTIAL_KEY")
+            .ok()
+            .filter(|v| !v.is_empty())
+        {
+            Some(encoded) => Some(crate::local_mac::parse_credential_key(&encoded)?),
+            None if auth_mode == AuthMode::Jwt => {
+                return Err(
+                    "ELSEWHERE_LOCAL_MAC_CREDENTIAL_KEY is required when ELSEWHERE_AUTH_MODE=jwt"
+                        .into(),
+                );
+            }
+            None => None,
+        };
 
         Ok(Self {
             database_url,
@@ -213,6 +229,7 @@ impl Config {
             slack_signing_secret,
             slack_oauth_redirect_uri,
             slack_api_base,
+            local_mac_credential_key,
         })
     }
 
@@ -226,6 +243,7 @@ impl Config {
             jwt_configured = self.jwt_jwks_url.is_some(),
             cors_web_origin = ?self.cors_web_origin,
             allow_codex_login = self.allow_codex_login,
+            local_mac_pairing_configured = self.local_mac_credential_key.is_some(),
             codex_profiles_dir = ?self.codex_profiles_dir,
             browser_profiles_dir = ?self.browser_profiles_dir,
             run_engine = ?self.run_engine,

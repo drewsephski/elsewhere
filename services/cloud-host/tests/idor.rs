@@ -56,6 +56,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         slack_signing_secret: None,
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
+        local_mac_credential_key: None,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
@@ -696,7 +697,10 @@ async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
     .await
     .unwrap();
     let intervention_waiting = overview(app.clone(), "alice").await;
-    assert_eq!(intervention_waiting["bots"][0]["presence"], "waiting_approval");
+    assert_eq!(
+        intervention_waiting["bots"][0]["presence"],
+        "waiting_approval"
+    );
     assert_eq!(intervention_waiting["counts"]["approvals"], 1);
     sqlx::query("DELETE FROM human_intervention_requests WHERE id = 'presence-intervention'")
         .execute(&pool)

@@ -104,3 +104,12 @@ pub fn require_internal_token(principal: &Principal) -> Result<(), ApiError> {
         Err(ApiError::Unauthorized)
     }
 }
+
+/// Reject the internal cloud-host token on user-only actions such as Mac pairing approval.
+pub fn require_jwt(principal: &Principal) -> Result<(), ApiError> {
+    if principal.auth_kind == AuthKind::Jwt {
+        Ok(())
+    } else {
+        Err(ApiError::Unauthorized)
+    }
+}

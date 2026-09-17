@@ -81,6 +81,24 @@ export const tauriApi = {
   listOpenAiModels(): Promise<ModelDescriptor[]> {
     return invoke("list_openai_models");
   },
+  getElsewherePairingStatus(): Promise<{
+    connected: boolean;
+    pairing: boolean;
+    nodeId: string | null;
+    computerId: string | null;
+    userCode: string | null;
+  }> {
+    return invoke("get_elsewhere_pairing_status");
+  },
+  startElsewherePairing(): Promise<{
+    connected: boolean;
+    pairing: boolean;
+    nodeId: string | null;
+    computerId: string | null;
+    userCode: string | null;
+  }> {
+    return invoke("start_elsewhere_pairing");
+  },
   startChat(input: StartChatInput): Promise<StartChatResult> {
     return invoke("start_chat", { input });
   },

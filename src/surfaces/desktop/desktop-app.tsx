@@ -52,6 +52,8 @@ export default function DesktopApp() {
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
+  const [elsewhereConnected, setElsewhereConnected] = useState(false);
+  const [elsewherePairing, setElsewherePairing] = useState(false);
   const [apiKeyBannerDismissed, setApiKeyBannerDismissed] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -101,6 +103,11 @@ export default function DesktopApp() {
   const refreshApiKeyStatus = useCallback(async () => {
     const status = await tauriApi.getApiKeyStatus();
     setApiKeyConfigured(status.configured);
+  }, []);
+
+  const refreshElsewherePairingStatus = useCallback(async () => {
+    const status = await tauriApi.getElsewherePairingStatus();
+    setElsewhereConnected(status.connected);
   }, []);
 
   const loadModels = useCallback(async () => {
@@ -176,7 +183,8 @@ export default function DesktopApp() {
   useEffect(() => {
     void refreshBots();
     void refreshApiKeyStatus();
-  }, [refreshBots, refreshApiKeyStatus]);
+    void refreshElsewherePairingStatus();
+  }, [refreshBots, refreshApiKeyStatus, refreshElsewherePairingStatus]);
 
   useEffect(() => {
     if (selectedBotId) {
@@ -456,6 +464,21 @@ export default function DesktopApp() {
     }
   }
 
+  async function handleConnectElsewhere() {
+    setSettingsSaving(true);
+    setElsewherePairing(true);
+    setSettingsError(null);
+    try {
+      const status = await tauriApi.startElsewherePairing();
+      setElsewhereConnected(status.connected);
+    } catch (error) {
+      setSettingsError(formatInvokeError(error));
+    } finally {
+      setElsewherePairing(false);
+      setSettingsSaving(false);
+    }
+  }
+
   function handleOpenCreateBot() {
     setCreateOpen(true);
     setCreateError(null);
@@ -599,12 +622,15 @@ export default function DesktopApp() {
         open={settingsOpen}
         apiKeyConfigured={apiKeyConfigured}
         apiKeyDraft={apiKeyDraft}
+        elsewhereConnected={elsewhereConnected}
+        elsewherePairing={elsewherePairing}
         error={settingsError}
         saving={settingsSaving}
         onClose={() => setSettingsOpen(false)}
         onApiKeyChange={setApiKeyDraft}
         onSave={handleSaveApiKey}
         onClear={handleClearApiKey}
+        onConnectElsewhere={() => void handleConnectElsewhere()}
       />
 
       <CreateBotModal
