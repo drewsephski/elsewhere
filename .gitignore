@@ -38,6 +38,9 @@ target/
 tsconfig.tsbuildinfo
 **/tsconfig.tsbuildinfo
 
+# Next.js regenerates this on `next dev` / `next build` / `next typegen`
+**/next-env.d.ts
+
 # Tool scratch directories (e.g. Codex schema dumps)
 .tmp-*/
 
