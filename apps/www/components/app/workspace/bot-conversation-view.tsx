@@ -52,6 +52,11 @@ import { WorkStatusCard } from "./work-status-card";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  bumpLoadScope,
+  createLoadScopeRef,
+  isActiveLoadScope,
+} from "@/lib/conversation-load-scope";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -99,8 +104,24 @@ export function BotConversationView({
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const loadScopeRef = useRef(createLoadScopeRef());
   const [conversationLoading, setConversationLoading] = useState(true);
   const composerFiles = useComposerAttachments(botId ? { botId } : null);
+
+  useLayoutEffect(() => {
+    bumpLoadScope(loadScopeRef.current);
+    setRuns([]);
+    setConversationId(null);
+    setLiveRunId(null);
+    setLiveDelegations([]);
+    setPendingTurn(null);
+    setMessage("");
+    setError(null);
+    setConversationLoading(true);
+    stickToBottomRef.current = true;
+    requestRef.current = null;
+    composerFiles.reset();
+  }, [botId, composerFiles]);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {
@@ -205,23 +226,35 @@ export function BotConversationView({
     });
   }, []);
 
-  const loadRuns = useCallback(async (activeConversationId: string | null) => {
-    if (!activeConversationId) {
-      setRuns([]);
-      setLiveRunId(null);
-      return;
-    }
-    const response = await cloudHostFetch(
-      `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
-    );
-    if (!response.ok) {
-      throw new Error("Could not load conversation history");
-    }
-    const rows: RunSummary[] = await response.json();
-    setRuns(rows);
-    syncLiveRunId(rows);
-    return rows;
-  }, [botId, syncLiveRunId]);
+  const loadRuns = useCallback(
+    async (activeConversationId: string | null, generation: number) => {
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      if (!activeConversationId) {
+        setRuns([]);
+        setLiveRunId(null);
+        return;
+      }
+      const response = await cloudHostFetch(
+        `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
+      );
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Could not load conversation history");
+      }
+      const rows: RunSummary[] = await response.json();
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      setRuns(rows);
+      syncLiveRunId(rows);
+      return rows;
+    },
+    [botId, syncLiveRunId],
+  );
 
   const resolveConversationId = useCallback(async () => {
     const response = await cloudHostFetch(
@@ -254,18 +287,11 @@ export function BotConversationView({
   }, [botId, onBotLoaded]);
 
   useEffect(() => {
-    let cancelled = false;
-    setMessage("");
-    setError(null);
-    setPendingTurn(null);
-    setLiveRunId(null);
-    setConversationLoading(true);
-    stickToBottomRef.current = true;
-    composerFiles.reset();
+    const generation = loadScopeRef.current.current;
     void (async () => {
       try {
         const id = await resolveConversationId();
-        if (cancelled) {
+        if (!isActiveLoadScope(loadScopeRef.current, generation)) {
           return;
         }
         setConversationId(id);
@@ -273,37 +299,45 @@ export function BotConversationView({
           setRuns([]);
           return;
         }
-        await loadRuns(id);
+        await loadRuns(id, generation);
       } catch (err) {
-        if (!cancelled) {
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
           setError(err instanceof Error ? err.message : "Could not load conversation");
         }
       } finally {
-        if (!cancelled) {
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
           setConversationLoading(false);
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [botId, loadRuns, resolveConversationId]);
 
   useEffect(() => {
     if (!conversationId) {
       return;
     }
+    const generation = loadScopeRef.current.current;
     let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
     async function poll() {
+      if (cancelled || !isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
       try {
-        await loadRuns(conversationId);
+        await loadRuns(conversationId, generation);
       } catch {
         /* ignore transient errors */
+      }
+      if (cancelled || !isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
       }
       timer = setTimeout(() => void poll(), 5000);
     }
     void poll();
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [conversationId, loadRuns]);
 
   useEffect(() => {
@@ -433,7 +467,7 @@ export function BotConversationView({
       );
       requestRef.current = null;
       composerFiles.reset();
-      const rows = await loadRuns(created.conversationId);
+      const rows = await loadRuns(created.conversationId, loadScopeRef.current.current);
       const runVisible =
         rows?.some((run) => run.runId === created.runId) ??
         false;
@@ -454,7 +488,7 @@ export function BotConversationView({
     try {
       await archiveWorkRun(run.runId);
       if (conversationId) {
-        await loadRuns(conversationId);
+        await loadRuns(conversationId, loadScopeRef.current.current);
       }
       if (liveRunId === run.runId) {
         setLiveRunId(null);
@@ -546,7 +580,8 @@ export function BotConversationView({
         className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
       >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
-          {chronologicalRuns.map((run) => {
+          {!conversationLoading
+            ? chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
             const assistantText = isLive
               ? assistantStream.answerText ||
@@ -684,7 +719,8 @@ export function BotConversationView({
                 ) : null}
               </div>
             );
-          })}
+          })
+            : null}
 
           {pendingTurn &&
           !chronologicalRuns.some(
@@ -703,7 +739,7 @@ export function BotConversationView({
             </div>
           ) : null}
 
-          {conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
+          {conversationLoading && !pendingTurn ? (
             <div className="flex justify-center py-16" role="status" aria-label="Loading conversation">
               <Spinner className="size-5 text-muted-foreground" />
             </div>

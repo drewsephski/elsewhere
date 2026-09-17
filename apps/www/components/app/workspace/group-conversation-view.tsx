@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronLeft, FileText, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
 import {
@@ -39,6 +39,11 @@ import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill, type StatusTone } from "@/components/app/status-pill";
 import { workStatus } from "@/lib/work-events";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  bumpLoadScope,
+  createLoadScopeRef,
+  isActiveLoadScope,
+} from "@/lib/conversation-load-scope";
 
 const MIN_GROUP_BOTS = 2;
 
@@ -103,49 +108,83 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [pending, setPending] = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState(true);
   const idempotencyRef = useRef<string | null>(null);
+  const loadScopeRef = useRef(createLoadScopeRef());
   const composerFiles = useComposerAttachments({ conversationId: groupId });
+
+  useLayoutEffect(() => {
+    bumpLoadScope(loadScopeRef.current);
+    setGroup(null);
+    setMessages([]);
+    setMessage("");
+    setMentions([]);
+    setTranscriptLoading(true);
+    idempotencyRef.current = null;
+    composerFiles.reset();
+  }, [groupId, composerFiles]);
 
   const activeParticipants = useMemo(
     () => group?.participants.filter((p) => !p.leftAt) ?? [],
     [group],
   );
 
-  const loadGroup = useCallback(async () => {
+  const loadGroup = useCallback(async (generation: number) => {
     const response = await cloudHostFetch(`/v1/conversations/${groupId}`);
+    if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+      return;
+    }
     if (!response.ok) {
       throw new Error("Group not found");
     }
-    setGroup(await response.json());
+    const detail: GroupConversationDetail = await response.json();
+    if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+      return;
+    }
+    setGroup(detail);
   }, [groupId]);
 
-  const loadMessages = useCallback(async () => {
+  const loadMessages = useCallback(async (generation: number) => {
     const response = await cloudHostFetch(`/v1/conversations/${groupId}/messages`);
+    if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+      return;
+    }
     if (!response.ok) {
       throw new Error("Could not load transcript");
     }
-    setMessages(await response.json());
+    const rows: TranscriptMessage[] = await response.json();
+    if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+      return;
+    }
+    setMessages(rows);
   }, [groupId]);
 
   useEffect(() => {
-    setTranscriptLoading(true);
+    const generation = loadScopeRef.current.current;
     void (async () => {
       try {
-        await loadGroup();
-        await loadMessages();
+        await loadGroup(generation);
+        await loadMessages(generation);
       } catch (err) {
-        toastCloudError(err instanceof Error ? err.message : "Could not load group");
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
+          toastCloudError(err instanceof Error ? err.message : "Could not load group");
+        }
       } finally {
-        setTranscriptLoading(false);
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
+          setTranscriptLoading(false);
+        }
       }
     })();
   }, [groupId, loadGroup, loadMessages]);
 
   useEffect(() => {
+    const generation = loadScopeRef.current.current;
     const timer = setInterval(() => {
-      void loadMessages().catch(() => undefined);
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      void loadMessages(generation).catch(() => undefined);
     }, 2500);
     return () => clearInterval(timer);
-  }, [loadMessages]);
+  }, [groupId, loadMessages]);
 
   async function handleSubmit() {
     const attachmentIds = readyAttachmentIds(composerFiles.files);
@@ -177,7 +216,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       }
       idempotencyRef.current = null;
       composerFiles.reset();
-      await loadMessages();
+      await loadMessages(loadScopeRef.current.current);
     } catch (err) {
       setMessage(trimmed);
       toastCloudError(err instanceof Error ? err.message : "Could not send message");
@@ -210,7 +249,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           item.routing?.status === "pending" || item.routing?.status === "routing";
         if (routingPending) {
           await deleteConversationMessage(groupId, item.id);
-          await loadMessages();
+          await loadMessages(loadScopeRef.current.current);
           return;
         }
         const activeRecipient = item.recipients?.some(
@@ -225,7 +264,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       } else {
         await deleteConversationMessage(groupId, item.id);
       }
-      await loadMessages();
+      await loadMessages(loadScopeRef.current.current);
     } catch (err) {
       toastCloudError(err instanceof Error ? err.message : "Could not delete message");
     }
@@ -241,7 +280,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       toastCloudError(body.error ?? "Could not retry routing");
       return;
     }
-    await loadMessages();
+    await loadMessages(loadScopeRef.current.current);
   }
 
   function canDeleteMessage(item: TranscriptMessage): boolean {
@@ -308,7 +347,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
-          {transcriptLoading && messages.length === 0 ? (
+          {transcriptLoading ? (
             <div className="flex justify-center py-16" role="status" aria-label="Loading group chat">
               <Spinner className="size-5 text-muted-foreground" />
             </div>
@@ -323,7 +362,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
             </div>
           ) : null}
 
-          {messages.map((item) =>
+          {!transcriptLoading
+            ? messages.map((item) =>
             item.authorKind === "human" ? (
               <div key={item.id} className="flex flex-col items-end gap-1.5">
                 <UserPromptBubble
@@ -417,7 +457,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                 />
               </AssistantMessageBubble>
             ),
-          )}
+          )
+            : null}
         </div>
       </div>
 
