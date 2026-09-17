@@ -37,6 +37,7 @@ import {
 } from "./group-mention-composer";
 import { deleteConversationMessage, canArchiveWorkRun, archiveWorkRun } from "@/lib/archive-work-run";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { StatusPill, type StatusTone } from "@/components/app/status-pill";
 import { workStatus } from "@/lib/work-events";
 import { Spinner } from "@/components/ui/spinner";
@@ -108,6 +109,11 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [mentions, setMentions] = useState<MentionToken[]>([]);
   const [pending, setPending] = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState(true);
+  const [confirmRemoveParticipant, setConfirmRemoveParticipant] = useState<{
+    botId: string;
+    name: string;
+  } | null>(null);
+  const [removingParticipant, setRemovingParticipant] = useState(false);
   const idempotencyRef = useRef<string | null>(null);
   const loadScopeRef = useRef(createLoadScopeRef());
   const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments({
@@ -230,21 +236,39 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     }
   }
 
-  async function handleRemoveParticipant(botId: string) {
+  function requestRemoveParticipant(botId: string, name: string) {
     if (activeParticipants.length <= MIN_GROUP_BOTS) {
       toast.error("Keep at least 2 bots in the group.");
       return;
     }
-    const response = await cloudHostFetch(
-      `/v1/conversations/${groupId}/participants/${botId}`,
-      { method: "DELETE" },
-    );
-    const body = await response.json();
-    if (!response.ok) {
-      toastCloudError(body.error ?? "Could not remove participant");
+    setConfirmRemoveParticipant({ botId, name });
+  }
+
+  async function handleRemoveParticipant(botId: string) {
+    if (removingParticipant) {
       return;
     }
-    setGroup(body);
+    if (activeParticipants.length <= MIN_GROUP_BOTS) {
+      toast.error("Keep at least 2 bots in the group.");
+      setConfirmRemoveParticipant(null);
+      return;
+    }
+    setRemovingParticipant(true);
+    try {
+      const response = await cloudHostFetch(
+        `/v1/conversations/${groupId}/participants/${botId}`,
+        { method: "DELETE" },
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        toastCloudError(body.error ?? "Could not remove participant");
+        return;
+      }
+      setGroup(body);
+      setConfirmRemoveParticipant(null);
+    } finally {
+      setRemovingParticipant(false);
+    }
   }
 
   async function handleDeleteMessage(item: TranscriptMessage) {
@@ -476,7 +500,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                   <button
                     type="button"
                     className="group inline-flex h-6 items-center gap-1 rounded-full bg-surface-hover pl-2 pr-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-surface-active hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    onClick={() => void handleRemoveParticipant(participant.botId)}
+                    onClick={() => requestRemoveParticipant(participant.botId, participant.name)}
                     aria-label={`Remove ${participant.name} from group`}
                   >
                     {participant.name}
@@ -559,6 +583,29 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
           </ChatComposerFrame>
         </div>
       </footer>
+      <ConfirmAlertDialog
+        open={confirmRemoveParticipant !== null}
+        onOpenChange={(open) => {
+          if (!open && !removingParticipant) {
+            setConfirmRemoveParticipant(null);
+          }
+        }}
+        title={
+          confirmRemoveParticipant
+            ? `Remove ${confirmRemoveParticipant.name} from this group?`
+            : "Remove participant?"
+        }
+        description="They will leave this group conversation. You can add them again later."
+        confirmLabel="Remove"
+        pendingLabel="Removing…"
+        destructive
+        pending={removingParticipant}
+        onConfirm={() => {
+          if (confirmRemoveParticipant) {
+            void handleRemoveParticipant(confirmRemoveParticipant.botId);
+          }
+        }}
+      />
     </div>
   );
 }
