@@ -99,8 +99,13 @@ fn list_dir_sync(
 }
 
 fn read_file_sync(vm: &VirtualMachineManager, path: &str) -> Result<Vec<u8>, ComputerError> {
-    let response = guest_call(vm, "read_file", serde_json::json!({ "path": path }))?;
-    Ok(response.stdout.unwrap_or_default().into_bytes())
+    let response = guest_call(
+        vm,
+        "read_file",
+        serde_json::json!({ "path": path, "encoding": "base64" }),
+    )?;
+    let encoded = response.stdout.unwrap_or_default();
+    agent_core::decode_bytes(&encoded).map_err(ComputerError::ExecutionFailed)
 }
 
 fn write_file_sync(
@@ -108,11 +113,14 @@ fn write_file_sync(
     path: &str,
     data: &[u8],
 ) -> Result<(), ComputerError> {
-    let content = String::from_utf8_lossy(data);
     guest_call(
         vm,
         "write_file",
-        serde_json::json!({ "path": path, "content": content }),
+        serde_json::json!({
+            "path": path,
+            "content": agent_core::encode_bytes(data),
+            "encoding": "base64",
+        }),
     )?;
     Ok(())
 }

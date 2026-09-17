@@ -12,6 +12,8 @@ pub struct ElsewherePairingStatus {
     pub node_id: Option<String>,
     pub computer_id: Option<String>,
     pub user_code: Option<String>,
+    pub live_session: bool,
+    pub reauth_required: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +77,7 @@ pub fn get_elsewhere_pairing_status(
     };
     let credential = state.secrets.get_elsewhere_device_credential()?;
     let connected = identity.is_some() && credential.is_some();
+    let (live_session, reauth_required) = host_link_flags(&state);
     Ok(ElsewherePairingStatus {
         connected,
         pairing: false,
@@ -83,6 +86,8 @@ pub fn get_elsewhere_pairing_status(
             .as_ref()
             .map(|(_, computer_id)| computer_id.clone()),
         user_code: None,
+        live_session,
+        reauth_required,
     })
 }
 
@@ -174,12 +179,33 @@ pub async fn start_elsewhere_pairing(
             db.set_elsewhere_pairing_identity(&node_id, &computer_id)?;
         }
         let _ = body.display_name;
+        #[cfg(target_os = "macos")]
+        state.host_link.notify_credential_ready();
+        let (live_session, reauth_required) = host_link_flags(&state);
         return Ok(ElsewherePairingStatus {
             connected: true,
             pairing: false,
             node_id: Some(node_id),
             computer_id: Some(computer_id),
             user_code: Some(started.user_code),
+            live_session,
+            reauth_required,
         });
+    }
+}
+
+fn host_link_flags(state: &AppState) -> (bool, bool) {
+    #[cfg(target_os = "macos")]
+    {
+        match state.host_link.state() {
+            crate::host_link::HostLinkState::Connected => (true, false),
+            crate::host_link::HostLinkState::ReauthRequired => (false, true),
+            _ => (false, false),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = state;
+        (false, false)
     }
 }

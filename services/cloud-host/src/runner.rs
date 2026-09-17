@@ -674,6 +674,8 @@ async fn build_computer(
         return Ok(Arc::new(ReadinessCachedComputer::new(o.computer.clone())));
     }
 
+    // Bot runs stay on the Sprite path. Provider-neutral resolution is
+    // ComputerRegistry::connect_agent_computer and is not wired here yet.
     let sprite = registry
         .connect_sprite(
             config,

@@ -24,6 +24,8 @@ struct FakeState {
     listings: HashMap<String, Vec<WorkspaceEntry>>,
     exec_results: HashMap<String, ExecResult>,
     reject_non_workspace_paths: bool,
+    write_file_calls: usize,
+    exec_calls: usize,
 }
 
 impl FakeAgentComputer {
@@ -72,6 +74,18 @@ impl FakeAgentComputer {
     pub fn with_ensure_ready_delay(mut self, delay: Duration) -> Self {
         self.inner.get_mut().unwrap().ensure_ready_delay = Some(delay);
         self
+    }
+
+    pub fn write_file_calls(&self) -> usize {
+        self.inner.lock().unwrap().write_file_calls
+    }
+
+    pub fn exec_calls(&self) -> usize {
+        self.inner.lock().unwrap().exec_calls
+    }
+
+    pub fn file_contents(&self, path: &str) -> Option<Vec<u8>> {
+        self.inner.lock().unwrap().files.get(path).cloned()
     }
 }
 
@@ -131,14 +145,26 @@ impl AgentComputer for FakeAgentComputer {
     async fn write_file(&self, path: &str, data: &[u8]) -> Result<(), ComputerError> {
         let mut state = self.inner.lock().unwrap();
         ensure_workspace_path(path, state.reject_non_workspace_paths)?;
+        state.write_file_calls += 1;
         state.files.insert(path.to_string(), data.to_vec());
         Ok(())
     }
 
     async fn exec(&self, command: &str) -> Result<ExecResult, ComputerError> {
-        let state = self.inner.lock().unwrap();
+        let mut state = self.inner.lock().unwrap();
+        state.exec_calls += 1;
         if let Some(result) = state.exec_results.get(command) {
             return Ok(truncate_exec(result.clone()));
+        }
+        if let Some(path) = command.strip_prefix("cat ") {
+            if let Some(bytes) = state.files.get(path) {
+                return Ok(truncate_exec(ExecResult {
+                    ok: true,
+                    stdout: String::from_utf8_lossy(bytes).into_owned(),
+                    stderr: String::new(),
+                    exit_code: 0,
+                }));
+            }
         }
         Ok(truncate_exec(ExecResult {
             ok: true,

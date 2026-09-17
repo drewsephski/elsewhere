@@ -9,6 +9,7 @@ use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteCompute
 
 use crate::config::Config;
 use crate::error::ApiError;
+use crate::local_mac::session::{LocalMacSessionRegistry, RemoteLocalMacComputer};
 use crate::runner::sprite_resource_for_computer;
 
 const MAX_CACHED_COMPUTERS: usize = 128;
@@ -177,5 +178,45 @@ impl ComputerRegistry {
         Ok(self
             .connect_sprite(config, pool, owner_id, computer_id, browser_enabled)
             .await?)
+    }
+
+    /// Provider-neutral computer resolver. Bot runs still use `connect_sprite`
+    /// via `runner::build_computer`; this seam is for the next local-Mac slice.
+    pub async fn connect_agent_computer(
+        &self,
+        config: &Config,
+        pool: &sqlx::PgPool,
+        owner_id: &str,
+        computer_id: &str,
+        local_mac_sessions: &LocalMacSessionRegistry,
+        browser_enabled: bool,
+    ) -> Result<Arc<dyn AgentComputer>, ApiError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT provider, provider_resource_id FROM sandboxes
+             WHERE id = $1 AND owner_id = $2 AND state <> 'archived'",
+        )
+        .bind(computer_id)
+        .bind(owner_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let Some((provider, resource_id)) = row else {
+            return Err(ApiError::NotFound);
+        };
+        match provider.as_str() {
+            "fly_sprite" => {
+                self.connect_sprite_computer(config, pool, owner_id, computer_id, browser_enabled)
+                    .await
+            }
+            crate::local_mac::PROVIDER => Ok(Arc::new(RemoteLocalMacComputer::new(
+                owner_id,
+                computer_id,
+                resource_id,
+                local_mac_sessions.clone(),
+            ))),
+            other => Err(ApiError::Validation(format!(
+                "unsupported computer provider: {other}"
+            ))),
+        }
     }
 }

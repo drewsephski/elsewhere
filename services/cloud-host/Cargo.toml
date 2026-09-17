@@ -22,7 +22,7 @@ base64 = "0.22"
 aes-gcm = "0.10"
 rand = "0.8"
 urlencoding = "2"
-axum = { version = "0.8", features = ["macros", "multipart"] }
+axum = { version = "0.8", features = ["macros", "multipart", "ws"] }
 chrono = { version = "0.4", features = ["serde"] }
 chrono-tz = "0.10"
 saffron = "0.1"
@@ -124,10 +124,15 @@ required-features = ["test-utils"]
 [dev-dependencies]
 rcgen = "0.14"
 tempfile = "3"
-axum = { version = "0.8", features = ["macros"] }
+axum = { version = "0.8", features = ["macros", "ws"] }
 http = "1"
 http-body-util = "0.1"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 tower = { version = "0.5", features = ["util"] }
 wiremock = "0.6"
 uuid = { version = "1", features = ["v4"] }
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect"] }
+
+[[test]]
+name = "local_mac_remote"
+required-features = ["test-utils"]

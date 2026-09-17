@@ -17,6 +17,7 @@ interface SettingsModalProps {
   apiKeyConfigured: boolean;
   apiKeyDraft: string;
   elsewhereConnected: boolean;
+  elsewhereReauthRequired: boolean;
   elsewherePairing: boolean;
   error: string | null;
   saving: boolean;
@@ -32,6 +33,7 @@ export function SettingsModal({
   apiKeyConfigured,
   apiKeyDraft,
   elsewhereConnected,
+  elsewhereReauthRequired,
   elsewherePairing,
   error,
   saving,
@@ -75,9 +77,11 @@ export function SettingsModal({
           <div className="space-y-1.5 border-t border-border pt-3">
             <p className="text-sm font-medium">Elsewhere account</p>
             <p className="text-xs text-muted-foreground">
-              {elsewhereConnected
-                ? "This Mac is connected to your hosted Elsewhere account."
-                : "Connect this Mac so it can appear as a Computer in your workspace."}
+              {elsewhereReauthRequired
+                ? "This Mac needs to reconnect. Pair again to refresh the device credential."
+                : elsewhereConnected
+                  ? "This Mac is connected to your hosted Elsewhere account."
+                  : "Connect this Mac so it can appear as a Computer in your workspace."}
             </p>
             <Button
               type="button"

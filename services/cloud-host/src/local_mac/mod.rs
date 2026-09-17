@@ -14,6 +14,7 @@ use sha2::Sha256;
 use crate::error::ApiError;
 
 pub mod db;
+pub mod session;
 
 pub const PROVIDER: &str = "local_mac";
 pub const DISPLAY_NAME: &str = "This Mac";

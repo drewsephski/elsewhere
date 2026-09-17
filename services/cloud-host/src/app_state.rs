@@ -17,6 +17,7 @@ use crate::config::Config;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::events::registry::RunRegistry;
 use crate::human_intervention::HumanInterventionService;
+use crate::local_mac::session::LocalMacSessionRegistry;
 use crate::local_mac::PairingStartLimiter;
 use crate::permission_policies::PermissionPolicyService;
 use crate::provider_status_cache::ProviderStatusCache;
@@ -75,6 +76,7 @@ pub struct AppState {
     pub github_client: GitHubClient,
     pub slack_client: SlackClient,
     pub local_mac_pairing_limiter: PairingStartLimiter,
+    pub local_mac_sessions: LocalMacSessionRegistry,
     #[cfg(any(test, feature = "test-utils"))]
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
     #[cfg(any(test, feature = "test-utils"))]
@@ -209,6 +211,7 @@ impl AppState {
             github_client,
             slack_client,
             local_mac_pairing_limiter: PairingStartLimiter::default(),
+            local_mac_sessions: LocalMacSessionRegistry::default(),
             #[cfg(any(test, feature = "test-utils"))]
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(any(test, feature = "test-utils"))]

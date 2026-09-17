@@ -482,6 +482,122 @@ pub async fn validate_node_credential(
     Ok(node)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthenticatedLocalMac {
+    pub owner_id: String,
+    pub node_id: String,
+    pub computer_id: String,
+    pub installation_id: String,
+}
+
+/// True when the hashed credential matches an active, unrevoked local-Mac node.
+///
+/// Used at WebSocket handshake so unknown/revoked tokens fail with HTTP 401
+/// before upgrade. Does not log or return credential material.
+pub async fn active_device_credential_exists(
+    pool: &PgPool,
+    key: &[u8; 32],
+    credential: &str,
+) -> Result<bool, ApiError> {
+    if !credential.starts_with("emac_") {
+        return Ok(false);
+    }
+    let presented_hash = hash_node_credential(key, credential);
+    let exists: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM local_mac_nodes n
+            INNER JOIN sandboxes s ON s.id = n.sandbox_id
+            WHERE n.credential_hash = $1
+              AND n.revoked_at IS NULL
+              AND s.provider = $2
+              AND s.owner_id = n.owner_id
+              AND s.state <> 'archived'
+        )
+        "#,
+    )
+    .bind(presented_hash)
+    .bind(PROVIDER)
+    .fetch_one(pool)
+    .await
+    .map_err(db_error)?;
+    Ok(exists)
+}
+
+/// Resolve a presented device credential to the canonical local-Mac identity.
+///
+/// The credential is hashed and compared without reading stored secret material.
+/// Errors never include the credential. Access is only to this node/computer.
+pub async fn authenticate_device_session(
+    pool: &PgPool,
+    key: &[u8; 32],
+    credential: &str,
+    claimed_node_id: &str,
+    claimed_computer_id: &str,
+) -> Result<AuthenticatedLocalMac, ApiError> {
+    if !credential.starts_with("emac_")
+        || claimed_node_id.is_empty()
+        || claimed_computer_id.is_empty()
+    {
+        return Err(ApiError::Unauthorized);
+    }
+    let presented_hash = hash_node_credential(key, credential);
+    let node: Option<LocalMacNodeRow> = sqlx::query_as(
+        r#"
+        SELECT id, owner_id, sandbox_id, installation_id, device_name,
+               credential_hash, credential_hint, revoked_at, created_at, last_connected_at
+        FROM local_mac_nodes
+        WHERE id = $1
+        "#,
+    )
+    .bind(claimed_node_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(db_error)?;
+    let Some(node) = node else {
+        return Err(ApiError::Unauthorized);
+    };
+    if node.revoked_at.is_some() {
+        return Err(ApiError::Unauthorized);
+    }
+    if !hashes_equal(&node.credential_hash, &presented_hash) {
+        return Err(ApiError::Unauthorized);
+    }
+    if node.sandbox_id != claimed_computer_id {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let sandbox: Option<(String, String, String)> =
+        sqlx::query_as("SELECT owner_id, provider, state FROM sandboxes WHERE id = $1")
+            .bind(&node.sandbox_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(db_error)?;
+    let Some((owner_id, provider, state)) = sandbox else {
+        return Err(ApiError::Unauthorized);
+    };
+    if owner_id != node.owner_id || provider != PROVIDER || state == "archived" {
+        return Err(ApiError::Unauthorized);
+    }
+
+    Ok(AuthenticatedLocalMac {
+        owner_id: node.owner_id,
+        node_id: node.id,
+        computer_id: node.sandbox_id,
+        installation_id: node.installation_id,
+    })
+}
+
+pub async fn touch_node_connected(pool: &PgPool, node_id: &str) -> Result<(), ApiError> {
+    sqlx::query("UPDATE local_mac_nodes SET last_connected_at = NOW() WHERE id = $1")
+        .bind(node_id)
+        .execute(pool)
+        .await
+        .map_err(db_error)?;
+    Ok(())
+}
+
 pub async fn count_sandboxes_for_owner(pool: &PgPool, owner_id: &str) -> Result<i64, ApiError> {
     sqlx::query_scalar("SELECT COUNT(*)::bigint FROM sandboxes WHERE owner_id = $1")
         .bind(owner_id)

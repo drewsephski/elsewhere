@@ -1,5 +1,6 @@
 //! Minimal Elsewhere guest agent — listens on AF_VSOCK for newline-delimited JSON RPC.
 
+mod content;
 mod sandbox;
 
 use std::fs;
@@ -136,21 +137,27 @@ fn dispatch(request: &GuestRequest) -> GuestResponse {
         }
         "write_file" => {
             let path = request.params.get("path").and_then(|v| v.as_str());
-            let content = request.params.get("content").and_then(|v| v.as_str());
-            match (path, content) {
-                (Some(path), Some(content)) => match sandbox::write_workspace_file(path, content) {
-                    Ok(()) => {
-                        let mut r = base(true);
-                        r.exit_code = Some(0);
-                        r
-                    }
+            match path {
+                Some(path) => match content::decode_write_content(&request.params) {
+                    Ok(bytes) => match sandbox::write_workspace_file(path, &bytes) {
+                        Ok(()) => {
+                            let mut r = base(true);
+                            r.exit_code = Some(0);
+                            r
+                        }
+                        Err(err) => {
+                            let mut r = base(false);
+                            r.error = Some(err);
+                            r
+                        }
+                    },
                     Err(err) => {
                         let mut r = base(false);
                         r.error = Some(err);
                         r
                     }
                 },
-                _ => {
+                None => {
                     let mut r = base(false);
                     r.error = Some("write_file requires path and content".into());
                     r
@@ -195,12 +202,22 @@ fn dispatch(request: &GuestRequest) -> GuestResponse {
                 r.error = Some("read_file requires path".into());
                 return r;
             }
-            match sandbox::read_workspace_file(path) {
-                Ok(text) => {
-                    let mut r = base(true);
-                    r.stdout = Some(text);
-                    r.exit_code = Some(0);
-                    r
+            match sandbox::read_workspace_file_bytes(path) {
+                Ok(bytes) => {
+                    let encoding = request.params.get("encoding").and_then(|v| v.as_str());
+                    match content::encode_read_content(&bytes, encoding) {
+                        Ok(text) => {
+                            let mut r = base(true);
+                            r.stdout = Some(text);
+                            r.exit_code = Some(0);
+                            r
+                        }
+                        Err(err) => {
+                            let mut r = base(false);
+                            r.error = Some(err);
+                            r
+                        }
+                    }
                 }
                 Err(err) => {
                     let mut r = base(false);

@@ -179,15 +179,26 @@ export function ComputersManager() {
       {
         id: "status",
         header: "Status",
-        cell: ({ row }) => (
-          <Badge
-            variant={
-              row.original.providerMetadata.provisioned ? "success-light" : "warning-light"
-            }
-          >
-            {row.original.providerMetadata.provisioned ? "Ready for work" : "Ready to set up"}
-          </Badge>
-        ),
+        cell: ({ row }) => {
+          const localMac = isLocalMacProvider(row.original.provider);
+          const online = row.original.providerMetadata.connected === true;
+          const provisioned = row.original.providerMetadata.provisioned;
+          const label = localMac
+            ? online
+              ? "Online"
+              : "Offline"
+            : provisioned
+              ? "Ready for work"
+              : "Ready to set up";
+          const variant = localMac
+            ? online
+              ? "success-light"
+              : "warning-light"
+            : provisioned
+              ? "success-light"
+              : "warning-light";
+          return <Badge variant={variant}>{label}</Badge>;
+        },
         size: 140,
       },
       {

@@ -43,6 +43,8 @@ pub enum ComputerError {
     SandboxRejected(String),
     #[error("execution failed: {0}")]
     ExecutionFailed(String),
+    #[error("computer operation outcome is ambiguous: {0}")]
+    AmbiguousOutcome(String),
     #[error("cancelled")]
     Cancelled,
 }
@@ -56,8 +58,13 @@ impl ComputerError {
             ComputerError::MalformedArguments(_) => "malformed_tool_arguments",
             ComputerError::SandboxRejected(_) => "tool_rejected_by_sandbox",
             ComputerError::ExecutionFailed(_) => "tool_execution_failed",
+            ComputerError::AmbiguousOutcome(_) => "computer_operation_ambiguous",
             ComputerError::Cancelled => "cancelled",
         }
+    }
+
+    pub fn is_ambiguous(&self) -> bool {
+        matches!(self, ComputerError::AmbiguousOutcome(_))
     }
 }
 

@@ -87,6 +87,8 @@ export const tauriApi = {
     nodeId: string | null;
     computerId: string | null;
     userCode: string | null;
+    liveSession: boolean;
+    reauthRequired: boolean;
   }> {
     return invoke("get_elsewhere_pairing_status");
   },
@@ -96,6 +98,8 @@ export const tauriApi = {
     nodeId: string | null;
     computerId: string | null;
     userCode: string | null;
+    liveSession: boolean;
+    reauthRequired: boolean;
   }> {
     return invoke("start_elsewhere_pairing");
   },

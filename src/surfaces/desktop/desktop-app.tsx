@@ -53,6 +53,7 @@ export default function DesktopApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
   const [elsewhereConnected, setElsewhereConnected] = useState(false);
+  const [elsewhereReauthRequired, setElsewhereReauthRequired] = useState(false);
   const [elsewherePairing, setElsewherePairing] = useState(false);
   const [apiKeyBannerDismissed, setApiKeyBannerDismissed] = useState(false);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
@@ -108,6 +109,7 @@ export default function DesktopApp() {
   const refreshElsewherePairingStatus = useCallback(async () => {
     const status = await tauriApi.getElsewherePairingStatus();
     setElsewhereConnected(status.connected);
+    setElsewhereReauthRequired(status.reauthRequired);
   }, []);
 
   const loadModels = useCallback(async () => {
@@ -471,6 +473,7 @@ export default function DesktopApp() {
     try {
       const status = await tauriApi.startElsewherePairing();
       setElsewhereConnected(status.connected);
+      setElsewhereReauthRequired(status.reauthRequired);
     } catch (error) {
       setSettingsError(formatInvokeError(error));
     } finally {
@@ -623,6 +626,7 @@ export default function DesktopApp() {
         apiKeyConfigured={apiKeyConfigured}
         apiKeyDraft={apiKeyDraft}
         elsewhereConnected={elsewhereConnected}
+        elsewhereReauthRequired={elsewhereReauthRequired}
         elsewherePairing={elsewherePairing}
         error={settingsError}
         saving={settingsSaving}

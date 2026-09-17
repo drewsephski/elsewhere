@@ -377,6 +377,10 @@ pub fn build_router(state: AppState) -> Router {
                 .route(
                     "/v1/local-mac/pairings/{pairingId}/exchange",
                     post(api::local_mac::exchange_pairing),
+                )
+                .route(
+                    "/v1/local-mac/sessions",
+                    get(api::local_mac_session::local_mac_session),
                 ),
         )
         .with_state(state.clone())
