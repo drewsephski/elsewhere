@@ -101,7 +101,7 @@ export function ProductDemo({ onGetStarted }: ProductDemoProps) {
 
   return (
     <section id="demo" className="landing-shell mt-10 md:mt-14">
-      <div className="dark relative flex h-[min(78dvh,680px)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-white/8 bg-[#0c0c0c] shadow-[0_24px_80px_-24px_rgba(43,39,53,0.55)]">
+      <div className="dark relative flex h-[min(78dvh,680px)] min-h-[520px] flex-col overflow-hidden rounded-[20px] border border-white/10 bg-[#0c0c0c] shadow-[0_20px_50px_-24px_rgba(43,39,53,0.45)]">
         <div className="flex shrink-0 items-center gap-2 border-b border-white/8 px-4 py-3">
           <span className="size-2.5 rounded-full bg-[#ff5f57]" aria-hidden />
           <span className="size-2.5 rounded-full bg-[#febc2e]" aria-hidden />

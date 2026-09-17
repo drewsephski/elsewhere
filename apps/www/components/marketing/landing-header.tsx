@@ -1,6 +1,7 @@
 "use client";
 
 import { siteConfig } from "@elsewhere/brand";
+import { GitHubMark } from "@/components/icons/github-mark";
 import { ProductLogo } from "@/components/product-logo";
 import { appRoutes } from "@/lib/app-routes";
 import { cn } from "cn";
@@ -48,7 +49,7 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
 
   return (
     <header className="relative z-50">
-      <div className="landing-shell relative z-50 flex h-[86px] items-center justify-between gap-6 bg-background/90 backdrop-blur-sm">
+      <div className="landing-shell relative z-50 flex h-[86px] items-center justify-between gap-6">
         <div className="flex min-w-0 items-center gap-8">
           <Link
             href="/"
@@ -91,9 +92,9 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
             href={siteConfig.links.docs}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-[42px] items-center gap-1.5 rounded-full border border-border bg-white px-3.5 text-[14px] text-brand-dark/80 transition-colors hover:bg-muted"
+            className="inline-flex h-[42px] items-center gap-1.5 rounded-[14px] px-2.5 text-[14px] text-brand-dark/80 transition-opacity hover:opacity-70"
           >
-            <span aria-hidden>★</span>
+            <GitHubMark className="size-4 shrink-0" aria-hidden />
             <span>Source</span>
           </a>
           <Link
