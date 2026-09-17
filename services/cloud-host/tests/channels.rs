@@ -19,6 +19,55 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const SIGNING_SECRET: &str = "signing-secret";
 const OWNER: &str = "legacy-local";
+const MOCK_SLACK_BOT_TOKEN: &str = "xoxb-bot-token-secret";
+
+/// OAuth complete must return only `ChannelConnectionSummary` fields — never tokens or Slack ids.
+fn assert_slack_oauth_complete_response_excludes_secrets(conn: &Value, response_body: &str) {
+    assert!(
+        !response_body.contains(MOCK_SLACK_BOT_TOKEN),
+        "response must not contain the plaintext Slack bot token"
+    );
+    let obj = conn
+        .as_object()
+        .expect("oauth complete response must be a JSON object");
+    const FORBIDDEN_KEYS: &[&str] = &[
+        "accessToken",
+        "access_token",
+        "botToken",
+        "token",
+        "installerExternalUserId",
+        "externalWorkspaceId",
+        "botUserId",
+        "workspaceId",
+        "ciphertext",
+        "nonce",
+    ];
+    for key in FORBIDDEN_KEYS {
+        assert!(
+            obj.get(*key).is_none(),
+            "response must not include secret field `{}`",
+            key
+        );
+    }
+    const ALLOWED_KEYS: &[&str] = &[
+        "id",
+        "provider",
+        "status",
+        "enabled",
+        "workspaceName",
+        "defaultBotId",
+        "defaultBotName",
+        "connectedAt",
+        "updatedAt",
+    ];
+    for key in obj.keys() {
+        assert!(
+            ALLOWED_KEYS.contains(&key.as_str()),
+            "unexpected field `{}` in oauth complete response",
+            key
+        );
+    }
+}
 
 fn secret_key() -> String {
     base64::engine::general_purpose::STANDARD.encode([9u8; 32])
@@ -252,10 +301,8 @@ async fn slack_oauth_state_and_encrypted_token(pool: PgPool) {
     .await;
     assert_eq!(status, http::StatusCode::OK);
     assert_eq!(conn["workspaceName"], "Acme");
-    let serialized = conn.to_string();
-    assert!(!serialized.contains("xoxb-"));
-    assert!(!serialized.contains("UINSTALL"));
-    assert!(!serialized.contains("T1"));
+    let response_body = serde_json::to_string(&conn).unwrap();
+    assert_slack_oauth_complete_response_excludes_secrets(&conn, &response_body);
 
     let (status, _) = json_auth(
         app.clone(),
@@ -267,11 +314,29 @@ async fn slack_oauth_state_and_encrypted_token(pool: PgPool) {
     assert_eq!(status, http::StatusCode::BAD_REQUEST);
 
     let connection_id = conn["id"].as_str().unwrap();
+    let stored_ciphertext: Vec<u8> = sqlx::query_scalar(
+        "SELECT ciphertext FROM channel_connection_secrets WHERE connection_id = $1",
+    )
+    .bind(connection_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let stored_as_utf8 = String::from_utf8_lossy(&stored_ciphertext);
+    assert_ne!(
+        stored_ciphertext.as_slice(),
+        MOCK_SLACK_BOT_TOKEN.as_bytes(),
+        "access token must be encrypted at rest, not stored as plaintext"
+    );
+    assert!(
+        !stored_as_utf8.contains(MOCK_SLACK_BOT_TOKEN),
+        "ciphertext must not embed the plaintext bot token"
+    );
+
     let token = load_access_token(&pool, connection_id, &secret_box())
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(token, "xoxb-bot-token-secret");
+    assert_eq!(token, MOCK_SLACK_BOT_TOKEN);
 
     Mock::given(method("POST"))
         .and(path("/apps.uninstall"))
