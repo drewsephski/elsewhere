@@ -67,6 +67,8 @@ interface BotConversationViewProps {
   botId: string;
   onOpenContext?: () => void;
   onBotLoaded?: (bot: BotSummary) => void;
+  /** Parent-owned bot snapshot (e.g. after settings save) to keep header in sync. */
+  syncedBot?: BotSummary | null;
   onRenameBot?: (botId: string, name: string) => Promise<void>;
   onStreamRunIdChange?: (runId: string | null) => void;
   /** Desktop context rail is hidden; show an affordance to bring it back. */
@@ -78,6 +80,7 @@ export function BotConversationView({
   botId,
   onOpenContext,
   onBotLoaded,
+  syncedBot = null,
   onRenameBot,
   onStreamRunIdChange,
   railCollapsed = false,
@@ -271,6 +274,13 @@ export function BotConversationView({
     const rows: ConversationSummary[] = await response.json();
     return rows[0]?.id ?? null;
   }, [botId]);
+
+  useEffect(() => {
+    if (!syncedBot || syncedBot.id !== botId) {
+      return;
+    }
+    setBot(syncedBot);
+  }, [botId, syncedBot]);
 
   useEffect(() => {
     const controller = new AbortController();
