@@ -5,7 +5,9 @@ description: Drive the Elsewhere web workspace the way a user does and capture p
 
 # Verify Elsewhere
 
-Elsewhere's primary user surface is the Next.js web app at `http://127.0.0.1:3000` (`apps/www`). Drive it in a real browser. Do not treat Vitest, `cargo test`, or curl of `/v1/*` as UI proof.
+Elsewhere's primary user surface is the Next.js web app (`apps/www`). Drive it in a real browser. Do not treat Vitest, `cargo test`, or curl of `/v1/*` as UI proof.
+
+Default local base: `http://127.0.0.1:3000`. Hosted alpha base: `https://elsewhere-alpha-web.fly.dev`. Set `ELSEWHERE_VERIFY_BASE` to choose. Prefer alpha when proving deployed UX; prefer local when proving an unmerged branch.
 
 Secondary surfaces (do not use these as the default proof path):
 
@@ -38,6 +40,20 @@ Env lives in `apps/www/.env` and/or repo `.env` (both gitignored). Required for 
 
 Do not start a second `pnpm dev:www` on 3000. Do not start a second `cloud-host` against the same `DATABASE_URL` (advisory lock, one dispatcher).
 
+## Hosted alpha
+
+```bash
+export ELSEWHERE_VERIFY_BASE=https://elsewhere-alpha-web.fly.dev
+# Optional: public runner may not resolve; BFF uses Fly .internal. Prefer web health:
+#   curl -sS "$ELSEWHERE_VERIFY_BASE/api/health/runner"
+.cursor/skills/verify-elsewhere/scripts/doctor.sh
+```
+
+Doctor requires landing `/` HTTP 200 with Elsewhere + Get started/Open workspace. `/sign-in` may be client-rendered (no SSR "Sign in" text). Confirm the heading in the browser for sign-in recipes.
+
+Do not start local `pnpm dev:www` when verifying alpha. Do not kill Fly Machines as cleanup.
+
+
 Record PIDs of processes this run started under `/tmp/elsewhere-verify-$RUN_ID/`.
 
 ## Doctor
@@ -63,7 +79,7 @@ Stable handles:
 - Get-started dialog: heading `How do you want to start?`, link `Open workspace now` to `/app`
 - Sign-in page (`/sign-in`): heading `Sign in`, textboxes `Email` and `Password`, button `Sign in`, link `Need an account? Sign up`, link `Back to home`
 - Unauthenticated `/app`: redirects to `/sign-in`
-- Signed-in workspace: `/app`. Legacy management nav (`aria-label="App navigation"`) uses labels from `appShellNavLinks`: `Work`, `Approvals`, `Results`, `Routines`, `Computers`, `Integrations`, `Channels`, `Skills`, `Settings`
+- Signed-in workspace: `/app`. Legacy management nav (`aria-label="App navigation"`) uses labels from `appShellNavLinks`: `Work`, `Approvals`, `Results`, `Routines`, `Computers`, `Integrations`, `Channels`, `Skills`. Settings opens from the selected Bot gear or the account menu.
 
 Do not sign in with production credentials in a shared browser profile. Use a disposable account or stop at the sign-in form when the recipe is unauthenticated.
 
