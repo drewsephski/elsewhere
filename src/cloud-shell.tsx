@@ -101,6 +101,7 @@ export default function CloudShell() {
     <Routes>
       <Route path="/" element={<Navigate to="/app" replace />} />
       <Route path="/sign-in" element={<SignInRoute />} />
+      <Route path="/sign-up" element={<SignInRoute />} />
       <Route
         path="/app"
         element={<AuthenticatedWorkspace />}
