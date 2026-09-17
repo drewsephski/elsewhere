@@ -43,6 +43,8 @@ export default defineConfig(({ mode }) => ({
     include: [
       "src/**/*.test.ts",
       "apps/www/lib/**/*.test.ts",
+      "apps/www/hooks/**/*.test.ts",
+      "apps/www/components/**/*.hook.test.ts",
       "apps/www/app/**/*.test.ts",
       "crates/sprite-computer/guest/**/*.test.mjs",
     ],

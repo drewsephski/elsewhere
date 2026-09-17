@@ -35,6 +35,7 @@ import {
 import { ChevronLeft, ChevronsLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
@@ -51,6 +52,12 @@ import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  bumpLoadScope,
+  createLoadScopeRef,
+  isActiveLoadScope,
+} from "@/lib/conversation-load-scope";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -97,7 +104,29 @@ export function BotConversationView({
     key: string;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const composerFiles = useComposerAttachments(botId ? { botId } : null);
+  const stickToBottomRef = useRef(true);
+  const loadScopeRef = useRef(createLoadScopeRef());
+  const [conversationLoading, setConversationLoading] = useState(true);
+  const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments(
+    botId ? { botId } : null,
+  );
+
+  const handleBotIdentityChange = useCallback(() => {
+    bumpLoadScope(loadScopeRef.current);
+    setRuns([]);
+    setConversationId(null);
+    setLiveRunId(null);
+    setLiveDelegations([]);
+    setPendingTurn(null);
+    setMessage("");
+    setError(null);
+    setConversationLoading(true);
+    stickToBottomRef.current = true;
+    requestRef.current = null;
+    resetComposerAttachments();
+  }, [resetComposerAttachments]);
+
+  useConversationIdentityLayout(botId, handleBotIdentityChange);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {
@@ -202,23 +231,35 @@ export function BotConversationView({
     });
   }, []);
 
-  const loadRuns = useCallback(async (activeConversationId: string | null) => {
-    if (!activeConversationId) {
-      setRuns([]);
-      setLiveRunId(null);
-      return;
-    }
-    const response = await cloudHostFetch(
-      `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
-    );
-    if (!response.ok) {
-      throw new Error("Could not load conversation history");
-    }
-    const rows: RunSummary[] = await response.json();
-    setRuns(rows);
-    syncLiveRunId(rows);
-    return rows;
-  }, [botId, syncLiveRunId]);
+  const loadRuns = useCallback(
+    async (activeConversationId: string | null, generation: number) => {
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      if (!activeConversationId) {
+        setRuns([]);
+        setLiveRunId(null);
+        return;
+      }
+      const response = await cloudHostFetch(
+        `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
+      );
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Could not load conversation history");
+      }
+      const rows: RunSummary[] = await response.json();
+      if (!isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
+      setRuns(rows);
+      syncLiveRunId(rows);
+      return rows;
+    },
+    [botId, syncLiveRunId],
+  );
 
   const resolveConversationId = useCallback(async () => {
     const response = await cloudHostFetch(
@@ -251,16 +292,11 @@ export function BotConversationView({
   }, [botId, onBotLoaded]);
 
   useEffect(() => {
-    let cancelled = false;
-    setMessage("");
-    setError(null);
-    setPendingTurn(null);
-    setLiveRunId(null);
-    composerFiles.reset();
+    const generation = loadScopeRef.current.current;
     void (async () => {
       try {
         const id = await resolveConversationId();
-        if (cancelled) {
+        if (!isActiveLoadScope(loadScopeRef.current, generation)) {
           return;
         }
         setConversationId(id);
@@ -268,33 +304,45 @@ export function BotConversationView({
           setRuns([]);
           return;
         }
-        await loadRuns(id);
+        await loadRuns(id, generation);
       } catch (err) {
-        if (!cancelled) {
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
           setError(err instanceof Error ? err.message : "Could not load conversation");
+        }
+      } finally {
+        if (isActiveLoadScope(loadScopeRef.current, generation)) {
+          setConversationLoading(false);
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, [botId, loadRuns, resolveConversationId]);
 
   useEffect(() => {
     if (!conversationId) {
       return;
     }
+    const generation = loadScopeRef.current.current;
     let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
     async function poll() {
+      if (cancelled || !isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
+      }
       try {
-        await loadRuns(conversationId);
+        await loadRuns(conversationId, generation);
       } catch {
         /* ignore transient errors */
+      }
+      if (cancelled || !isActiveLoadScope(loadScopeRef.current, generation)) {
+        return;
       }
       timer = setTimeout(() => void poll(), 5000);
     }
     void poll();
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [conversationId, loadRuns]);
 
   useEffect(() => {
@@ -306,9 +354,25 @@ export function BotConversationView({
     }
   }, [pendingTurn, runs]);
 
+  function handleConversationScroll() {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 96;
+  }
+
   useEffect(() => {
+    if (!stickToBottomRef.current) {
+      return;
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [runs.length, timeline.length, liveDetail?.assistantResult]);
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [botId, conversationId]);
 
   async function handleStartNewChat() {
     if (startingNewChat || pending) {
@@ -330,7 +394,7 @@ export function BotConversationView({
       setRuns([]);
       setLiveRunId(null);
       setMessage("");
-      composerFiles.reset();
+      resetComposerAttachments();
       requestRef.current = null;
     } catch (err) {
       setError(formatUserFacingError(err, "Could not start a new chat"));
@@ -407,8 +471,8 @@ export function BotConversationView({
             },
       );
       requestRef.current = null;
-      composerFiles.reset();
-      const rows = await loadRuns(created.conversationId);
+      resetComposerAttachments();
+      const rows = await loadRuns(created.conversationId, loadScopeRef.current.current);
       const runVisible =
         rows?.some((run) => run.runId === created.runId) ??
         false;
@@ -429,13 +493,13 @@ export function BotConversationView({
     try {
       await archiveWorkRun(run.runId);
       if (conversationId) {
-        await loadRuns(conversationId);
+        await loadRuns(conversationId, loadScopeRef.current.current);
       }
       if (liveRunId === run.runId) {
         setLiveRunId(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete message");
+      setError(err instanceof Error ? err.message : "Could not archive from chat");
     }
   }
 
@@ -515,9 +579,14 @@ export function BotConversationView({
         </div>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+      <div
+        ref={scrollRef}
+        onScroll={handleConversationScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
+      >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
-          {chronologicalRuns.map((run) => {
+          {!conversationLoading
+            ? chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
             const assistantText = isLive
               ? assistantStream.answerText ||
@@ -531,9 +600,9 @@ export function BotConversationView({
             const deleteAction =
               canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
                 <MessageDeleteButton
+                  intent="archive"
                   onDelete={() => handleDeleteRun(run)}
-                  label="Delete"
-                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
+                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
                 />
               ) : null;
 
@@ -655,7 +724,8 @@ export function BotConversationView({
                 ) : null}
               </div>
             );
-          })}
+          })
+            : null}
 
           {pendingTurn &&
           !chronologicalRuns.some(
@@ -674,7 +744,13 @@ export function BotConversationView({
             </div>
           ) : null}
 
-          {!chronologicalRuns.length && !pendingTurn ? (
+          {conversationLoading && !pendingTurn ? (
+            <div className="flex justify-center py-16" role="status" aria-label="Loading conversation">
+              <Spinner className="size-5 text-muted-foreground" />
+            </div>
+          ) : null}
+
+          {!conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
             <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
               <BotCreatureAvatar
                 name={bot?.name ?? "Bot"}

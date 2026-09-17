@@ -118,10 +118,15 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get("create") === "1") {
-      setCreateOpen(true);
+    if (searchParams.get("create") !== "1") {
+      return;
     }
-  }, [searchParams]);
+    setCreateOpen(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("create");
+    const query = params.toString();
+    router.replace(query ? `/app?${query}` : "/app");
+  }, [router, searchParams]);
 
   useEffect(() => {
     if (selectedBotId) {
