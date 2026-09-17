@@ -275,8 +275,8 @@ export function BotListSidebar({
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                   size="lg"
                 />
-                <span className="w-full truncate text-center text-[10px] font-medium">
-                  {bot.name.split(" ")[0]}
+                <span className="w-full truncate text-center text-[10px] font-medium" title={bot.name}>
+                  {bot.name}
                 </span>
               </Link>
             ))}

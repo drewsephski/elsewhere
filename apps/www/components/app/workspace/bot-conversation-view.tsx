@@ -51,6 +51,7 @@ import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
+import { Spinner } from "@/components/ui/spinner";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -97,6 +98,8 @@ export function BotConversationView({
     key: string;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const [conversationLoading, setConversationLoading] = useState(true);
   const composerFiles = useComposerAttachments(botId ? { botId } : null);
 
   const activeRun = useMemo(() => {
@@ -256,6 +259,8 @@ export function BotConversationView({
     setError(null);
     setPendingTurn(null);
     setLiveRunId(null);
+    setConversationLoading(true);
+    stickToBottomRef.current = true;
     composerFiles.reset();
     void (async () => {
       try {
@@ -272,6 +277,10 @@ export function BotConversationView({
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Could not load conversation");
+        }
+      } finally {
+        if (!cancelled) {
+          setConversationLoading(false);
         }
       }
     })();
@@ -306,9 +315,25 @@ export function BotConversationView({
     }
   }, [pendingTurn, runs]);
 
+  function handleConversationScroll() {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 96;
+  }
+
   useEffect(() => {
+    if (!stickToBottomRef.current) {
+      return;
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [runs.length, timeline.length, liveDetail?.assistantResult]);
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [botId, conversationId]);
 
   async function handleStartNewChat() {
     if (startingNewChat || pending) {
@@ -435,7 +460,7 @@ export function BotConversationView({
         setLiveRunId(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete message");
+      setError(err instanceof Error ? err.message : "Could not archive from chat");
     }
   }
 
@@ -515,7 +540,11 @@ export function BotConversationView({
         </div>
       </header>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+      <div
+        ref={scrollRef}
+        onScroll={handleConversationScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
+      >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
@@ -531,9 +560,9 @@ export function BotConversationView({
             const deleteAction =
               canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
                 <MessageDeleteButton
+                  intent="archive"
                   onDelete={() => handleDeleteRun(run)}
-                  label="Delete"
-                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-destructive"
+                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
                 />
               ) : null;
 
@@ -674,7 +703,13 @@ export function BotConversationView({
             </div>
           ) : null}
 
-          {!chronologicalRuns.length && !pendingTurn ? (
+          {conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
+            <div className="flex justify-center py-16" role="status" aria-label="Loading conversation">
+              <Spinner className="size-5 text-muted-foreground" />
+            </div>
+          ) : null}
+
+          {!conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
             <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
               <BotCreatureAvatar
                 name={bot?.name ?? "Bot"}

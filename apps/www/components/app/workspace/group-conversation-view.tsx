@@ -37,6 +37,8 @@ import {
 import { deleteConversationMessage, canArchiveWorkRun, archiveWorkRun } from "@/lib/archive-work-run";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill, type StatusTone } from "@/components/app/status-pill";
+import { workStatus } from "@/lib/work-events";
+import { Spinner } from "@/components/ui/spinner";
 
 const MIN_GROUP_BOTS = 2;
 
@@ -58,18 +60,7 @@ interface GroupConversationViewProps {
 }
 
 function recipientStatusLabel(status: string): string {
-  switch (status) {
-    case "queued":
-      return "queued";
-    case "running":
-      return "working";
-    case "completed":
-      return "finished";
-    case "cancelled":
-      return "cancelled";
-    default:
-      return status;
-  }
+  return workStatus(status);
 }
 
 function recipientStatusTone(status: string): StatusTone {
@@ -110,6 +101,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [message, setMessage] = useState("");
   const [mentions, setMentions] = useState<MentionToken[]>([]);
   const [pending, setPending] = useState(false);
+  const [transcriptLoading, setTranscriptLoading] = useState(true);
   const idempotencyRef = useRef<string | null>(null);
   const composerFiles = useComposerAttachments({ conversationId: groupId });
 
@@ -135,15 +127,18 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   }, [groupId]);
 
   useEffect(() => {
+    setTranscriptLoading(true);
     void (async () => {
       try {
         await loadGroup();
         await loadMessages();
       } catch (err) {
         toastCloudError(err instanceof Error ? err.message : "Could not load group");
+      } finally {
+        setTranscriptLoading(false);
       }
     })();
-  }, [loadGroup, loadMessages]);
+  }, [groupId, loadGroup, loadMessages]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -313,6 +308,21 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
+          {transcriptLoading && messages.length === 0 ? (
+            <div className="flex justify-center py-16" role="status" aria-label="Loading group chat">
+              <Spinner className="size-5 text-muted-foreground" />
+            </div>
+          ) : null}
+
+          {!transcriptLoading && messages.length === 0 ? (
+            <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
+              <p className="text-[13px] font-medium text-foreground">Start the group chat</p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Send a message below. @mention a bot when you want a specific responder.
+              </p>
+            </div>
+          ) : null}
+
           {messages.map((item) =>
             item.authorKind === "human" ? (
               <div key={item.id} className="flex flex-col items-end gap-1.5">

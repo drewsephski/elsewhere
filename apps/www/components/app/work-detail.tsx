@@ -328,7 +328,7 @@ export function WorkDetail({ runId }: { runId: string }) {
       }
       router.push("/app");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete message");
+      setError(err instanceof Error ? err.message : "Could not archive work");
       setDeleting(false);
     }
   }
@@ -421,9 +421,9 @@ export function WorkDetail({ runId }: { runId: string }) {
             </Badge>
             {canDelete ? (
               <MessageDeleteButton
+                intent="archive"
                 onDelete={handleDeleteMessage}
-                label="Delete"
-                className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                className="h-8 text-xs text-muted-foreground hover:text-foreground"
               />
             ) : null}
             {detail && active(detail.status) ? (

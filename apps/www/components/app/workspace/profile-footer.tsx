@@ -24,7 +24,7 @@ interface ProfileFooterProps {
 const footerRowClass =
   "flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] text-foreground transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-surface-active";
 
-/** Nav footer: a "Manage" row plus the account row that opens the account menu. */
+/** Nav footer: work history link plus the account row that opens the account menu. */
 export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterProps) {
   const router = useRouter();
 
@@ -40,7 +40,7 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
     <div className={cn("space-y-px", compact && "space-y-0")}>
       <Link href={appRoutes.work} className={footerRowClass}>
         <LayoutGrid className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="truncate">Manage</span>
+        <span className="truncate">Work history</span>
       </Link>
       <DropdownMenu>
         <DropdownMenuTrigger

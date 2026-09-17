@@ -13,7 +13,7 @@ export async function archiveWorkRun(runId: string): Promise<void> {
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? "Could not delete message");
+    throw new Error(body?.error ?? "Could not archive work");
   }
 }
 
