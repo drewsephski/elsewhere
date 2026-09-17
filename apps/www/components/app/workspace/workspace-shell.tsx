@@ -125,7 +125,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("create");
     const query = params.toString();
-    router.replace(query ? `/app?${query}` : "/app", { scroll: false });
+    router.replace(query ? `/app?${query}` : "/app");
   }, [router, searchParams]);
 
   useEffect(() => {
