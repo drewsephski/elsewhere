@@ -14,10 +14,13 @@ import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
+import { SettingsDialog } from "@/components/app/settings-dialog";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { parseSettingsSection, type SettingsSection } from "@/lib/settings-sections";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
+import { ChevronsRight } from "@/components/icons/lucide";
 
 /** Must be module-scoped — an inline component remounts the whole workspace on every parent render. */
 function WorkspaceBrowserPreviewLayer({
@@ -72,7 +75,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const [connectionOpen, setConnectionOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runActivityAt, setRunActivityAt] = useState<Record<string, string>>({});
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
@@ -129,6 +133,19 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   }, [router, searchParams]);
 
   useEffect(() => {
+    const section = parseSettingsSection(searchParams.get("settings"));
+    if (!section) {
+      return;
+    }
+    setSettingsSection(section);
+    setSettingsOpen(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("settings");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }, [pathname, router, searchParams]);
+
+  useEffect(() => {
     if (selectedBotId) {
       return;
     }
@@ -140,9 +157,10 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     }
     const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
     if (isDesktop) {
-      router.replace(`/app/bots/${bots[0].id}`);
+      const params = searchParams.toString();
+      router.replace(params ? `/app/bots/${bots[0].id}?${params}` : `/app/bots/${bots[0].id}`);
     }
-  }, [bots, pathname, router, selectedBotId]);
+  }, [bots, pathname, router, searchParams, selectedBotId]);
 
   useEffect(() => {
     let stopped = false;
@@ -198,6 +216,11 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   const handleBotLoaded = useCallback((loaded: BotSummary) => {
     setBot(loaded);
+  }, []);
+
+  const handleOpenSettings = useCallback((section: SettingsSection = "general") => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
   }, []);
 
   const handleBotSaved = useCallback(
@@ -343,17 +366,24 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const contextRail = selectedBotId ? (
     <aside
       className={cn(
-        "hidden w-[min(100%,18.5rem)] min-w-0 shrink-0 overflow-hidden border-l border-border bg-surface lg:flex lg:flex-col",
+        "group/rail relative hidden w-[min(100%,18.5rem)] min-w-0 shrink-0 overflow-hidden border-l border-border bg-surface lg:flex lg:flex-col",
         railCollapsed && "lg:hidden",
       )}
       aria-label="Bot context"
     >
+      <button
+        type="button"
+        aria-label="Hide details"
+        onClick={() => setRailCollapsed(true)}
+        className="absolute top-1/2 left-1 z-20 hidden size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:flex group-hover/rail:opacity-100"
+      >
+        <ChevronsRight className="size-3.5" aria-hidden />
+      </button>
       <BotContextRail
         bot={bot}
         activeRun={activeRun}
-        showConnectionSettings={false}
         onBotSaved={handleBotSaved}
-        onCollapse={() => setRailCollapsed(true)}
+        onOpenSettings={() => handleOpenSettings("general")}
       />
     </aside>
   ) : null;
@@ -387,7 +417,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             footer={
               <ProfileFooter
                 email={userEmail}
-                onOpenSettings={() => setConnectionOpen(true)}
+                onOpenSettings={(section) => handleOpenSettings(section ?? "chatgpt")}
               />
             }
             className="min-h-0 flex-1"
@@ -418,19 +448,21 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           <BotContextRail
             bot={bot}
             activeRun={activeRun}
-            showConnectionSettings={false}
             onBotSaved={handleBotSaved}
+            onOpenSettings={() => handleOpenSettings("general")}
           />
         ) : null}
       </MobileSheet>
 
-      <MobileSheet
-        open={connectionOpen}
-        title="ChatGPT connection"
-        onClose={() => setConnectionOpen(false)}
-      >
-        <ProviderStatusCard />
-      </MobileSheet>
+      <SettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        section={settingsSection}
+        onSectionChange={setSettingsSection}
+        bot={bot}
+        onBotSaved={handleBotSaved}
+        onBotDeleted={() => setSettingsOpen(false)}
+      />
     </>
   );
 

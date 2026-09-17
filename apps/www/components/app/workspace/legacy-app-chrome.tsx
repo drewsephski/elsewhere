@@ -41,7 +41,7 @@ export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
             <div className="mb-3 px-4 pt-3 md:hidden">
               <AppShellNav layout="mobile" showBackToChat />
             </div>
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">{children}</div>
+            <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-5">{children}</div>
           </main>
         </div>
       </div>

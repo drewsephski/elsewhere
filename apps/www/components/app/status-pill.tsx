@@ -80,3 +80,28 @@ export function RunStatusPill({ status, className }: { status: string; className
     </StatusPill>
   );
 }
+
+/** Quiet status used in dense tables: colored dot + label, no pill chrome. */
+export function RunStatusDot({ status, className }: { status: string; className?: string }) {
+  const tone = runStatusTone(status);
+  const label = status === "completed" || status === "complete" ? "Finished" : workStatus(status);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 text-[12px] font-medium",
+        tone === "success" && "text-success",
+        tone === "info" && "text-info",
+        tone === "warning" && "text-warning",
+        tone === "destructive" && "text-destructive",
+        tone === "neutral" && "text-muted-foreground",
+        className,
+      )}
+    >
+      <span
+        className={cn("size-1.5 rounded-full", dotClass[tone], runStatusIsLive(status) && "animate-pulse")}
+        aria-hidden
+      />
+      {label}
+    </span>
+  );
+}

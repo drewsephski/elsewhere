@@ -24,6 +24,17 @@ export function formatMessageTime(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+export function instructionPreview(instructions: string, maxChars = 120): string {
+  const compact = instructions.trim().replace(/\s+/g, " ");
+  if (!compact) {
+    return "";
+  }
+  if (compact.length <= maxChars) {
+    return compact;
+  }
+  return `${compact.slice(0, maxChars).trimEnd()}…`;
+}
+
 export function formatBytes(size: number): string {
   if (size < 1024) {
     return `${size} B`;

@@ -8,7 +8,7 @@ import { cn } from "cn";
 
 interface ProviderStatusCardProps {
   /** Larger layout for empty workspace / mobile sheet. */
-  variant?: "panel" | "featured";
+  variant?: "panel" | "featured" | "plain";
   className?: string;
 }
 
@@ -30,6 +30,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
   } = useProviderStatus();
 
   const featured = variant === "featured";
+  const plain = variant === "plain";
   const temporarilyUnavailable = checkFailed || providerUnavailable;
 
   return (
@@ -37,45 +38,54 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
       className={cn(
         featured
           ? "w-full max-w-md rounded-2xl border border-border bg-card p-6 text-left"
-          : "surface-card",
+          : plain
+            ? "text-left"
+            : "surface-card",
         className,
       )}
       aria-labelledby="chatgpt-heading"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2
-            id="chatgpt-heading"
-            className={cn(
-              "font-semibold tracking-tight text-foreground",
-              featured ? "text-xl" : "text-lg font-medium",
-            )}
+      {plain ? (
+        <h2 id="chatgpt-heading" className="sr-only">
+          ChatGPT connection
+        </h2>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2
+              id="chatgpt-heading"
+              className={cn(
+                "font-semibold tracking-tight text-foreground",
+                featured ? "text-xl" : "text-lg font-medium",
+              )}
+            >
+              {featured ? "Connect ChatGPT" : "Your ChatGPT connection"}
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {featured
+                ? "Link your ChatGPT plan so bots can run on your subscription allowance—not paid API keys."
+                : "Power your bots with your ChatGPT plan. Your connection stays on the computer running Elsewhere."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-muted-foreground"
+            onClick={() => void load()}
+            disabled={checking}
+            aria-label="Refresh connection status"
           >
-            {featured ? "Connect ChatGPT" : "Your ChatGPT connection"}
-          </h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {featured
-              ? "Link your ChatGPT plan so bots can run on your subscription allowance—not paid API keys."
-              : "Power your bots with your ChatGPT plan. Your connection stays on the computer running Elsewhere."}
-          </p>
+            <RefreshCw className={cn("size-4", checking && "animate-spin")} aria-hidden />
+          </Button>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="shrink-0 text-muted-foreground"
-          onClick={() => void load()}
-          disabled={checking}
-          aria-label="Refresh connection status"
-        >
-          <RefreshCw className={cn("size-4", checking && "animate-spin")} aria-hidden />
-        </Button>
-      </div>
+      )}
 
       {!checkFailed ? (
         <div
           className={cn(
-            "mt-5 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
+            "flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm",
+            plain ? "mt-0" : "mt-5",
             providerUnavailable
               ? "border-warning/25 bg-warning/10 text-warning-foreground"
               : connected

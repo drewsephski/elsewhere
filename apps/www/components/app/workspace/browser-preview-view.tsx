@@ -25,9 +25,14 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "cn";
 import { ArrowUpRight, Monitor, PanelRight } from "@/components/icons/lucide";
-import { useMemo, useState, type ReactNode } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
 
 export type BrowserPreviewVariant = "embedded" | "floating" | "work";
+
+export interface BrowserPreviewHandle {
+  expand: () => void;
+  canExpand: boolean;
+}
 
 interface BrowserPreviewViewProps {
   variant: BrowserPreviewVariant;
@@ -170,7 +175,8 @@ function OverlayIconButton({
   );
 }
 
-export function BrowserPreviewView({
+export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPreviewViewProps>(
+  function BrowserPreviewView({
   variant,
   className,
   frame: frameProp,
@@ -180,7 +186,7 @@ export function BrowserPreviewView({
   addressBar,
   chromeAttached,
   caption,
-}: BrowserPreviewViewProps) {
+}: BrowserPreviewViewProps, ref) {
   const ctx = useOptionalBrowserPreviewContext();
   const activeRun = useOptionalActiveRun();
   const frame = frameProp ?? ctx?.frame ?? null;
@@ -255,6 +261,15 @@ export function BrowserPreviewView({
   function handleDialogChange(open: boolean) {
     setDialogOpen(open);
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      expand: handleOpenDialog,
+      canExpand: hasImage,
+    }),
+    [hasImage],
+  );
 
   async function handleHumanPreviewClick(xRatio: number, yRatio: number) {
     const computerId = ctx?.computerId;
@@ -528,4 +543,4 @@ export function BrowserPreviewView({
       </Dialog>
     </>
   );
-}
+});

@@ -6,9 +6,9 @@ import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { formatMessageTime } from "@/lib/format";
 import {
   activityPreview,
-  presenceLabels,
+  presenceDotClass,
   presenceIsActive,
-  presenceNeedsAttention,
+  presenceShortLabel,
   type WorkspaceBotPresence,
 } from "@/lib/workspace-types";
 import { cn } from "cn";
@@ -287,6 +287,9 @@ export function BotListSidebar({
       <div className="mt-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
         {groups.length > 0 ? (
           <section aria-label="Groups">
+            <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+              Groups
+            </p>
             <ul className="space-y-px">
               {groups.map((group) => {
                 const selected = group.id === selectedGroupId;
@@ -355,14 +358,19 @@ export function BotListSidebar({
             </ul>
           </section>
         ) : null}
-        <section aria-label="Bots" className={cn(groups.length > 0 && "border-t border-border pt-2")}>
+        <section aria-label="Bots" className={cn(groups.length > 0 && "pt-2")}>
+          {groups.length > 0 ? (
+            <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+              Bots
+            </p>
+          ) : null}
           <ul className="space-y-px">
         {filtered.map((bot) => {
           const selected = bot.id === selectedBotId;
-          const attention = presenceNeedsAttention(bot.presence);
-          const showAttention = attention && !selected;
+          const statusLabel = presenceShortLabel(bot.presence);
           const activityIso = runActivityAt[bot.id];
           const timeLabel = activityIso ? formatMessageTime(activityIso) : null;
+          const trailingLabel = statusLabel ?? timeLabel;
 
           return (
             <li key={bot.id}>
@@ -395,24 +403,22 @@ export function BotListSidebar({
                         {bot.name}
                       </span>
                     )}
-                    {timeLabel ? (
-                      <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
-                        {timeLabel}
+                    {trailingLabel ? (
+                      <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80">
+                        {statusLabel ? (
+                          <span
+                            className={cn("size-1.5 rounded-full", presenceDotClass(bot.presence))}
+                            aria-hidden
+                          />
+                        ) : null}
+                        {trailingLabel}
                       </span>
                     ) : null}
                   </div>
                   <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-                    {showAttention
-                      ? (presenceLabels[bot.presence] ?? "Needs attention")
-                      : activityPreview(bot)}
+                    {activityPreview(bot)}
                   </p>
                 </div>
-                {showAttention ? (
-                  <span
-                    className="size-1.5 shrink-0 rounded-full bg-info"
-                    aria-label="Needs attention"
-                  />
-                ) : null}
               </Link>
             </li>
           );

@@ -2,8 +2,6 @@
 
 import type { BotSummary, RunSummary } from "@/lib/api-types";
 import { BotMemoryPanel } from "@/components/app/bot-memory";
-import { BotSettings } from "@/components/app/bot-settings";
-import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { BotRoutinesSidebar } from "./bot-routines-sidebar";
 import { ComposerIconButton } from "./chat-composer";
 import { ComputerStatePanel } from "./computer-state-panel";
@@ -14,37 +12,29 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "cn";
-import { ChevronDown, ChevronsRight, Settings2 } from "@/components/icons/lucide";
-import { useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Settings2 } from "@/components/icons/lucide";
+import type { ReactNode } from "react";
 
 interface BotContextRailProps {
   bot: BotSummary | null;
   activeRun: RunSummary | null;
-  showConnectionSettings: boolean;
   onBotSaved: (bot: BotSummary) => void;
-  /** Desktop only: hides the rail (the conversation header offers a way back). */
-  onCollapse?: () => void;
+  onOpenSettings?: () => void;
   className?: string;
 }
 
 function RailSection({
   title,
   defaultOpen = false,
-  open,
-  onOpenChange,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }) {
   return (
     <Collapsible
       defaultOpen={defaultOpen}
-      open={open}
-      onOpenChange={onOpenChange}
       className="group border-t border-border first:border-t-0"
     >
       <CollapsibleTrigger className="flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md py-2 text-left text-[12px] font-medium text-foreground transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
@@ -62,32 +52,16 @@ function RailSection({
 export function BotContextRail({
   bot,
   activeRun,
-  showConnectionSettings,
   onBotSaved,
-  onCollapse,
+  onOpenSettings,
   className,
 }: BotContextRailProps) {
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const settingsRef = useRef<HTMLDivElement>(null);
-
-  function handleOpenSettings() {
-    setSettingsOpen(true);
-    requestAnimationFrame(() => {
-      settingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }
-
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-      <div className="flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
-        {bot ? (
-          <ComposerIconButton label="Bot settings" className="size-7" onClick={handleOpenSettings}>
+      <div className="flex h-11 shrink-0 items-center justify-end px-2">
+        {bot && onOpenSettings ? (
+          <ComposerIconButton label="Bot settings" className="size-7" onClick={onOpenSettings}>
             <Settings2 className="size-4" aria-hidden />
-          </ComposerIconButton>
-        ) : null}
-        {onCollapse ? (
-          <ComposerIconButton label="Hide details" className="size-7" onClick={onCollapse}>
-            <ChevronsRight className="size-4" aria-hidden />
           </ComposerIconButton>
         ) : null}
       </div>
@@ -113,17 +87,6 @@ export function BotContextRail({
                 embedded
               />
             </RailSection>
-            <div ref={settingsRef} className="scroll-mt-2">
-              <RailSection title="Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
-                <BotSettings bot={bot} onSaved={onBotSaved} embedded />
-              </RailSection>
-            </div>
-          </div>
-        ) : null}
-
-        {showConnectionSettings ? (
-          <div className="mt-3 border-t border-border pt-3">
-            <ProviderStatusCard />
           </div>
         ) : null}
       </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { BrowserPreviewView } from "./browser-preview-view";
+import { BrowserPreviewView, type BrowserPreviewHandle } from "./browser-preview-view";
 import { cn } from "cn";
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 
 interface ComputerBrowserPreviewProps {
   className?: string;
@@ -11,6 +11,15 @@ interface ComputerBrowserPreviewProps {
 }
 
 /** Embedded live browser preview in the Computer rail (requires BrowserPreviewProvider). */
-export function ComputerBrowserPreview({ className, caption }: ComputerBrowserPreviewProps) {
-  return <BrowserPreviewView variant="embedded" className={cn(className)} caption={caption} />;
-}
+export const ComputerBrowserPreview = forwardRef<BrowserPreviewHandle, ComputerBrowserPreviewProps>(
+  function ComputerBrowserPreview({ className, caption }, ref) {
+    return (
+      <BrowserPreviewView
+        ref={ref}
+        variant="embedded"
+        className={cn(className)}
+        caption={caption}
+      />
+    );
+  },
+);

@@ -2,7 +2,6 @@
 
 import { authClient } from "@/lib/auth-client";
 import { appRoutes, appShellNavLinks } from "@/lib/app-routes";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 import {
   BriefcaseBusiness,
@@ -13,7 +12,6 @@ import {
   MessageSquare,
   Monitor,
   Plug,
-  Settings2,
   Sparkles,
 } from "@/components/icons/lucide";
 import Link from "next/link";
@@ -28,7 +26,6 @@ const linkIcons = {
   [appRoutes.connectors]: Plug,
   [appRoutes.channels]: MessageSquare,
   [appRoutes.skills]: Sparkles,
-  [appRoutes.settings]: Settings2,
 } as const;
 
 interface AppShellNavProps {
@@ -62,10 +59,7 @@ export function AppShellNav({
       {showBackToChat && !isMobile ? (
         <Link
           href={appRoutes.workspace}
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "mb-3 w-full justify-start gap-2 rounded-lg text-[13px]",
-          )}
+          className="mb-3 inline-flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <MessageSquare className="size-4 shrink-0" aria-hidden />
           Back to chat
@@ -75,7 +69,7 @@ export function AppShellNav({
       {showBackToChat && isMobile ? (
         <Link
           href={appRoutes.workspace}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-[13px] font-medium"
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted-foreground hover:bg-surface-hover hover:text-foreground"
         >
           <MessageSquare className="size-4" aria-hidden />
           Chat

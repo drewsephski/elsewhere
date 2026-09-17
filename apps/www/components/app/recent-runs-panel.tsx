@@ -3,7 +3,7 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { RunSummary } from "@/lib/api-types";
 import { formatMessageTime } from "@/lib/format";
-import { workStatus } from "@/lib/work-events";
+import { RunStatusDot } from "@/components/app/status-pill";
 import {
   WorkspaceDataGrid,
   WorkspaceDataGridTabs,
@@ -30,16 +30,6 @@ type WorkTab = "active" | "archived";
 
 function canArchiveRun(status: string): boolean {
   return status !== "queued" && status !== "running";
-}
-
-function statusTone(status: string): string {
-  if (status === "running" || status === "queued") {
-    return "text-info";
-  }
-  if (status === "failed" || status === "interrupted") {
-    return "text-warning";
-  }
-  return "text-muted-foreground";
 }
 
 export function RecentRunsPanel({
@@ -135,7 +125,8 @@ export function RecentRunsPanel({
         cell: ({ row }) => (
           <Link
             href={`/app/work/${row.original.runId}`}
-            className="line-clamp-2 font-medium leading-snug text-foreground hover:underline"
+            className="block truncate font-medium leading-snug text-foreground hover:underline"
+            title={row.original.task}
           >
             {row.original.task}
           </Link>
@@ -176,11 +167,7 @@ export function RecentRunsPanel({
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => (
-          <span className={cn("font-medium", statusTone(row.original.status))}>
-            {workStatus(row.original.status)}
-          </span>
-        ),
+        cell: ({ row }) => <RunStatusDot status={row.original.status} />,
         size: 110,
       },
       {

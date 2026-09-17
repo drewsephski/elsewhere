@@ -11,13 +11,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "cn";
-import { LayoutGrid, LogOut, Plug, Settings2, Sparkles } from "@/components/icons/lucide";
+import { LayoutGrid, LogOut, Settings2 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface ProfileFooterProps {
   email: string;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (section?: "workspace" | "chatgpt") => void;
   compact?: boolean;
 }
 
@@ -57,18 +57,10 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
         <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-56">
           <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem render={<Link href={appRoutes.computers} />}>
-            <Plug className="size-4" aria-hidden />
-            Computers
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href={appRoutes.skills} />}>
-            <Sparkles className="size-4" aria-hidden />
-            Skills
-          </DropdownMenuItem>
           {onOpenSettings ? (
-            <DropdownMenuItem onClick={onOpenSettings}>
+            <DropdownMenuItem onClick={() => onOpenSettings("chatgpt")}>
               <Settings2 className="size-4" aria-hidden />
-              ChatGPT connection
+              Settings
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuSeparator />

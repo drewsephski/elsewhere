@@ -122,31 +122,20 @@ export function BotSkillsSettings({
     : undefined;
 
   return (
-    <div
-      className={
-        embedded
-          ? "min-w-0 space-y-2"
-          : "space-y-3 rounded-xl border border-border/60 p-4"
-      }
-    >
+    <div className="min-w-0 space-y-3">
       {embedded ? (
         <p className="text-[11px] leading-snug text-muted-foreground">
           Skills run with this bot. Pin a version to freeze behavior.
         </p>
       ) : (
-        <div>
-          <p className="text-sm font-medium">Enabled skills</p>
-          <p className="text-xs text-muted-foreground">
-            Attached skills are materialized for each run on this bot. Pin a version to freeze
-            behavior.{" "}
-            <Link
-              href={appRoutes.skills}
-              className="underline underline-offset-4 hover:text-foreground"
-            >
-              Manage catalog
-            </Link>
-          </p>
-        </div>
+        <p className="text-[13px] text-muted-foreground">
+          <Link
+            href={appRoutes.skills}
+            className="underline underline-offset-4 hover:text-foreground"
+          >
+            Manage catalog
+          </Link>
+        </p>
       )}
       {attached.length ? (
         <ul className={embedded ? "space-y-0.5" : "space-y-2 text-sm"}>

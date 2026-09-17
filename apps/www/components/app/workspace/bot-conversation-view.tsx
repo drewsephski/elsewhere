@@ -23,6 +23,7 @@ import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { archiveWorkRun, canArchiveWorkRun } from "@/lib/archive-work-run";
+import { instructionPreview } from "@/lib/format";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill } from "@/components/app/status-pill";
 import { useActiveRun } from "@/contexts/active-run-context";
@@ -767,12 +768,14 @@ export function BotConversationView({
                 avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                 size="2xl"
               />
-              <p className="mt-4 text-[13px] font-medium text-foreground">
-                {bot?.name ? `Message ${bot.name}` : "Start a conversation"}
+              <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
+                {bot?.name ? `What should ${bot.name} work on?` : "What should this Bot work on?"}
               </p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Describe the outcome you want—a report, results and approvals show up right here.
-              </p>
+              {bot?.instructions ? (
+                <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted-foreground">
+                  {instructionPreview(bot.instructions)}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

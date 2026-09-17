@@ -10,13 +10,13 @@ import {
   type PolicyDecision,
 } from "@/lib/permission-policies";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { cn } from "cn";
+import { AnimatedTabs, AnimatedTabsTrigger } from "@/components/ui/animated-tabs";
 
 interface PermissionPolicyEditorProps {
   endpoint: string;
   mode: "owner" | "bot";
   embedded?: boolean;
+  hideHeading?: boolean;
 }
 
 function inheritHint(action: PolicyAction, mode: "owner" | "bot"): string {
@@ -41,6 +41,7 @@ export function PermissionPolicyEditor({
   endpoint,
   mode,
   embedded = false,
+  hideHeading = false,
 }: PermissionPolicyEditorProps) {
   const [catalog, setCatalog] = useState<PolicyCatalog | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -96,17 +97,19 @@ export function PermissionPolicyEditor({
     : "text-xs font-medium text-muted-foreground";
 
   return (
-    <div className="min-w-0 space-y-3">
-      <div>
-        <p className={embedded ? "text-xs font-medium text-foreground" : "text-sm font-medium"}>
-          Permissions
-        </p>
-        <p className={embedded ? "mt-0.5 text-[11px] leading-snug text-muted-foreground" : "mt-1 text-xs text-muted-foreground"}>
-          {mode === "bot"
-            ? "Applies whenever this Bot works on its own, including Routines."
-            : "Applies to every Bot unless that Bot has its own setting."}
-        </p>
-      </div>
+    <div className="min-w-0 space-y-5">
+      {hideHeading ? null : (
+        <div>
+          <p className={embedded ? "text-xs font-medium text-foreground" : "text-sm font-medium"}>
+            Permissions
+          </p>
+          <p className={embedded ? "mt-0.5 text-[11px] leading-snug text-muted-foreground" : "mt-1 text-xs text-muted-foreground"}>
+            {mode === "bot"
+              ? "Applies whenever this Bot works on its own, including Routines."
+              : "Applies to every Bot unless that Bot has its own setting."}
+          </p>
+        </div>
+      )}
       {groups.map((group) => (
         <section key={group.group} className="min-w-0 space-y-1.5">
           <h3 className={labelClass}>{group.groupLabel}</h3>
@@ -180,33 +183,23 @@ function PolicyActionRow({
           ) : null}
         </p>
       </div>
-      <div
-        className="inline-flex shrink-0 rounded-md border border-border p-0.5"
-        role="radiogroup"
+      <AnimatedTabs
+        value={action.decision}
+        onValueChange={(next) => onChange(next as PolicyDecision)}
+        variant="pill"
+        selection="radio"
+        disabled={disabled}
         aria-label={`${action.label} permission`}
       >
         {POLICY_DECISIONS.map((option) => {
           const selected = action.decision === option.value;
           return (
-            <Button
-              key={option.value}
-              type="button"
-              size="sm"
-              role="radio"
-              aria-checked={selected}
-              variant={selected ? "default" : "ghost"}
-              className={cn(
-                "h-7 px-2 text-[11px]",
-                selected ? "" : "text-muted-foreground",
-              )}
-              disabled={disabled}
-              onClick={() => onChange(option.value)}
-            >
+            <AnimatedTabsTrigger key={option.value} value={option.value}>
               {busy && selected ? "…" : option.label}
-            </Button>
+            </AnimatedTabsTrigger>
           );
         })}
-      </div>
+      </AnimatedTabs>
     </div>
   );
 }

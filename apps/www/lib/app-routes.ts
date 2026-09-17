@@ -40,5 +40,4 @@ export const appShellNavLinks = [
   { href: appRoutes.connectors, label: "Integrations" },
   { href: appRoutes.channels, label: "Channels" },
   { href: appRoutes.skills, label: "Skills" },
-  { href: appRoutes.settings, label: "Settings" },
 ] as const;

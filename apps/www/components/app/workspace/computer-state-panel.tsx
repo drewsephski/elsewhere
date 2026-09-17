@@ -7,8 +7,10 @@ import { workStatus } from "@/lib/work-events";
 import { cn } from "cn";
 import { Monitor } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ComputerBrowserPreview } from "./computer-browser-preview";
+import type { BrowserPreviewHandle } from "./browser-preview-view";
 
 interface ComputerStatePanelProps {
   bot: BotSummary | null;
@@ -25,6 +27,8 @@ export function ComputerStatePanel({
 }: ComputerStatePanelProps) {
   const [computer, setComputer] = useState<ComputerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const previewRef = useRef<BrowserPreviewHandle>(null);
+  const router = useRouter();
 
   const { timeline } = useActiveRun();
   const latestActivity = useMemo(() => {
@@ -71,9 +75,8 @@ export function ComputerStatePanel({
   }, [bot?.computerId]);
 
   const displayName = computer?.displayName ?? (bot?.computerId ? "Computer" : null);
-  const readyLabel = computer?.providerMetadata.provisioned
-    ? "Ready for work"
-    : "Provisions on first use";
+  const ready = Boolean(computer?.providerMetadata.provisioned);
+  const readyLabel = ready ? "Ready" : "Starting";
   if (variant === "minimal") {
     return (
       <section className={cn("pb-1", className)} aria-labelledby="computer-panel-title">
@@ -101,18 +104,28 @@ export function ComputerStatePanel({
           </div>
         ) : (
           <>
-            <ComputerBrowserPreview />
-            <div className="mt-1.5 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
-              <p className="min-w-0 flex-1 truncate">
-                {displayName}
-                <span className="text-muted-foreground/80"> · {readyLabel}</span>
+            <ComputerBrowserPreview ref={previewRef} />
+            <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[12px]">
+              <p className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground" title={displayName ?? undefined}>
+                <span
+                  className={cn("size-1.5 shrink-0 rounded-full", ready ? "bg-success" : "bg-muted-foreground")}
+                  aria-hidden
+                />
+                <span>{readyLabel}</span>
               </p>
-              <Link
-                href="/app/computers"
-                className="shrink-0 underline-offset-2 hover:text-foreground hover:underline"
+              <button
+                type="button"
+                className="shrink-0 text-[12px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                onClick={() => {
+                  if (previewRef.current?.canExpand) {
+                    previewRef.current.expand();
+                    return;
+                  }
+                    router.push("/app/computers");
+                }}
               >
-                Manage
-              </Link>
+                Open computer
+              </button>
             </div>
           </>
         )}

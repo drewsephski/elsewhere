@@ -9,6 +9,7 @@ import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagina
 import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll-area";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
 import { Card } from "@/components/ui/card";
+import { AnimatedTabs, AnimatedTabsTrigger } from "@/components/ui/animated-tabs";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -89,26 +90,21 @@ export function WorkspaceDataGridTabs({
   hint,
 }: WorkspaceDataGridTabsProps) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60 pb-3">
-      <div className="flex gap-4">
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border/60">
+      <AnimatedTabs
+        value={active}
+        onValueChange={onChange}
+        variant="underline"
+        selection="tab"
+        aria-label="Work views"
+      >
         {tabs.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            onClick={() => onChange(tab.value)}
-            className={cn(
-              "border-b-2 pb-2 text-sm font-medium transition-colors",
-              active === tab.value
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-            aria-current={active === tab.value ? "true" : undefined}
-          >
+          <AnimatedTabsTrigger key={tab.value} value={tab.value}>
             {tab.label}
-          </button>
+          </AnimatedTabsTrigger>
         ))}
-      </div>
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      </AnimatedTabs>
+      {hint ? <p className="pb-2 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

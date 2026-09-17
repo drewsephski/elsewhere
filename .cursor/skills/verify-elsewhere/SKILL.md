@@ -63,7 +63,7 @@ Stable handles:
 - Get-started dialog: heading `How do you want to start?`, link `Open workspace now` to `/app`
 - Sign-in page (`/sign-in`): heading `Sign in`, textboxes `Email` and `Password`, button `Sign in`, link `Need an account? Sign up`, link `Back to home`
 - Unauthenticated `/app`: redirects to `/sign-in`
-- Signed-in workspace: `/app`. Legacy management nav (`aria-label="App navigation"`) uses labels from `appShellNavLinks`: `Work`, `Approvals`, `Results`, `Routines`, `Computers`, `Integrations`, `Channels`, `Skills`, `Settings`
+- Signed-in workspace: `/app`. Legacy management nav (`aria-label="App navigation"`) uses labels from `appShellNavLinks`: `Work`, `Approvals`, `Results`, `Routines`, `Computers`, `Integrations`, `Channels`, `Skills`. Settings opens from the selected Bot gear or the account menu.
 
 Do not sign in with production credentials in a shared browser profile. Use a disposable account or stop at the sign-in form when the recipe is unauthenticated.
 

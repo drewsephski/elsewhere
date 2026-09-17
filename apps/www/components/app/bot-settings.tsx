@@ -3,37 +3,28 @@
 import { useEffect, useState } from "react";
 import type { BotSummary, ComputerSummary } from "@/lib/api-types";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import { useRouter } from "next/navigation";
+import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { ComputerSelect } from "@/components/app/computer-select";
+import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
+import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { ChevronDown } from "@/components/icons/lucide";
-import { cn } from "cn";
-import { BotSkillsSettings } from "@/components/app/bot-skills-settings";
-import { PermissionPolicyEditor } from "@/components/app/permission-policy-editor";
+import { useRouter } from "next/navigation";
 
-export function BotSettings({
+export function BotGeneralSettings({
   bot,
   onSaved,
-  embedded = false,
 }: {
   bot: BotSummary;
   onSaved: (bot: BotSummary) => void;
-  embedded?: boolean;
 }) {
-  const router = useRouter();
   const [name, setName] = useState(bot.name);
   const [instructions, setInstructions] = useState(bot.instructions);
   const [computer, setComputer] = useState(bot.computerId ?? "");
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [avatarId, setAvatarId] = useState(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +34,9 @@ export function BotSettings({
     setName(bot.name);
     setInstructions(bot.instructions);
     setComputer(bot.computerId ?? "");
+    setAvatarId(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
+    setNotice("");
+    setError(null);
   }, [bot]);
 
   useEffect(() => {
@@ -69,7 +63,12 @@ export function BotSettings({
     try {
       const response = await cloudHostFetch(`/v1/bots/${bot.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, instructions, computerId: computer }),
+        body: JSON.stringify({
+          name,
+          instructions,
+          computerId: computer,
+          avatarId,
+        }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not update bot");
@@ -81,6 +80,79 @@ export function BotSettings({
       setBusy(false);
     }
   }
+
+  return (
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void save(event)}>
+      <FormFields className="min-w-0 gap-5">
+        <BotAvatarPicker
+          value={avatarId}
+          onChange={setAvatarId}
+          disabled={busy}
+          compact
+        />
+        <FormItem>
+          <Label htmlFor="settings-name">Name</Label>
+          <Input
+            id="settings-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={100}
+            required
+          />
+        </FormItem>
+        <FormItem>
+          <Label htmlFor="settings-role">Role and instructions</Label>
+          <Textarea
+            id="settings-role"
+            className="min-h-32 text-[13px] leading-5"
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            maxLength={16000}
+          />
+        </FormItem>
+        <ComputerSelect
+          id="settings-computer"
+          label="Assigned computer"
+          value={computer}
+          onValueChange={setComputer}
+          computers={computers}
+          allowEmpty
+          unavailableId={computer}
+        />
+        <p className="text-[12px] leading-snug text-muted-foreground">
+          Computer changes apply to new work only. Queued and running work keeps its original snapshot.
+        </p>
+      </FormFields>
+      <div className="sticky bottom-0 mt-6 flex items-center justify-end gap-3 border-t border-border bg-card pt-3">
+        {notice ? (
+          <p role="status" className="mr-auto text-[12px] text-muted-foreground">
+            {notice}
+          </p>
+        ) : null}
+        {error ? (
+          <p role="alert" className="mr-auto text-[12px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Saving…" : "Save changes"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function BotDeleteSettings({
+  bot,
+  onDeleted,
+}: {
+  bot: BotSummary;
+  onDeleted?: () => void;
+}) {
+  const router = useRouter();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleDelete() {
     if (busy) {
@@ -96,7 +168,8 @@ export function BotSettings({
           typeof body.error === "string" ? body.error : "Could not delete bot",
         );
       }
-      setDeleteOpen(false);
+      setConfirmOpen(false);
+      onDeleted?.();
       router.push("/app");
       router.refresh();
     } catch (err) {
@@ -106,137 +179,48 @@ export function BotSettings({
     }
   }
 
-  const labelClass = embedded
-    ? "text-[11px] font-medium text-muted-foreground"
-    : undefined;
-
-  const form = (
-    <form
-      className={embedded ? "min-w-0" : "mt-5"}
-      onSubmit={(event) => void save(event)}
-    >
-      <FormFields className={embedded ? "min-w-0 gap-2" : undefined}>
-          <FormItem>
-            <Label htmlFor="settings-name" className={labelClass}>Name</Label>
-            <Input
-              id="settings-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              maxLength={100}
-              required
-              className={embedded ? "h-7 text-xs" : undefined}
-            />
-          </FormItem>
-          <FormItem>
-            <Label htmlFor="settings-role" className={labelClass}>Role and instructions</Label>
-            <Textarea
-              id="settings-role"
-              className={embedded ? "min-h-20 text-xs leading-5" : "min-h-28 text-xs leading-5"}
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-              maxLength={16000}
-            />
-          </FormItem>
-          <ComputerSelect
-            id="settings-computer"
-            label="Assigned computer"
-            value={computer}
-            onValueChange={setComputer}
-            computers={computers}
-            allowEmpty
-            unavailableId={computer}
-            compact={embedded}
-          />
-          <BotSkillsSettings botId={bot.id} embedded={embedded} />
-          <PermissionPolicyEditor
-            endpoint={`/v1/bots/${bot.id}/permission-policies`}
-            mode="bot"
-            embedded={embedded}
-          />
-          <p className={embedded ? "text-[11px] leading-snug text-muted-foreground" : "text-xs text-muted-foreground"}>
-            {embedded
-              ? "Computer changes apply to new work only."
-              : "Changing computers does not move files. Queued work stays on its original computer."}
-          </p>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Button type="submit" size={embedded ? "sm" : "default"} disabled={busy || !name.trim()}>
-              {busy ? "Saving…" : embedded ? "Save" : "Save settings"}
-            </Button>
-            <Button
-              type="button"
-              variant={embedded ? "ghost" : "outline"}
-              size={embedded ? "sm" : "default"}
-              className="text-destructive hover:bg-destructive/10"
-              disabled={busy}
-              onClick={() => setDeleteOpen(true)}
-            >
-              Delete bot
-            </Button>
-          </div>
-          {deleteOpen ? (
-            <div
-              className="rounded-lg border border-destructive/25 bg-destructive/10 p-2.5 text-sm"
-              role="alertdialog"
-              aria-labelledby="delete-bot-title"
-            >
-              <p id="delete-bot-title" className="font-medium text-destructive-foreground">
-                Delete {bot.name}?
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-destructive-foreground/90">
-                This removes the bot and its settings. Work history may remain in your account.
-              </p>
-              <div className="mt-2.5 flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setDeleteOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={busy}
-                  onClick={() => void handleDelete()}
-                >
-                  {busy ? "Deleting…" : "Delete"}
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          {notice ? (
-            <p role="status" className={embedded ? "text-[11px] text-muted-foreground" : "text-sm text-muted-foreground"}>
-              {embedded ? "Saved." : notice}
-            </p>
-          ) : null}
-          {error ? (
-            <p role="alert" className={embedded ? "text-[11px] text-destructive" : "text-sm text-destructive"}>
-              {error}
-            </p>
-          ) : null}
-      </FormFields>
-    </form>
-  );
-
-  if (embedded) {
-    return form;
-  }
-
   return (
-    <Collapsible defaultOpen={false} className="group surface-card">
-      <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-base font-semibold">
-        Bot settings
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-open:rotate-180",
-          )}
-          aria-hidden
-        />
-      </CollapsibleTrigger>
-      <CollapsibleContent>{form}</CollapsibleContent>
-    </Collapsible>
+    <div className="max-w-md space-y-3">
+      <p className="text-[13px] leading-relaxed text-muted-foreground">
+        Remove this Bot from the workspace. Work history may remain in your account.
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        className="text-destructive hover:bg-destructive/10"
+        disabled={busy}
+        onClick={() => setConfirmOpen(true)}
+      >
+        Delete Bot
+      </Button>
+      <ConfirmAlertDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!busy) {
+            setConfirmOpen(open);
+          }
+        }}
+        title={`Delete ${bot.name}?`}
+        description="This removes the bot and its settings. Work history may remain in your account."
+        confirmLabel="Delete"
+        pendingLabel="Deleting…"
+        destructive
+        pending={busy}
+        error={error}
+        onConfirm={() => void handleDelete()}
+      />
+    </div>
   );
+}
+
+/** @deprecated Legacy collapsible used by unused BotChat. Prefer SettingsDialog. */
+export function BotSettings({
+  bot,
+  onSaved,
+}: {
+  bot: BotSummary;
+  onSaved: (bot: BotSummary) => void;
+  embedded?: boolean;
+}) {
+  return <BotGeneralSettings bot={bot} onSaved={onSaved} />;
 }

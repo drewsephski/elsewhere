@@ -45,6 +45,7 @@ export default defineConfig(({ mode }) => ({
       "apps/www/lib/**/*.test.ts",
       "apps/www/hooks/**/*.test.ts",
       "apps/www/components/**/*.hook.test.ts",
+      "apps/www/components/**/*.test.tsx",
       "apps/www/app/**/*.test.ts",
       "crates/sprite-computer/guest/**/*.test.mjs",
     ],
