@@ -17,6 +17,11 @@ import type { ApprovalRequestedPayload, ApprovalTerminalState } from "@/componen
 import type { UserQuestionPayload } from "@/components/app/user-question-card";
 import { userQuestionFromPayload } from "@/components/app/user-question-card";
 import {
+  fetchHumanInterventionStatus,
+  type PendingHumanIntervention,
+} from "@/lib/human-intervention";
+import { formatUserFacingError } from "@/lib/format-api-error";
+import {
   createContext,
   useContext,
   useEffect,
@@ -42,6 +47,7 @@ export type ActiveRunState = {
   lastBrowserToolError: string | null;
   connection: string | null;
   error: string | null;
+  pendingHumanIntervention: PendingHumanIntervention | null;
 };
 
 const ActiveRunContext = createContext<ActiveRunState | null>(null);
@@ -103,6 +109,8 @@ export function ActiveRunProvider({
   const [lastBrowserToolError, setLastBrowserToolError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<string | null>(null);
+  const [pendingHumanIntervention, setPendingHumanIntervention] =
+    useState<PendingHumanIntervention | null>(null);
 
   useEffect(() => {
     if (!runId) {
@@ -115,9 +123,11 @@ export function ActiveRunProvider({
       setLastBrowserToolError(null);
       setError(null);
       setConnection(null);
+      setPendingHumanIntervention(null);
       return;
     }
 
+    const activeRunId = runId;
     const controller = new AbortController();
     let lastEventIdLocal: string | undefined;
     let timer: ReturnType<typeof setTimeout>;
@@ -137,7 +147,7 @@ export function ActiveRunProvider({
 
     async function sync() {
       try {
-        const response = await cloudHostFetch(`/v1/runs/${runId}`, {
+        const response = await cloudHostFetch(`/v1/runs/${activeRunId}`, {
           signal: controller.signal,
         });
         if (!response.ok) {
@@ -153,7 +163,16 @@ export function ActiveRunProvider({
         );
         setError(null);
 
-        await cloudHostEventStream(`/v1/runs/${runId}/events`, {
+        try {
+          const intervention = await fetchHumanInterventionStatus(activeRunId);
+          if (!controller.signal.aborted) {
+            setPendingHumanIntervention(intervention.pending);
+          }
+        } catch {
+          /* non-fatal */
+        }
+
+        await cloudHostEventStream(`/v1/runs/${activeRunId}/events`, {
           signal: controller.signal,
           lastEventId: lastEventIdLocal,
           onEvent(event) {
@@ -176,6 +195,28 @@ export function ActiveRunProvider({
                 applyAssistantDelta(previous, itemProgress, payload),
               );
               return;
+            }
+
+            if (
+              event.event === "human_intervention_requested" &&
+              typeof payload.interventionId === "string"
+            ) {
+              setDetail((previous) => {
+                const computerId = String(
+                  payload.computerId ?? previous?.computerId ?? "",
+                );
+                setPendingHumanIntervention({
+                  id: payload.interventionId as string,
+                  runId: activeRunId,
+                  computerId,
+                  reason: String(payload.reason ?? "other"),
+                  message: String(payload.message ?? "The Bot needs your help"),
+                  requestedAt: new Date().toISOString(),
+                });
+                return previous;
+              });
+            } else if (event.event === "human_intervention_resolved") {
+              setPendingHumanIntervention(null);
             }
 
             if (event.event === "terminal") {
@@ -206,7 +247,7 @@ export function ActiveRunProvider({
                 previous ? { ...previous, status: payload.status as string } : previous,
               );
             }
-            const id = event.id ?? `terminal-${runId}`;
+            const id = event.id ?? `terminal-${activeRunId}`;
             if (
               event.event === "approval_requested" &&
               typeof payload.approvalId === "string" &&
@@ -248,7 +289,7 @@ export function ActiveRunProvider({
                 );
               }
             } else if (event.event === "user_question_requested") {
-              const question = userQuestionFromPayload(runId ?? "", payload);
+              const question = userQuestionFromPayload(activeRunId, payload);
               if (question) {
                 setTimeline((previous) =>
                   previous.some(
@@ -350,7 +391,7 @@ export function ActiveRunProvider({
           return;
         }
 
-        const refreshed = await cloudHostFetch(`/v1/runs/${runId}`, {
+        const refreshed = await cloudHostFetch(`/v1/runs/${activeRunId}`, {
           signal: controller.signal,
         });
         if (!refreshed.ok) {
@@ -370,7 +411,7 @@ export function ActiveRunProvider({
         if (controller.signal.aborted) {
           return;
         }
-        setError(err instanceof Error ? err.message : "Could not follow progress");
+        setError(formatUserFacingError(err, "Could not follow progress"));
         setConnection("Reconnecting…");
         timer = setTimeout(() => void sync(), 5000);
       }
@@ -399,6 +440,7 @@ export function ActiveRunProvider({
       lastBrowserToolError,
       connection,
       error,
+      pendingHumanIntervention,
     }),
     [
       runId,
@@ -411,6 +453,7 @@ export function ActiveRunProvider({
       lastBrowserToolError,
       connection,
       error,
+      pendingHumanIntervention,
     ],
   );
 
@@ -431,6 +474,7 @@ export function useActiveRun(): ActiveRunState {
       lastBrowserToolError: null,
       connection: null,
       error: null,
+      pendingHumanIntervention: null,
     };
   }
   return ctx;

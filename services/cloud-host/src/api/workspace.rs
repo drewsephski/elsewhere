@@ -35,13 +35,14 @@ pub async fn overview(
     State(state): State<AppState>,
     Extension(owner): Extension<Principal>,
 ) -> Result<Json<WorkspaceOverview>, ApiError> {
-    let counts = sqlx::query_as("SELECT (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='running') AS working, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='queued') AS queued, (SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id=$1 AND status='pending' AND expires_at > NOW()) + (SELECT COUNT(*) FROM run_user_questions WHERE owner_id=$1 AND status='pending') AS approvals, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='completed') AS finished, (SELECT COUNT(*) FROM work_results f JOIN agent_runs r ON r.id=f.run_id WHERE r.owner_id=$1) AS results, (SELECT COUNT(*) FROM routines WHERE owner_id=$1 AND enabled) AS routines")
+    let counts = sqlx::query_as("SELECT (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='running') AS working, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='queued') AS queued, (SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id=$1 AND status='pending' AND expires_at > NOW()) + (SELECT COUNT(*) FROM run_user_questions WHERE owner_id=$1 AND status='pending') + (SELECT COUNT(*) FROM human_intervention_requests WHERE owner_id=$1 AND status='pending') AS approvals, (SELECT COUNT(*) FROM agent_runs WHERE owner_id=$1 AND status='completed') AS finished, (SELECT COUNT(*) FROM work_results f JOIN agent_runs r ON r.id=f.run_id WHERE r.owner_id=$1) AS results, (SELECT COUNT(*) FROM routines WHERE owner_id=$1 AND enabled) AS routines")
         .bind(owner.owner_id()).fetch_one(&state.pool).await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let bots = sqlx::query_as(r#"
         SELECT b.id, b.name, b.avatar_id, s.display_name AS computer_name,
         CASE
           WHEN EXISTS(SELECT 1 FROM tool_approval_requests a JOIN agent_runs r ON r.id=a.run_id WHERE r.bot_id=b.id AND a.owner_id=b.owner_id AND a.status='pending' AND a.expires_at > NOW() AND r.status='running')
-            OR EXISTS(SELECT 1 FROM run_user_questions q JOIN agent_runs r ON r.id=q.run_id WHERE r.bot_id=b.id AND q.owner_id=b.owner_id AND q.status='pending' AND r.status='running') THEN 'waiting_approval'
+            OR EXISTS(SELECT 1 FROM run_user_questions q JOIN agent_runs r ON r.id=q.run_id WHERE r.bot_id=b.id AND q.owner_id=b.owner_id AND q.status='pending' AND r.status='running')
+            OR EXISTS(SELECT 1 FROM human_intervention_requests h JOIN agent_runs r ON r.id=h.run_id WHERE r.bot_id=b.id AND h.owner_id=b.owner_id AND h.status='pending' AND r.status='running') THEN 'waiting_approval'
           WHEN current.status = 'running' THEN 'working'
           WHEN current.status = 'queued' THEN 'queued'
           WHEN current.status = 'completed' AND current.execution_released_at IS NULL AND current.started_at IS NOT NULL THEN 'saving_results'
