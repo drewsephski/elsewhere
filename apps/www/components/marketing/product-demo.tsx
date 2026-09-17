@@ -110,7 +110,7 @@ export function ProductDemo({ onGetStarted }: ProductDemoProps) {
         </div>
 
         <div className="relative flex min-h-0 flex-1">
-          <aside className="hidden min-h-0 w-[220px] shrink-0 flex-col border-r border-white/8 sm:flex lg:w-[248px]">
+          <aside className="hidden min-h-0 w-[220px] shrink-0 flex flex-col border-r border-white/8 sm:flex lg:w-[248px]">
             <BotList
               bots={filteredBots}
               selectedId={selected.id}
@@ -357,7 +357,7 @@ function BotList({
           aria-label="Search bots"
         />
       </label>
-      <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+      <ul className="demo-sidebar-scroll min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
         {bots.map((bot) => {
           const active = bot.id === selectedId;
           return (

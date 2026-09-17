@@ -220,6 +220,17 @@
   box-shadow: 0 6px 20px -8px rgba(43, 39, 53, 0.12);
 }
 
+.demo-sidebar-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.demo-sidebar-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .surface-card {
   border-radius: var(--radius-xl);
   border: 1px solid color-mix(in oklab, var(--color-border) 90%, transparent);
