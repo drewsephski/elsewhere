@@ -683,6 +683,25 @@ async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query(
+        r#"
+        INSERT INTO human_intervention_requests (
+            id, run_id, owner_id, computer_id, reason, message, status, requested_at, created_at, updated_at
+        ) VALUES ('presence-intervention',$1,'alice',$2,'login','Sign in to continue','pending',NOW(),NOW(),NOW())
+        "#,
+    )
+    .bind(&run.run_id)
+    .bind(&computer.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let intervention_waiting = overview(app.clone(), "alice").await;
+    assert_eq!(intervention_waiting["bots"][0]["presence"], "waiting_approval");
+    assert_eq!(intervention_waiting["counts"]["approvals"], 1);
+    sqlx::query("DELETE FROM human_intervention_requests WHERE id = 'presence-intervention'")
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO tool_approval_requests (id, run_id, owner_id, tool_name, tool_kind, expires_at) VALUES ('presence-approval',$1,'alice','workspace_write','write',NOW()+INTERVAL '5 minutes')")
         .bind(&run.run_id).execute(&pool).await.unwrap();
     let waiting = overview(app.clone(), "alice").await;

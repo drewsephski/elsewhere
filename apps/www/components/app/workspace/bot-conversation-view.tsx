@@ -2,6 +2,9 @@
 
 import { ApprovalCard } from "@/components/app/approval-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudApiErrorFromResponse } from "@/lib/cloud-api-error";
+import { formatUserFacingError } from "@/lib/format-api-error";
+import { HumanInterventionBanner } from "@/components/app/human-intervention-banner";
 import type {
   BotSummary,
   ConversationSummary,
@@ -118,8 +121,14 @@ export function BotConversationView({
     return active?.runId ?? null;
   }, [liveRunId, runs]);
 
-  const { detail: liveDetail, timeline, assistantStream, error: streamError, connection } =
-    useActiveRun();
+  const {
+    detail: liveDetail,
+    timeline,
+    assistantStream,
+    error: streamError,
+    connection,
+    pendingHumanIntervention,
+  } = useActiveRun();
 
   useEffect(() => {
     if (!streamRunId) {
@@ -312,10 +321,10 @@ export function BotConversationView({
         method: "POST",
         body: JSON.stringify({ botId }),
       });
-      const body = await response.json();
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not start a new chat");
+        throw await cloudApiErrorFromResponse(response, "Could not start a new chat");
       }
+      const body = await response.json();
       const created = body as CreateConversationResponse;
       setConversationId(created.id);
       setRuns([]);
@@ -324,7 +333,7 @@ export function BotConversationView({
       composerFiles.reset();
       requestRef.current = null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start a new chat");
+      setError(formatUserFacingError(err, "Could not start a new chat"));
     } finally {
       setStartingNewChat(false);
     }
@@ -380,11 +389,10 @@ export function BotConversationView({
         headers: { "Idempotency-Key": idempotencyKey },
         body: JSON.stringify(payload),
       });
-      const body = await response.json();
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not delegate work");
+        throw await cloudApiErrorFromResponse(response, "Could not delegate work");
       }
-      const created = body as CreateRunResponse;
+      const created = (await response.json()) as CreateRunResponse;
       setConversationId(created.conversationId);
       setLiveRunId(created.runId);
       setPendingTurn((previous) =>
@@ -410,7 +418,7 @@ export function BotConversationView({
     } catch (err) {
       setMessage(trimmed);
       setPendingTurn(null);
-      setError(err instanceof Error ? err.message : "Could not delegate work");
+      setError(formatUserFacingError(err, "Could not delegate work"));
     } finally {
       setPending(false);
     }
@@ -552,6 +560,10 @@ export function BotConversationView({
                       <DelegationCard key={delegation.id} delegation={delegation} />
                     ))}
                   </div>
+                ) : null}
+
+                {isLive && pendingHumanIntervention ? (
+                  <HumanInterventionBanner pending={pendingHumanIntervention} />
                 ) : null}
 
                 {(isLive ? timeline : []).map((item) =>

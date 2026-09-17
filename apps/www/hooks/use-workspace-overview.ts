@@ -2,6 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
+import { formatUserFacingError } from "@/lib/format-api-error";
 import type { WorkspaceOverview } from "@/lib/workspace-types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -43,8 +44,7 @@ export function useWorkspaceOverview(pollMs = 5000) {
         return null;
       }
       consecutiveFailures.current += 1;
-      const message = err instanceof Error ? err.message : "Workspace unavailable";
-      setError(message);
+      setError(formatUserFacingError(err, "Workspace unavailable"));
       setErrorCode(isCloudApiError(err) ? err.code ?? null : null);
       setPhase(hasLoadedOnce.current ? "stale" : "unavailable");
       return null;
