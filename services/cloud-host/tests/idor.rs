@@ -665,6 +665,24 @@ async fn workspace_presence_tracks_real_work_and_is_private(pool: PgPool) {
         overview(app.clone(), "alice").await["bots"][0]["presence"],
         "working"
     );
+    sqlx::query(
+        r#"
+        INSERT INTO run_user_questions (
+            id, owner_id, run_id, request_id, tool_invocation_id, question, options, status, requested_at, updated_at
+        ) VALUES ('presence-question','alice',$1,'presence','inv-q','Pick one?','["A","B"]'::jsonb,'pending',NOW(),NOW())
+        "#,
+    )
+    .bind(&run.run_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let question_waiting = overview(app.clone(), "alice").await;
+    assert_eq!(question_waiting["bots"][0]["presence"], "waiting_approval");
+    assert_eq!(question_waiting["counts"]["approvals"], 1);
+    sqlx::query("DELETE FROM run_user_questions WHERE id = 'presence-question'")
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("INSERT INTO tool_approval_requests (id, run_id, owner_id, tool_name, tool_kind, expires_at) VALUES ('presence-approval',$1,'alice','workspace_write','write',NOW()+INTERVAL '5 minutes')")
         .bind(&run.run_id).execute(&pool).await.unwrap();
     let waiting = overview(app.clone(), "alice").await;
