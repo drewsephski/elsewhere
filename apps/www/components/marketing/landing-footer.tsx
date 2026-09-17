@@ -1,4 +1,5 @@
 import { siteConfig } from "@elsewhere/brand";
+import { GitHubMark } from "@/components/icons/github-mark";
 import { ProductLogo } from "@/components/product-logo";
 import { appRoutes } from "@/lib/app-routes";
 import Link from "next/link";
@@ -30,8 +31,9 @@ export function LandingFooter() {
                 href={link.href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-[14px] text-muted-foreground transition-colors hover:text-foreground"
+                className="inline-flex items-center gap-1.5 text-[14px] text-muted-foreground transition-colors hover:text-foreground"
               >
+                <GitHubMark className="size-3.5 shrink-0" aria-hidden />
                 {link.label}
               </a>
             ) : (
