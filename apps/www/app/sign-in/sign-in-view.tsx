@@ -50,6 +50,8 @@ export function SignInView() {
       }
       router.push("/app");
       router.refresh();
+    } catch {
+      setError(mode === "sign-up" ? "Sign up failed. Please try again." : "Sign in failed. Please try again.");
     } finally {
       setPending(false);
     }
@@ -57,10 +59,17 @@ export function SignInView() {
 
   async function handleGoogleSignIn() {
     setError(null);
-    await authClient.signIn.social({
-      provider: "google",
-      callbackURL: "/app",
-    });
+    setPending(true);
+    try {
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: "/app",
+      });
+    } catch {
+      setError("Google sign-in failed. Please try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   const googleEnabled =
@@ -164,9 +173,10 @@ export function SignInView() {
             type="button"
             variant="outline"
             className="mt-3 w-full"
+            disabled={pending}
             onClick={handleGoogleSignIn}
           >
-            Continue with Google
+            {pending ? "Working…" : "Continue with Google"}
           </Button>
         ) : null}
 
