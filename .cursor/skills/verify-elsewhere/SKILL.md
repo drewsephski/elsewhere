@@ -5,7 +5,9 @@ description: Drive the Elsewhere web workspace the way a user does and capture p
 
 # Verify Elsewhere
 
-Elsewhere's primary user surface is the Next.js web app at `http://127.0.0.1:3000` (`apps/www`). Drive it in a real browser. Do not treat Vitest, `cargo test`, or curl of `/v1/*` as UI proof.
+Elsewhere's primary user surface is the Next.js web app (`apps/www`). Drive it in a real browser. Do not treat Vitest, `cargo test`, or curl of `/v1/*` as UI proof.
+
+Default local base: `http://127.0.0.1:3000`. Hosted alpha base: `https://elsewhere-alpha-web.fly.dev`. Set `ELSEWHERE_VERIFY_BASE` to choose. Prefer alpha when proving deployed UX; prefer local when proving an unmerged branch.
 
 Secondary surfaces (do not use these as the default proof path):
 
@@ -37,6 +39,20 @@ Ready when `GET http://127.0.0.1:8080/health` returns JSON `"service":"elsewhere
 Env lives in `apps/www/.env` and/or repo `.env` (both gitignored). Required for a full stack: `DATABASE_URL`, Better Auth vars, `ELSEWHERE_CLOUD_HOST_URL=http://127.0.0.1:8080`, `SPRITE_TOKEN`, `ELSEWHERE_CLOUD_API_TOKEN`. Local Postgres from `infra/dev/docker-compose.yml` is `postgres://elsewhere:elsewhere@127.0.0.1:5432/elsewhere`.
 
 Do not start a second `pnpm dev:www` on 3000. Do not start a second `cloud-host` against the same `DATABASE_URL` (advisory lock, one dispatcher).
+
+## Hosted alpha
+
+```bash
+export ELSEWHERE_VERIFY_BASE=https://elsewhere-alpha-web.fly.dev
+# Optional: public runner may not resolve; BFF uses Fly .internal. Prefer web health:
+#   curl -sS "$ELSEWHERE_VERIFY_BASE/api/health/runner"
+.cursor/skills/verify-elsewhere/scripts/doctor.sh
+```
+
+Doctor requires landing `/` HTTP 200 with Elsewhere + Get started/Open workspace. `/sign-in` may be client-rendered (no SSR "Sign in" text). Confirm the heading in the browser for sign-in recipes.
+
+Do not start local `pnpm dev:www` when verifying alpha. Do not kill Fly Machines as cleanup.
+
 
 Record PIDs of processes this run started under `/tmp/elsewhere-verify-$RUN_ID/`.
 

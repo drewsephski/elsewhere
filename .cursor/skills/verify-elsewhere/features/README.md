@@ -4,7 +4,7 @@ This directory is the maintained source for verifying user-facing behavior of th
 
 ## Baseline preconditions
 
-- Web app at `http://127.0.0.1:3000` from this checkout (`pnpm dev:www`).
+- Web app at `ELSEWHERE_VERIFY_BASE` (default `http://127.0.0.1:3000` from `pnpm dev:www`, or `https://elsewhere-alpha-web.fly.dev` for hosted alpha).
 - Run `.cursor/skills/verify-elsewhere/scripts/doctor.sh` and require `web: ok`.
 - Never drive an instance Doctor rejected.
 - Unauthenticated recipes stop at public pages. Do not reuse the operator's signed-in browser profile.
