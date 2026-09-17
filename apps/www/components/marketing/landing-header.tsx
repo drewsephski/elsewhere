@@ -2,6 +2,7 @@
 
 import { siteConfig } from "@elsewhere/brand";
 import { ProductLogo } from "@/components/product-logo";
+import { GitHubIcon } from "@/components/icons/github";
 import { appRoutes } from "@/lib/app-routes";
 import { cn } from "cn";
 import Link from "next/link";
@@ -11,7 +12,7 @@ const navLinks = [
   { href: "/#demo", label: "Product" },
   { href: "/#roster", label: "Bots" },
   { href: "/#selfhost", label: "Computers" },
-  { href: siteConfig.links.docs, label: "Source", external: true },
+  { href: siteConfig.links.docs, label: "GitHub", external: true },
 ] as const;
 
 interface LandingHeaderProps {
@@ -48,7 +49,7 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
 
   return (
     <header className="relative z-50">
-      <div className="landing-shell relative z-50 flex h-[86px] items-center justify-between gap-6 bg-background/90 backdrop-blur-sm">
+      <div className="landing-shell relative z-50 flex h-[86px] items-center justify-between gap-6 bg-transparent">
         <div className="flex min-w-0 items-center gap-8">
           <Link
             href="/"
@@ -91,10 +92,10 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
             href={siteConfig.links.docs}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex h-[42px] items-center gap-1.5 rounded-full border border-border bg-white px-3.5 text-[14px] text-brand-dark/80 transition-colors hover:bg-muted"
+            className="inline-flex h-[42px] items-center gap-1.5 rounded-full border border-border/80 bg-transparent px-3.5 text-[14px] text-brand-dark/80 transition-colors hover:bg-black/[0.03]"
           >
-            <span aria-hidden>★</span>
-            <span>Source</span>
+            <GitHubIcon className="size-3.5" />
+            <span>GitHub</span>
           </a>
           <Link
             href={appRoutes.workspace}

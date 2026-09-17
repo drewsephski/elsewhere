@@ -26,10 +26,11 @@ export function LandingHero({ onGetStarted }: LandingHeroProps) {
     <section className="landing-shell pt-14 text-center md:pt-16">
       <a
         href="/#selfhost"
-        className="mb-[30px] inline-flex items-center gap-2.5 rounded-full border border-[#ddd6fe] bg-[linear-gradient(#f5f3ff,#ede9fe)] px-3.5 py-1.5 pr-3.5 text-[13px] text-primary"
+        className="mb-[30px] inline-flex items-center gap-2 rounded-full border border-border/80 bg-transparent px-3.5 py-1.5 text-[13px] text-brand-dark/70"
       >
-        <span className="rounded-full bg-white px-2 py-0.5 text-[12px] font-medium text-primary shadow-sm">
-          Cloud workspace
+        <span className="font-medium text-brand-dark/85">Cloud workspace</span>
+        <span className="text-brand-dark/35" aria-hidden>
+          /
         </span>
         <span>ChatGPT</span>
       </a>

@@ -21,7 +21,7 @@ const cloudPoints = [
 export function CompareSection() {
   return (
     <section id="open-source" className="landing-shell mt-20 md:mt-28">
-      <p className="text-[13px] font-medium text-primary">Open source</p>
+      <p className="text-[12px] font-medium tracking-[0.14em] uppercase text-brand-dark/45">Open source</p>
       <h2 className="mt-2 max-w-2xl text-[32px] leading-9 font-medium tracking-[-0.02em] text-brand-dark md:text-[42px] md:leading-[48px] md:tracking-[-0.84px]">
         No pricing page. Just the work.
       </h2>
@@ -37,7 +37,7 @@ export function CompareSection() {
                 macOS app for local computers
               </p>
             </div>
-            <span className="rounded-full border border-border bg-white px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+            <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
               Coming soon
             </span>
           </div>
@@ -60,7 +60,7 @@ export function CompareSection() {
             </a>
           </div>
         </article>
-        <article className="landing-card flex flex-col bg-accent/60 p-8">
+        <article className="landing-card flex flex-col p-8">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="text-[20px] font-medium text-brand-dark">Cloud</h3>
@@ -68,7 +68,7 @@ export function CompareSection() {
                 We run the computers. You bring ChatGPT.
               </p>
             </div>
-            <span className="rounded-full border border-[#ddd6fe] bg-[linear-gradient(#f5f3ff,#ede9fe)] px-2.5 py-1 text-[12px] font-medium text-primary">
+            <span className="rounded-full border border-border/70 bg-transparent px-2.5 py-1 text-[12px] font-medium text-brand-dark/70">
               Live
             </span>
           </div>

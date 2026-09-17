@@ -26,7 +26,7 @@ const featureCards = [
 export function LandingFeatures() {
   return (
     <section id="selfhost" className="landing-shell mt-20 md:mt-28">
-      <p className="text-[13px] font-medium text-primary">Self-hosted</p>
+      <p className="text-[12px] font-medium tracking-[0.14em] uppercase text-brand-dark/45">Self-hosted</p>
       <h2 className="mt-2 max-w-2xl text-[32px] leading-9 font-medium tracking-[-0.02em] text-brand-dark md:text-[42px] md:leading-[48px] md:tracking-[-0.84px]">
         The computer is yours
       </h2>

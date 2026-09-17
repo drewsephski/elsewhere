@@ -35,7 +35,7 @@ export function GetStartedDialog({ open, onOpenChange }: GetStartedDialogProps) 
         <div className="flex flex-col gap-2.5">
           <Link
             href={appRoutes.workspace}
-            className="group flex items-start justify-between gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3.5 text-left transition-colors hover:border-primary/25 hover:bg-accent"
+            className="group flex items-start justify-between gap-3 rounded-2xl border border-border bg-muted/30 px-4 py-3.5 text-left transition-colors hover:bg-muted/50"
             onClick={() => onOpenChange(false)}
           >
             <span>
