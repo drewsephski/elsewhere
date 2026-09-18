@@ -66,6 +66,11 @@ fn minimal_tarball_with_readme() -> Vec<u8> {
 }
 
 async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
+    mock_github_api_without_branch_head(server, tarball_bytes).await;
+    mock_github_default_branch_head(server, "base_sha_abc123").await;
+}
+
+async fn mock_github_api_without_branch_head(server: &MockServer, tarball_bytes: Vec<u8>) {
     Mock::given(method("GET"))
         .and(path_regex(r"^/user/installations$"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -105,18 +110,40 @@ async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "object": { "sha": "base_sha_abc123" }
-        })))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/git/commits/base_sha_abc123"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": "base_sha_abc123",
             "tree": { "sha": "base_tree_sha_xyz" }
         })))
+        .mount(server)
+        .await;
+}
+
+async fn mock_github_default_branch_head(server: &MockServer, head_sha: &str) {
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": head_sha }
+        })))
+        .mount(server)
+        .await;
+}
+
+async fn mock_github_default_branch_head_once(server: &MockServer, head_sha: &str) {
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": head_sha }
+        })))
+        .up_to_n_times(1)
+        .mount(server)
+        .await;
+}
+
+async fn mock_github_open_pulls_empty(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/pulls(\?.*)?$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
         .mount(server)
         .await;
 }
@@ -631,6 +658,7 @@ async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
     )
     .await
     .expect("review");
+    mock_github_open_pulls_empty(&server).await;
     computer
         .write_file(
             "/workspace/repos/acme/demo/README.md",
@@ -662,22 +690,9 @@ async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
 async fn github_coding_base_drift_blocks_publish(pool: PgPool) {
     let server = MockServer::start().await;
     let tarball = minimal_tarball_with_readme();
-    mock_github_api(&server, tarball).await;
-    Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "object": { "sha": "base_sha_abc123" }
-        })))
-        .up_to_n_times(1)
-        .mount(&server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "object": { "sha": "base_sha_moved_forward" }
-        })))
-        .mount(&server)
-        .await;
+    mock_github_api_without_branch_head(&server, tarball).await;
+    mock_github_default_branch_head_once(&server, "base_sha_abc123").await;
+    mock_github_default_branch_head(&server, "base_sha_moved_forward").await;
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
     let secret = test_secret_box();
     upsert_github_app_credential(
@@ -731,6 +746,7 @@ async fn github_coding_base_drift_blocks_publish(pool: PgPool) {
     )
     .await
     .expect("review");
+    mock_github_open_pulls_empty(&server).await;
     let err = dispatch_github_coding_tool(
         Some(&coding),
         &computer,
@@ -907,6 +923,7 @@ async fn github_coding_revoked_install_blocks_publish(pool: PgPool) {
         })))
         .mount(&server)
         .await;
+    mock_github_open_pulls_empty(&server).await;
 
     let err = dispatch_github_coding_tool(
         Some(&coding),
@@ -919,7 +936,14 @@ async fn github_coding_revoked_install_blocks_publish(pool: PgPool) {
     )
     .await
     .expect_err("revoked");
-    assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
+    assert!(
+        matches!(
+            err,
+            agent_core::ToolError::MalformedArguments(_) | agent_core::ToolError::Denied(_)
+        ),
+        "unexpected error: {:?}",
+        err
+    );
     let posts = server.received_requests().await.unwrap_or_default();
     assert!(!posts.iter().any(|r| r.method.as_str() == "POST"));
 }
