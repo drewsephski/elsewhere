@@ -51,6 +51,19 @@ export type QuickStartOutcome =
       computerId?: string;
     };
 
+export type CreateBotOutcome =
+  | { status: "created"; botId: string; computerId: string }
+  | QuickStartOutcome;
+
+export type CreateBotWorkInput = {
+  name: string;
+  instructions?: string;
+  task?: string;
+  computerId?: string;
+  model?: string;
+  avatarId?: string;
+};
+
 export function isUsableComputer(computer: ComputerSummary): boolean {
   if (computer.state === "archived") {
     return false;
@@ -158,20 +171,27 @@ export async function ensureQuickStartComputer(
 
 export async function ensureQuickStartBot(
   session: QuickStartSession,
-  input: { name: string; computerId: string },
+  input: {
+    name: string;
+    computerId: string;
+    instructions?: string;
+    model?: string;
+    avatarId?: string;
+  },
 ): Promise<string> {
   if (session.botId) {
     return session.botId;
   }
+  const instructions = input.instructions?.trim() || DEFAULT_BOT_INSTRUCTIONS;
   const response = await cloudHostFetch("/v1/bots", {
     method: "POST",
     body: JSON.stringify({
       name: input.name.trim(),
-      instructions: DEFAULT_BOT_INSTRUCTIONS,
+      instructions,
       computerId: input.computerId,
-      model: DEFAULT_BOT_MODEL_ID,
+      model: input.model ?? DEFAULT_BOT_MODEL_ID,
       enginePreference: DEFAULT_BOT_ENGINE,
-      avatarId: DEFAULT_BOT_AVATAR_ID,
+      avatarId: input.avatarId ?? DEFAULT_BOT_AVATAR_ID,
     }),
   });
   const created = await readOkJson<BotSummary>(response, "Could not create bot");
@@ -179,64 +199,113 @@ export async function ensureQuickStartBot(
   return created.id;
 }
 
-export async function startFirstBotWork(
-  input: { name: string; task: string },
-  session: QuickStartSession = {},
+async function startBotRun(
+  session: QuickStartSession,
+  botId: string,
+  computerId: string,
+  task: string,
 ): Promise<QuickStartOutcome> {
+  const fingerprint = taskFingerprint(botId, task);
+  if (session.taskFingerprint !== fingerprint || !session.idempotencyKey) {
+    session.idempotencyKey = crypto.randomUUID();
+    session.taskFingerprint = fingerprint;
+  }
+
+  try {
+    const runResponse = await cloudHostFetch("/v1/runs", {
+      method: "POST",
+      headers: { "Idempotency-Key": session.idempotencyKey },
+      body: JSON.stringify({ botId, message: task }),
+    });
+    const created = await readOkJson<CreateRunResponse>(
+      runResponse,
+      "Could not start work",
+    );
+    return {
+      status: "started",
+      botId,
+      computerId,
+      runId: created.runId,
+      conversationId: created.conversationId,
+    };
+  } catch (error) {
+    const message = formatUserFacingError(error, "Could not start work");
+    if (isCodexAuthRequired(error)) {
+      return { status: "needs_codex", error: message, botId, computerId };
+    }
+    return {
+      status: "bot_ready_run_failed",
+      error: message,
+      botId,
+      computerId,
+      task,
+    };
+  }
+}
+
+/** Shared create-bot path for quick start, New bot, and management surfaces. */
+export async function createBotAndMaybeStartWork(
+  input: CreateBotWorkInput,
+  session: QuickStartSession = {},
+): Promise<CreateBotOutcome> {
   const name = input.name.trim();
-  const task = input.task.trim();
+  const task = input.task?.trim() ?? "";
+  const instructions = input.instructions?.trim() || DEFAULT_BOT_INSTRUCTIONS;
+
   if (!name) {
     return { status: "failed", error: "Name your Bot to get started.", ...session };
   }
-  if (!task) {
-    return { status: "failed", error: "Tell this Bot what to work on.", ...session };
+
+  if (input.computerId) {
+    session.computerId = input.computerId;
   }
 
   try {
     const computerId = await ensureQuickStartComputer(session);
-    const botId = await ensureQuickStartBot(session, { name, computerId });
-    const fingerprint = taskFingerprint(botId, task);
-    if (session.taskFingerprint !== fingerprint || !session.idempotencyKey) {
-      session.idempotencyKey = crypto.randomUUID();
-      session.taskFingerprint = fingerprint;
+    const botId = await ensureQuickStartBot(session, {
+      name,
+      computerId,
+      instructions,
+      model: input.model,
+      avatarId: input.avatarId,
+    });
+
+    if (!task) {
+      return { status: "created", botId, computerId };
     }
 
-    try {
-      const runResponse = await cloudHostFetch("/v1/runs", {
-        method: "POST",
-        headers: { "Idempotency-Key": session.idempotencyKey },
-        body: JSON.stringify({ botId, message: task }),
-      });
-      const created = await readOkJson<CreateRunResponse>(
-        runResponse,
-        "Could not start work",
-      );
-      return {
-        status: "started",
-        botId,
-        computerId,
-        runId: created.runId,
-        conversationId: created.conversationId,
-      };
-    } catch (error) {
-      const message = formatUserFacingError(error, "Could not start work");
-      if (isCodexAuthRequired(error)) {
-        return { status: "needs_codex", error: message, botId, computerId };
-      }
-      return {
-        status: "bot_ready_run_failed",
-        error: message,
-        botId,
-        computerId,
-        task,
-      };
-    }
+    const runOutcome = await startBotRun(session, botId, computerId, task);
+    return runOutcome;
   } catch (error) {
     return {
       status: "failed",
-      error: formatUserFacingError(error, "Could not start this Bot"),
+      error: formatUserFacingError(error, "Could not create this Bot"),
       botId: session.botId,
       computerId: session.computerId,
     };
   }
+}
+
+export async function startFirstBotWork(
+  input: { name: string; task: string },
+  session: QuickStartSession = {},
+): Promise<QuickStartOutcome> {
+  const task = input.task.trim();
+  if (!task) {
+    return { status: "failed", error: "Tell this Bot what to work on.", ...session };
+  }
+
+  const outcome = await createBotAndMaybeStartWork(
+    { name: input.name, task },
+    session,
+  );
+  if (outcome.status === "created") {
+    return {
+      status: "failed",
+      error: "Tell this Bot what to work on.",
+      botId: outcome.botId,
+      computerId: outcome.computerId,
+    };
+  }
+  return outcome;
 }

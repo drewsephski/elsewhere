@@ -124,8 +124,8 @@ export function SettingsDialog({
               bot ? (
                 <>
                   <SettingsPanelHeader
-                    title="General"
-                    description="Name, instructions, model, and computer for this Bot."
+                    title="This Bot"
+                    description="Name, role, and avatar. Model and computer live here when you need to change them."
                   />
                   <BotGeneralSettings bot={bot} onSaved={onBotSaved} />
                 </>

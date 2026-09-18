@@ -94,7 +94,8 @@ export function ComputerStatePanel({
               <Monitor className="size-4" />
             </span>
             <p className="text-[11px] leading-snug text-muted-foreground">
-              Assign a computer in Settings so your bot can keep files between assignments.
+              This Bot does not have a workspace yet. Open Bot settings or create a new Bot to
+              get one automatically.
             </p>
             <Link
               href="/app/computers"

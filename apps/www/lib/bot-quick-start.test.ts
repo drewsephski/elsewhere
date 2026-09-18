@@ -15,6 +15,7 @@ import {
   isUsableComputer,
   rememberQuickStartDraft,
   selectUsableComputer,
+  createBotAndMaybeStartWork,
   startFirstBotWork,
   type QuickStartSession,
 } from "./bot-quick-start";
@@ -129,6 +130,40 @@ describe("quick start draft", () => {
     rememberQuickStartDraft("bot_1", "Write the brief");
     expect(consumeQuickStartDraft("bot_2")).toBeNull();
     expect(consumeQuickStartDraft("bot_1")).toBe("Write the brief");
+  });
+});
+
+describe("createBotAndMaybeStartWork", () => {
+  it("creates a Bot without starting a run when no task is provided", async () => {
+    fetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (path === "/v1/computers" && init?.method !== "POST") {
+        return jsonResponse(200, [computer({ id: "comp_1" })]);
+      }
+      if (path === "/v1/bots") {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body.instructions).toBe("Own the launch checklist.");
+        return jsonResponse(200, {
+          id: "bot_2",
+          name: "Launch",
+          instructions: "Own the launch checklist.",
+          model: DEFAULT_BOT_MODEL_ID,
+          computerId: "comp_1",
+          enginePreference: DEFAULT_BOT_ENGINE,
+        });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+
+    const outcome = await createBotAndMaybeStartWork({
+      name: "Launch",
+      instructions: "Own the launch checklist.",
+    });
+    expect(outcome).toEqual({
+      status: "created",
+      botId: "bot_2",
+      computerId: "comp_1",
+    });
+    expect(fetchMock.mock.calls.some(([path]) => path === "/v1/runs")).toBe(false);
   });
 });
 
