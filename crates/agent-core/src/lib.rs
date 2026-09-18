@@ -21,6 +21,8 @@ mod memory;
 mod memory_tools;
 mod routine_tools;
 mod routines;
+mod skill_tools;
+mod skills;
 mod model;
 mod public_http_url;
 mod readiness_cache;
@@ -111,6 +113,12 @@ pub use routines::{
     RoutineCreateDraft, RoutineError, RoutineMutationResult, RoutineSummary,
     ROUTINE_CREATE_TOOL_NAME,
     ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
+};
+pub use skill_tools::{dispatch_skill_tool, skill_openai_tool_definitions};
+pub use skills::{
+    is_skill_mutation_tool, AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult,
+    SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult, SKILL_ATTACH_TOOL_NAME,
+    SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME, SKILL_SAVE_RECENT_WORK_TOOL_NAME,
 };
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,

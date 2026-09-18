@@ -621,6 +621,7 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "browser_request_human",
@@ -643,6 +644,7 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "browser_click",
@@ -665,6 +667,7 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "browser_snapshot",
@@ -686,6 +689,7 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "browser_click",

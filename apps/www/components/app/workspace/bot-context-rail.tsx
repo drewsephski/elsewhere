@@ -3,6 +3,7 @@
 import type { BotSummary, RunSummary } from "@/lib/api-types";
 import { BotMemoryPanel } from "@/components/app/bot-memory";
 import { BotRoutinesSidebar } from "./bot-routines-sidebar";
+import { BotSkillsSidebar } from "./bot-skills-sidebar";
 import { ComposerIconButton } from "./chat-composer";
 import { ComputerStatePanel } from "./computer-state-panel";
 import { ComputerWorkspaceTree } from "./computer-workspace-tree";
@@ -93,6 +94,9 @@ export function BotContextRail({
                 conversationId={activeRun?.conversationId}
                 variant="minimal"
               />
+            </RailSection>
+            <RailSection title="Skills">
+              <BotSkillsSidebar botId={bot.id} variant="minimal" />
             </RailSection>
             <RailSection title="Memory">
               <BotMemoryPanel

@@ -16,6 +16,13 @@ fn is_foreign_key_violation(error: &sqlx::Error) -> bool {
         .is_some_and(|code| code == "23503")
 }
 
+fn is_unique_violation(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(|db| db.code())
+        .is_some_and(|code| code == "23505")
+}
+
 #[derive(Debug, Clone)]
 pub struct SkillRow {
     pub id: String,
@@ -105,7 +112,15 @@ pub async fn create_skill_with_version(
     .bind(&package.frontmatter.description)
     .execute(&mut *tx)
     .await
-    .map_err(db_err)?;
+    .map_err(|e| {
+        if is_unique_violation(&e) {
+            ApiError::Conflict(format!(
+                "A skill with slug \"{slug}\" already exists for this owner"
+            ))
+        } else {
+            db_err(e)
+        }
+    })?;
     insert_version_files(
         &mut tx,
         owner,

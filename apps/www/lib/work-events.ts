@@ -30,6 +30,10 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     routine_create: "Scheduling recurring work",
     routine_pause: "Pausing a routine",
     routine_resume: "Resuming a routine",
+    skill_list: "Checking skills",
+    skill_save_recent_work: "Saving a skill",
+    skill_attach: "Attaching a skill",
+    skill_detach: "Removing a skill",
   };
   const base = tools[tool];
   if (!base) {
@@ -51,6 +55,15 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     return tool === "routine_pause"
       ? `Pausing routine (${args.routineName.trim()})`
       : `Resuming routine (${args.routineName.trim()})`;
+  }
+  if (tool === "skill_save_recent_work" && args && typeof args.name === "string" && args.name.trim()) {
+    return `Saving a skill (${args.name.trim()})`;
+  }
+  if (tool === "skill_attach" && args && typeof args.skillName === "string" && args.skillName.trim()) {
+    return `Attaching a skill (${args.skillName.trim()})`;
+  }
+  if (tool === "skill_detach" && args && typeof args.skillName === "string" && args.skillName.trim()) {
+    return `Removing a skill (${args.skillName.trim()})`;
   }
   if (tool === "browser_navigate" && args && typeof args.url === "string") {
     try {

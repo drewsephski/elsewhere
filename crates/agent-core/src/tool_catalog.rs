@@ -29,6 +29,13 @@ pub const ROUTINE_TOOL_NAMES: &[&str] = &[
     "routine_resume",
 ];
 
+pub const SKILL_TOOL_NAMES: &[&str] = &[
+    "skill_list",
+    "skill_save_recent_work",
+    "skill_attach",
+    "skill_detach",
+];
+
 pub const ATTACHMENT_TOOL_NAMES: &[&str] = &["attachment_list", "attachment_read"];
 
 pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
@@ -88,6 +95,10 @@ pub fn is_routine_tool(name: &str) -> bool {
     ROUTINE_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_skill_tool(name: &str) -> bool {
+    SKILL_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_attachment_tool(name: &str) -> bool {
     ATTACHMENT_TOOL_NAMES.contains(&name)
 }
@@ -129,6 +140,9 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "routine_create",
     "routine_pause",
     "routine_resume",
+    "skill_save_recent_work",
+    "skill_attach",
+    "skill_detach",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -148,6 +162,7 @@ pub enum PolicyActionGroup {
     ConnectedApps,
     Memory,
     Routines,
+    Skills,
 }
 
 impl PolicyActionGroup {
@@ -160,6 +175,7 @@ impl PolicyActionGroup {
             Self::ConnectedApps => "connected_apps",
             Self::Memory => "memory",
             Self::Routines => "routines",
+            Self::Skills => "skills",
         }
     }
 
@@ -172,6 +188,7 @@ impl PolicyActionGroup {
             Self::ConnectedApps => "Connected apps",
             Self::Memory => "Memory",
             Self::Routines => "Routines",
+            Self::Skills => "Skills",
         }
     }
 }
@@ -197,6 +214,9 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
         "remember" | "forget_memory" => Some(PolicyActionGroup::Memory),
         "routine_create" | "routine_pause" | "routine_resume" => Some(PolicyActionGroup::Routines),
+        "skill_save_recent_work" | "skill_attach" | "skill_detach" => {
+            Some(PolicyActionGroup::Skills)
+        }
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -221,6 +241,9 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "routine_create" => "Create routines",
         "routine_pause" => "Pause routines",
         "routine_resume" => "Resume routines",
+        "skill_save_recent_work" => "Save skills",
+        "skill_attach" => "Attach skills",
+        "skill_detach" => "Remove skills",
         _ => "This action",
     }
 }
@@ -244,6 +267,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "routine_create" => "This Bot is not allowed to create routines.".into(),
         "routine_pause" => "This Bot is not allowed to pause routines.".into(),
         "routine_resume" => "This Bot is not allowed to resume routines.".into(),
+        "skill_save_recent_work" => "This Bot is not allowed to save skills.".into(),
+        "skill_attach" => "This Bot is not allowed to attach skills.".into(),
+        "skill_detach" => "This Bot is not allowed to remove skills.".into(),
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -284,6 +310,10 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "routine_create",
     "routine_pause",
     "routine_resume",
+    "skill_list",
+    "skill_save_recent_work",
+    "skill_attach",
+    "skill_detach",
 ];
 
 #[cfg(test)]
