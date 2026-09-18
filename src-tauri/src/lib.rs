@@ -55,25 +55,18 @@ pub fn run() {
                 let trimmed = external_url.trim();
                 if !trimmed.is_empty() {
                     if let Some(window) = app.get_webview_window("main") {
-                        match trimmed.parse::<url::Url>() {
-                            Ok(parsed) => {
-                                if let Err(error) = window.navigate(parsed) {
-                                    tracing::warn!(
-                                        %error,
-                                        url = %trimmed,
-                                        "ELSEWHERE_DESKTOP_WEBVIEW_URL navigation failed"
-                                    );
-                                } else {
-                                    tracing::info!(url = %trimmed, "desktop webview navigated to hosted workspace");
-                                }
-                            }
-                            Err(error) => {
-                                tracing::warn!(
-                                    %error,
-                                    url = %trimmed,
-                                    "invalid ELSEWHERE_DESKTOP_WEBVIEW_URL"
-                                );
-                            }
+                        let script = format!(
+                            "window.location.replace({});",
+                            serde_json::to_string(trimmed).unwrap_or_else(|_| "\"\"".to_string())
+                        );
+                        if let Err(error) = window.eval(&script) {
+                            tracing::warn!(
+                                %error,
+                                url = %trimmed,
+                                "ELSEWHERE_DESKTOP_WEBVIEW_URL navigation failed"
+                            );
+                        } else {
+                            tracing::info!(url = %trimmed, "desktop webview navigated to hosted workspace");
                         }
                     }
                 }
