@@ -48,13 +48,22 @@ pub async fn working_tree_fingerprint(
     computer: &dyn AgentComputer,
     checkout_path: &str,
 ) -> Result<String, GithubCodingError> {
-    let script = format!(
-        "cd {} && git rev-parse HEAD && git diff --raw -z HEAD && git status --porcelain=v1 -z",
+    let head_script = format!(
+        "cd {} && git rev-parse HEAD",
         shell_quote(checkout_path)
     );
-    let out = exec_stdout(computer, &script).await?;
+    let head = exec_stdout(computer, &head_script).await?;
+    let changes = collect_publish_changes(computer, checkout_path).await?;
     let mut hasher = Sha256::new();
-    hasher.update(out.as_bytes());
+    hasher.update(head.trim().as_bytes());
+    for change in changes {
+        hasher.update(change.path.as_bytes());
+        hasher.update(change.mode.as_bytes());
+        hasher.update([u8::from(change.deleted)]);
+        if let Some(bytes) = &change.bytes {
+            hasher.update(bytes);
+        }
+    }
     Ok(hex::encode(hasher.finalize()))
 }
 
