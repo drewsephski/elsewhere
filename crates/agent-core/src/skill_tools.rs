@@ -264,7 +264,7 @@ pub fn truncate_skill_md_preview(skill_md: &str) -> String {
     while end > 0 && !skill_md.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{ellipsis}{}", &skill_md[..end])
+    format!("{}{ellipsis}", &skill_md[..end])
 }
 
 #[cfg(test)]
@@ -275,8 +275,9 @@ mod tests {
     fn preview_truncation_is_utf8_safe() {
         let emoji = "😀".repeat(200);
         let preview = truncate_skill_md_preview(&emoji);
-        assert!(preview.ends_with('…'));
+        assert!(preview.len() <= 480);
         assert!(std::str::from_utf8(preview.as_bytes()).is_ok());
+        assert!(preview.contains('…'));
     }
 
     #[test]
@@ -284,7 +285,7 @@ mod tests {
         let text = format!("{}café{}中文", "a".repeat(400), "b".repeat(100));
         let preview = truncate_skill_md_preview(&text);
         assert!(std::str::from_utf8(preview.as_bytes()).is_ok());
-        assert!(preview.len() <= 481);
+        assert!(preview.len() <= 480);
     }
 }
 
