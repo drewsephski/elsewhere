@@ -39,18 +39,10 @@ pub fn github_coding_openai_tool_definitions() -> Vec<Value> {
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checks": {
+                    "checkCommands": {
                         "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "command": { "type": "string" },
-                                "exitCode": { "type": "integer" },
-                                "ok": { "type": "boolean" }
-                            },
-                            "required": ["command", "exitCode", "ok"],
-                            "additionalProperties": false
-                        }
+                        "items": { "type": "string" },
+                        "description": "Shell commands already executed via workspace_exec in this run. Elsewhere verifies results from durable tool events; do not report exit codes yourself."
                     }
                 },
                 "additionalProperties": false
@@ -114,12 +106,20 @@ pub async fn dispatch_github_coding_tool(
         if cancel.load(Ordering::Relaxed) {
             return Err(ToolError::Cancelled);
         }
+        service
+            .confirm_publish_approval(&run.owner_id, &run.run_id, computer)
+            .await
+            .map_err(map_github_coding_error)?;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ToolError::Cancelled);
+        }
     }
 
     let result = service
         .dispatch_tool(
             &run.owner_id,
             &run.run_id,
+            &run.request_id,
             &run.computer_id,
             computer,
             name,

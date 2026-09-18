@@ -8,6 +8,14 @@ const REPO_PAGE_SIZE: u32 = 100;
 const MAX_INSTALLATIONS: usize = 50;
 const MAX_AUTHORIZED_REPOS: usize = 1000;
 
+#[derive(Debug, Clone)]
+pub struct GitHubTreeChange {
+    pub path: String,
+    pub mode: String,
+    pub deleted: bool,
+    pub content: Option<Vec<u8>>,
+}
+
 #[derive(Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
@@ -302,6 +310,22 @@ impl GitHubClient {
         Ok(bytes.to_vec())
     }
 
+    pub async fn get_commit_tree_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        commit_sha: &str,
+    ) -> Result<String, String> {
+        let path = format!("/repos/{}/{}/git/commits/{}", owner, repo, commit_sha);
+        let body: Value = self.get_json(token, &path).await?;
+        body.get("tree")
+            .and_then(|t| t.get("sha"))
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "GitHub commit response missing tree sha".into())
+    }
+
     pub async fn get_branch_head_sha(
         &self,
         token: &str,
@@ -365,26 +389,74 @@ impl GitHubClient {
         .await
     }
 
-    pub async fn publish_tree_commit(
+    pub async fn ref_head_sha(
         &self,
         token: &str,
         owner: &str,
         repo: &str,
-        base_sha: &str,
+        branch: &str,
+    ) -> Result<Option<String>, String> {
+        let path = format!(
+            "/repos/{}/{}/git/ref/heads/{}",
+            owner,
+            repo,
+            urlencoding::encode(branch),
+        );
+        let body: Result<Value, String> = self.get_json(token, &path).await;
+        match body {
+            Ok(value) => Ok(value
+                .get("object")
+                .and_then(|o| o.get("sha"))
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_string())),
+            Err(message) if message.contains("404") => Ok(None),
+            Err(message) => Err(message),
+        }
+    }
+
+    pub async fn publish_file_changes(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        base_commit_sha: &str,
+        base_tree_sha: &str,
         branch: &str,
         message: &str,
-        files: &[(&str, &str)],
+        changes: &[GitHubTreeChange],
+        expected_existing_commit: Option<&str>,
     ) -> Result<String, String> {
         let mut tree_items = Vec::new();
-        for (path, content) in files {
+        for change in changes {
+            if change.deleted {
+                tree_items.push(json!({
+                    "path": change.path,
+                    "mode": change.mode,
+                    "type": "blob",
+                    "sha": null
+                }));
+                continue;
+            }
+            let content = change
+                .content
+                .as_ref()
+                .ok_or_else(|| format!("missing content for {}", change.path))?;
+            let blob_body = if std::str::from_utf8(content).is_err() {
+                json!({
+                    "content": base64::engine::general_purpose::STANDARD.encode(content),
+                    "encoding": "base64"
+                })
+            } else {
+                json!({
+                    "content": String::from_utf8_lossy(content),
+                    "encoding": "utf-8"
+                })
+            };
             let blob: Value = self
                 .post_json(
                     token,
                     &format!("/repos/{}/{}/git/blobs", owner, repo),
-                    &json!({
-                        "content": content,
-                        "encoding": "utf-8"
-                    }),
+                    &blob_body,
                 )
                 .await?;
             let sha = blob
@@ -392,8 +464,8 @@ impl GitHubClient {
                 .and_then(|s| s.as_str())
                 .ok_or_else(|| "blob missing sha".to_string())?;
             tree_items.push(json!({
-                "path": path,
-                "mode": "100644",
+                "path": change.path,
+                "mode": change.mode,
                 "type": "blob",
                 "sha": sha
             }));
@@ -403,7 +475,7 @@ impl GitHubClient {
                 token,
                 &format!("/repos/{}/{}/git/trees", owner, repo),
                 &json!({
-                    "base_tree": base_sha,
+                    "base_tree": base_tree_sha,
                     "tree": tree_items
                 }),
             )
@@ -419,7 +491,7 @@ impl GitHubClient {
                 &json!({
                     "message": message,
                     "tree": tree_sha,
-                    "parents": [base_sha]
+                    "parents": [base_commit_sha]
                 }),
             )
             .await?;
@@ -427,25 +499,47 @@ impl GitHubClient {
             .get("sha")
             .and_then(|s| s.as_str())
             .ok_or_else(|| "commit missing sha".to_string())?;
-        let ref_path = format!("/repos/{}/{}/git/refs/heads/{}", owner, repo, branch);
-        let update: Result<Value, String> = self
-            .patch_json(
-                token,
-                &ref_path,
-                &json!({ "sha": commit_sha, "force": false }),
-            )
-            .await;
-        if update.is_err() {
-            let _: Value = self
-                .post_json(
-                    token,
-                    &format!("/repos/{}/{}/git/refs", owner, repo),
-                    &json!({
-                        "ref": format!("refs/heads/{branch}"),
-                        "sha": commit_sha
-                    }),
-                )
-                .await?;
+
+        let existing_ref = self.ref_head_sha(token, owner, repo, branch).await?;
+        match existing_ref {
+            None => {
+                let _: Value = self
+                    .post_json(
+                        token,
+                        &format!("/repos/{}/{}/git/refs", owner, repo),
+                        &json!({
+                            "ref": format!("refs/heads/{branch}"),
+                            "sha": commit_sha
+                        }),
+                    )
+                    .await?;
+            }
+            Some(head) => {
+                if let Some(expected) = expected_existing_commit {
+                    if head != expected {
+                        return Err(
+                            "working branch already exists for another Elsewhere change".into(),
+                        );
+                    }
+                } else if head != base_commit_sha {
+                    return Err(
+                        "working branch already exists for another Elsewhere change".into(),
+                    );
+                }
+                let ref_path = format!(
+                    "/repos/{}/{}/git/refs/heads/{}",
+                    owner,
+                    repo,
+                    urlencoding::encode(branch)
+                );
+                let _: Value = self
+                    .patch_json(
+                        token,
+                        &ref_path,
+                        &json!({ "sha": commit_sha, "force": false }),
+                    )
+                    .await?;
+            }
         }
         Ok(commit_sha.to_string())
     }

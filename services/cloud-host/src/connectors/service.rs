@@ -360,6 +360,23 @@ impl PostgresAgentConnectors {
         Ok(())
     }
 
+    /// Fresh installation catalog lookup for mutation boundaries (bypasses TTL cache).
+    pub async fn assert_repo_authorized_fresh(
+        &self,
+        owner_id: &str,
+        owner: &str,
+        repo: &str,
+    ) -> Result<(), ConnectorError> {
+        self.invalidate_owner_catalog(owner_id);
+        self.assert_repo_authorized(owner_id, owner, repo).await
+    }
+
+    fn invalidate_owner_catalog(&self, owner_id: &str) {
+        if let Ok(mut catalogs) = self.catalogs.lock() {
+            catalogs.remove(owner_id);
+        }
+    }
+
     pub async fn github_access_token_for_owner(
         &self,
         owner_id: &str,

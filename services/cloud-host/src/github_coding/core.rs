@@ -39,8 +39,16 @@ pub fn sanitize_task_slug(raw: &str) -> Result<String, String> {
     Ok(out)
 }
 
-pub fn working_branch(slug: &str) -> String {
-    format!("{BRANCH_PREFIX}{}", sanitize_task_slug(slug).unwrap_or_else(|_| "task".into()))
+pub fn working_branch(slug: &str, run_id: &str) -> String {
+    let slug = sanitize_task_slug(slug).unwrap_or_else(|_| "task".into());
+    let suffix = run_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let suffix = if suffix.is_empty() { "run" } else { suffix.as_str() };
+    format!("{BRANCH_PREFIX}{slug}-{suffix}")
 }
 
 pub fn path_within_checkout(checkout: &str, relative: &str) -> Result<String, String> {
@@ -96,7 +104,10 @@ mod tests {
     #[test]
     fn slug_sanitization_and_branch() {
         assert_eq!(sanitize_task_slug("Fix README").unwrap(), "fix-readme");
-        assert_eq!(working_branch("Fix README"), "elsewhere/fix-readme");
+        assert_eq!(
+            working_branch("Fix README", "run-abc12345"),
+            "elsewhere/fix-readme-runabc12"
+        );
     }
 
     #[test]

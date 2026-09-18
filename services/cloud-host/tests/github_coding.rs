@@ -1,5 +1,7 @@
 //! GitHub coding workflow: authorized checkout, review, publish approval, PR idempotency.
 
+mod github_coding_shell;
+
 use agent_core::{
     dispatch_github_coding_tool, AgentComputer, AgentGithubCoding, AllowAllApprovalGate,
     FakeAgentComputer, ToolRunContext,
@@ -16,8 +18,10 @@ use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use wiremock::matchers::{method, path_regex};
+use wiremock::matchers::{body_string_contains, method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
+
+use github_coding_shell::ShellWorkspaceComputer;
 
 fn test_secret_box() -> ConnectorSecretBox {
     let key = base64::engine::general_purpose::STANDARD.encode([9u8; 32]);
@@ -91,6 +95,69 @@ async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
         .respond_with(ResponseTemplate::new(200).set_body_bytes(tarball_bytes))
         .mount(server)
         .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": "base_sha_abc123" }
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/commits/base_sha_abc123"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "base_sha_abc123",
+            "tree": { "sha": "base_tree_sha_xyz" }
+        })))
+        .mount(server)
+        .await;
+}
+
+async fn insert_workspace_exec_events(
+    pool: &PgPool,
+    request_id: &str,
+    command: &str,
+    exit_code: i32,
+    ok: bool,
+) {
+    let call_id = format!("call-{}", command.replace(' ', "-"));
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'tool_call', $2)",
+    )
+    .bind(request_id)
+    .bind(json!({
+        "tool": "workspace_exec",
+        "callId": call_id,
+        "arguments": { "command": command }
+    }))
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO run_events (request_id, event_type, payload_json) VALUES ($1, 'tool_result', $2)",
+    )
+    .bind(request_id)
+    .bind(json!({
+        "tool": "workspace_exec",
+        "callId": call_id,
+        "ok": ok,
+        "output": json!({
+            "ok": ok,
+            "exitCode": exit_code,
+            "stdout": "",
+            "stderr": ""
+        }).to_string()
+    }))
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn coding_service(
+    pool: PgPool,
+    connectors: Arc<PostgresAgentConnectors>,
+    github: GitHubClient,
+) -> Arc<dyn AgentGithubCoding> {
+    PostgresAgentGithubCoding::new(connectors, github, pool)
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -109,7 +176,8 @@ async fn github_coding_open_rejects_unauthorized_repo(pool: PgPool) {
     .await
     .unwrap();
     let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github);
-    let coding: Arc<dyn AgentGithubCoding> = PostgresAgentGithubCoding::new(
+    let coding = coding_service(
+        pool.clone(),
         connectors,
         GitHubClient::with_api_base(server.uri(), server.uri()),
     );
@@ -158,9 +226,8 @@ async fn github_coding_publish_denied_does_not_hit_github(pool: PgPool) {
     .await
     .unwrap();
     let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
-    let coding: Arc<dyn AgentGithubCoding> =
-        PostgresAgentGithubCoding::new(connectors, github);
-    let computer = FakeAgentComputer::new().allow_any_path();
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
     let run = ToolRunContext {
         run_id: "run-2".into(),
         request_id: "req-2".into(),
@@ -195,7 +262,7 @@ async fn github_coding_publish_denied_does_not_hit_github(pool: PgPool) {
         Some(&coding),
         &computer,
         "github_review_publish",
-        r#"{"checks":[{"command":"npm test","exitCode":0,"ok":true}]}"#,
+        r#"{"checkCommands":[]}"#,
         &cancel,
         &gate,
         &run,
@@ -242,13 +309,6 @@ async fn mock_publish_apis(server: &MockServer) {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
         .mount(server)
         .await;
-    Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "object": { "sha": "base_sha_abc123" }
-        })))
-        .mount(server)
-        .await;
     Mock::given(method("POST"))
         .and(path_regex(r"/repos/acme/demo/git/blobs"))
         .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "blob_sha_1" })))
@@ -256,6 +316,7 @@ async fn mock_publish_apis(server: &MockServer) {
         .await;
     Mock::given(method("POST"))
         .and(path_regex(r"/repos/acme/demo/git/trees"))
+        .and(body_string_contains("base_tree_sha_xyz"))
         .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "tree_sha_1" })))
         .mount(server)
         .await;
@@ -264,14 +325,14 @@ async fn mock_publish_apis(server: &MockServer) {
         .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "commit_sha_1" })))
         .mount(server)
         .await;
-    Mock::given(method("PATCH"))
-        .and(path_regex(r"/repos/acme/demo/git/refs/heads/elsewhere/readme-fix"))
-        .respond_with(ResponseTemplate::new(422).set_body_json(json!({ "message": "Reference does not exist" })))
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/refs/heads/elsewhere%2Freadme-fix-run3$"))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "message": "Not Found" })))
         .mount(server)
         .await;
     Mock::given(method("POST"))
         .and(path_regex(r"/repos/acme/demo/git/refs"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "ref": "refs/heads/elsewhere/readme-fix" })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "ref": "refs/heads/elsewhere/readme-fix-run3" })))
         .mount(server)
         .await;
     Mock::given(method("POST"))
@@ -302,9 +363,8 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
     .await
     .unwrap();
     let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
-    let coding: Arc<dyn AgentGithubCoding> =
-        PostgresAgentGithubCoding::new(connectors, github);
-    let computer = FakeAgentComputer::new().allow_any_path();
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
     let run = ToolRunContext {
         run_id: "run-3".into(),
         request_id: "req-3".into(),
@@ -336,11 +396,12 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
         .await
         .unwrap();
 
+    insert_workspace_exec_events(&pool, "req-3", "pnpm test", 0, true).await;
     dispatch_github_coding_tool(
         Some(&coding),
         &computer,
         "github_review_publish",
-        r#"{"checks":[{"command":"npm test","exitCode":0,"ok":true}]}"#,
+        r#"{"checkCommands":["pnpm test"]}"#,
         &cancel,
         &gate,
         &run,
@@ -380,4 +441,57 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
         !body.contains("gho_test"),
         "access token must not appear in tool result"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_rejects_forged_check_payload(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-forge".into(),
+        request_id: "req-forge".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checks":[{"command":"pnpm test","exitCode":0,"ok":true}]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("forged");
+    assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
 }

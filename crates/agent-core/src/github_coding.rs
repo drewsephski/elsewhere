@@ -63,11 +63,22 @@ pub trait AgentGithubCoding: Send + Sync {
         &self,
         owner_id: &str,
         run_id: &str,
+        request_id: &str,
         computer_id: &str,
         computer: &dyn crate::computer::AgentComputer,
         tool_name: &str,
         arguments: &Value,
     ) -> Result<Value, GithubCodingError>;
+
+    /// After owner approval and before publish mutations, bind the approved workspace fingerprint.
+    async fn confirm_publish_approval(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        computer: &dyn crate::computer::AgentComputer,
+    ) -> Result<(), GithubCodingError> {
+        Ok(())
+    }
 
     /// Merge durable session fields into approval snapshots (never includes secrets).
     async fn approval_arguments(

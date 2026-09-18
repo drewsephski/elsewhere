@@ -260,9 +260,9 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "taskSlug": args.get("taskSlug").and_then(|v| v.as_str()).unwrap_or("")
         }),
         "github_review_publish" => {
-            let checks = args.get("checks").and_then(|v| v.as_array());
+            let commands = args.get("checkCommands").and_then(|v| v.as_array());
             json!({
-                "checkCount": checks.map(|c| c.len()).unwrap_or(0)
+                "checkCommandCount": commands.map(|c| c.len()).unwrap_or(0)
             })
         }
         "github_publish_pull_request" => sanitize_github_publish_arguments(args),
@@ -309,6 +309,9 @@ fn sanitize_github_publish_arguments(args: &Value) -> Value {
         "baseBranch": args.get("baseBranch").and_then(|v| v.as_str()).unwrap_or(""),
         "changedPaths": args.get("changedPaths").cloned().unwrap_or_else(|| json!([])),
         "checksPassed": args.get("checksPassed").and_then(|v| v.as_bool()),
+        "verifiedChecks": args.get("verifiedChecks").cloned().unwrap_or_else(|| json!([])),
+        "explicitNoChecks": args.get("explicitNoChecks").and_then(|v| v.as_bool()).unwrap_or(false),
+        "workspaceFingerprint": args.get("workspaceFingerprint").and_then(|v| v.as_str()).unwrap_or(""),
     })
 }
 
