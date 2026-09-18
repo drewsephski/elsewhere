@@ -69,7 +69,7 @@ export function BotCreatureAvatar({
         draggable={false}
         className={cn(
           "max-h-full w-auto max-w-full object-contain object-bottom",
-          animated && "animate-[bot-bob_2.4s_ease-in-out_infinite]",
+          animated && "animate-[bot-bob_2.4s_ease-in-out_infinite] motion-reduce:animate-none",
         )}
         aria-hidden
       />

@@ -86,6 +86,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByLabelText("Name")).toBeTruthy();
     expect(screen.getByLabelText("Role and instructions")).toBeTruthy();
+    expect(screen.getByLabelText("Model")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
   });
 

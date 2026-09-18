@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use agent_core::DEFAULT_MODEL;
+use agent_core::canonical_bot_model;
 
 use crate::auth::LEGACY_LOCAL_OWNER;
 use crate::error::ApiError;
@@ -501,9 +501,7 @@ pub fn normalize_engine_preference(raw: &str) -> Result<&'static str, ApiError> 
 }
 
 pub fn normalize_model(raw: Option<&str>) -> String {
-    raw.filter(|m| !m.trim().is_empty())
-        .unwrap_or(DEFAULT_MODEL)
-        .to_string()
+    canonical_bot_model(raw)
 }
 
 pub fn legacy_owner_for_bootstrap(owner_id: Option<&str>) -> &str {

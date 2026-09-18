@@ -5,12 +5,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ComputerSelect } from "@/components/app/computer-select";
+import { BotModelSelect } from "@/components/app/bot-model-select";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceOverview } from "./workspace-overview";
+import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 
 export function BotsManager() {
   const router = useRouter();
@@ -19,6 +21,7 @@ export function BotsManager() {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("Complete delegated work carefully, keep useful files on your computer, and explain your results clearly. Ask for approval before making changes.");
   const [computerId, setComputerId] = useState("");
+  const [model, setModel] = useState(DEFAULT_BOT_MODEL_ID);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -33,7 +36,7 @@ export function BotsManager() {
   async function create(event: React.FormEvent) {
     event.preventDefault(); if (busy) return; setBusy(true); setError(null);
     try {
-      const response = await cloudHostFetch("/v1/bots", { method: "POST", body: JSON.stringify({ name, instructions, computerId, enginePreference: "codex" }) });
+      const response = await cloudHostFetch("/v1/bots", { method: "POST", body: JSON.stringify({ name, instructions, computerId, model, enginePreference: "codex" }) });
       const body = await response.json(); if (!response.ok) throw new Error(body.error ?? "Could not create bot");
       router.push(`/app/bots/${body.id}`);
     } catch (err) { setError(err instanceof Error ? err.message : "Could not create bot"); }
@@ -41,11 +44,12 @@ export function BotsManager() {
   }
   return <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
     <WorkspaceOverview compact />
-    <section className="surface-card"><h2 className="text-lg font-semibold">Meet your next teammate</h2><p className="mt-2 text-sm text-muted-foreground">Give it a name, a role, and a computer to work on.</p>
+    <section className="surface-card"><h2 className="text-lg font-semibold">Meet your next teammate</h2><p className="mt-2 text-sm text-muted-foreground">Give it a name, a role, a model, and a computer to work on.</p>
       <form className="mt-5" onSubmit={event => void create(event)}>
         <FormFields>
         <FormItem><Label htmlFor="bot-name">Name</Label><Input id="bot-name" placeholder="Scout" required maxLength={100} value={name} onChange={event => setName(event.target.value)} /></FormItem>
         <FormItem><Label htmlFor="bot-instructions">Role and instructions</Label><Textarea id="bot-instructions" className="min-h-36" maxLength={16000} value={instructions} onChange={event => setInstructions(event.target.value)} /></FormItem>
+        <BotModelSelect id="bot-model" value={model} onValueChange={setModel} disabled={busy} />
         <ComputerSelect id="bot-computer" value={computerId} onValueChange={setComputerId} computers={computers} loading={loading} disabled={loading} />
         {!loading && !computers.length ? <p className="text-sm text-muted-foreground"><Link href="/app/computers" className="underline">Create a computer</Link> first. Its files will persist between assignments.</p> : null}
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}

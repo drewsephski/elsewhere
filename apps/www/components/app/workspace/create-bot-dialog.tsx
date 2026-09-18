@@ -3,8 +3,10 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { ComputerSummary } from "@/lib/api-types";
 import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
+import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ComputerSelect } from "@/components/app/computer-select";
 import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +35,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
   const [name, setName] = useState(defaultForm.name);
   const [instructions, setInstructions] = useState(defaultForm.instructions);
   const [computerId, setComputerId] = useState("");
+  const [model, setModel] = useState(DEFAULT_BOT_MODEL_ID);
   const [avatarId, setAvatarId] = useState(DEFAULT_BOT_AVATAR_ID);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -53,6 +56,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
     setAvatarId(DEFAULT_BOT_AVATAR_ID);
     setName(defaults.name);
     setInstructions(defaults.instructions);
+    setModel(DEFAULT_BOT_MODEL_ID);
     setError(null);
     setLoading(true);
     const controller = new AbortController();
@@ -92,6 +96,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
           name,
           instructions,
           computerId,
+          model,
           enginePreference: "codex",
           avatarId,
         }),
@@ -117,7 +122,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
           <DialogHeader className="gap-1">
             <DialogTitle className="text-base">New bot</DialogTitle>
             <DialogDescription className="text-xs">
-              Give it a name, a role, and a computer to work on.
+              Give it a name, a role, a model, and a computer to work on.
             </DialogDescription>
           </DialogHeader>
           <FormFields className="mt-2 gap-3">
@@ -150,6 +155,12 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
                 onChange={(event) => setInstructions(event.target.value)}
               />
             </FormItem>
+            <BotModelSelect
+              id="create-bot-model"
+              value={model}
+              onValueChange={setModel}
+              disabled={busy}
+            />
             <ComputerSelect
               id="create-bot-computer"
               value={computerId}

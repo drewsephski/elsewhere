@@ -105,10 +105,11 @@ describe("workspace chat mount", () => {
     });
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
+    expect(await screen.findByLabelText("Model")).toBeTruthy();
     const starter = await screen.findByRole("button", { name: "What can you take on?" });
     fireEvent.click(starter);
-    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
-      "What can you take on?",
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toContain(
+      "Look at your instructions and this computer",
     );
   });
 });

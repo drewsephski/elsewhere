@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import type { BotSummary, ComputerSummary } from "@/lib/api-types";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
+import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ComputerSelect } from "@/components/app/computer-select";
+import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ export function BotGeneralSettings({
   const [name, setName] = useState(bot.name);
   const [instructions, setInstructions] = useState(bot.instructions);
   const [computer, setComputer] = useState(bot.computerId ?? "");
+  const [model, setModel] = useState(bot.model || DEFAULT_BOT_MODEL_ID);
   const [avatarId, setAvatarId] = useState(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -34,6 +37,7 @@ export function BotGeneralSettings({
     setName(bot.name);
     setInstructions(bot.instructions);
     setComputer(bot.computerId ?? "");
+    setModel(bot.model || DEFAULT_BOT_MODEL_ID);
     setAvatarId(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
     setNotice("");
     setError(null);
@@ -77,13 +81,14 @@ export function BotGeneralSettings({
           name,
           instructions,
           computerId: computer,
+          model,
           avatarId,
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not update bot");
       onSaved(body);
-      setNotice("Saved. Existing work keeps its original instructions and computer.");
+      setNotice("Saved. Existing work keeps its original instructions, model, and computer.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update bot");
     } finally {
@@ -120,6 +125,12 @@ export function BotGeneralSettings({
             maxLength={16000}
           />
         </FormItem>
+        <BotModelSelect
+          id="settings-model"
+          value={model}
+          onValueChange={setModel}
+          disabled={busy}
+        />
         <ComputerSelect
           id="settings-computer"
           label="Assigned computer"

@@ -39,6 +39,7 @@ import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { botPresetPrompts } from "@/lib/bot-preset-prompts";
 import { BotPresetPrompts } from "./bot-preset-prompts";
+import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
   ComposerAttachmentStrip,
@@ -63,6 +64,23 @@ import {
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
+}
+
+function BotWaitingStatus({
+  name,
+  avatarId,
+  label,
+}: {
+  name: string;
+  avatarId?: string | null;
+  label: string;
+}) {
+  return (
+    <div className="flex items-end gap-3" role="status" aria-live="polite">
+      <BotCreatureAvatar name={name} avatarId={avatarId} size="xl" animated />
+      <p className="pb-1 text-[13px] text-muted-foreground">{label}</p>
+    </div>
+  );
 }
 
 interface BotConversationViewProps {
@@ -95,6 +113,7 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [modelBusy, setModelBusy] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<{
     idempotencyKey: string;
     message: string;
@@ -526,6 +545,36 @@ export function BotConversationView({
     chronologicalRuns.length === 0 &&
     !pendingTurn;
 
+  async function handleModelChange(nextModel: string) {
+    if (!bot || nextModel === bot.model || modelBusy) {
+      return;
+    }
+    const previousModel = bot.model;
+    setModelBusy(true);
+    setBot({ ...bot, model: nextModel });
+    setError(null);
+    try {
+      const response = await cloudHostFetch(`/v1/bots/${bot.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ model: nextModel }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof body.error === "string" ? body.error : "Could not update model",
+        );
+      }
+      const saved = body as BotSummary;
+      setBot(saved);
+      onBotLoaded?.(saved);
+    } catch (err) {
+      setBot((current) => (current ? { ...current, model: previousModel } : current));
+      setError(formatUserFacingError(err, "Could not update model"));
+    } finally {
+      setModelBusy(false);
+    }
+  }
+
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
     const placeholder = /\[[^\]]+\]/.exec(prompt);
@@ -577,6 +626,16 @@ export function BotConversationView({
             <StatusPill tone="info" live className="hidden sm:inline-flex">
               {connection ?? "Working"}
             </StatusPill>
+          ) : null}
+          {bot ? (
+            <BotModelSelect
+              id="conversation-bot-model"
+              value={bot.model}
+              onValueChange={(next) => void handleModelChange(next)}
+              disabled={modelBusy}
+              compact
+              className="hidden shrink-0 sm:block"
+            />
           ) : null}
         </div>
         <div className="flex items-center gap-0.5">
@@ -718,7 +777,7 @@ export function BotConversationView({
                         />
                       }
                     />
-                    <WorkStatusCard run={run} actions={deleteAction}>
+                    <WorkStatusCard run={run} actions={deleteAction} className="ml-[2.25rem]">
                       <ChatResultCards runId={run.runId} />
                     </WorkStatusCard>
                   </>
@@ -726,41 +785,52 @@ export function BotConversationView({
 
                 {isLive ? (
                   <>
-                    <AssistantMessageBubble
-                      leading={
-                        <BotCreatureAvatar
-                          name={bot?.name ?? "Bot"}
-                          avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                          size="xs"
-                        />
-                      }
-                    >
-                      {assistantStream.commentaryText ? (
-                        <p className="mb-1.5 text-xs text-muted-foreground">
-                          {assistantStream.commentaryText}
-                        </p>
-                      ) : null}
-                      {assistantText ? (
-                        <div>
-                          <MarkdownContent text={assistantText} />
-                          {assistantStream.streaming ? (
-                            <span
-                              className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-foreground/80 align-middle"
-                              aria-hidden
-                            />
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground">
-                          {assistantStream.streaming
+                    {assistantText?.trim() || assistantStream.commentaryText ? (
+                      <AssistantMessageBubble
+                        leading={
+                          <BotCreatureAvatar
+                            name={bot?.name ?? "Bot"}
+                            avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                            size="xs"
+                            animated={assistantStream.streaming}
+                          />
+                        }
+                      >
+                        {assistantStream.commentaryText ? (
+                          <p className="mb-1.5 text-xs text-muted-foreground">
+                            {assistantStream.commentaryText}
+                          </p>
+                        ) : null}
+                        {assistantText ? (
+                          <div>
+                            <MarkdownContent text={assistantText} />
+                            {assistantStream.streaming ? (
+                              <span
+                                className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-foreground/80 align-middle"
+                                aria-hidden
+                              />
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="text-muted-foreground">Composing a reply…</p>
+                        )}
+                      </AssistantMessageBubble>
+                    ) : (
+                      <BotWaitingStatus
+                        name={bot?.name ?? "Bot"}
+                        avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                        label={
+                          assistantStream.streaming
                             ? "Composing a reply…"
-                            : "Your bot is working on this…"}
-                        </p>
-                      )}
-                    </AssistantMessageBubble>
-                    <WorkStatusCard run={run} status={liveDetail?.status ?? run.status}>
-                      <ChatResultCards runId={run.runId} />
-                    </WorkStatusCard>
+                            : "Your bot is working on this…"
+                        }
+                      />
+                    )}
+                    {assistantText?.trim() ? (
+                      <WorkStatusCard run={run} className="ml-[2.25rem]">
+                        <ChatResultCards runId={run.runId} />
+                      </WorkStatusCard>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -781,7 +851,11 @@ export function BotConversationView({
               >
                 {pendingTurn.message}
               </UserPromptBubble>
-              <p className="text-center text-[11px] text-muted-foreground">Sending…</p>
+              <BotWaitingStatus
+                name={bot?.name ?? "Bot"}
+                avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                label="Sending…"
+              />
             </div>
           ) : null}
 

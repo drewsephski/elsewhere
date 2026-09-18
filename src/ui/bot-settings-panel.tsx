@@ -1,4 +1,5 @@
 import type { Bot, ModelDescriptor } from "@desktop/lib/definitions";
+import { modelDisplayName } from "@desktop/lib/definitions";
 import { Button } from "@desktop/components/ui/button";
 import { Input } from "@desktop/components/ui/input";
 import { Label } from "@desktop/components/ui/label";
@@ -142,7 +143,7 @@ export function BotSettingsPanel({
                   ) : (
                     models.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
-                        {m.displayName}
+                        {modelDisplayName(m.id)}
                       </SelectItem>
                     ))
                   )}
@@ -215,7 +216,7 @@ export function BotSettingsPanel({
                   ) : (
                     models.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
-                        {m.displayName}
+                        {modelDisplayName(m.id)}
                       </SelectItem>
                     ))
                   )}

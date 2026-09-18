@@ -13,6 +13,21 @@ export function isLunaModelAvailable(
   );
 }
 
+export function modelDisplayName(id: string): string {
+  switch (id) {
+    case "gpt-5.6-luna":
+      return "5.6 Luna";
+    case "gpt-5.6-terra":
+      return "5.6 Terra";
+    case "gpt-5.6-sol":
+      return "5.6 Sol";
+    case "gpt-6-astra":
+      return "Astra 6";
+    default:
+      return id;
+  }
+}
+
 /** Prefer Luna when the account lists it; otherwise keep the canonical default id (UI should show unavailability). */
 export function resolveDefaultModelId(
   models: readonly { id: string }[],

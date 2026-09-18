@@ -92,7 +92,9 @@ pub use local_mac_protocol::{
     METHOD_ENSURE_READY, METHOD_EXEC, METHOD_LIST_DIR, METHOD_READ_FILE, METHOD_WRITE_FILE,
     PROTOCOL_VERSION,
 };
-pub use luna::{default_model_id, luna_model_id, DEFAULT_MODEL};
+pub use luna::{
+    canonical_bot_model, default_model_id, luna_model_id, BotModelSpec, BOT_MODELS, DEFAULT_MODEL,
+};
 pub use memory::{
     is_memory_mutation_tool, AgentMemory, MemoryContext, MemoryError, MemoryRecallItem,
     MemoryWriteResult, DEFAULT_MEMORY_RECALL_LIMIT, FORGET_MEMORY_DESCRIPTION,

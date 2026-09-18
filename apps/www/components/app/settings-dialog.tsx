@@ -123,7 +123,10 @@ export function SettingsDialog({
             {section === "general" ? (
               bot ? (
                 <>
-                  <SettingsPanelHeader title="General" />
+                  <SettingsPanelHeader
+                    title="General"
+                    description="Name, instructions, model, and computer for this Bot."
+                  />
                   <BotGeneralSettings bot={bot} onSaved={onBotSaved} />
                 </>
               ) : (

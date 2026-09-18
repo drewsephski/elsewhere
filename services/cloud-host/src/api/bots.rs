@@ -160,13 +160,14 @@ pub async fn patch(
         Some(raw) => Some(normalize_avatar_id(Some(raw))?),
         None => None,
     };
+    let model = body.model.as_deref().map(|raw| normalize_model(Some(raw)));
     let row = patch_bot(
         &state.pool,
         principal.owner_id(),
         &bot_id,
         body.name.as_deref().map(str::trim),
         body.instructions.as_deref().map(str::trim),
-        body.model.as_deref(),
+        model.as_deref(),
         body.computer_id
             .as_deref()
             .map(|id| if id.is_empty() { None } else { Some(id) }),

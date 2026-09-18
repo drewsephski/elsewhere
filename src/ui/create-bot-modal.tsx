@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@desktop/components/ui/select";
 import { Alert, AlertDescription } from "@desktop/components/ui/alert";
+import { modelDisplayName } from "@desktop/lib/definitions";
 
 interface CreateBotModalProps {
   open: boolean;
@@ -97,7 +98,7 @@ export function CreateBotModal({
               <SelectContent>
                 {models.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
-                    {m.displayName}
+                    {modelDisplayName(m.id)}
                   </SelectItem>
                 ))}
               </SelectContent>
