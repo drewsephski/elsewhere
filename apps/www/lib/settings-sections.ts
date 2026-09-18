@@ -14,7 +14,7 @@ export const SETTINGS_SECTION_ITEMS: readonly {
   label: string;
   botScoped: boolean;
 }[] = [
-  { value: "general", label: "General", botScoped: true },
+  { value: "general", label: "This Bot", botScoped: true },
   { value: "permissions", label: "Permissions", botScoped: true },
   { value: "skills", label: "Skills", botScoped: true },
   { value: "workspace", label: "Workspace", botScoped: false },
