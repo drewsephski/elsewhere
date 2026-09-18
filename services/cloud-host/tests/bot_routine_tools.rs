@@ -1,6 +1,6 @@
 //! Bot-facing routine tools: schedules, approval, and owner isolation.
 
-use agent_core::{CreateResponseResult, ModelError, ResponsesModel};
+use agent_core::{AgentRoutines, CreateResponseResult, ModelError, ResponsesModel};
 use async_trait::async_trait;
 use chrono::Utc;
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
@@ -8,7 +8,6 @@ use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
 use cloud_host::routines::{self, RoutineInput};
 use cloud_host::{build_router, test_signing, AppState, TestRunOverrides};
-use http_body_util::BodyExt;
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::{Arc, Mutex};
@@ -240,7 +239,7 @@ async fn routine_create_requires_approval_and_persists_timezone(pool: PgPool) {
                 .method("POST")
                 .uri(format!("/v1/approvals/{approval_id}/approve"))
                 .header("Authorization", format!("Bearer {}", token(&owner)))
-                .body(axum::body::Body::new())
+                .body(axum::body::Body::empty())
                 .unwrap(),
         )
         .await
@@ -286,7 +285,7 @@ async fn denied_routine_create_does_not_persist(pool: PgPool) {
                 .method("POST")
                 .uri(format!("/v1/approvals/{approval_id}/deny"))
                 .header("Authorization", format!("Bearer {}", token(&owner)))
-                .body(axum::body::Body::new())
+                .body(axum::body::Body::empty())
                 .unwrap(),
         )
         .await
@@ -306,7 +305,7 @@ async fn routine_list_is_scoped_to_bot(pool: PgPool) {
     let now = Utc::now();
     for (bot_id, name) in [(bot_a.as_str(), "A"), (bot_b.as_str(), "B")] {
         let input = RoutineInput {
-            bot_id: bot_id.clone(),
+            bot_id: bot_id.to_string(),
             name: format!("Routine {name}"),
             instructions: "work".into(),
             interval_minutes: Some(60),
@@ -442,7 +441,7 @@ async fn validate_create_rejects_schedule_and_timezone_errors(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn malformed_schedule_is_rejected(pool: PgPool) {
+async fn malformed_schedule_is_rejected(_pool: PgPool) {
     let spec = agent_core::BotRoutineSchedule {
         repeat: "cron".into(),
         every_minutes: None,
