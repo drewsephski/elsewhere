@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { ExternalLink, FileText } from "@/components/icons/lucide";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import {
+  isAssignmentSummaryKind,
   isMarkdownResultFile,
   isPreviewableImageFileName,
   RESULT_PREVIEW_MAX_BYTES,
@@ -21,7 +22,7 @@ import { cn } from "cn";
 import { useEffect, useState } from "react";
 
 export function resultItemTitle(kind: string, name: string): string {
-  return kind === "summary" ? "Assignment summary" : name;
+  return isAssignmentSummaryKind(kind) ? "Assignment summary" : name;
 }
 
 type OpenResult = {

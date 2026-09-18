@@ -2,6 +2,7 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { formatBytes } from "@/lib/format";
+import { isAssignmentSummaryKind } from "@/lib/result-preview";
 import { cn } from "cn";
 import { FileText } from "@/components/icons/lucide";
 import { useEffect, useState } from "react";
@@ -37,7 +38,11 @@ export function ChatResultCards({
           return;
         }
         const data = await response.json();
-        setItems(data.items ?? []);
+        setItems(
+          (data.items ?? []).filter(
+            (item: ResultItem) => !isAssignmentSummaryKind(item.kind),
+          ),
+        );
       })
       .catch(() => undefined);
     return () => controller.abort();

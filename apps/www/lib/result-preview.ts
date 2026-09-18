@@ -21,8 +21,12 @@ export function isPreviewableImageFileName(name: string): boolean {
   return mimeTypeForResultFileName(name) !== null;
 }
 
+export function isAssignmentSummaryKind(kind: string | undefined): boolean {
+  return kind === "summary";
+}
+
 export function isMarkdownResultFile(fileName: string, kind?: string): boolean {
-  if (kind === "summary") {
+  if (isAssignmentSummaryKind(kind)) {
     return true;
   }
   const ext = fileName.split(".").pop()?.toLowerCase();
