@@ -330,10 +330,16 @@ fn summarize_connected_app_args(args: &Value) -> Value {
 
 fn sanitize_routine_create_arguments(args: &Value) -> Value {
     let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let timezone = args.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+    let timezone = args.get("timezone").and_then(|v| v.as_str()).unwrap_or("");
     let schedule_label = args
-        .get("schedule")
-        .and_then(|s| routine_schedule_label_from_value(s))
+        .get("scheduleLabel")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .or_else(|| {
+            args.get("schedule")
+                .and_then(routine_schedule_label_from_value)
+        })
         .unwrap_or_else(|| "on a schedule".to_string());
     json!({
         "name": truncate_str(name, 80),

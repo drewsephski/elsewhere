@@ -29,6 +29,28 @@ describe("permission policy activity", () => {
     );
   });
 
+  it("labels routine tools in the activity timeline", () => {
+    expect(activityText("tool_call", { tool: "routine_list" })).toBe("Checking routines");
+    expect(
+      activityText("tool_call", {
+        tool: "routine_create",
+        arguments: { name: "Morning brief" },
+      }),
+    ).toBe("Scheduling recurring work (Morning brief)");
+    expect(
+      activityText("tool_call", {
+        tool: "routine_pause",
+        arguments: { routineName: "Morning brief" },
+      }),
+    ).toBe("Pausing routine (Morning brief)");
+    expect(
+      activityText("tool_call", {
+        tool: "routine_resume",
+        arguments: { routineName: "Morning brief" },
+      }),
+    ).toBe("Resuming routine (Morning brief)");
+  });
+
   it("does not flatten user questions into generic timeline text", () => {
     expect(
       activityText("user_question_requested", {

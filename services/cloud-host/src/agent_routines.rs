@@ -1,8 +1,8 @@
 //! Bot-facing routine tools backed by the existing routines service.
 
 use agent_core::{
-    AgentRoutines, BotRoutineSchedule, RoutineContext, RoutineError, RoutineMutationResult,
-    RoutineSummary,
+    AgentRoutines, BotRoutineSchedule, RoutineContext, RoutineCreateDraft, RoutineError,
+    RoutineMutationResult, RoutineSummary,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -10,7 +10,7 @@ use sqlx::PgPool;
 
 use crate::error::ApiError;
 use crate::routines::{self, RoutineInput};
-use crate::schedule::{initial_next_run, parse_schedule};
+use crate::schedule::{human_schedule_label, initial_next_run, parse_schedule};
 
 pub struct PostgresAgentRoutines {
     pool: PgPool,
@@ -118,7 +118,7 @@ impl AgentRoutines for PostgresAgentRoutines {
             .collect())
     }
 
-    async fn create(
+    async fn validate_create(
         &self,
         ctx: &RoutineContext,
         name: &str,
@@ -126,10 +126,21 @@ impl AgentRoutines for PostgresAgentRoutines {
         schedule: &BotRoutineSchedule,
         timezone: &str,
         destination_conversation_id: Option<&str>,
-    ) -> Result<RoutineMutationResult, RoutineError> {
+    ) -> Result<RoutineCreateDraft, RoutineError> {
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() || trimmed_name.chars().count() > 100 {
+            return Err(RoutineError::Validation(
+                "Give your routine a name of up to 100 characters".into(),
+            ));
+        }
+        let trimmed_instructions = instructions.trim();
+        if trimmed_instructions.is_empty() || trimmed_instructions.len() > 100_000 {
+            return Err(RoutineError::Validation(
+                "Add an assignment of up to 100,000 bytes".into(),
+            ));
+        }
         let (schedule_kind, schedule_expression, interval_minutes) =
             schedule_to_routine_fields(schedule, timezone)?;
-        let now = Utc::now();
         let schedule_def = parse_schedule(
             &schedule_kind,
             &schedule_expression,
@@ -137,26 +148,74 @@ impl AgentRoutines for PostgresAgentRoutines {
             Some(interval_minutes),
         )
         .map_err(map_api)?;
+        let schedule_label = format!("Scheduled · {}", human_schedule_label(&schedule_def));
+
+        let destination = if let Some(id) = destination_conversation_id.filter(|s| !s.is_empty()) {
+            let mut tx = self
+                .pool
+                .begin()
+                .await
+                .map_err(|e| RoutineError::Internal(e.to_string()))?;
+            crate::groups::assert_bot_may_use_conversation(
+                &mut tx,
+                &ctx.owner_id,
+                &ctx.bot_id,
+                id,
+            )
+            .await
+            .map_err(map_api)?;
+            tx.commit()
+                .await
+                .map_err(|e| RoutineError::Internal(e.to_string()))?;
+            Some(id.to_string())
+        } else {
+            Some(ctx.source_conversation_id.clone())
+        };
+
+        Ok(RoutineCreateDraft {
+            name: trimmed_name.to_string(),
+            instructions: trimmed_instructions.to_string(),
+            timezone: timezone.trim().to_string(),
+            schedule_label,
+            schedule: schedule.clone(),
+            schedule_kind,
+            schedule_expression,
+            interval_minutes,
+            destination_conversation_id: destination,
+        })
+    }
+
+    async fn create_validated(
+        &self,
+        ctx: &RoutineContext,
+        draft: &RoutineCreateDraft,
+    ) -> Result<RoutineMutationResult, RoutineError> {
+        let now = Utc::now();
+        let schedule_def = parse_schedule(
+            &draft.schedule_kind,
+            &draft.schedule_expression,
+            &draft.timezone,
+            Some(draft.interval_minutes),
+        )
+        .map_err(map_api)?;
         let next_run_at = initial_next_run(&schedule_def, now, now).map_err(map_api)?;
-        let destination = destination_conversation_id
-            .map(str::to_string)
-            .or_else(|| Some(ctx.source_conversation_id.clone()));
         let input = RoutineInput {
             bot_id: ctx.bot_id.clone(),
-            name: name.to_string(),
-            instructions: instructions.to_string(),
-            interval_minutes: Some(interval_minutes),
+            name: draft.name.clone(),
+            instructions: draft.instructions.clone(),
+            interval_minutes: Some(draft.interval_minutes),
             next_run_at,
             enabled: true,
-            schedule_kind: Some(schedule_kind),
-            schedule_expression: Some(schedule_expression),
-            timezone: Some(timezone.to_string()),
-            destination_conversation_id: destination,
+            schedule_kind: Some(draft.schedule_kind.clone()),
+            schedule_expression: Some(draft.schedule_expression.clone()),
+            timezone: Some(draft.timezone.clone()),
+            destination_conversation_id: draft.destination_conversation_id.clone(),
             failure_policy: None,
             skill_id: None,
             pinned_skill_version: None,
             trigger_mode: Some("schedule".into()),
         };
+        input.validate().map_err(map_api)?;
         let view = routines::save(&self.pool, &ctx.owner_id, None, &input)
             .await
             .map_err(map_api)?;

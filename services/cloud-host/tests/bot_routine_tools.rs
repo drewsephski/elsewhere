@@ -149,6 +149,16 @@ async fn wait_no_active_runs(pool: &PgPool, owner: &str) {
     panic!("runs did not finish");
 }
 
+async fn pending_approval_count(pool: &PgPool, owner: &str) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*) FROM tool_approval_requests WHERE owner_id = $1 AND status = 'pending'",
+    )
+    .bind(owner)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
 async fn wait_pending_approval(pool: &PgPool, owner: &str) -> String {
     for _ in 0..80 {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
@@ -324,6 +334,111 @@ async fn routine_list_is_scoped_to_bot(pool: PgPool) {
         .unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].name, "Routine A");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn invalid_routine_create_does_not_request_approval(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let state = jwt_state(pool.clone());
+    let request_id = Uuid::new_v4().to_string();
+    let args = json!({
+        "name": "Morning brief",
+        "instructions": "Summarize news.",
+        "timezone": "America/Chicago",
+        "schedule": { "repeat": "weekdays" }
+    });
+    start_run(
+        &state,
+        &owner,
+        &bot_id,
+        "create routine",
+        &request_id,
+        ScriptedModel::calls("routine_create", &args.to_string()),
+    )
+    .await;
+    wait_no_active_runs(&pool, &owner).await;
+    state.clear_test_run_overrides(&request_id);
+    assert_eq!(pending_approval_count(&pool, &owner).await, 0);
+    assert!(routines::list(&pool, &owner).await.unwrap().is_empty());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn validate_create_rejects_schedule_and_timezone_errors(pool: PgPool) {
+    use agent_core::{BotRoutineSchedule, RoutineContext};
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let service = cloud_host::agent_routines::PostgresAgentRoutines::new(pool.clone());
+    let ctx = RoutineContext {
+        owner_id: owner.clone(),
+        bot_id: bot_id.clone(),
+        source_conversation_id: "conv-src".into(),
+    };
+
+    let cases: Vec<(BotRoutineSchedule, &str, &str)> = vec![
+        (
+            BotRoutineSchedule {
+                repeat: "daily".into(),
+                every_minutes: None,
+                at: None,
+                days: None,
+            },
+            "UTC",
+            "Daily schedules need at",
+        ),
+        (
+            BotRoutineSchedule {
+                repeat: "daily".into(),
+                every_minutes: None,
+                at: Some("99:99".into()),
+                days: None,
+            },
+            "UTC",
+            "hh:mm",
+        ),
+        (
+            BotRoutineSchedule {
+                repeat: "daily".into(),
+                every_minutes: None,
+                at: Some("08:00".into()),
+                days: None,
+            },
+            "Not/A/Timezone",
+            "iana timezone",
+        ),
+        (
+            BotRoutineSchedule {
+                repeat: "weekly".into(),
+                every_minutes: None,
+                at: Some("08:00".into()),
+                days: Some("NOTADAY".into()),
+            },
+            "UTC",
+            "weekly days",
+        ),
+        (
+            BotRoutineSchedule {
+                repeat: "every_minutes".into(),
+                every_minutes: Some(5),
+                at: None,
+                days: None,
+            },
+            "UTC",
+            "15 minutes",
+        ),
+    ];
+
+    for (schedule, timezone, needle) in cases {
+        let err = service
+            .validate_create(&ctx, "Test", "Do work", &schedule, timezone, None)
+            .await
+            .unwrap_err();
+        let message = err.message().to_lowercase();
+        assert!(
+            message.contains(&needle.to_lowercase()),
+            "expected {needle} in {message}"
+        );
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

@@ -618,10 +618,11 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None,
         None,
         Some(&backend),
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "browser_request_human",
         r#"{"reason":"captcha","message":"Solve the CAPTCHA in the browser"}"#,
         &cancel,
@@ -639,10 +640,11 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None,
         None,
         Some(&backend),
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "browser_click",
         r#"{"ref":"e1"}"#,
         &cancel,
@@ -660,10 +662,11 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None,
         None,
         Some(&backend),
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "browser_snapshot",
         r#"{}"#,
         &cancel,
@@ -680,10 +683,11 @@ async fn recovery_session_blocks_mutation_until_snapshot_after_handback() {
         None,
         None,
         Some(&backend),
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "browser_click",
         r#"{"ref":"e1"}"#,
         &cancel,

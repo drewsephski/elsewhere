@@ -117,6 +117,48 @@ pub async fn dispatch_routine_tool(
     let mut args: Value = serde_json::from_str(arguments)
         .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
 
+    if name == ROUTINE_CREATE_TOOL_NAME {
+        let name = required_str(&args, "name")?;
+        let instructions = required_str(&args, "instructions")?;
+        let timezone = required_str(&args, "timezone")?;
+        let schedule = parse_schedule(&args)?;
+        let destination = args
+            .get("destinationConversationId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty());
+        let draft = service
+            .validate_create(ctx, name, instructions, &schedule, timezone, destination)
+            .await
+            .map_err(map_routine_error)?;
+        let approval_args = json!({
+            "name": draft.name,
+            "timezone": draft.timezone,
+            "scheduleLabel": draft.schedule_label,
+            "instructionsLength": draft.instructions.len(),
+        });
+        let approval_ctx =
+            ToolApprovalContext::for_tool(run, ROUTINE_CREATE_TOOL_NAME, approval_args);
+        let approval = gate
+            .authorize(&approval_ctx)
+            .await
+            .map_err(map_approval_error)?;
+        if let crate::approval::ApprovalDecision::Deny { reason } = approval {
+            return Err(ToolError::Denied(reason));
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ToolError::Cancelled);
+        }
+        let mutation = service
+            .create_validated(ctx, &draft)
+            .await
+            .map_err(map_routine_error)?;
+        return Ok(json!({
+            "ok": true,
+            "routine": mutation.routine,
+            "message": mutation.message
+        }));
+    }
+
     if name == ROUTINE_PAUSE_TOOL_NAME || name == ROUTINE_RESUME_TOOL_NAME {
         let routine_id = args
             .get("routineId")
@@ -154,32 +196,6 @@ pub async fn dispatch_routine_tool(
         ROUTINE_LIST_TOOL_NAME => {
             let rows = service.list(ctx).await.map_err(map_routine_error)?;
             json!({ "ok": true, "routines": rows })
-        }
-        ROUTINE_CREATE_TOOL_NAME => {
-            let name = required_str(&args, "name")?;
-            let instructions = required_str(&args, "instructions")?;
-            let timezone = required_str(&args, "timezone")?;
-            let schedule = parse_schedule(&args)?;
-            let destination = args
-                .get("destinationConversationId")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty());
-            let mutation = service
-                .create(
-                    ctx,
-                    name,
-                    instructions,
-                    &schedule,
-                    timezone,
-                    destination,
-                )
-                .await
-                .map_err(map_routine_error)?;
-            json!({
-                "ok": true,
-                "routine": mutation.routine,
-                "message": mutation.message
-            })
         }
         ROUTINE_PAUSE_TOOL_NAME => {
             let routine_id = required_str(&args, "routineId")?;
@@ -240,7 +256,7 @@ fn parse_schedule(args: &Value) -> Result<BotRoutineSchedule, ToolError> {
     })
 }
 
-fn required_str(args: &Value, key: &str) -> Result<&str, ToolError> {
+fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
     args.get(key)
         .and_then(|v| v.as_str())
         .filter(|s| !s.is_empty())

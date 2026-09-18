@@ -116,19 +116,18 @@ pub async fn dispatch_agent_tool_with_gate(
         collaboration,
         connectors,
         human_intervention,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         name,
         arguments,
         cancel,
         gate,
         run,
         collaboration_ctx,
-        None,
+        None, // browser_recovery
     )
     .await
 }

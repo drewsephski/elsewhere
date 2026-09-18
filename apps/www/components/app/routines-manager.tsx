@@ -47,6 +47,7 @@ import {
 } from "@/lib/routine-time";
 import { toast } from "sonner";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
+import { resolveRoutineComposePrefill } from "@/lib/routine-compose-prefill";
 
 const intervals = [
   { value: "15", label: "Every 15 minutes" },
@@ -252,6 +253,7 @@ export function RoutinesManager() {
   const [revealedWebhookUrl, setRevealedWebhookUrl] = useState<string | null>(null);
   const [confirmRotateWebhook, setConfirmRotateWebhook] = useState(false);
   const appliedEditRef = useRef(false);
+  const appliedComposeRef = useRef(false);
 
   const zones = useMemo(() => timezoneOptions(), []);
   const activeSkills = useMemo(
@@ -360,6 +362,33 @@ export function RoutinesManager() {
     handleEdit(routine);
     window.history.replaceState(null, "", "/app/routines");
   }, [handleEdit, routines]);
+
+  useEffect(() => {
+    if (appliedComposeRef.current || loading || bots.length === 0) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const botId = params.get("bot");
+    const conversationId = params.get("conversation");
+    if (!botId && !conversationId) {
+      return;
+    }
+    appliedComposeRef.current = true;
+    const prefill = resolveRoutineComposePrefill(bots, conversations, botId, conversationId);
+    window.history.replaceState(null, "", "/app/routines");
+    if (!prefill) {
+      return;
+    }
+    setEditing(null);
+    setForm({
+      ...emptyForm(),
+      botId: prefill.botId,
+      destinationConversationId: prefill.destinationConversationId,
+    });
+    setRevealedWebhookUrl(null);
+    setFormOpen(true);
+    setError(null);
+  }, [bots, conversations, loading]);
 
   useEffect(() => {
     if (formOpen) {

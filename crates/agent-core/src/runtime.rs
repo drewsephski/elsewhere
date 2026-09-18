@@ -723,6 +723,7 @@ mod tests {
             browser_recovery: None,
             subagents: None,
             memory: None,
+            routines: None,
             attachments: None,
             user_questions: None,
         };

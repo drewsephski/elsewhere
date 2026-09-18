@@ -580,10 +580,11 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None,
         None,
         None,
-        None,
+        None, // subagents
         Some(&dyn_memory),
-        None,
-        None,
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "remember",
         r#"{"content":"Drew prefers concise implementation prompts.","kind":"preference"}"#,
         &cancel,
@@ -600,10 +601,11 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None,
         None,
         None,
-        None,
+        None, // subagents
         Some(&dyn_memory),
-        None,
-        None,
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "recall_memory",
         r#"{"query":"concise prompts"}"#,
         &cancel,
@@ -622,10 +624,11 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None,
         None,
         None,
-        None,
+        None, // subagents
         Some(&dyn_memory),
-        None,
-        None,
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "forget_memory",
         &format!(r#"{{"memoryId":"{memory_id}"}}"#),
         &cancel,
@@ -643,10 +646,11 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None,
         None,
         None,
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         "remember",
         r#"{"content":"subagent should not remember"}"#,
         &cancel,

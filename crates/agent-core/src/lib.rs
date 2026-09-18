@@ -108,8 +108,9 @@ pub use memory_tools::{dispatch_memory_tool, memory_openai_tool_definitions};
 pub use routine_tools::{dispatch_routine_tool, routine_openai_tool_definitions};
 pub use routines::{
     is_routine_mutation_tool, AgentRoutines, BotRoutineSchedule, RoutineContext,
-    RoutineError, RoutineMutationResult, RoutineSummary, ROUTINE_CREATE_TOOL_NAME,
-    ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME, ROUTINE_TOOL_NAMES,
+    RoutineCreateDraft, RoutineError, RoutineMutationResult, RoutineSummary,
+    ROUTINE_CREATE_TOOL_NAME,
+    ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
 };
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,

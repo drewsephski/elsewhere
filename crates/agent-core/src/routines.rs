@@ -20,13 +20,6 @@ pub const ROUTINE_PAUSE_DESCRIPTION: &str =
 pub const ROUTINE_RESUME_DESCRIPTION: &str =
     "Resume a paused routine. Requires owner approval.";
 
-pub const ROUTINE_TOOL_NAMES: &[&str] = &[
-    ROUTINE_LIST_TOOL_NAME,
-    ROUTINE_CREATE_TOOL_NAME,
-    ROUTINE_PAUSE_TOOL_NAME,
-    ROUTINE_RESUME_TOOL_NAME,
-];
-
 #[derive(Debug, Clone)]
 pub struct RoutineContext {
     pub owner_id: String,
@@ -61,6 +54,21 @@ pub struct RoutineSummary {
     pub next_run_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions_preview: Option<String>,
+}
+
+/// Normalized create payload validated before owner approval.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutineCreateDraft {
+    pub name: String,
+    pub instructions: String,
+    pub timezone: String,
+    pub schedule_label: String,
+    pub schedule: BotRoutineSchedule,
+    pub schedule_kind: String,
+    pub schedule_expression: String,
+    pub interval_minutes: i32,
+    pub destination_conversation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -101,7 +109,7 @@ impl RoutineError {
 pub trait AgentRoutines: Send + Sync {
     async fn list(&self, ctx: &RoutineContext) -> Result<Vec<RoutineSummary>, RoutineError>;
 
-    async fn create(
+    async fn validate_create(
         &self,
         ctx: &RoutineContext,
         name: &str,
@@ -109,6 +117,12 @@ pub trait AgentRoutines: Send + Sync {
         schedule: &BotRoutineSchedule,
         timezone: &str,
         destination_conversation_id: Option<&str>,
+    ) -> Result<RoutineCreateDraft, RoutineError>;
+
+    async fn create_validated(
+        &self,
+        ctx: &RoutineContext,
+        draft: &RoutineCreateDraft,
     ) -> Result<RoutineMutationResult, RoutineError>;
 
     async fn set_enabled(
