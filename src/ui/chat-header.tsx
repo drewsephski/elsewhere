@@ -39,7 +39,7 @@ export function ChatHeader({
   onRenameBot,
 }: ChatHeaderProps) {
   return (
-    <header className="flex shrink-0 items-center gap-3 border-b border-border/60 bg-white px-4 py-3">
+    <header className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-background px-3">
       <Button
         type="button"
         variant="ghost"

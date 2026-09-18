@@ -1,6 +1,4 @@
-import { ProductThemeScope } from "@/components/app/product-theme-scope";
-import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
-import { Toaster } from "@/components/ui/sonner";
+import { WorkspaceAuthenticatedFrame } from "@/components/app/workspace/workspace-authenticated-frame";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -20,20 +18,16 @@ export default async function AppLayout({
   }
 
   return (
-    <>
-      <ProductThemeScope />
-      <Suspense
-        fallback={
-          <div className="app-shell-bg flex min-h-screen items-center justify-center text-sm text-muted-foreground">
-            Loading workspace…
-          </div>
-        }
-      >
-        <WorkspaceAppLayout userEmail={session.user.email}>
-          {children}
-        </WorkspaceAppLayout>
-      </Suspense>
-      <Toaster position="bottom-right" />
-    </>
+    <Suspense
+      fallback={
+        <div className="app-shell-bg flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+          Loading workspace…
+        </div>
+      }
+    >
+      <WorkspaceAuthenticatedFrame userEmail={session.user.email}>
+        {children}
+      </WorkspaceAuthenticatedFrame>
+    </Suspense>
   );
 }

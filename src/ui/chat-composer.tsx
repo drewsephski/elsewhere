@@ -1,8 +1,10 @@
-import type { KeyboardEvent } from "react";
-import { Button } from "@desktop/components/ui/button";
-import { Input } from "@desktop/components/ui/input";
-import { Mic, Plus, Square } from "@desktop/components/icons/lucide";
-import { cn } from "@desktop/lib/utils";
+import type { FormEvent } from "react";
+import {
+  ChatComposerFrame,
+  ChatComposerTextarea,
+  ComposerIconButton,
+} from "@/components/app/workspace/chat-composer";
+import { Square } from "@desktop/components/icons/lucide";
 
 interface ChatComposerProps {
   value: string;
@@ -23,72 +25,50 @@ export function ChatComposer({
   onSend,
   onStop,
 }: ChatComposerProps) {
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      if (!disabled && value.trim() && !isStreaming) {
-        onSend();
-      }
-    }
-  }
-
   const placeholder = recipientName
     ? `Message ${recipientName}`
-    : "Message your assistant";
+    : "Message your bot";
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (disabled || isStreaming || !value.trim()) {
+      return;
+    }
+    onSend();
+  }
+
+  const canSend = !disabled && !isStreaming && Boolean(value.trim());
 
   return (
-    <div className="shrink-0 border-t border-border/50 bg-white px-4 py-4">
-      <div
-        className={cn(
-          "mx-auto flex max-w-2xl items-center gap-1 rounded-full border border-border/70 bg-[#f5f5f7] px-2 py-1.5 shadow-sm",
-          "focus-within:border-foreground/20 focus-within:ring-2 focus-within:ring-foreground/5",
-        )}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="shrink-0 rounded-full text-muted-foreground"
-          aria-label="Add attachment"
-          disabled
+    <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
+      <div className="mx-auto max-w-3xl">
+        <ChatComposerFrame
+          onSubmit={handleSubmit}
+          canSend={canSend}
+          pending={false}
+          sendLabel="Send message"
+          leading={
+            isStreaming ? (
+              <ComposerIconButton
+                label="Stop response"
+                type="button"
+                onClick={onStop}
+                className="text-destructive hover:text-destructive"
+              >
+                <Square className="size-3.5 fill-current" aria-hidden />
+              </ComposerIconButton>
+            ) : undefined
+          }
         >
-          <Plus className="size-4" />
-        </Button>
-
-        <Input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled || isStreaming}
-          placeholder={placeholder}
-          className="h-9 flex-1 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0"
-          aria-label="Message input"
-        />
-
-        {isStreaming ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon-sm"
-            onClick={onStop}
-            aria-label="Stop response"
-            className="shrink-0 rounded-full"
-          >
-            <Square className="size-3.5 fill-current" />
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0 rounded-full text-muted-foreground"
-            aria-label="Voice input"
-            disabled
-          >
-            <Mic className="size-4" />
-          </Button>
-        )}
+          <ChatComposerTextarea
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={disabled || isStreaming}
+            placeholder={placeholder}
+            aria-label="Message"
+          />
+        </ChatComposerFrame>
       </div>
-    </div>
+    </footer>
   );
 }

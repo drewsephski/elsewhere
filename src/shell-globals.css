@@ -1,0 +1,5 @@
+@import "@fontsource-variable/geist";
+
+html {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+}

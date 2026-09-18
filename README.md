@@ -37,7 +37,7 @@ You do **not** paste an OpenAI API key to use the default product path. Link you
 |------|---------|
 | Web app | `pnpm dev:www` |
 | Control plane | `cargo run -p cloud-host` |
-| Desktop (Tauri) | `pnpm tauri dev` (starts the web workspace UI on `:1420` and proxies `/api` to `:3000`; run `cargo run -p cloud-host` separately) |
+| Desktop (Tauri) | `pnpm tauri dev` (starts the web workspace UI on `:1420` and proxies `/api` to `:3000`; run `cargo run -p cloud-host` separately). Better Auth trusts `:1420` by default so sign-in works through the proxy. |
 | Frontend only (Vite) | `pnpm dev` |
 | Full local check (mirrors CI; needs Postgres for cloud-host integration tests) | `pnpm check` |
 | Rust logs | `RUST_LOG=elsewhere=info cargo run -p cloud-host` |
@@ -51,6 +51,8 @@ pnpm tauri build
 ```
 
 The `.app` bundle is under `src-tauri/target/release/bundle/macos/`. The desktop shell renders the same workspace UI as [`apps/www`](apps/www) (shared components, theme, and routes). Keep the Next.js app running on port 3000 during development so auth and `/api/cloud` BFF routes work through the Vite proxy.
+
+For a packaged build against hosted alpha (no local Next.js), set `ELSEWHERE_DESKTOP_WEBVIEW_URL` to your deployed web app (for example `https://elsewhere-alpha-web.fly.dev/app`) before launching the `.app`. The shell navigates the webview to that URL on startup.
 
 ## Testing
 

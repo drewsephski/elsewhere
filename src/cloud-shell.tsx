@@ -1,12 +1,16 @@
-import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
+import { WorkspaceAuthenticatedFrame } from "@/components/app/workspace/workspace-authenticated-frame";
+import { WorkspaceRouteOutlet } from "@/components/app/workspace/workspace-route-outlet";
 import { authClient } from "@/lib/auth-client";
 import ApprovalsPage from "@/app/app/approvals/page";
 import ComputersPage from "@/app/app/computers/page";
 import ResultsPage from "@/app/app/results/page";
 import RoutinesPage from "@/app/app/routines/page";
+import SkillsPage from "@/app/app/skills/page";
+import SkillDetailPage from "@/app/app/skills/[id]/page";
 import WorkPage from "@/app/app/work/page";
 import { SignInView } from "@/app/sign-in/sign-in-view";
-import { Suspense, useEffect, useState } from "react";
+import { settingsDialogHref } from "@/lib/settings-sections";
+import { Suspense, useEffect, useRef, useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -42,23 +46,29 @@ function AuthenticatedWorkspace() {
   const location = useLocation();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const hadSessionRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     async function loadSession() {
-      setLoading(true);
+      const showBlockingLoader = !hadSessionRef.current;
+      if (showBlockingLoader) {
+        setLoading(true);
+      }
       try {
         const { data } = await authClient.getSession();
         if (cancelled) {
           return;
         }
         if (data?.user?.email) {
+          hadSessionRef.current = true;
           setUser({ email: data.user.email });
         } else {
+          hadSessionRef.current = false;
           setUser(null);
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showBlockingLoader) {
           setLoading(false);
         }
       }
@@ -82,18 +92,18 @@ function AuthenticatedWorkspace() {
   }
 
   return (
-    <WorkspaceAppLayout userEmail={user.email}>
+    <WorkspaceAuthenticatedFrame userEmail={user.email}>
       <Outlet />
-    </WorkspaceAppLayout>
+    </WorkspaceAuthenticatedFrame>
   );
-}
-
-function AppHomePage() {
-  return null;
 }
 
 function BotsIndexRedirect() {
   return <Navigate to="/app?create=1" replace />;
+}
+
+function SettingsRedirect() {
+  return <Navigate to={settingsDialogHref("workspace")} replace />;
 }
 
 export default function CloudShell() {
@@ -102,19 +112,20 @@ export default function CloudShell() {
       <Route path="/" element={<Navigate to="/app" replace />} />
       <Route path="/sign-in" element={<SignInRoute />} />
       <Route path="/sign-up" element={<SignInRoute />} />
-      <Route
-        path="/app"
-        element={<AuthenticatedWorkspace />}
-      >
-        <Route index element={<AppHomePage />} />
+      <Route path="/app" element={<AuthenticatedWorkspace />}>
+        <Route index element={<WorkspaceRouteOutlet />} />
         <Route path="bots" element={<BotsIndexRedirect />} />
-        <Route path="bots/:id" element={<AppHomePage />} />
+        <Route path="bots/:id" element={<WorkspaceRouteOutlet />} />
+        <Route path="groups/:id" element={<WorkspaceRouteOutlet />} />
         <Route path="computers" element={<ComputersPage />} />
         <Route path="routines" element={<RoutinesPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="work" element={<WorkPage />} />
         <Route path="work/:id" element={<WorkDetailPage />} />
         <Route path="results" element={<ResultsPage />} />
+        <Route path="skills" element={<SkillsPage />} />
+        <Route path="skills/:id" element={<SkillDetailPage />} />
+        <Route path="settings" element={<SettingsRedirect />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

@@ -58,6 +58,32 @@ pub fn run() {
             });
 
             tracing::info!(path = %db_path.display(), "database initialized");
+
+            if let Ok(external_url) = std::env::var("ELSEWHERE_DESKTOP_WEBVIEW_URL") {
+                let trimmed = external_url.trim();
+                if !trimmed.is_empty() {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let script = format!(
+                            "window.location.replace({});",
+                            serde_json::to_string(trimmed).unwrap_or_else(|_| "\"\"".to_string())
+                        );
+                        if let Err(error) = window.eval(&script) {
+                            tracing::warn!(
+                                %error,
+                                url = %trimmed,
+                                "ELSEWHERE_DESKTOP_WEBVIEW_URL navigation failed"
+                            );
+                        } else {
+                            tracing::info!(url = %trimmed, "desktop webview navigated to hosted workspace");
+                        }
+                    }
+                }
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_focus();
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
