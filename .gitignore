@@ -46,3 +46,4 @@ tsconfig.tsbuildinfo
 
 # pstack verification proof (keep local; do not commit screenshots)
 .cursor/skills/verify-elsewhere/evidence/
+.agents/skills/verify-elsewhere/evidence/
