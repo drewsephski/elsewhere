@@ -79,9 +79,11 @@ impl AgentComputer for ShellWorkspaceComputer {
 
     async fn exec(&self, command: &str) -> Result<ExecResult, ComputerError> {
         let workspace = self.workspace_root.path().join("workspace");
+        let workspace_str = workspace.to_string_lossy();
+        let rewritten = command.replace("/workspace", workspace_str.as_ref());
         let output = Command::new("bash")
             .arg("-lc")
-            .arg(command)
+            .arg(&rewritten)
             .current_dir(&workspace)
             .output()
             .await
