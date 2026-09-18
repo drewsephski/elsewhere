@@ -39,7 +39,7 @@ function decisionFromApi(decision: "approve" | "deny"): ApprovalTerminalState {
 function labelForStatus(status: ApprovalTerminalState): string {
   switch (status) {
     case "approved":
-      return "Approved";
+      return "Allowed";
     case "denied":
       return "Denied";
     case "cancelled":
@@ -51,6 +51,17 @@ function labelForStatus(status: ApprovalTerminalState): string {
   }
 }
 
+function humanTarget(payload: ApprovalRequestedPayload): string | null {
+  if (payload.connectedAppName) {
+    const tool = payload.connectedToolName ? ` · ${payload.connectedToolName}` : "";
+    return `${payload.connectedAppName}${tool}`;
+  }
+  if (payload.policyActionLabel) {
+    return payload.policyActionLabel;
+  }
+  return null;
+}
+
 export function ApprovalCard({
   payload,
   externalStatus,
@@ -59,6 +70,7 @@ export function ApprovalCard({
   const [status, setStatus] = useState<ApprovalTerminalState>("pending");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (!externalStatus || externalStatus === "pending") {
@@ -79,12 +91,20 @@ export function ApprovalCard({
     setBusy(true);
     try {
       const response = await cloudHostFetch(path, { method: "POST" });
-      if (!response.ok) throw new Error(response.status === 404 ? "This request may have expired or been resolved. Refresh its work to see the latest status." : "Could not update approval. Try again.");
+      if (!response.ok)
+        throw new Error(
+          response.status === 404
+            ? "This request may have expired or been resolved. Refresh to see the latest status."
+            : "Could not update approval. Try again.",
+        );
       const next = decisionFromApi(decision);
       setStatus(next);
       onResolved?.(next);
-    } catch (err) { setError(err instanceof Error ? err.message : "Could not update approval. Try again."); }
-    finally { setBusy(false); }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update approval. Try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handlePersistent(kind: "allow" | "deny") {
@@ -102,7 +122,7 @@ export function ApprovalCard({
       if (!response.ok) {
         throw new Error(
           response.status === 404
-            ? "This request may have expired or been resolved. Refresh its work to see the latest status."
+            ? "This request may have expired or been resolved. Refresh to see the latest status."
             : "Could not update this Bot’s permissions. Try again.",
         );
       }
@@ -121,6 +141,9 @@ export function ApprovalCard({
   const actionLabel = (payload.policyActionLabel ?? payload.tool).toLowerCase();
   const showPersistent = payload.policyOverridable === true;
   const argumentSummary = payload.argumentSummary;
+  const hasDetails =
+    argumentSummary && Object.keys(argumentSummary).length > 0;
+  const target = humanTarget(payload);
 
   return (
     <div
@@ -128,20 +151,33 @@ export function ApprovalCard({
       role="region"
       aria-label="Action approval required"
     >
-      <p className="font-medium text-foreground">Approval required</p>
-      <p className="mt-1 text-foreground/85">{payload.summary}</p>
-      {payload.connectedAppName ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {botName} · {payload.connectedAppName}
-          {payload.connectedToolName ? ` · ${payload.connectedToolName}` : ""}
+      <p className="font-medium text-foreground">Allow this action?</p>
+      <p className="mt-1 text-foreground/90">{payload.summary}</p>
+      {target ? (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">Target:</span> {target}
         </p>
       ) : null}
-      {argumentSummary && Object.keys(argumentSummary).length > 0 ? (
-        <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-background/40 p-2 text-xs text-foreground/80">
-          {JSON.stringify(argumentSummary, null, 2)}
-        </pre>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {botName} will continue after you choose. Nothing runs until you allow it.
+      </p>
+      {hasDetails ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => setDetailsOpen((open) => !open)}
+            aria-expanded={detailsOpen}
+          >
+            {detailsOpen ? "Hide details" : "Show details"}
+          </button>
+          {detailsOpen ? (
+            <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-background/40 p-2 text-xs text-foreground/80">
+              {JSON.stringify(argumentSummary, null, 2)}
+            </pre>
+          ) : null}
+        </div>
       ) : null}
-      <p className="mt-1 text-xs text-muted-foreground">Approve this action once. Your bot will wait for your decision.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -149,7 +185,7 @@ export function ApprovalCard({
           disabled={resolved || busy}
           onClick={() => void handleDecision("approve")}
         >
-          Approve
+          Allow
         </Button>
         <Button
           type="button"

@@ -17,7 +17,7 @@ export const SETTINGS_SECTION_ITEMS: readonly {
   { value: "general", label: "This Bot", botScoped: true },
   { value: "permissions", label: "Permissions", botScoped: true },
   { value: "skills", label: "Skills", botScoped: true },
-  { value: "workspace", label: "Workspace", botScoped: false },
+  { value: "workspace", label: "Team rules", botScoped: false },
   { value: "chatgpt", label: "ChatGPT", botScoped: false },
   { value: "advanced", label: "Advanced", botScoped: true },
 ];

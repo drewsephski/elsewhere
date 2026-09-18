@@ -32,14 +32,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
+import {
+  ChevronLeft,
+  FileText,
+  MessageSquare,
+  PanelRight,
+  Plus,
+  Settings2,
+} from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { botPresetPrompts } from "@/lib/bot-preset-prompts";
 import { BotPresetPrompts } from "./bot-preset-prompts";
-import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
   ComposerAttachmentStrip,
@@ -95,6 +101,7 @@ interface BotConversationViewProps {
   /** Desktop context rail is hidden; show an affordance to bring it back. */
   railCollapsed?: boolean;
   onExpandRail?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export function BotConversationView({
@@ -106,6 +113,7 @@ export function BotConversationView({
   onStreamRunIdChange,
   railCollapsed = false,
   onExpandRail,
+  onOpenSettings,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -114,7 +122,6 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [modelBusy, setModelBusy] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<{
     idempotencyKey: string;
     message: string;
@@ -553,36 +560,6 @@ export function BotConversationView({
     chronologicalRuns.length === 0 &&
     !pendingTurn;
 
-  async function handleModelChange(nextModel: string) {
-    if (!bot || nextModel === bot.model || modelBusy) {
-      return;
-    }
-    const previousModel = bot.model;
-    setModelBusy(true);
-    setBot({ ...bot, model: nextModel });
-    setError(null);
-    try {
-      const response = await cloudHostFetch(`/v1/bots/${bot.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ model: nextModel }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof body.error === "string" ? body.error : "Could not update model",
-        );
-      }
-      const saved = body as BotSummary;
-      setBot(saved);
-      onBotLoaded?.(saved);
-    } catch (err) {
-      setBot((current) => (current ? { ...current, model: previousModel } : current));
-      setError(formatUserFacingError(err, "Could not update model"));
-    } finally {
-      setModelBusy(false);
-    }
-  }
-
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
     const placeholder = /\[[^\]]+\]/.exec(prompt);
@@ -635,16 +612,6 @@ export function BotConversationView({
               {connection ?? "Working"}
             </StatusPill>
           ) : null}
-          {bot ? (
-            <BotModelSelect
-              id="conversation-bot-model"
-              value={bot.model}
-              onValueChange={(next) => void handleModelChange(next)}
-              disabled={modelBusy}
-              compact
-              className="hidden shrink-0 sm:block"
-            />
-          ) : null}
         </div>
         <div className="flex items-center gap-0.5">
           <ComposerIconButton
@@ -655,14 +622,15 @@ export function BotConversationView({
           >
             <MessageSquare className="size-4" aria-hidden />
           </ComposerIconButton>
-          <Link
-            href="/app/computers"
-            className="hidden size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground sm:flex"
-            aria-label="Computer settings"
-            title="Computer settings"
-          >
-            <Monitor className="size-4" />
-          </Link>
+          {onOpenSettings ? (
+            <ComposerIconButton
+              label="Bot settings"
+              className="hidden size-7 sm:flex"
+              onClick={onOpenSettings}
+            >
+              <Settings2 className="size-4" aria-hidden />
+            </ComposerIconButton>
+          ) : null}
           <ComposerIconButton
             label="Bot details"
             className="size-7 lg:hidden"
@@ -934,10 +902,12 @@ export function BotConversationView({
                     <MessageSquare className="size-4" aria-hidden />
                     New chat
                   </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link href="/app/computers" />}>
-                    <Monitor className="size-4" aria-hidden />
-                    Computer settings
-                  </DropdownMenuItem>
+                  {onOpenSettings ? (
+                    <DropdownMenuItem onClick={onOpenSettings}>
+                      <Settings2 className="size-4" aria-hidden />
+                      Bot settings
+                    </DropdownMenuItem>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             }
@@ -966,7 +936,8 @@ export function BotConversationView({
           </ChatComposerFrame>
           {bot && !bot.computerId ? (
             <p className="px-3 text-[11px] text-warning">
-              Assign a computer in bot settings before delegating work.
+              This Bot needs a workspace before it can work. Open Bot settings → Advanced to assign
+              one, or create a new Bot to get one automatically.
             </p>
           ) : null}
           {error || streamError ? (

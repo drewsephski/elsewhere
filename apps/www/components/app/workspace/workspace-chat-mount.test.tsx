@@ -161,7 +161,7 @@ describe("workspace chat mount", () => {
     });
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
-    expect(await screen.findByLabelText("Model")).toBeTruthy();
+    expect(screen.queryByLabelText("Model")).toBeNull();
     const starter = await screen.findByRole("button", { name: "What can you take on?" });
     fireEvent.click(starter);
     expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toContain(

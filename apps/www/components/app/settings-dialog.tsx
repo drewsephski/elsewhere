@@ -1,6 +1,10 @@
 "use client";
 
-import { BotDeleteSettings, BotGeneralSettings } from "@/components/app/bot-settings";
+import {
+  BotAdvancedSettings,
+  BotDeleteSettings,
+  BotGeneralSettings,
+} from "@/components/app/bot-settings";
 import { BotSkillsSettings } from "@/components/app/bot-skills-settings";
 import { PermissionPolicyEditor } from "@/components/app/permission-policy-editor";
 import { ProviderStatusCard } from "@/components/app/provider-status-card";
@@ -125,7 +129,7 @@ export function SettingsDialog({
                 <>
                   <SettingsPanelHeader
                     title="This Bot"
-                    description="Name, role, and avatar. Model and computer live here when you need to change them."
+                    description="How this teammate shows up and what it is responsible for."
                   />
                   <BotGeneralSettings bot={bot} onSaved={onBotSaved} />
                 </>
@@ -169,8 +173,8 @@ export function SettingsDialog({
             {section === "workspace" ? (
               <>
                 <SettingsPanelHeader
-                  title="Workspace"
-                  description="Defaults for all Bots. Individual Bot settings can override these."
+                  title="Team rules"
+                  description="Default permission rules for every Bot. Per-Bot settings can override these."
                 />
                 <PermissionPolicyEditor
                   endpoint="/v1/settings/permission-policies"
@@ -192,10 +196,19 @@ export function SettingsDialog({
 
             {section === "advanced" ? (
               bot ? (
-                <>
-                  <SettingsPanelHeader title="Advanced" />
-                  <BotDeleteSettings bot={bot} onDeleted={onBotDeleted} />
-                </>
+                <div className="space-y-8">
+                  <div>
+                    <SettingsPanelHeader
+                      title="Model & workspace"
+                      description="Power-user options. Most teams can leave these on the defaults."
+                    />
+                    <BotAdvancedSettings bot={bot} onSaved={onBotSaved} />
+                  </div>
+                  <div className="border-t border-border pt-6">
+                    <SettingsPanelHeader title="Delete this Bot" />
+                    <BotDeleteSettings bot={bot} onDeleted={onBotDeleted} />
+                  </div>
+                </div>
               ) : (
                 <BotRequiredNotice />
               )
