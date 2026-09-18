@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import CloudShell from "./cloud-shell";
+import "./shell-globals.css";
 import "../apps/www/app/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
