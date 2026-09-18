@@ -35,20 +35,24 @@ pub fn extract_tarball_files(
     let mut decompressed_total = 0usize;
     for entry in archive.entries().map_err(map_tar_err)? {
         let mut entry = entry.map_err(map_tar_err)?;
-        let path = entry
-            .path()
-            .map_err(map_tar_err)?
-            .into_owned();
-        let path_str = path.to_string_lossy();
-        if path_str.is_empty() {
+        let header = entry.header();
+        let raw_path = header.path().map_err(map_tar_err)?;
+        let raw_path_str = raw_path.to_string_lossy();
+        if raw_path_str.is_empty() {
             continue;
         }
-        if path.is_absolute() || path_str.contains("..") {
+        if raw_path.is_absolute()
+            || raw_path_str.contains("..")
+            || raw_path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             return Err(GithubCodingError::Validation(
                 "repository archive contains unsafe paths".into(),
             ));
         }
-        let header = entry.header();
+        let path = entry.path().map_err(map_tar_err)?.into_owned();
+        let path_str = path.to_string_lossy();
         let entry_type = header.entry_type();
         if entry_type == EntryType::Symlink || entry_type == EntryType::Link {
             return Err(GithubCodingError::Validation(
@@ -144,11 +148,44 @@ mod tests {
         gz
     }
 
+    fn ustar_entry(path: &str, data: &[u8]) -> Vec<u8> {
+        let mut header = [0u8; 512];
+        let path_bytes = path.as_bytes();
+        assert!(path_bytes.len() <= 100, "ustar path too long");
+        header[..path_bytes.len()].copy_from_slice(path_bytes);
+        let size_octal = format!("{:011o}\0", data.len());
+        header[124..124 + 12].copy_from_slice(size_octal.as_bytes());
+        header[156] = b'0';
+        for i in 148..156 {
+            header[i] = b' ';
+        }
+        let cksum: u64 = header.iter().map(|&b| u64::from(b)).sum();
+        let mut cksum_field = [b' '; 8];
+        let cksum_str = format!("{:06o}", cksum);
+        cksum_field[..cksum_str.len()].copy_from_slice(cksum_str.as_bytes());
+        header[148..156].copy_from_slice(&cksum_field);
+        let mut block = Vec::with_capacity(512 + data.len() + (512 - data.len() % 512) % 512 + 512);
+        block.extend_from_slice(&header);
+        block.extend_from_slice(data);
+        let pad = (512 - (data.len() % 512)) % 512;
+        block.extend(vec![0u8; pad]);
+        block.extend([0u8; 512]);
+        block
+    }
+
     #[test]
     fn rejects_parent_traversal() {
-        let archive = build_tar_gz(&[("repo-main/../secret", b"x")]);
-        let err = extract_tarball_files(&archive).expect_err("traversal");
-        assert!(matches!(err, GithubCodingError::Validation(_)));
+        let body = ustar_entry("repo-main/../secret", b"x");
+        let mut gz = Vec::new();
+        let mut enc = flate2::write::GzEncoder::new(&mut gz, Compression::default());
+        enc.write_all(&body).unwrap();
+        enc.finish().unwrap();
+        let err = extract_tarball_files(&gz).expect_err("traversal");
+        assert!(
+            matches!(err, GithubCodingError::Validation(_)),
+            "expected validation error for traversal, got {:?}",
+            err
+        );
     }
 
     #[test]

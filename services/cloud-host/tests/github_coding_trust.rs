@@ -24,3 +24,36 @@ fn workspace_exec_evidence_required() {
     let err = verify_check_commands_from_events(&[], &[String::from("pnpm test")]).expect_err("missing");
     assert!(err.message().contains("not executed"));
 }
+
+#[test]
+fn workspace_exec_failed_check_recorded() {
+    let events = vec![
+        (
+            "tool_call".into(),
+            json!({
+                "tool": "workspace_exec",
+                "callId": "call-lint",
+                "arguments": { "command": "pnpm lint" }
+            }),
+        ),
+        (
+            "tool_result".into(),
+            json!({
+                "tool": "workspace_exec",
+                "callId": "call-lint",
+                "ok": false,
+                "output": json!({
+                    "ok": false,
+                    "exitCode": 2,
+                    "stdout": "",
+                    "stderr": "lint failed"
+                }).to_string()
+            }),
+        ),
+    ];
+    let verified =
+        verify_check_commands_from_events(&events, &[String::from("pnpm lint")]).expect("verified");
+    assert_eq!(verified.len(), 1);
+    assert!(!verified[0].ok);
+    assert_eq!(verified[0].exit_code, 2);
+}

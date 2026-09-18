@@ -303,7 +303,8 @@ async fn github_coding_publish_denied_does_not_hit_github(pool: PgPool) {
     );
 }
 
-async fn mock_publish_apis(server: &MockServer) {
+async fn mock_publish_apis(server: &MockServer, working_branch: &str) {
+    let branch_encoded = urlencoding::encode(working_branch);
     Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/pulls(\?.*)?$"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
@@ -326,13 +327,18 @@ async fn mock_publish_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/refs/heads/elsewhere%2Freadme-fix-run3$"))
+        .and(path_regex(format!(
+            r"/repos/acme/demo/git/refs/heads/{}$",
+            branch_encoded
+        )))
         .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "message": "Not Found" })))
         .mount(server)
         .await;
     Mock::given(method("POST"))
         .and(path_regex(r"/repos/acme/demo/git/refs"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "ref": "refs/heads/elsewhere/readme-fix-run3" })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "ref": format!("refs/heads/{}", working_branch)
+        })))
         .mount(server)
         .await;
     Mock::given(method("POST"))
@@ -350,7 +356,8 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
     let server = MockServer::start().await;
     let tarball = minimal_tarball_with_readme();
     mock_github_api(&server, tarball).await;
-    mock_publish_apis(&server).await;
+    let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-3");
+    mock_publish_apis(&server, &working_branch).await;
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
     let secret = test_secret_box();
     upsert_github_app_credential(
@@ -494,4 +501,416 @@ async fn github_coding_rejects_forged_check_payload(pool: PgPool) {
     .await
     .expect_err("forged");
     assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_publish_without_review_rejected(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-noreview".into(),
+        request_id: "req-noreview".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Hello from Elsewhere",
+        )
+        .await
+        .unwrap();
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("no review");
+    assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
+    let posts = server.received_requests().await.unwrap_or_default();
+    assert!(!posts.iter().any(|r| r.method.as_str() == "POST"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-stale".into(),
+        request_id: "req-stale".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Hello from Elsewhere",
+        )
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Changed again after review",
+        )
+        .await
+        .unwrap();
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("stale fingerprint");
+    let msg = err.message();
+    assert!(
+        msg.contains("Files changed after review"),
+        "unexpected error: {msg}"
+    );
+    let posts = server.received_requests().await.unwrap_or_default();
+    assert!(!posts.iter().any(|r| r.method.as_str() == "POST"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_base_drift_blocks_publish(pool: PgPool) {
+    let server = MockServer::start().await;
+    let tarball = minimal_tarball_with_readme();
+    mock_github_api(&server, tarball).await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": "base_sha_abc123" }
+        })))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/ref/heads/main"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": "base_sha_moved_forward" }
+        })))
+        .mount(&server)
+        .await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-drift".into(),
+        request_id: "req-drift".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Hello from Elsewhere",
+        )
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("base drift");
+    assert!(
+        err.message().contains("repository changed on GitHub"),
+        "got {:?}",
+        err
+    );
+    let posts = server.received_requests().await.unwrap_or_default();
+    assert!(
+        !posts
+            .iter()
+            .any(|r| r.method.as_str() == "POST" && r.url.path().contains("/git/")),
+        "must not mutate git objects when base drifted"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_session_survives_service_reconstruction(pool: PgPool) {
+    let server = MockServer::start().await;
+    let tarball = minimal_tarball_with_readme();
+    mock_github_api(&server, tarball).await;
+    let working_branch =
+        cloud_host::github_coding::working_branch("readme-fix", "run-reload");
+    mock_publish_apis(&server, &working_branch).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors.clone(), github.clone());
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-reload".into(),
+        request_id: "req-reload".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Hello from Elsewhere",
+        )
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+
+    let coding_reloaded = coding_service(pool.clone(), connectors, github);
+    let published = dispatch_github_coding_tool(
+        Some(&coding_reloaded),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello from Elsewhere"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("publish after reload");
+    assert_eq!(
+        published
+            .get("pullRequest")
+            .and_then(|v| v.get("number"))
+            .and_then(|v| v.as_u64()),
+        Some(42)
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_revoked_install_blocks_publish(pool: PgPool) {
+    let server = MockServer::start().await;
+    let tarball = minimal_tarball_with_readme();
+    mock_github_api(&server, tarball).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github.clone());
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-revoke".into(),
+        request_id: "req-revoke".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(
+            "/workspace/repos/acme/demo/README.md",
+            b"Hello from Elsewhere",
+        )
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+
+    server.reset().await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/user/installations$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "total_count": 0,
+            "installations": []
+        })))
+        .mount(&server)
+        .await;
+
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("revoked");
+    assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
+    let posts = server.received_requests().await.unwrap_or_default();
+    assert!(!posts.iter().any(|r| r.method.as_str() == "POST"));
 }
