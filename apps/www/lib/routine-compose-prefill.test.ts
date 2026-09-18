@@ -6,11 +6,10 @@ const bots: BotSummary[] = [
   {
     id: "bot-a",
     name: "Scout",
-    role: "",
+    instructions: "Helpful",
     model: "gpt-5.6-luna",
     computerId: "comp-a",
-    engine: "codex",
-    avatarSlug: "sky-wisp",
+    enginePreference: "codex",
     learnFromConversations: false,
   },
 ];
