@@ -7,6 +7,11 @@ describe("appShellNavLinks", () => {
     expect(appShellNavLinks.map((link) => link.label)).not.toContain("Settings");
     expect(appShellNavLinks.map((link) => link.href)).not.toContain(appRoutes.settings);
   });
+
+  it("does not expose Channels in management navigation", () => {
+    expect(appShellNavLinks.map((link) => link.label)).not.toContain("Channels");
+    expect(appShellNavLinks.map((link) => link.href)).not.toContain(appRoutes.channels);
+  });
 });
 
 describe("parseSettingsSection", () => {

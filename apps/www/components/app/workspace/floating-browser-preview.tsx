@@ -12,8 +12,8 @@ import {
 } from "@/lib/browser-preview-pip";
 import { cn } from "cn";
 import {
-  ArrowUpRight,
   GripVertical,
+  Maximize2,
   PanelRight,
   RefreshCw,
   X,
@@ -244,7 +244,7 @@ export function FloatingBrowserPreview() {
                 aria-label="Open computer"
                 title="Open computer"
               >
-                <ArrowUpRight className="size-3.5" aria-hidden />
+                <Maximize2 className="size-3.5" aria-hidden />
               </Button>
             ) : null}
             <Button

@@ -82,4 +82,15 @@ describe("BrowserPreviewView dock/float", () => {
     fireEvent.click(screen.getByRole("button", { name: "Float preview over chat" }));
     expect(openPip).toHaveBeenCalledTimes(1);
   });
+
+  it("places expand on the live screen, separate from the float control", () => {
+    previewState.pipOpen = false;
+    render(<BrowserPreviewView variant="embedded" />);
+    const expand = screen.getByRole("button", { name: "Expand preview" });
+    const float = screen.getByRole("button", { name: "Float preview over chat" });
+    expect(expand).toBeTruthy();
+    expect(float).toBeTruthy();
+    expect(expand).not.toBe(float);
+    expect(expand.textContent).toContain("Expand");
+  });
 });

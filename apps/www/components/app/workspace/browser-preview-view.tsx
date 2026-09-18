@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "cn";
-import { ArrowUpRight, Monitor, PanelRight } from "@/components/icons/lucide";
+import { Maximize2, Monitor, PictureInPicture2 } from "@/components/icons/lucide";
 import { forwardRef, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
 
 export type BrowserPreviewVariant = "embedded" | "floating" | "work";
@@ -150,28 +150,18 @@ function PreviewChrome({
   );
 }
 
-function OverlayIconButton({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
+function ExpandPreviewOverlay() {
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onClick();
-      }}
-      aria-label={label}
-      title={label}
-      className="flex size-6 items-center justify-center rounded-md bg-black/55 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/75 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+    <div
+      className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
+      aria-hidden
     >
-      {children}
-    </button>
+      <span className="absolute inset-0 bg-black/45" />
+      <span className="relative flex items-center gap-2 rounded-full bg-white/95 px-5 py-3 text-sm font-medium text-zinc-950 shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5">
+        <Maximize2 className="size-5" />
+        Expand
+      </span>
+    </div>
   );
 }
 
@@ -418,7 +408,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     <>
       <div
         className={cn(
-          isEmbedded ? "group/screen relative" : "space-y-2",
+          isEmbedded ? "relative" : "space-y-2",
           isWork && "mx-auto w-full max-w-xs sm:max-w-sm",
           className,
         )}
@@ -452,7 +442,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
                 title="Float preview over chat"
                 className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                <PanelRight className="size-3.5" aria-hidden />
+                <PictureInPicture2 className="size-3.5" aria-hidden />
               </button>
             ) : null}
           </div>
@@ -467,7 +457,13 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           )}
           onClick={handleOpenDialog}
           disabled={!hasImage || humanControl.humanActive}
-          aria-label={hasImage ? "Open expanded browser preview" : "Browser preview placeholder"}
+          aria-label={
+            hasImage
+              ? isEmbedded
+                ? "Expand preview"
+                : "Open expanded browser preview"
+              : "Browser preview placeholder"
+          }
         >
           <PreviewChrome
             frame={frame}
@@ -491,23 +487,16 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               busy={humanClickBusy}
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
-            {hasImage ? (
+            {hasImage && !(isEmbedded && !humanControl.humanActive) ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
                 <p className="truncate text-[10px] text-white/85">
                   {frame?.title || host || "Live page"}
                 </p>
               </div>
             ) : null}
+            {isEmbedded && hasImage && !humanControl.humanActive ? <ExpandPreviewOverlay /> : null}
           </PreviewChrome>
         </button>
-
-        {isEmbedded && hasImage ? (
-          <div className="absolute top-2 right-2 z-[3] flex items-center gap-1 opacity-0 transition-opacity group-hover/screen:opacity-100 focus-within:opacity-100">
-            <OverlayIconButton label="Expand preview" onClick={handleOpenDialog}>
-              <ArrowUpRight className="size-3.5" aria-hidden />
-            </OverlayIconButton>
-          </div>
-        ) : null}
 
         {caption}
 

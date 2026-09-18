@@ -15,5 +15,6 @@ describe("AppShellNav", () => {
     expect(screen.getByRole("link", { name: "Back to chat" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Work" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Settings" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Channels" })).toBeNull();
   });
 });

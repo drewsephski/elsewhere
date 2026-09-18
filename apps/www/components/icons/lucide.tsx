@@ -37,11 +37,13 @@ import { GripVerticalIcon } from "./grip-vertical";
 import { LoaderCircleIcon } from "./loader-circle";
 import { LogoutIcon } from "./logout";
 import { MapPinOffIcon } from "./map-pin-off";
+import { Maximize2Icon } from "./maximize-2";
 import { MenuIcon } from "./menu";
 import { CirclePlus, CirclePlusIcon } from "./circle-plus-static";
 import { MessageSquareIcon } from "./message-square";
 import { MonitorCheckIcon } from "./monitor-check";
 import { PanelRightOpenIcon } from "./panel-right-open";
+import { PictureInPicture2Icon } from "./picture-in-picture-2";
 import { PauseIcon } from "./pause";
 import { PlayIcon } from "./play";
 import { PlugZapIcon } from "./plug-zap";
@@ -80,9 +82,11 @@ const GripVertical = adaptAnimatedIcon(GripVerticalIcon);
 const Info = adaptAnimatedIcon(CircleHelpIcon);
 const Loader2 = createSpinningIcon(LoaderCircleIcon);
 const LogOut = adaptAnimatedIcon(LogoutIcon);
+const Maximize2 = adaptAnimatedIcon(Maximize2Icon);
 const Monitor = adaptAnimatedIcon(MonitorCheckIcon);
 const MoreHorizontal = adaptAnimatedIcon(MenuIcon);
 const PanelRight = adaptAnimatedIcon(PanelRightOpenIcon);
+const PictureInPicture2 = adaptAnimatedIcon(PictureInPicture2Icon);
 const Pause = adaptAnimatedIcon(PauseIcon);
 const Play = adaptAnimatedIcon(PlayIcon);
 const Plug = adaptAnimatedIcon(PlugZapIcon);
@@ -165,11 +169,15 @@ export {
   LoaderCircleIcon,
   LogOut,
   LogoutIcon,
+  Maximize2,
+  Maximize2Icon,
   Monitor,
   MonitorCheckIcon,
   MoreHorizontal,
   PanelRight,
   PanelRightOpenIcon,
+  PictureInPicture2,
+  PictureInPicture2Icon,
   Pause,
   PauseIcon,
   PinOff,
