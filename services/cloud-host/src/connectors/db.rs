@@ -3,9 +3,18 @@ use serde_json::Value;
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::connectors::github_client::GitHubCredential;
 use crate::error::ApiError;
 
 pub const PROVIDER_GITHUB: &str = "github";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitHubCredentialLoad {
+    Missing,
+    Legacy,
+    ReconnectRequired,
+    App(GitHubCredential),
+}
 
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct ConnectorRow {
@@ -111,6 +120,87 @@ pub async fn upsert_connected(
         .ok_or(ApiError::Internal("connector missing after upsert".into()))
 }
 
+pub async fn upsert_github_app_credential(
+    pool: &PgPool,
+    owner_id: &str,
+    metadata: &Value,
+    credential: &GitHubCredential,
+    secret_box: &crate::connectors::secret::ConnectorSecretBox,
+) -> Result<ConnectorRow, ApiError> {
+    let plaintext = credential.to_plaintext().map_err(ApiError::Internal)?;
+    upsert_connected(
+        pool,
+        owner_id,
+        PROVIDER_GITHUB,
+        metadata,
+        &plaintext,
+        secret_box,
+    )
+    .await
+}
+
+pub async fn replace_connector_secret(
+    pool: &PgPool,
+    owner_id: &str,
+    provider: &str,
+    plaintext: &str,
+    secret_box: &crate::connectors::secret::ConnectorSecretBox,
+) -> Result<bool, ApiError> {
+    let (nonce, ciphertext) = secret_box.encrypt(plaintext).map_err(ApiError::Internal)?;
+    let now = Utc::now();
+    let connector_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM owner_connectors WHERE owner_id = $1 AND provider = $2")
+            .bind(owner_id)
+            .bind(provider)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let Some(connector_id) = connector_id else {
+        return Ok(false);
+    };
+    sqlx::query(
+        r#"
+        INSERT INTO owner_connector_secrets (connector_id, ciphertext, nonce, updated_at)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (connector_id) DO UPDATE
+        SET ciphertext = EXCLUDED.ciphertext,
+            nonce = EXCLUDED.nonce,
+            updated_at = EXCLUDED.updated_at
+        "#,
+    )
+    .bind(connector_id)
+    .bind(ciphertext)
+    .bind(nonce)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(true)
+}
+
+pub async fn mark_reconnect_required(
+    pool: &PgPool,
+    owner_id: &str,
+    provider: &str,
+) -> Result<bool, ApiError> {
+    let now = Utc::now();
+    let result = sqlx::query(
+        r#"
+        UPDATE owner_connectors
+        SET status = 'reconnect_required',
+            updated_at = $3
+        WHERE owner_id = $1 AND provider = $2 AND status <> 'disconnected'
+        "#,
+    )
+    .bind(owner_id)
+    .bind(provider)
+    .bind(now)
+    .execute(pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(result.rows_affected() > 0)
+}
+
 pub async fn disconnect(pool: &PgPool, owner_id: &str, provider: &str) -> Result<bool, ApiError> {
     let now = Utc::now();
     let mut tx = pool
@@ -186,6 +276,71 @@ pub async fn load_access_token(
         .decrypt(&nonce, &ciphertext)
         .map_err(|e| ApiError::Internal(e))?;
     Ok(Some(token))
+}
+
+pub async fn load_github_credential(
+    pool: &PgPool,
+    owner_id: &str,
+    secret_box: &crate::connectors::secret::ConnectorSecretBox,
+) -> Result<GitHubCredentialLoad, ApiError> {
+    let row: Option<(Vec<u8>, Vec<u8>, String)> = sqlx::query_as(
+        r#"
+        SELECT s.nonce, s.ciphertext, c.status
+        FROM owner_connectors c
+        JOIN owner_connector_secrets s ON s.connector_id = c.id
+        WHERE c.owner_id = $1 AND c.provider = $2
+        "#,
+    )
+    .bind(owner_id)
+    .bind(PROVIDER_GITHUB)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let Some((nonce, ciphertext, status)) = row else {
+        return Ok(GitHubCredentialLoad::Missing);
+    };
+    if status == "reconnect_required" {
+        return Ok(GitHubCredentialLoad::ReconnectRequired);
+    }
+    if status != "connected" {
+        return Ok(GitHubCredentialLoad::Missing);
+    }
+    let plaintext = secret_box
+        .decrypt(&nonce, &ciphertext)
+        .map_err(ApiError::Internal)?;
+    match GitHubCredential::from_plaintext(&plaintext) {
+        Some(credential) => Ok(GitHubCredentialLoad::App(credential)),
+        None => Ok(GitHubCredentialLoad::Legacy),
+    }
+}
+
+pub async fn decrypt_connector_secret(
+    pool: &PgPool,
+    owner_id: &str,
+    provider: &str,
+    secret_box: &crate::connectors::secret::ConnectorSecretBox,
+) -> Result<Option<String>, ApiError> {
+    let row: Option<(Vec<u8>, Vec<u8>)> = sqlx::query_as(
+        r#"
+        SELECT s.nonce, s.ciphertext
+        FROM owner_connectors c
+        JOIN owner_connector_secrets s ON s.connector_id = c.id
+        WHERE c.owner_id = $1 AND c.provider = $2
+        "#,
+    )
+    .bind(owner_id)
+    .bind(provider)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let Some((nonce, ciphertext)) = row else {
+        return Ok(None);
+    };
+    let plaintext = secret_box
+        .decrypt(&nonce, &ciphertext)
+        .map_err(ApiError::Internal)?;
+    Ok(Some(plaintext))
 }
 
 pub async fn store_oauth_state(

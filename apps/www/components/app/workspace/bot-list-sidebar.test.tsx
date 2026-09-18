@@ -102,4 +102,14 @@ describe("BotListSidebar", () => {
       expect(onRenameGroup).toHaveBeenCalledWith("group_1", "Launch desk");
     });
   });
+
+  it("places the sliding selection highlight on the selected bot", () => {
+    renderSidebar();
+    const selected = screen.getByRole("link", { current: "page" });
+    expect(selected.getAttribute("href")).toBe("/app/bots/bot_1");
+    expect(selected.querySelector("[data-sidebar-selection]")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Launch crew/ }).querySelector("[data-sidebar-selection]"),
+    ).toBeNull();
+  });
 });

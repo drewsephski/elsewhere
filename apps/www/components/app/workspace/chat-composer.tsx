@@ -142,7 +142,7 @@ export const ChatComposerTextarea = forwardRef<HTMLTextAreaElement, ChatComposer
         rows={rows}
         onKeyDown={handleKeyDown}
         className={cn(
-          "max-h-40 min-h-8 w-full resize-none bg-transparent px-1.5 py-1.5 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60",
+          "field-sizing-content max-h-40 min-h-8 w-full resize-none bg-transparent px-1.5 py-1.5 text-[13px] leading-5 text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60",
           className,
         )}
         {...props}

@@ -16,7 +16,7 @@ pub fn connector_openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "name": "github_list_repositories",
-            "description": "List repositories visible to the connected GitHub account. Read-only.",
+            "description": "List repositories authorized through the connected GitHub App installations. Read-only.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -31,7 +31,7 @@ pub fn connector_openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "name": "github_search_repositories",
-            "description": "Search GitHub repositories. Read-only.",
+            "description": "Search repositories authorized through the connected GitHub App installations. Read-only.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -521,6 +521,17 @@ mod tests {
             .map(|v| v.get("name").and_then(|n| n.as_str()).unwrap().to_string())
             .collect();
         assert!(names.contains(&"github_list_repositories".to_string()));
+        for name in [
+            "github_search_repositories",
+            "github_get_repository",
+            "github_get_file_contents",
+            "github_list_issues",
+            "github_get_issue",
+            "github_list_pull_requests",
+            "github_get_pull_request",
+        ] {
+            assert!(names.contains(&name.to_string()), "{name}");
+        }
         assert_eq!(
             names
                 .iter()

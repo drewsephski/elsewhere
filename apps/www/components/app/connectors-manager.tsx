@@ -37,6 +37,14 @@ import { Plus } from "@/components/icons/lucide";
 import type { StatusTone } from "@/components/app/status-pill";
 import { toast } from "sonner";
 
+interface GithubInstallationSummary {
+  id: number;
+  accountLogin: string;
+  accountId: number;
+  accountType: string;
+  repositorySelection: string;
+}
+
 interface GithubSummary {
   provider: string;
   status: string;
@@ -44,6 +52,14 @@ interface GithubSummary {
     login?: string;
     name?: string;
     avatarUrl?: string;
+    githubUser?: {
+      login?: string;
+      userId?: number;
+      name?: string;
+      avatarUrl?: string;
+    };
+    installations?: GithubInstallationSummary[];
+    authorizedRepositoryCount?: number;
   };
   connectedAt?: string | null;
   updatedAt: string;
@@ -81,6 +97,36 @@ function connectionStatus(connected: boolean): { label: string; tone: StatusTone
   return connected
     ? { label: "Connected", tone: "success" }
     : { label: "Not connected", tone: "neutral" };
+}
+
+function githubCardStatus(github: GithubSummary | null): { label: string; tone: StatusTone } {
+  if (github?.status === "connected") {
+    return { label: "Connected", tone: "success" };
+  }
+  if (github?.status === "reconnect_required") {
+    return { label: "Reconnect", tone: "warning" };
+  }
+  return { label: "Not connected", tone: "neutral" };
+}
+
+function githubUserLogin(github: GithubSummary | null): string | undefined {
+  return github?.metadata?.githubUser?.login ?? github?.metadata?.login;
+}
+
+function githubInstalledOn(installations?: GithubInstallationSummary[]): string | null {
+  if (!installations?.length) {
+    return null;
+  }
+  return installations
+    .map((install) => {
+      if (install.accountType === "Organization") {
+        return install.accountLogin;
+      }
+      return install.accountLogin
+        ? `personal account (@${install.accountLogin})`
+        : "personal account";
+    })
+    .join(", ");
 }
 
 function installStatus(install: InstallSummary): { label: string; tone: StatusTone } {
@@ -163,7 +209,7 @@ export function ConnectorsManager() {
         method: "POST",
       });
       if (!response.ok) {
-        setError("GitHub OAuth is not available. Check host configuration.");
+        setError("GitHub App is not available. Check host configuration.");
         return;
       }
       const body = (await response.json()) as { authorizeUrl: string };
@@ -328,8 +374,11 @@ export function ConnectorsManager() {
   }
 
   const githubConnected = github?.status === "connected";
+  const githubNeedsReconnect = github?.status === "reconnect_required";
+  const githubLogin = githubUserLogin(github);
+  const githubInstalled = githubInstalledOn(github?.metadata?.installations);
   const slackConnected = slack?.status === "connected";
-  const githubStatus = connectionStatus(githubConnected);
+  const githubStatus = githubCardStatus(github);
   const slackStatus = connectionStatus(slackConnected);
 
   return (
@@ -383,16 +432,45 @@ export function ConnectorsManager() {
                   statusLabel={githubStatus.label}
                   statusTone={githubStatus.tone}
                   meta={
-                    githubConnected && github?.metadata?.login ? (
-                      <span>
-                        Connected as{" "}
-                        <span className="font-medium">@{github.metadata.login}</span>
-                        {github.metadata.name ? ` (${github.metadata.name})` : null}
-                      </span>
+                    githubLogin || githubInstalled || github?.metadata?.authorizedRepositoryCount != null ? (
+                      <div className="space-y-1">
+                        {githubLogin ? (
+                          <p>
+                            Connected as{" "}
+                            <span className="font-medium">@{githubLogin}</span>
+                          </p>
+                        ) : null}
+                        {githubInstalled ? <p>Installed on: {githubInstalled}</p> : null}
+                        {github?.metadata?.authorizedRepositoryCount != null ? (
+                          <p>
+                            Repositories: {github.metadata.authorizedRepositoryCount} authorized
+                          </p>
+                        ) : null}
+                      </div>
                     ) : null
                   }
                   actions={
-                    githubConnected ? (
+                    githubNeedsReconnect ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void handleConnectGithub()}
+                        >
+                          Reconnect GitHub
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => void handleDisconnectGithub()}
+                        >
+                          Disconnect
+                        </Button>
+                      </>
+                    ) : githubConnected ? (
                       <Button
                         type="button"
                         size="sm"

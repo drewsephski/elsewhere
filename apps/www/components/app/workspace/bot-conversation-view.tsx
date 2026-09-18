@@ -23,7 +23,6 @@ import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { archiveWorkRun, canArchiveWorkRun } from "@/lib/archive-work-run";
-import { instructionPreview } from "@/lib/format";
 import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill } from "@/components/app/status-pill";
 import { useActiveRun } from "@/contexts/active-run-context";
@@ -529,7 +528,19 @@ export function BotConversationView({
 
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
-    composerRef.current?.focus();
+    const placeholder = /\[[^\]]+\]/.exec(prompt);
+    window.setTimeout(() => {
+      const el = composerRef.current;
+      if (!el) {
+        return;
+      }
+      el.focus();
+      if (placeholder && placeholder.index !== undefined) {
+        el.setSelectionRange(placeholder.index, placeholder.index + placeholder[0].length);
+        return;
+      }
+      el.setSelectionRange(el.value.length, el.value.length);
+    }, 0);
   }
 
   return (
@@ -608,9 +619,13 @@ export function BotConversationView({
         <div
           ref={scrollRef}
           onScroll={handleConversationScroll}
-          className="h-full min-h-0 overflow-y-auto px-3 py-4 sm:px-5"
+          className="h-full min-h-0 overflow-y-auto"
         >
-        <div className="mx-auto flex max-w-3xl flex-col gap-5">
+        <div
+          className={`mx-auto flex min-h-full max-w-3xl flex-col gap-5 px-3 py-4 sm:px-5 ${
+            showPresetPrompts ? "justify-center" : ""
+          }`}
+        >
           {!conversationLoading
             ? chronologicalRuns.map((run) => {
             const isLive = run.runId === streamRunId;
@@ -777,7 +792,7 @@ export function BotConversationView({
           ) : null}
 
           {!conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
-            <div className="mx-auto flex max-w-sm flex-col items-center px-6 py-16 text-center">
+            <div className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-6 text-center">
               <BotCreatureAvatar
                 name={bot?.name ?? "Bot"}
                 avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
@@ -786,10 +801,14 @@ export function BotConversationView({
               <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
                 {bot?.name ? `What should ${bot.name} work on?` : "What should this Bot work on?"}
               </p>
-              {bot?.instructions ? (
-                <p className="mt-1.5 max-w-xs text-[13px] leading-relaxed text-muted-foreground">
-                  {instructionPreview(bot.instructions)}
-                </p>
+              {showPresetPrompts ? (
+                <div className="mt-5 w-full">
+                  <BotPresetPrompts
+                    prompts={presetPrompts}
+                    onSelect={handleSelectPreset}
+                    disabled={pending}
+                  />
+                </div>
               ) : null}
             </div>
           ) : null}
@@ -800,13 +819,6 @@ export function BotConversationView({
 
       <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
         <div className="mx-auto max-w-3xl space-y-2">
-          {showPresetPrompts ? (
-            <BotPresetPrompts
-              prompts={presetPrompts}
-              onSelect={handleSelectPreset}
-              disabled={pending}
-            />
-          ) : null}
           <ChatComposerFrame
             onSubmit={(event) => void handleSubmit(event)}
             canSend={canSend}

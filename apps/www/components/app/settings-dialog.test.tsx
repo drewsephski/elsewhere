@@ -89,6 +89,24 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
   });
 
+  it("fills name and instructions from a newly selected avatar", () => {
+    renderDialog("general");
+    fireEvent.click(screen.getByRole("radio", { name: /Writer/ }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Writer");
+    expect(
+      (screen.getByLabelText("Role and instructions") as HTMLTextAreaElement).value,
+    ).toContain("writing specialist");
+  });
+
+  it("keeps a custom name when the already selected avatar is clicked again", () => {
+    renderDialog("general");
+    fireEvent.click(screen.getByRole("radio", { name: /Chief of Staff/ }));
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("Researcher");
+    expect(
+      (screen.getByLabelText("Role and instructions") as HTMLTextAreaElement).value,
+    ).toBe("Research, compare sources, and deliver a concise result.");
+  });
+
   it("notifies the parent when switching sections", () => {
     const onSectionChange = vi.fn();
     renderDialog("general", onSectionChange);

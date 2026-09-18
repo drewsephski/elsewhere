@@ -1,12 +1,20 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use agent_core::{AgentConnectors, ConnectorError};
 use async_trait::async_trait;
+use chrono::Utc;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 
-use super::db::{load_access_token, PROVIDER_GITHUB};
-use super::github_client::GitHubClient;
+use super::db::{
+    load_github_credential, mark_reconnect_required, replace_connector_secret,
+    GitHubCredentialLoad, PROVIDER_GITHUB,
+};
+use super::github_client::{
+    GitHubClient, GitHubCredential, GitHubInstallation, GitHubRefreshError,
+};
 use super::installs::{
     get_tool_for_owner, list_tools_for_owner, load_secret, store_secret, update_install_status,
     InstallRow, InstallToolRow, StoredSecret,
@@ -19,17 +27,39 @@ use super::redact::{redact_value, secrets_from_stored};
 use super::remote::{RemoteHttpClient, RemotePolicy};
 use super::secret::ConnectorSecretBox;
 use crate::bounded_text::truncate_utf8_bytes;
+use crate::redact::redact_secrets;
 use agent_core::{
     truncate_connector_tool_result, ConnectorToolDefinition, MAX_CONNECTED_APP_DESCRIPTION_CHARS,
     MAX_CONNECTED_APP_SEARCH_LIMIT,
 };
 use uuid::Uuid;
 
+const CATALOG_TTL: Duration = Duration::from_secs(30);
+const UNAUTHORIZED_REPO_MESSAGE: &str =
+    "GitHub repository is not in the authorized installation set";
+
+#[derive(Clone)]
+pub(crate) struct AuthorizedRepository {
+    owner: String,
+    name: String,
+    full_name: String,
+    description: Option<String>,
+    private: bool,
+    payload: Value,
+}
+
+#[derive(Clone)]
+struct CachedCatalog {
+    fetched_at: Instant,
+    repos: Vec<AuthorizedRepository>,
+}
+
 pub struct PostgresAgentConnectors {
     pool: PgPool,
     secret_box: Arc<ConnectorSecretBox>,
     github: GitHubClient,
     remote: RemoteHttpClient,
+    catalogs: Mutex<HashMap<String, CachedCatalog>>,
 }
 
 impl PostgresAgentConnectors {
@@ -61,7 +91,14 @@ impl PostgresAgentConnectors {
             secret_box,
             github,
             remote,
+            catalogs: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn invalidate_github_catalog(&self, owner_id: &str) {
+        if let Ok(mut catalogs) = self.catalogs.lock() {
+            catalogs.remove(owner_id);
+        }
     }
 }
 
@@ -78,12 +115,9 @@ impl AgentConnectors for PostgresAgentConnectors {
                 "unknown connector tool: {tool_name}"
             )));
         }
-        let token = load_access_token(&self.pool, owner_id, PROVIDER_GITHUB, &self.secret_box)
-            .await
-            .map_err(|e| ConnectorError::Internal(e.to_string()))?
-            .ok_or(ConnectorError::NotConnected)?;
-
-        dispatch_github_tool(&self.github, &token, tool_name, arguments).await
+        let token = self.github_access_token(owner_id).await?;
+        let catalog = self.authorized_catalog(owner_id, &token).await?;
+        dispatch_github_tool(&self.github, &token, &catalog, tool_name, arguments).await
     }
 
     async fn search_connected_app_tools(
@@ -226,6 +260,222 @@ impl AgentConnectors for PostgresAgentConnectors {
     }
 }
 
+impl PostgresAgentConnectors {
+    async fn github_access_token(&self, owner_id: &str) -> Result<String, ConnectorError> {
+        let loaded = load_github_credential(&self.pool, owner_id, &self.secret_box)
+            .await
+            .map_err(|e| ConnectorError::Internal(e.to_string()))?;
+        match loaded {
+            GitHubCredentialLoad::Missing => Err(ConnectorError::NotConnected),
+            GitHubCredentialLoad::ReconnectRequired => Err(ConnectorError::ReconnectRequired),
+            GitHubCredentialLoad::Legacy => {
+                let _ = mark_reconnect_required(&self.pool, owner_id, PROVIDER_GITHUB).await;
+                self.invalidate_github_catalog(owner_id);
+                Err(ConnectorError::ReconnectRequired)
+            }
+            GitHubCredentialLoad::App(credential) => {
+                self.refresh_if_needed(owner_id, credential).await
+            }
+        }
+    }
+
+    async fn refresh_if_needed(
+        &self,
+        owner_id: &str,
+        credential: GitHubCredential,
+    ) -> Result<String, ConnectorError> {
+        let now = Utc::now();
+        if credential.access_token_is_fresh(now) {
+            return Ok(credential.access_token);
+        }
+        if !credential.refresh_token_is_valid(now) {
+            let _ = mark_reconnect_required(&self.pool, owner_id, PROVIDER_GITHUB).await;
+            self.invalidate_github_catalog(owner_id);
+            return Err(ConnectorError::ReconnectRequired);
+        }
+        match self
+            .github
+            .refresh_user_token(&credential.refresh_token)
+            .await
+        {
+            Ok(token) => {
+                let next = GitHubCredential::from_user_token(token, Utc::now());
+                let plaintext = next.to_plaintext().map_err(ConnectorError::Internal)?;
+                replace_connector_secret(
+                    &self.pool,
+                    owner_id,
+                    PROVIDER_GITHUB,
+                    &plaintext,
+                    &self.secret_box,
+                )
+                .await
+                .map_err(|e| ConnectorError::Internal(e.to_string()))?;
+                Ok(next.access_token)
+            }
+            Err(GitHubRefreshError::InvalidGrant) | Err(GitHubRefreshError::NotConfigured) => {
+                let _ = mark_reconnect_required(&self.pool, owner_id, PROVIDER_GITHUB).await;
+                self.invalidate_github_catalog(owner_id);
+                Err(ConnectorError::ReconnectRequired)
+            }
+            Err(GitHubRefreshError::Provider(message)) => {
+                Err(ConnectorError::Provider(redact_secrets(&message)))
+            }
+        }
+    }
+
+    async fn authorized_catalog(
+        &self,
+        owner_id: &str,
+        token: &str,
+    ) -> Result<Vec<AuthorizedRepository>, ConnectorError> {
+        if let Ok(catalogs) = self.catalogs.lock() {
+            if let Some(cached) = catalogs.get(owner_id) {
+                if cached.fetched_at.elapsed() < CATALOG_TTL {
+                    return Ok(cached.repos.clone());
+                }
+            }
+        }
+        let repos = fetch_authorized_repositories(&self.github, token).await?;
+        if let Ok(mut catalogs) = self.catalogs.lock() {
+            catalogs.insert(
+                owner_id.to_string(),
+                CachedCatalog {
+                    fetched_at: Instant::now(),
+                    repos: repos.clone(),
+                },
+            );
+        }
+        Ok(repos)
+    }
+}
+
+pub(crate) async fn fetch_authorized_repositories(
+    github: &GitHubClient,
+    token: &str,
+) -> Result<Vec<AuthorizedRepository>, ConnectorError> {
+    let installations = github
+        .list_user_installations(token)
+        .await
+        .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
+    collect_authorized_repositories(github, token, &installations).await
+}
+
+pub(crate) async fn collect_authorized_repositories(
+    github: &GitHubClient,
+    token: &str,
+    installations: &[GitHubInstallation],
+) -> Result<Vec<AuthorizedRepository>, ConnectorError> {
+    let mut repos = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for installation in installations {
+        let values = github
+            .list_installation_repositories(token, installation.id)
+            .await
+            .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
+        for payload in values {
+            let parsed = match authorized_repository_from_payload(payload) {
+                Some(repo) => repo,
+                None => continue,
+            };
+            let key = repo_key(&parsed.owner, &parsed.name);
+            if seen.insert(key) {
+                repos.push(parsed);
+            }
+        }
+    }
+    Ok(repos)
+}
+
+fn authorized_repository_from_payload(payload: Value) -> Option<AuthorizedRepository> {
+    let full_name = payload
+        .get("full_name")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .or_else(|| {
+            let owner = payload
+                .get("owner")
+                .and_then(|v| v.get("login"))
+                .and_then(|v| v.as_str())?;
+            let name = payload.get("name").and_then(|v| v.as_str())?;
+            Some(format!("{owner}/{name}"))
+        })?;
+    let (owner, name) = split_full_name(&full_name)?;
+    Some(AuthorizedRepository {
+        owner,
+        name,
+        full_name,
+        description: payload
+            .get("description")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        private: payload
+            .get("private")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        payload,
+    })
+}
+
+fn split_full_name(full_name: &str) -> Option<(String, String)> {
+    let (owner, name) = full_name.split_once('/')?;
+    if owner.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some((owner.to_string(), name.to_string()))
+}
+
+fn repo_key(owner: &str, name: &str) -> String {
+    format!(
+        "{} / {}",
+        owner.to_ascii_lowercase(),
+        name.to_ascii_lowercase()
+    )
+}
+
+fn find_authorized_repo<'a>(
+    catalog: &'a [AuthorizedRepository],
+    owner: &str,
+    repo: &str,
+) -> Option<&'a AuthorizedRepository> {
+    let key = repo_key(owner, repo);
+    catalog
+        .iter()
+        .find(|item| repo_key(&item.owner, &item.name) == key)
+}
+
+fn require_authorized_repo<'a>(
+    catalog: &'a [AuthorizedRepository],
+    owner: &str,
+    repo: &str,
+) -> Result<&'a AuthorizedRepository, ConnectorError> {
+    find_authorized_repo(catalog, owner, repo)
+        .ok_or_else(|| ConnectorError::Provider(UNAUTHORIZED_REPO_MESSAGE.into()))
+}
+
+fn paginate<T>(items: &[T], per_page: u32, page: u32) -> &[T] {
+    let per_page = per_page.clamp(1, 100) as usize;
+    let page = page.max(1) as usize;
+    let start = (page - 1).saturating_mul(per_page);
+    if start >= items.len() {
+        return &[];
+    }
+    let end = (start + per_page).min(items.len());
+    &items[start..end]
+}
+
+fn repo_matches_query(repo: &AuthorizedRepository, query: &str) -> bool {
+    let q = query.to_ascii_lowercase();
+    repo.full_name.to_ascii_lowercase().contains(&q)
+        || repo.name.to_ascii_lowercase().contains(&q)
+        || repo.owner.to_ascii_lowercase().contains(&q)
+        || repo
+            .description
+            .as_deref()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .contains(&q)
+}
+
 async fn load_authorized_tool(
     pool: &sqlx::PgPool,
     owner_id: &str,
@@ -275,6 +525,7 @@ fn token_expired(secret: &StoredSecret) -> bool {
 async fn dispatch_github_tool(
     github: &GitHubClient,
     token: &str,
+    catalog: &[AuthorizedRepository],
     tool_name: &str,
     args: &Value,
 ) -> Result<Value, ConnectorError> {
@@ -286,84 +537,106 @@ async fn dispatch_github_tool(
                 .unwrap_or("all");
             let per_page = args.get("perPage").and_then(|v| v.as_u64()).unwrap_or(30) as u32;
             let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
-            let repos = github
-                .list_repositories(token, visibility, per_page, page)
-                .await
-                .map_err(ConnectorError::Provider)?;
-            Ok(json!({ "ok": true, "repositories": repos }))
+            let filtered: Vec<&AuthorizedRepository> = catalog
+                .iter()
+                .filter(|repo| match visibility {
+                    "public" => !repo.private,
+                    "private" => repo.private,
+                    _ => true,
+                })
+                .collect();
+            let page_items = paginate(&filtered, per_page, page);
+            let repositories: Vec<Value> =
+                page_items.iter().map(|repo| repo.payload.clone()).collect();
+            Ok(json!({ "ok": true, "repositories": repositories }))
         }
         "github_search_repositories" => {
             let query = required_str(args, "query")?;
             let per_page = args.get("perPage").and_then(|v| v.as_u64()).unwrap_or(30) as u32;
             let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
-            let result = github
-                .search_repositories(token, query, per_page, page)
-                .await
-                .map_err(ConnectorError::Provider)?;
-            Ok(json!({ "ok": true, "result": result }))
+            let matches: Vec<&AuthorizedRepository> = catalog
+                .iter()
+                .filter(|repo| repo_matches_query(repo, query))
+                .collect();
+            let page_items = paginate(&matches, per_page, page);
+            let items: Vec<Value> = page_items.iter().map(|repo| repo.payload.clone()).collect();
+            Ok(json!({
+                "ok": true,
+                "result": {
+                    "total_count": matches.len(),
+                    "incomplete_results": false,
+                    "items": items
+                }
+            }))
         }
         "github_get_repository" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let repository = github
                 .get_repository(token, owner, repo)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(json!({ "ok": true, "repository": repository }))
         }
         "github_get_file_contents" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
             let path = required_str(args, "path")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let git_ref = args.get("ref").and_then(|v| v.as_str());
             let file = github
                 .get_file_contents(token, owner, repo, path, git_ref)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(file)
         }
         "github_list_issues" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let state = args.get("state").and_then(|v| v.as_str()).unwrap_or("open");
             let per_page = args.get("perPage").and_then(|v| v.as_u64()).unwrap_or(30) as u32;
             let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
             let issues = github
                 .list_issues(token, owner, repo, state, per_page, page)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(json!({ "ok": true, "issues": issues }))
         }
         "github_get_issue" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let number = required_u64(args, "number")?;
             let issue = github
                 .get_issue(token, owner, repo, number)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(json!({ "ok": true, "issue": issue }))
         }
         "github_list_pull_requests" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let state = args.get("state").and_then(|v| v.as_str()).unwrap_or("open");
             let per_page = args.get("perPage").and_then(|v| v.as_u64()).unwrap_or(30) as u32;
             let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
             let pulls = github
                 .list_pull_requests(token, owner, repo, state, per_page, page)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(json!({ "ok": true, "pullRequests": pulls }))
         }
         "github_get_pull_request" => {
             let owner = required_str(args, "owner")?;
             let repo = required_str(args, "repo")?;
+            require_authorized_repo(catalog, owner, repo)?;
             let number = required_u64(args, "number")?;
             let pull = github
                 .get_pull_request(token, owner, repo, number)
                 .await
-                .map_err(ConnectorError::Provider)?;
+                .map_err(|e| ConnectorError::Provider(redact_secrets(&e)))?;
             Ok(json!({ "ok": true, "pullRequest": pull }))
         }
         other => Err(ConnectorError::Validation(format!(

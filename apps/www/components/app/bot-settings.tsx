@@ -6,7 +6,7 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { ComputerSelect } from "@/components/app/computer-select";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
-import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
@@ -54,6 +54,16 @@ export function BotGeneralSettings({
     return () => controller.abort();
   }, []);
 
+  function handleAvatarChange(nextAvatarId: string) {
+    if (nextAvatarId === avatarId) {
+      return;
+    }
+    setAvatarId(nextAvatarId);
+    const defaults = botAvatarFormDefaults(nextAvatarId);
+    setName(defaults.name);
+    setInstructions(defaults.instructions);
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
@@ -86,7 +96,7 @@ export function BotGeneralSettings({
       <FormFields className="min-w-0 gap-5">
         <BotAvatarPicker
           value={avatarId}
-          onChange={setAvatarId}
+          onChange={handleAvatarChange}
           disabled={busy}
           compact
         />

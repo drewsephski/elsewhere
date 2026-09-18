@@ -14,6 +14,11 @@ const bot: BotSummary = {
   enginePreference: "codex",
 };
 
+const githubState = vi.hoisted(() => ({
+  status: "disconnected",
+  metadata: {} as Record<string, unknown>,
+}));
+
 vi.mock("@/lib/cloud-api", () => ({
   cloudHostErrorMessage: vi.fn(async () => "error"),
   cloudHostFetch: vi.fn(async (path: string) => {
@@ -22,8 +27,8 @@ vi.mock("@/lib/cloud-api", () => ({
         ok: true,
         json: async () => ({
           provider: "github",
-          status: "disconnected",
-          metadata: {},
+          status: githubState.status,
+          metadata: githubState.metadata,
           updatedAt: "2026-01-01T00:00:00.000Z",
         }),
       };
@@ -58,6 +63,8 @@ vi.mock("@/lib/cloud-api", () => ({
 }));
 
 afterEach(() => {
+  githubState.status = "disconnected";
+  githubState.metadata = {};
   cleanup();
 });
 
@@ -78,5 +85,31 @@ describe("ConnectorsManager", () => {
 
     const apps = screen.getByRole("heading", { name: "Apps" }).closest("section");
     expect(apps?.querySelector("ul")?.className).toContain("sm:grid-cols-2");
+  });
+
+  it("shows reconnect GitHub when the connector requires a new App authorization", async () => {
+    githubState.status = "reconnect_required";
+    githubState.metadata = {
+      githubUser: { login: "octocat", name: "The Octocat" },
+      installations: [
+        {
+          id: 1,
+          accountLogin: "octocat",
+          accountId: 1,
+          accountType: "User",
+          repositorySelection: "selected",
+        },
+      ],
+      authorizedRepositoryCount: 2,
+    };
+    render(<ConnectorsManager />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Reconnect GitHub" })).toBeTruthy();
+    });
+    expect(screen.getByText("Reconnect")).toBeTruthy();
+    expect(screen.getByText("@octocat")).toBeTruthy();
+    expect(screen.getByText(/Installed on:/)).toBeTruthy();
+    expect(screen.getByText(/2 authorized/)).toBeTruthy();
   });
 });

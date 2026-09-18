@@ -12,6 +12,7 @@ import {
   type WorkspaceBotPresence,
 } from "@/lib/workspace-types";
 import { cn } from "cn";
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -73,9 +74,50 @@ const menuItemClass =
   "flex w-full cursor-default items-center rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent";
 
 const navRowClass =
-  "group flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
-const navRowSelectedClass = "bg-surface-active";
+  "group relative flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 const navRowIdleClass = "hover:bg-surface-hover";
+const BOT_LIST_SELECTION_LAYOUT_ID = "bot-list-selection";
+const selectionSpring = {
+  type: "spring" as const,
+  stiffness: 420,
+  damping: 34,
+  mass: 0.75,
+};
+
+function SidebarNavLink({
+  href,
+  selected,
+  reduceMotion,
+  onContextMenu,
+  children,
+}: {
+  href: string;
+  selected: boolean;
+  reduceMotion: boolean | null;
+  onContextMenu: (event: React.MouseEvent) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      onContextMenu={onContextMenu}
+      className={cn(navRowClass, !selected && navRowIdleClass)}
+      aria-current={selected ? "page" : undefined}
+    >
+      {selected ? (
+        <motion.span
+          layoutId={BOT_LIST_SELECTION_LAYOUT_ID}
+          data-sidebar-selection=""
+          className="pointer-events-none absolute inset-0 rounded-lg bg-surface-active"
+          transition={reduceMotion ? { duration: 0 } : selectionSpring}
+        />
+      ) : null}
+      <span className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
+        {children}
+      </span>
+    </Link>
+  );
+}
 
 export function BotListSidebar({
   bots,
@@ -101,6 +143,7 @@ export function BotListSidebar({
   const [deleteItem, setDeleteItem] = useState<SidebarNamedItem | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion();
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -284,158 +327,157 @@ export function BotListSidebar({
         ) : null}
       </div>
 
-      <div className="mt-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-        {groups.length > 0 ? (
-          <section aria-label="Groups">
-            <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
-              Groups
-            </p>
+      <LayoutGroup id="bot-list-sidebar">
+        <div className="mt-1 min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
+          {groups.length > 0 ? (
+            <section aria-label="Groups">
+              <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+                Groups
+              </p>
+              <ul className="space-y-px">
+                {groups.map((group) => {
+                  const selected = group.id === selectedGroupId;
+                  const active = group.workingRuns > 0 || group.queuedRuns > 0;
+                  const participants = group.participants.filter((p) => !p.leftAt);
+                  return (
+                    <li key={group.id}>
+                      <SidebarNavLink
+                        href={`/app/groups/${group.id}`}
+                        selected={selected}
+                        reduceMotion={reduceMotion}
+                        onContextMenu={(event) =>
+                          handleContextMenu(event, {
+                            kind: "group",
+                            id: group.id,
+                            name: group.name,
+                          })
+                        }
+                      >
+                        <div className="flex shrink-0 -space-x-2">
+                          {participants.slice(0, 3).map((participant) => (
+                            <BotCreatureAvatar
+                              key={participant.botId}
+                              name={participant.name}
+                              avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                              size="xs"
+                              variant="tile"
+                              className="ring-2 ring-surface"
+                            />
+                          ))}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            {onRenameGroup ? (
+                              <InlineRenameLabel
+                                value={group.name}
+                                nested
+                                onCommit={(next) => onRenameGroup(group.id, next)}
+                                className="text-[13px] font-medium leading-tight"
+                                inputClassName="text-[13px]"
+                                ariaLabel={`Rename ${group.name}`}
+                              />
+                            ) : (
+                              <span className="truncate text-[13px] font-medium leading-tight">
+                                {group.name}
+                              </span>
+                            )}
+                            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
+                              {formatMessageTime(group.updatedAt)}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
+                            {active
+                              ? group.workingRuns > 0
+                                ? "Working…"
+                                : "Queued…"
+                              : `${participants.length} participants`}
+                          </p>
+                        </div>
+                      </SidebarNavLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+          <section aria-label="Bots" className={cn(groups.length > 0 && "pt-2")}>
+            {groups.length > 0 ? (
+              <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
+                Bots
+              </p>
+            ) : null}
             <ul className="space-y-px">
-              {groups.map((group) => {
-                const selected = group.id === selectedGroupId;
-                const active = group.workingRuns > 0 || group.queuedRuns > 0;
-                const participants = group.participants.filter((p) => !p.leftAt);
+              {filtered.map((bot) => {
+                const selected = bot.id === selectedBotId;
+                const statusLabel = presenceShortLabel(bot.presence);
+                const activityIso = runActivityAt[bot.id];
+                const timeLabel = activityIso ? formatMessageTime(activityIso) : null;
+                const trailingLabel = statusLabel ?? timeLabel;
+
                 return (
-                  <li key={group.id}>
-                    <Link
-                      href={`/app/groups/${group.id}`}
+                  <li key={bot.id}>
+                    <SidebarNavLink
+                      href={`/app/bots/${bot.id}`}
+                      selected={selected}
+                      reduceMotion={reduceMotion}
                       onContextMenu={(event) =>
-                        handleContextMenu(event, {
-                          kind: "group",
-                          id: group.id,
-                          name: group.name,
-                        })
+                        handleContextMenu(event, { kind: "bot", id: bot.id, name: bot.name })
                       }
-                      className={cn(
-                        navRowClass,
-                        selected ? navRowSelectedClass : navRowIdleClass,
-                      )}
-                      aria-current={selected ? "page" : undefined}
                     >
-                      <div className="flex shrink-0 -space-x-2">
-                        {participants.slice(0, 3).map((participant) => (
-                          <BotCreatureAvatar
-                            key={participant.botId}
-                            name={participant.name}
-                            avatarId={participant.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                            size="xs"
-                            variant="tile"
-                            className="ring-2 ring-surface"
-                          />
-                        ))}
-                      </div>
+                      <BotCreatureAvatar
+                        name={bot.name}
+                        avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                        size="sm"
+                        animated={selected && presenceIsActive(bot.presence)}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          {onRenameGroup ? (
+                          {onRenameBot ? (
                             <InlineRenameLabel
-                              value={group.name}
+                              value={bot.name}
                               nested
-                              onCommit={(next) => onRenameGroup(group.id, next)}
+                              onCommit={(next) => onRenameBot(bot.id, next)}
                               className="text-[13px] font-medium leading-tight"
                               inputClassName="text-[13px]"
-                              ariaLabel={`Rename ${group.name}`}
+                              ariaLabel={`Rename ${bot.name}`}
                             />
                           ) : (
                             <span className="truncate text-[13px] font-medium leading-tight">
-                              {group.name}
+                              {bot.name}
                             </span>
                           )}
-                          <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/80">
-                            {formatMessageTime(group.updatedAt)}
-                          </span>
+                          {trailingLabel ? (
+                            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80">
+                              {statusLabel ? (
+                                <span
+                                  className={cn("size-1.5 rounded-full", presenceDotClass(bot.presence))}
+                                  aria-hidden
+                                />
+                              ) : null}
+                              {trailingLabel}
+                            </span>
+                          ) : null}
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-                          {active
-                            ? group.workingRuns > 0
-                              ? "Working…"
-                              : "Queued…"
-                            : `${participants.length} participants`}
+                          {activityPreview(bot)}
                         </p>
                       </div>
-                    </Link>
+                    </SidebarNavLink>
                   </li>
                 );
               })}
+              {!filtered.length ? (
+                <li className="px-3 py-8 text-center text-[13px] text-muted-foreground">
+                  {workspaceBotsEmptyMessage(workspacePhase, {
+                    query,
+                    workspaceError,
+                  })}
+                </li>
+              ) : null}
             </ul>
           </section>
-        ) : null}
-        <section aria-label="Bots" className={cn(groups.length > 0 && "pt-2")}>
-          {groups.length > 0 ? (
-            <p className="px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground/80">
-              Bots
-            </p>
-          ) : null}
-          <ul className="space-y-px">
-        {filtered.map((bot) => {
-          const selected = bot.id === selectedBotId;
-          const statusLabel = presenceShortLabel(bot.presence);
-          const activityIso = runActivityAt[bot.id];
-          const timeLabel = activityIso ? formatMessageTime(activityIso) : null;
-          const trailingLabel = statusLabel ?? timeLabel;
-
-          return (
-            <li key={bot.id}>
-              <Link
-                href={`/app/bots/${bot.id}`}
-                onContextMenu={(event) =>
-                  handleContextMenu(event, { kind: "bot", id: bot.id, name: bot.name })
-                }
-                className={cn(navRowClass, selected ? navRowSelectedClass : navRowIdleClass)}
-                aria-current={selected ? "page" : undefined}
-              >
-                <BotCreatureAvatar
-                  name={bot.name}
-                  avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                  size="sm"
-                  animated={selected && presenceIsActive(bot.presence)}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    {onRenameBot ? (
-                      <InlineRenameLabel
-                        value={bot.name}
-                        nested
-                        onCommit={(next) => onRenameBot(bot.id, next)}
-                        className="text-[13px] font-medium leading-tight"
-                        inputClassName="text-[13px]"
-                        ariaLabel={`Rename ${bot.name}`}
-                      />
-                    ) : (
-                      <span className="truncate text-[13px] font-medium leading-tight">
-                        {bot.name}
-                      </span>
-                    )}
-                    {trailingLabel ? (
-                      <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80">
-                        {statusLabel ? (
-                          <span
-                            className={cn("size-1.5 rounded-full", presenceDotClass(bot.presence))}
-                            aria-hidden
-                          />
-                        ) : null}
-                        {trailingLabel}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
-                    {activityPreview(bot)}
-                  </p>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-        {!filtered.length ? (
-          <li className="px-3 py-8 text-center text-[13px] text-muted-foreground">
-            {workspaceBotsEmptyMessage(workspacePhase, {
-              query,
-              workspaceError,
-            })}
-          </li>
-        ) : null}
-          </ul>
-        </section>
-      </div>
+        </div>
+      </LayoutGroup>
 
       <div className="shrink-0 px-2 pb-2 pt-1">{footer}</div>
 

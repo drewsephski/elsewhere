@@ -12,13 +12,16 @@ use std::sync::Arc;
 
 use crate::connectors::{
     db::{
-        consume_oauth_state, disconnect, get_for_owner, list_for_owner, purge_expired_oauth_states,
-        store_oauth_state, upsert_connected, ConnectorRow, PROVIDER_GITHUB,
+        consume_oauth_state, disconnect, get_for_owner, list_for_owner, load_github_credential,
+        mark_reconnect_required, purge_expired_oauth_states, store_oauth_state,
+        upsert_github_app_credential, ConnectorRow, GitHubCredentialLoad, PROVIDER_GITHUB,
     },
     github_client::GitHubUser,
+    service::collect_authorized_repositories,
     ConnectorSecretBox,
 };
 use crate::error::ApiError;
+use crate::redact::redact_secrets;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,8 +55,14 @@ pub async fn list(
     State(state): State<AppState>,
     Extension(owner): Extension<Principal>,
 ) -> Result<Json<Vec<ConnectorSummary>>, ApiError> {
+    let secret = state.connector_secret_box();
     let rows = list_for_owner(&state.pool, owner.owner_id()).await?;
-    Ok(Json(rows.into_iter().map(ConnectorSummary::from).collect()))
+    let mut summaries = Vec::new();
+    for row in rows {
+        summaries
+            .push(github_aware_summary(&state, owner.owner_id(), secret.as_deref(), row).await?);
+    }
+    Ok(Json(summaries))
 }
 
 pub async fn github_status(
@@ -62,7 +71,15 @@ pub async fn github_status(
 ) -> Result<Json<ConnectorSummary>, ApiError> {
     let row = get_for_owner(&state.pool, owner.owner_id(), PROVIDER_GITHUB).await?;
     Ok(Json(match row {
-        Some(row) => ConnectorSummary::from(row),
+        Some(row) => {
+            github_aware_summary(
+                &state,
+                owner.owner_id(),
+                state.connector_secret_box().as_deref(),
+                row,
+            )
+            .await?
+        }
         None => ConnectorSummary {
             provider: PROVIDER_GITHUB.into(),
             status: "disconnected".into(),
@@ -71,6 +88,37 @@ pub async fn github_status(
             updated_at: Utc::now(),
         },
     }))
+}
+
+async fn github_aware_summary(
+    state: &AppState,
+    owner_id: &str,
+    secret_box: Option<&ConnectorSecretBox>,
+    row: ConnectorRow,
+) -> Result<ConnectorSummary, ApiError> {
+    if row.provider != PROVIDER_GITHUB {
+        return Ok(ConnectorSummary::from(row));
+    }
+    let mut summary = ConnectorSummary::from(row);
+    if summary.status != "connected" {
+        return Ok(summary);
+    }
+    let Some(secret_box) = secret_box else {
+        return Ok(summary);
+    };
+    match load_github_credential(&state.pool, owner_id, secret_box).await? {
+        GitHubCredentialLoad::App(_) => Ok(summary),
+        GitHubCredentialLoad::Missing => Ok(summary),
+        GitHubCredentialLoad::ReconnectRequired => {
+            summary.status = "reconnect_required".into();
+            Ok(summary)
+        }
+        GitHubCredentialLoad::Legacy => {
+            let _ = mark_reconnect_required(&state.pool, owner_id, PROVIDER_GITHUB).await?;
+            summary.status = "reconnect_required".into();
+            Ok(summary)
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -86,20 +134,18 @@ pub async fn github_oauth_start(
     Extension(owner): Extension<Principal>,
 ) -> Result<Json<GitHubOAuthStartResponse>, ApiError> {
     let _secret = secret_box(&state)?;
-    let client_id = state
+    let app_slug = state
+        .config
+        .github_app_slug
+        .as_deref()
+        .ok_or_else(|| ApiError::Validation("GitHub App is not configured".into()))?;
+    let _client_id = state
         .config
         .github_client_id
         .as_deref()
-        .ok_or_else(|| ApiError::Validation("GitHub OAuth is not configured".into()))?;
-    let redirect_uri = state
-        .config
-        .github_oauth_redirect_uri
-        .as_deref()
-        .ok_or_else(|| {
-            ApiError::Validation("GitHub OAuth redirect URI is not configured".into())
-        })?;
+        .ok_or_else(|| ApiError::Validation("GitHub App is not configured".into()))?;
 
-    let _ = purge_expired_oauth_states(&state.pool).await?;
+    purge_expired_oauth_states(&state.pool).await?;
     let state_token = Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::minutes(10);
     store_oauth_state(
@@ -111,9 +157,7 @@ pub async fn github_oauth_start(
     )
     .await?;
 
-    let authorize_url = state
-        .github_client
-        .authorize_url(client_id, redirect_uri, &state_token);
+    let authorize_url = state.github_client.installation_url(app_slug, &state_token);
 
     Ok(Json(GitHubOAuthStartResponse {
         authorize_url,
@@ -127,6 +171,7 @@ pub async fn github_oauth_start(
 pub struct GitHubOAuthCompleteRequest {
     pub code: String,
     pub state: String,
+    pub installation_id: Option<i64>,
 }
 
 pub async fn github_oauth_complete(
@@ -139,19 +184,17 @@ pub async fn github_oauth_complete(
         .config
         .github_client_id
         .as_deref()
-        .ok_or_else(|| ApiError::Validation("GitHub OAuth is not configured".into()))?;
+        .ok_or_else(|| ApiError::Validation("GitHub App is not configured".into()))?;
     let client_secret = state
         .config
         .github_client_secret
         .as_deref()
-        .ok_or_else(|| ApiError::Validation("GitHub OAuth is not configured".into()))?;
+        .ok_or_else(|| ApiError::Validation("GitHub App is not configured".into()))?;
     let redirect_uri = state
         .config
         .github_oauth_redirect_uri
         .as_deref()
-        .ok_or_else(|| {
-            ApiError::Validation("GitHub OAuth redirect URI is not configured".into())
-        })?;
+        .ok_or_else(|| ApiError::Validation("GitHub App redirect URI is not configured".into()))?;
 
     let consumed =
         consume_oauth_state(&state.pool, &body.state, PROVIDER_GITHUB, owner.owner_id()).await?;
@@ -165,27 +208,59 @@ pub async fn github_oauth_complete(
         .github_client
         .exchange_code(client_id, client_secret, &body.code, redirect_uri)
         .await
-        .map_err(|e| ApiError::Validation(crate::redact::redact_secrets(&e)))?;
+        .map_err(|e| ApiError::Validation(redact_secrets(&e)))?;
+    let credential = token.into_credential(Utc::now());
 
     let user: GitHubUser = state
         .github_client
-        .get_user(&token)
+        .get_user(&credential.access_token)
         .await
-        .map_err(|e| ApiError::Validation(crate::redact::redact_secrets(&e)))?;
+        .map_err(|e| ApiError::Validation(redact_secrets(&e)))?;
+
+    let installations = state
+        .github_client
+        .list_user_installations(&credential.access_token)
+        .await
+        .map_err(|e| ApiError::Validation(redact_secrets(&e)))?;
+    if installations.is_empty() {
+        return Err(ApiError::Validation(
+            "GitHub App is not installed on any account accessible to this user".into(),
+        ));
+    }
+
+    if let Some(claimed_id) = body.installation_id {
+        if !installations.iter().any(|install| install.id == claimed_id) {
+            tracing::info!(
+                claimed_installation_id = claimed_id,
+                "ignored GitHub installation id that is not accessible to the authorized user"
+            );
+        }
+    }
+
+    let repos = collect_authorized_repositories(
+        &state.github_client,
+        &credential.access_token,
+        &installations,
+    )
+    .await
+    .map_err(|e| ApiError::Validation(redact_secrets(&e.message())))?;
 
     let metadata = json!({
-        "login": user.login,
-        "userId": user.id,
-        "name": user.name,
-        "avatarUrl": user.avatar_url,
+        "githubUser": {
+            "login": user.login,
+            "userId": user.id,
+            "name": user.name,
+            "avatarUrl": user.avatar_url,
+        },
+        "installations": installations.iter().map(|install| install.metadata_summary()).collect::<Vec<_>>(),
+        "authorizedRepositoryCount": repos.len(),
     });
 
-    let row = upsert_connected(
+    let row = upsert_github_app_credential(
         &state.pool,
         owner.owner_id(),
-        PROVIDER_GITHUB,
         &metadata,
-        &token,
+        &credential,
         secret_box.as_ref(),
     )
     .await?;

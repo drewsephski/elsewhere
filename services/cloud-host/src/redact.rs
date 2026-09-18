@@ -80,7 +80,7 @@ fn redact_slack_tokens(input: &str) -> String {
 
 fn redact_github_oauth_tokens(input: &str) -> String {
     let mut out = input.to_string();
-    for marker in ["gho_", "ghp_", "ghu_", "github_pat_"] {
+    for marker in ["github_pat_", "gho_", "ghp_", "ghu_", "ghr_", "ghs_"] {
         while let Some(idx) = out.find(marker) {
             let rest = &out[idx..];
             let end = rest
@@ -103,5 +103,16 @@ mod tests {
         assert!(!msg.contains("OPENAI_API_KEY"));
         assert!(!msg.contains("SPRITE_TOKEN"));
         assert!(!msg.contains("ELSEWHERE_CLOUD_API_TOKEN"));
+    }
+
+    #[test]
+    fn redacts_github_app_user_and_refresh_tokens_without_length_assumption() {
+        let access = "ghu_short";
+        let refresh = "ghr_also_short_token";
+        let redacted = redact_secrets(&format!("provider failed {access} then {refresh}"));
+        assert!(!redacted.contains(access));
+        assert!(!redacted.contains(refresh));
+        assert!(redacted.contains("[redacted]"));
+        assert!(redact_secrets("ghs_installation").contains("[redacted]"));
     }
 }

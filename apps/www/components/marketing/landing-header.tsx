@@ -12,7 +12,6 @@ const navLinks = [
   { href: "/#demo", label: "Product" },
   { href: "/#roster", label: "Bots" },
   { href: "/#selfhost", label: "Computers" },
-  { href: siteConfig.links.docs, label: "Source", external: true },
 ] as const;
 
 interface LandingHeaderProps {
@@ -63,27 +62,15 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
             </span>
           </Link>
           <nav className="hidden items-center gap-6 lg:flex" aria-label="Primary">
-            {navLinks.map((link) =>
-              "external" in link && link.external ? (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[15px] text-brand-dark/80 transition-opacity hover:opacity-70"
-                >
-                  {link.label}
-                </a>
-              ) : (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="text-[15px] text-brand-dark/80 transition-opacity hover:opacity-70"
-                >
-                  {link.label}
-                </a>
-              ),
-            )}
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-[15px] text-brand-dark/80 transition-opacity hover:opacity-70"
+              >
+                {link.label}
+              </a>
+            ))}
           </nav>
         </div>
 
@@ -137,29 +124,26 @@ export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
           aria-label="Menu"
         >
           <div className="flex h-full flex-col items-center justify-center gap-8 px-6 pt-[86px]">
-            {navLinks.map((link) =>
-              "external" in link && link.external ? (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-3xl tracking-tight text-brand-dark"
-                  onClick={closeMenu}
-                >
-                  {link.label}
-                </a>
-              ) : (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className="text-3xl tracking-tight text-brand-dark"
-                  onClick={closeMenu}
-                >
-                  {link.label}
-                </a>
-              ),
-            )}
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                className="text-3xl tracking-tight text-brand-dark"
+                onClick={closeMenu}
+              >
+                {link.label}
+              </a>
+            ))}
+            <a
+              href={siteConfig.links.docs}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 text-3xl tracking-tight text-brand-dark"
+              onClick={closeMenu}
+            >
+              <GitHubMark className="size-7 shrink-0" aria-hidden />
+              Source
+            </a>
             <Link
               href={appRoutes.workspace}
               className="text-3xl tracking-tight text-brand-dark"
