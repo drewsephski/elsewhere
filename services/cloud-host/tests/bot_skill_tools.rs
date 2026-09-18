@@ -2,7 +2,6 @@
 
 use agent_core::{AgentSkills, CreateResponseResult, ModelError, ResponsesModel};
 use async_trait::async_trait;
-use chrono::Utc;
 use cloud_host::auth::{JwtVerifier, JwtVerifierConfig};
 use cloud_host::config::{AuthMode, Config};
 use cloud_host::db::resources::{insert_bot, insert_computer_placeholder};
@@ -493,7 +492,8 @@ async fn attach_and_detach_require_approval(pool: PgPool) {
     .await;
     let attach_approval = wait_pending_approval(&pool, &owner).await;
     let app = build_router(state.clone());
-    app.oneshot(
+    app.clone()
+        .oneshot(
         axum::http::Request::builder()
             .method("POST")
             .uri(format!("/v1/approvals/{attach_approval}/approve"))
