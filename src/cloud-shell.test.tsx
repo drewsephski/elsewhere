@@ -13,18 +13,10 @@ vi.mock("@/lib/auth-client", () => ({
   },
 }));
 
-vi.mock("@/components/app/workspace/workspace-app-layout", () => ({
-  WorkspaceAppLayout: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="workspace-app-layout">{children}</div>
+vi.mock("@/components/app/workspace/workspace-authenticated-frame", () => ({
+  WorkspaceAuthenticatedFrame: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="workspace-authenticated-frame">{children}</div>
   ),
-}));
-
-vi.mock("@/components/app/product-theme-scope", () => ({
-  ProductThemeScope: () => null,
-}));
-
-vi.mock("@/components/ui/sonner", () => ({
-  Toaster: () => null,
 }));
 
 vi.mock("@/app/sign-in/sign-in-view", () => ({
@@ -41,7 +33,7 @@ vi.mock("./routes/work-detail-page", () => ({
 }));
 
 describe("CloudShell", () => {
-  it("wraps authenticated /app/bots routes in WorkspaceAppLayout (shared workspace shell)", async () => {
+  it("wraps authenticated /app/bots routes in WorkspaceAuthenticatedFrame (shared web workspace)", async () => {
     render(
       <MemoryRouter initialEntries={["/app/bots/bot_1"]}>
         <CloudShell />
@@ -49,7 +41,7 @@ describe("CloudShell", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-app-layout")).toBeTruthy();
+      expect(screen.getByTestId("workspace-authenticated-frame")).toBeTruthy();
     });
   });
 });
