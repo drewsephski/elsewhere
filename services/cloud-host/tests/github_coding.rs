@@ -57,7 +57,10 @@ async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
         .and(path_regex(r"/user/installations.*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "total_count": 1,
-            "installations": [{ "id": 1, "account": { "login": "acme" } }]
+            "installations": [{
+                "id": 1,
+                "account": { "login": "acme", "id": 100, "type": "Organization" }
+            }]
         })))
         .mount(server)
         .await;
@@ -132,7 +135,10 @@ async fn github_coding_open_rejects_unauthorized_repo(pool: PgPool) {
     )
     .await
     .expect_err("unauthorized");
-    assert!(matches!(err, agent_core::ToolError::MalformedArguments(_)));
+    assert!(
+        matches!(err, agent_core::ToolError::Denied(_)),
+        "expected denied for repo outside installation catalog, got {err:?}"
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
