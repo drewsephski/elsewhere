@@ -33,7 +33,13 @@ type ResultItem = {
 };
 type RunResults = { items: ResultItem[]; collecting: boolean; note: string | null };
 
-export function ResultsPanel({ runId }: { runId?: string }) {
+export function ResultsPanel({
+  runId,
+  variant = "full",
+}: {
+  runId?: string;
+  variant?: "full" | "compact";
+}) {
   const [items, setItems] = useState<ResultItem[]>([]);
   const [collecting, setCollecting] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -197,6 +203,93 @@ export function ResultsPanel({ runId }: { runId?: string }) {
       ? "Results will be saved here when your bot finishes."
       : "Delegate work to a bot and ask for a report, draft, or file.";
 
+  const resultDialog = (
+    <ResultContentDialog
+      open={viewerOpen}
+      onOpenChange={setViewerOpen}
+      result={
+        activeItem
+          ? {
+              id: activeItem.id,
+              title: resultItemTitle(activeItem.kind, activeItem.name),
+              fileName: activeItem.name,
+              size: activeItem.size,
+              kind: activeItem.kind,
+            }
+          : null
+      }
+    />
+  );
+
+  if (variant === "compact") {
+    if (items.length === 0) {
+      if (error) {
+        return (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        );
+      }
+      if (collecting) {
+        return (
+          <p className="text-sm text-muted-foreground">
+            Files will appear here when your bot saves them.
+          </p>
+        );
+      }
+      return null;
+    }
+
+    return (
+      <section className="space-y-3">
+        {error ? (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {note ? <p className="text-sm text-warning">{note}</p> : null}
+        <h2 className="text-sm font-medium">Files</h2>
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {resultItemTitle(item.kind, item.name)}
+                  </p>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {Math.max(1, Math.ceil(item.size / 1024))} KB
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleOpenResult(item)}
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  Open
+                </button>
+                <a
+                  href={`/api/results/${item.id}/download`}
+                  download={item.name}
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  Download
+                </a>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {collecting ? (
+          <p className="text-xs text-muted-foreground">Still collecting results…</p>
+        ) : null}
+        {resultDialog}
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3">
       {error ? (
@@ -218,21 +311,7 @@ export function ResultsPanel({ runId }: { runId?: string }) {
       {items.length > 0 && collecting ? (
         <p className="text-xs text-muted-foreground">Still collecting results…</p>
       ) : null}
-      <ResultContentDialog
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
-        result={
-          activeItem
-            ? {
-                id: activeItem.id,
-                title: resultItemTitle(activeItem.kind, activeItem.name),
-                fileName: activeItem.name,
-                size: activeItem.size,
-                kind: activeItem.kind,
-              }
-            : null
-        }
-      />
+      {resultDialog}
     </section>
   );
 }

@@ -23,15 +23,8 @@ import {
   type ApprovalRequestedPayload,
   type ApprovalTerminalState,
 } from "./approval-card";
-import { WorkspaceEmptyState } from "@/components/app/workspace-empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/reui/alert";
 import { Badge } from "@/components/reui/badge";
-import {
-  Frame,
-  FrameHeader,
-  FramePanel,
-  FrameTitle,
-} from "@/components/reui/frame";
 import {
   Timeline,
   TimelineContent,
@@ -42,17 +35,20 @@ import {
   TimelineTitle,
 } from "@/components/reui/timeline";
 import { Button } from "@/components/ui/button";
-import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
-import { ListTree } from "lucide-react";
 import { UserQuestionCard, type UserQuestionPayload, userQuestionFromPayload } from "@/components/app/user-question-card";
 import { MessageAttachmentList } from "@/components/app/workspace/message-attachments";
 import {
   fetchHumanInterventionStatus,
   type PendingHumanIntervention,
 } from "@/lib/human-intervention";
-import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
+import {
+  BrowserPreviewProvider,
+  useOptionalBrowserPreviewContext,
+} from "@/contexts/browser-preview-context";
 import { BrowserPreviewView } from "@/components/app/workspace/browser-preview-view";
 import { HumanInterventionBanner } from "./human-intervention-banner";
+import { ArrowLeft } from "@/components/icons/lucide";
+import { cn } from "cn";
 
 type Activity = {
   id: string;
@@ -85,9 +81,25 @@ function timelineTitle(item: Activity) {
       ? `Approval ${item.decision}`
       : "Approval required";
   }
-  const text = item.text ?? "";
-  if (text.length <= 72) return text || "Update";
-  return `${text.slice(0, 72)}…`;
+  return item.text?.trim() || "Update";
+}
+
+function hasInteractiveTimelineItem(item: Activity) {
+  return Boolean(item.approval || item.subagent || item.question);
+}
+
+function WorkBrowserColumn({ show }: { show: boolean }) {
+  const ctx = useOptionalBrowserPreviewContext();
+  const hasImage = Boolean(ctx?.frame?.imageDataUrl);
+  if (!show && !hasImage) {
+    return null;
+  }
+
+  return (
+    <aside className="min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-3 lg:sticky lg:top-4">
+      <BrowserPreviewView variant="work" className="w-full" />
+    </aside>
+  );
 }
 
 export function WorkDetail({ runId }: { runId: string }) {
@@ -388,7 +400,16 @@ export function WorkDetail({ runId }: { runId: string }) {
   }
 
   const previewEnabled = Boolean(detail?.computerId && detail && active(detail.status));
+  const showBrowser = previewEnabled || Boolean(pendingHumanIntervention);
   const canDelete = canArchiveWorkRun(detail?.status) && !deleting;
+  const assignment = detail?.task?.trim();
+  const hasOutcome = Boolean(
+    pendingHumanIntervention ||
+      error ||
+      detail?.status === "interrupted" ||
+      detail?.status === "failed" ||
+      detail?.assistantResult,
+  );
 
   return (
     <BrowserPreviewProvider
@@ -396,94 +417,96 @@ export function WorkDetail({ runId }: { runId: string }) {
       enabled={previewEnabled}
       sessionKey={runId}
     >
-    <section className="space-y-6">
-      <div className="mx-auto flex max-w-2xl flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Your message
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground" role="status">
-              {connection}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {detail?.originLabel ? (
-              <Badge variant="secondary">Started from {detail.originLabel}</Badge>
-            ) : null}
-            {detail?.memories && detail.memories.length > 0 ? (
-              <Badge variant="secondary">
-                Used {detail.memories.length} {detail.memories.length === 1 ? "memory" : "memories"}
-              </Badge>
-            ) : null}
-            <Badge variant={statusBadgeVariant(detail?.status)}>
-              {detail ? workStatus(detail.status) : "Loading…"}
-            </Badge>
-            {canDelete ? (
-              <MessageDeleteButton
-                intent="archive"
-                onDelete={handleDeleteMessage}
-                className="h-8 text-xs text-muted-foreground hover:text-foreground"
-              />
-            ) : null}
-            {detail && active(detail.status) ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={stopping}
-                onClick={() => void stop()}
+      <article className="flex min-w-0 flex-col gap-8">
+        <p className="sr-only" role="status">
+          {connection}
+        </p>
+
+        <header className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <Link
+              href="/app/work"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden />
+              All work
+            </Link>
+            {detail ? (
+              <Link
+                href={`/app/bots/${detail.botId}`}
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                {stopping ? "Stopping…" : "Stop work"}
-              </Button>
-            ) : null}
-            {detail?.status === "completed" ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={savingSkill}
-                onClick={() => void handleSaveAsSkill()}
-              >
-                {savingSkill ? "Preparing…" : "Save as skill"}
-              </Button>
+                Open chat
+              </Link>
             ) : null}
           </div>
-        </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1 space-y-3">
+              <h1 className="max-w-3xl text-base font-semibold leading-snug tracking-tight text-pretty sm:text-lg">
+                {assignment ||
+                  (detail ? "Untitled assignment" : "Loading assignment…")}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={statusBadgeVariant(detail?.status)}>
+                  {detail ? workStatus(detail.status) : "Loading…"}
+                </Badge>
+                {detail?.originLabel ? (
+                  <Badge variant="secondary">Started from {detail.originLabel}</Badge>
+                ) : null}
+              </div>
+              {detail?.attachments && detail.attachments.length > 0 ? (
+                <MessageAttachmentList attachments={detail.attachments} align="start" />
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {detail && active(detail.status) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={stopping}
+                  onClick={() => void stop()}
+                >
+                  {stopping ? "Stopping…" : "Stop work"}
+                </Button>
+              ) : null}
+              {detail?.status === "completed" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={savingSkill}
+                  onClick={() => void handleSaveAsSkill()}
+                >
+                  {savingSkill ? "Preparing…" : "Save as skill"}
+                </Button>
+              ) : null}
+              {canDelete ? (
+                <MessageDeleteButton
+                  intent="archive"
+                  onDelete={handleDeleteMessage}
+                  className="h-7 text-muted-foreground hover:text-foreground"
+                />
+              ) : null}
+            </div>
+          </div>
+        </header>
+
         {delegations.length > 0 ? (
-          <div className="space-y-3">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Bot handoffs
-            </p>
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium">Bot handoffs</h2>
             {delegations.map((delegation) => (
               <DelegationCard key={delegation.id} delegation={delegation} />
             ))}
-          </div>
+          </section>
         ) : null}
 
-        {detail?.task ? (
-          <div className="flex flex-col items-end gap-1">
-            <UserPromptBubble>{detail.task}</UserPromptBubble>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {detail ? "No assignment text saved for this work." : "Loading assignment…"}
-          </p>
-        )}
-        {detail?.attachments && detail.attachments.length > 0 ? (
-          <Frame spacing="sm">
-            <FrameHeader>
-              <FrameTitle>Inputs</FrameTitle>
-            </FrameHeader>
-            <FramePanel>
-              <MessageAttachmentList attachments={detail.attachments} align="start" />
-            </FramePanel>
-          </Frame>
-        ) : null}
         {detail?.memories && detail.memories.length > 0 ? (
-          <details className="rounded-lg border border-border bg-surface-raised p-3 text-xs">
-            <summary className="cursor-pointer font-medium text-foreground">
-              Used {detail.memories.length} {detail.memories.length === 1 ? "memory" : "memories"}
+          <details className="max-w-3xl text-sm">
+            <summary className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+              Used {detail.memories.length}{" "}
+              {detail.memories.length === 1 ? "memory" : "memories"}
             </summary>
             <ul className="mt-2 space-y-1 text-muted-foreground">
               {detail.memories.map((memory, index) => (
@@ -492,108 +515,106 @@ export function WorkDetail({ runId }: { runId: string }) {
             </ul>
           </details>
         ) : null}
-      </div>
 
-        {pendingHumanIntervention ? (
-          <HumanInterventionBanner pending={pendingHumanIntervention} />
-        ) : null}
-
-        {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Something went wrong</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {detail?.status === "interrupted" ? (
-        <Alert variant="warning">
-          <AlertTitle>Work interrupted</AlertTitle>
-          <AlertDescription>
-            Actions already taken have not been repeated. Review the progress below, then{" "}
-            <Link href={`/app/bots/${detail.botId}`} className="underline">
-              give your bot a follow-up
-            </Link>{" "}
-            to continue safely.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {detail?.status === "failed" ? (
-        <Alert variant="destructive">
-          <AlertTitle>Could not finish</AlertTitle>
-          <AlertDescription>
-            Your bot could not finish this assignment. Review its progress and connection, then
-            send a follow-up.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {detail?.assistantResult ? (
-        <Frame spacing="sm">
-          <FrameHeader>
-            <FrameTitle>{active(detail.status) ? "Work so far" : "Result"}</FrameTitle>
-          </FrameHeader>
-          <FramePanel>
-            <MarkdownContent text={detail.assistantResult} />
-          </FramePanel>
-        </Frame>
-      ) : null}
-
-      <ResultsPanel runId={runId} />
-
-      {detail?.computerId ? (
-        <div className="mx-auto max-w-2xl border-t border-border/50 pt-4">
-          <BrowserPreviewView variant="work" />
-        </div>
-      ) : null}
-
-      <Frame spacing="sm">
-        <FrameHeader>
-          <FrameTitle>Progress</FrameTitle>
-        </FrameHeader>
-        <FramePanel>
-          {timeline.length > 0 ? (
-            <Timeline value={timelineStep} className="w-full">
-              {timeline.map((item, index) => (
-                <TimelineItem key={item.id} step={index + 1}>
-                  <TimelineHeader>
-                    <TimelineTitle>{timelineTitle(item)}</TimelineTitle>
-                  </TimelineHeader>
-                  <TimelineIndicator />
-                  <TimelineSeparator />
-                  <TimelineContent>
-                    {item.approval ? (
-                      <ApprovalCard payload={item.approval} externalStatus={item.decision} />
-                    ) : item.subagent ? (
-                      <SubagentCard activity={item.subagent} />
-                    ) : item.question ? (
-                      <UserQuestionCard question={item.question} />
-                    ) : (
-                      <p className="text-muted-foreground">{item.text}</p>
-                    )}
-                  </TimelineContent>
-                </TimelineItem>
-              ))}
-            </Timeline>
-          ) : (
-            <WorkspaceEmptyState
-              title="Waiting for activity"
-              description="Your bot’s steps and approval requests will appear here as work runs."
-              icon={<ListTree aria-hidden />}
-            />
+        <div
+          className={cn(
+            "grid min-w-0 gap-8",
+            "lg:grid-cols-1 lg:items-start lg:has-[aside]:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]",
           )}
-        </FramePanel>
-      </Frame>
-
-      {detail ? (
-        <Link
-          href={`/app/bots/${detail.botId}`}
-          className="inline-block text-sm underline underline-offset-4"
         >
-          Back to your bot
-        </Link>
-      ) : null}
-    </section>
+          {hasOutcome ? (
+            <div className="flex min-w-0 flex-col gap-8 lg:col-start-1">
+              {pendingHumanIntervention ? (
+                <HumanInterventionBanner pending={pendingHumanIntervention} />
+              ) : null}
+
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Something went wrong</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+
+              {detail?.status === "interrupted" ? (
+                <Alert variant="warning">
+                  <AlertTitle>Work interrupted</AlertTitle>
+                  <AlertDescription>
+                    Actions already taken have not been repeated. Review progress below, then send a
+                    follow-up from chat.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {detail?.status === "failed" ? (
+                <Alert variant="destructive">
+                  <AlertTitle>Could not finish</AlertTitle>
+                  <AlertDescription>
+                    Review progress below, then send a follow-up from chat.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {detail?.assistantResult ? (
+                <section className="max-w-3xl space-y-3">
+                  <h2 className="text-sm font-medium">
+                    {active(detail.status) ? "Work so far" : "Result"}
+                  </h2>
+                  <MarkdownContent text={detail.assistantResult} />
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+
+          <WorkBrowserColumn show={showBrowser} />
+
+          <div className="flex min-w-0 flex-col gap-8 lg:col-start-1">
+            <ResultsPanel runId={runId} variant="compact" />
+
+            <section className="space-y-3">
+              <h2 className="text-sm font-medium">Progress</h2>
+              {timeline.length > 0 ? (
+                <Timeline value={timelineStep} className="w-full">
+                  {timeline.map((item, index) => (
+                    <TimelineItem
+                      key={item.id}
+                      step={index + 1}
+                      className="group-data-[orientation=vertical]/timeline:not-last:pb-3"
+                    >
+                      <TimelineHeader>
+                        <TimelineTitle className="font-normal leading-snug">
+                          {timelineTitle(item)}
+                        </TimelineTitle>
+                      </TimelineHeader>
+                      <TimelineIndicator className="size-2.5 border-border group-data-completed/timeline-item:border-muted-foreground" />
+                      <TimelineSeparator className="bg-border" />
+                      {hasInteractiveTimelineItem(item) ? (
+                        <TimelineContent>
+                          {item.approval ? (
+                            <ApprovalCard
+                              payload={item.approval}
+                              externalStatus={item.decision}
+                            />
+                          ) : item.subagent ? (
+                            <SubagentCard activity={item.subagent} />
+                          ) : item.question ? (
+                            <UserQuestionCard question={item.question} />
+                          ) : null}
+                        </TimelineContent>
+                      ) : null}
+                    </TimelineItem>
+                  ))}
+                </Timeline>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {detail && active(detail.status)
+                    ? "Steps will appear here as your bot works."
+                    : "No activity recorded."}
+                </p>
+              )}
+            </section>
+          </div>
+        </div>
+      </article>
     </BrowserPreviewProvider>
   );
 }

@@ -93,4 +93,13 @@ describe("BrowserPreviewView dock/float", () => {
     expect(expand).not.toBe(float);
     expect(expand.textContent).toContain("Expand");
   });
+
+  it("fills the work pane instead of a centered thumbnail", () => {
+    previewState.pipOpen = false;
+    const { container } = render(<BrowserPreviewView variant="work" />);
+    expect(screen.queryByText("Browser")).toBeNull();
+    expect(screen.getByRole("button", { name: "Open expanded browser preview" })).toBeTruthy();
+    expect(container.firstElementChild?.className).not.toContain("max-w-xs");
+    expect(container.firstElementChild?.className).not.toContain("max-w-sm");
+  });
 });

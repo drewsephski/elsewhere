@@ -52,7 +52,20 @@ interface BrowserPreviewViewProps {
 }
 
 /** Dark "idle desktop" scene shown until the first frame arrives. */
-function BrowserIdleScene({ enabled }: { enabled: boolean }) {
+function BrowserIdleScene({
+  enabled,
+  variant,
+}: {
+  enabled: boolean;
+  variant?: BrowserPreviewVariant;
+}) {
+  const idleCopy =
+    variant === "work"
+      ? "Live view appears when your bot opens a page."
+      : enabled
+        ? "Live view appears when your bot opens a page."
+        : "Send a message to watch the screen here.";
+
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#111111]" aria-hidden>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_130%_95%_at_28%_-10%,#3b3b3b_0%,#1f1f1f_42%,#0f0f0f_100%)]" />
@@ -63,9 +76,7 @@ function BrowserIdleScene({ enabled }: { enabled: boolean }) {
           <Monitor className="size-4 text-muted-foreground" aria-hidden />
         </div>
         <p className="max-w-[13rem] text-[11px] leading-snug text-muted-foreground">
-          {enabled
-            ? "Live view appears when your bot opens a page."
-            : "Send a message to watch the screen here."}
+          {idleCopy}
         </p>
       </div>
     </div>
@@ -83,6 +94,7 @@ function PreviewChrome({
   addressBar,
   attached,
   viewportClassName,
+  variant,
   children,
 }: {
   frame: BrowserPreviewFrame | null;
@@ -96,6 +108,7 @@ function PreviewChrome({
   addressBar?: ReactNode;
   attached?: boolean;
   viewportClassName?: string;
+  variant?: BrowserPreviewVariant;
   children: ReactNode;
 }) {
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
@@ -142,7 +155,9 @@ function PreviewChrome({
               <Spinner className="size-4 text-muted-foreground" />
             </div>
           ) : null}
-          {!frame?.imageDataUrl ? <BrowserIdleScene enabled={enabled} /> : null}
+          {!frame?.imageDataUrl ? (
+            <BrowserIdleScene enabled={enabled} variant={variant} />
+          ) : null}
           {children}
         </div>
       </div>
@@ -336,6 +351,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           addressBar={addressBar}
           attached={chromeAttached}
           compact
+          variant="floating"
         >
           {frame?.imageDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -409,28 +425,10 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
       <div
         className={cn(
           isEmbedded ? "relative" : "space-y-2",
-          isWork && "mx-auto w-full max-w-xs sm:max-w-sm",
+          isWork && "w-full",
           className,
         )}
       >
-        {isWork ? (
-          <div className="mb-1 flex items-center justify-between gap-2 px-0.5">
-            <p className="text-[10px] font-medium text-muted-foreground">Browser</p>
-            {hasImage ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-[11px] text-muted-foreground"
-                onClick={handleOpenDialog}
-                aria-label="Expand browser preview"
-              >
-                Expand
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
         {isEmbedded ? (
           <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
             <p className="text-[11px] font-medium text-muted-foreground">Live computer</p>
@@ -472,7 +470,8 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             addressLabel={addressLabel}
             bare={isEmbedded}
             compact={chromeCompact}
-            viewportClassName={isWork ? "aspect-[16/10] max-h-36 sm:max-h-40" : undefined}
+            variant={variant}
+            viewportClassName={isWork ? "aspect-[16/10] min-h-[12rem]" : undefined}
           >
             {frame?.imageDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -487,14 +486,16 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               busy={humanClickBusy}
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
-            {hasImage && !(isEmbedded && !humanControl.humanActive) ? (
+            {hasImage && !((isEmbedded || isWork) && !humanControl.humanActive) ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
                 <p className="truncate text-[10px] text-white/85">
                   {frame?.title || host || "Live page"}
                 </p>
               </div>
             ) : null}
-            {isEmbedded && hasImage && !humanControl.humanActive ? <ExpandPreviewOverlay /> : null}
+            {(isEmbedded || isWork) && hasImage && !humanControl.humanActive ? (
+              <ExpandPreviewOverlay />
+            ) : null}
           </PreviewChrome>
         </button>
 
