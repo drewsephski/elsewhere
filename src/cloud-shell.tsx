@@ -1,5 +1,6 @@
 import { ProductThemeScope } from "@/components/app/product-theme-scope";
 import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
+import { WorkspaceRouteOutlet } from "@/components/app/workspace/workspace-route-outlet";
 import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import ApprovalsPage from "@/app/app/approvals/page";
@@ -94,10 +95,6 @@ function AuthenticatedWorkspace() {
   );
 }
 
-function AppHomePage() {
-  return null;
-}
-
 function BotsIndexRedirect() {
   return <Navigate to="/app?create=1" replace />;
 }
@@ -112,10 +109,10 @@ export default function CloudShell() {
         path="/app"
         element={<AuthenticatedWorkspace />}
       >
-        <Route index element={<AppHomePage />} />
+        <Route index element={<WorkspaceRouteOutlet />} />
         <Route path="bots" element={<BotsIndexRedirect />} />
-        <Route path="bots/:id" element={<AppHomePage />} />
-        <Route path="groups/:id" element={<AppHomePage />} />
+        <Route path="bots/:id" element={<WorkspaceRouteOutlet />} />
+        <Route path="groups/:id" element={<WorkspaceRouteOutlet />} />
         <Route path="computers" element={<ComputersPage />} />
         <Route path="routines" element={<RoutinesPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
