@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { WorkspaceOverview } from "./workspace-overview";
+import { DEFAULT_BOT_INSTRUCTIONS } from "@/lib/bot-quick-start";
 import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 
 export function BotsManager() {
@@ -19,7 +20,7 @@ export function BotsManager() {
   const [computers, setComputers] = useState<ComputerSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [instructions, setInstructions] = useState("Complete delegated work carefully, keep useful files on your computer, and explain your results clearly. Ask for approval before making changes.");
+  const [instructions, setInstructions] = useState(DEFAULT_BOT_INSTRUCTIONS);
   const [computerId, setComputerId] = useState("");
   const [model, setModel] = useState(DEFAULT_BOT_MODEL_ID);
   const [busy, setBusy] = useState(false);

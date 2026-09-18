@@ -61,6 +61,7 @@ import {
   createLoadScopeRef,
   isActiveLoadScope,
 } from "@/lib/conversation-load-scope";
+import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -152,6 +153,13 @@ export function BotConversationView({
   }, [resetComposerAttachments]);
 
   useConversationIdentityLayout(botId, handleBotIdentityChange);
+
+  useEffect(() => {
+    const draft = consumeQuickStartDraft(botId);
+    if (draft) {
+      setMessage(draft);
+    }
+  }, [botId]);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {

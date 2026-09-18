@@ -13,9 +13,8 @@ import { BotListSidebar } from "./bot-list-sidebar";
 import { CreateBotDialog } from "./create-bot-dialog";
 import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
-import { ProviderStatusCard } from "@/components/app/provider-status-card";
 import { SettingsDialog } from "@/components/app/settings-dialog";
-import { Button } from "@/components/ui/button";
+import { WorkspaceQuickStart } from "./workspace-quick-start";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { parseSettingsSection, type SettingsSection } from "@/lib/settings-sections";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
@@ -73,6 +72,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const selectedGroupId = parseGroupId(pathname);
   const [createOpen, setCreateOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
+  const [quickStartBusy, setQuickStartBusy] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
   // Sidebar collapse is independent of preview dock/float. A docked preview
   // hides with the rail; a floating preview stays over the chat pane.
@@ -171,7 +171,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   }, [pathname, router, searchParams]);
 
   useEffect(() => {
-    if (selectedBotId) {
+    if (selectedBotId || quickStartBusy) {
       return;
     }
     if (pathname !== "/app") {
@@ -185,7 +185,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       const params = searchParams.toString();
       router.replace(params ? `/app/bots/${bots[0].id}?${params}` : `/app/bots/${bots[0].id}`);
     }
-  }, [bots, pathname, router, searchParams, selectedBotId]);
+  }, [bots, pathname, quickStartBusy, router, searchParams, selectedBotId]);
 
   useEffect(() => {
     let stopped = false;
@@ -327,7 +327,12 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     [refreshGroups, router, selectedGroupId],
   );
 
+  const workspaceLoading =
+    !workspace && (workspacePhase === "initial" || workspacePhase === "loading");
+  const showQuickStart =
+    !selectedBotId && !selectedGroupId && !workspaceLoading && bots.length === 0;
   const showConversation = Boolean(selectedBotId || selectedGroupId);
+  const showMainPane = showConversation || showQuickStart;
 
   const previewEnabled = Boolean(bot?.computerId);
   const previewComputerId = bot?.computerId ?? null;
@@ -337,7 +342,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     <main
       className={cn(
         "flex min-w-0 flex-1 flex-col bg-background",
-        !showConversation && "hidden lg:flex",
+        !showMainPane && "hidden lg:flex",
       )}
     >
       {workspaceError ? (
@@ -366,22 +371,20 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           railCollapsed={railCollapsed}
           onExpandRail={() => setRailCollapsed(false)}
         />
+      ) : workspaceLoading ? (
+        <div className="flex flex-1 items-center justify-center px-6 py-8">
+          <p className="text-sm text-muted-foreground">Loading workspace…</p>
+        </div>
+      ) : showQuickStart ? (
+        <WorkspaceQuickStart
+          onStarted={() => {
+            void refresh();
+          }}
+          onBusyChange={setQuickStartBusy}
+        />
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
-          <ProviderStatusCard variant="featured" />
-          <div className="max-w-md space-y-3">
-            <p className="text-[13px] text-muted-foreground">
-              After ChatGPT is connected, create a bot to start chatting and running work.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full px-4"
-              onClick={() => setCreateOpen(true)}
-            >
-              Create your first bot
-            </Button>
-          </div>
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-8 text-center">
+          <p className="text-sm text-muted-foreground">Select a bot to start chatting.</p>
         </div>
       )}
     </main>
@@ -413,7 +416,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           className={cn(
             "flex w-full flex-col border-r border-border bg-surface",
             "md:max-w-[min(100%,16rem)] lg:w-60 lg:max-w-none lg:shrink-0",
-            showConversation ? "hidden lg:flex" : "flex",
+            showMainPane ? "hidden lg:flex" : "flex",
           )}
           aria-label="Bots"
         >

@@ -1,0 +1,242 @@
+import type { BotSummary, ComputerSummary, CreateRunResponse } from "@/lib/api-types";
+import { cloudHostFetch } from "@/lib/cloud-api";
+import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
+import { isLocalMacProvider } from "@/lib/computer-kind";
+import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
+import { formatUserFacingError } from "@/lib/format-api-error";
+
+/** Generic first-Bot instructions used when the user does not pick a role. */
+export const DEFAULT_BOT_INSTRUCTIONS =
+  "Complete delegated work carefully, keep useful files on your computer, and explain your results clearly. Ask for approval before making changes.";
+
+export const DEFAULT_CLOUD_COMPUTER_NAME = "Workspace";
+
+export const DEFAULT_BOT_ENGINE = "codex";
+
+const QUICK_START_DRAFT_KEY = "elsewhere:quick-start-draft";
+
+export type QuickStartSession = {
+  computerId?: string;
+  botId?: string;
+  idempotencyKey?: string;
+  taskFingerprint?: string;
+};
+
+export type QuickStartOutcome =
+  | {
+      status: "started";
+      botId: string;
+      computerId: string;
+      runId: string;
+      conversationId: string;
+    }
+  | {
+      status: "needs_codex";
+      error: string;
+      botId?: string;
+      computerId?: string;
+    }
+  | {
+      status: "bot_ready_run_failed";
+      error: string;
+      botId: string;
+      computerId: string;
+      task: string;
+    }
+  | {
+      status: "failed";
+      error: string;
+      botId?: string;
+      computerId?: string;
+    };
+
+export function isUsableComputer(computer: ComputerSummary): boolean {
+  if (computer.state === "archived") {
+    return false;
+  }
+  if (isLocalMacProvider(computer.provider)) {
+    return computer.providerMetadata.connected === true;
+  }
+  return true;
+}
+
+export function selectUsableComputer(
+  computers: ComputerSummary[],
+): ComputerSummary | null {
+  const usable = computers.filter(isUsableComputer);
+  if (!usable.length) {
+    return null;
+  }
+  const cloud = usable.filter((computer) => !isLocalMacProvider(computer.provider));
+  const pool = cloud.length ? cloud : usable;
+  return (
+    [...pool].sort((a, b) => {
+      const aTime = a.lastUsedAt ?? "";
+      const bTime = b.lastUsedAt ?? "";
+      return bTime.localeCompare(aTime);
+    })[0] ?? null
+  );
+}
+
+export function isCodexAuthRequired(error: unknown): boolean {
+  if (isCloudApiError(error) && (error.status === 401 || error.code === "chatgpt_not_connected")) {
+    return true;
+  }
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return (
+    message.includes("not connected") ||
+    message.includes("connect chatgpt") ||
+    message.includes("sign in to chatgpt") ||
+    message.includes("codex login")
+  );
+}
+
+export function rememberQuickStartDraft(botId: string, message: string) {
+  sessionStorage.setItem(
+    QUICK_START_DRAFT_KEY,
+    JSON.stringify({ botId, message }),
+  );
+}
+
+export function consumeQuickStartDraft(botId: string): string | null {
+  const stored = sessionStorage.getItem(QUICK_START_DRAFT_KEY);
+  if (!stored) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(stored) as { botId?: unknown; message?: unknown };
+    if (parsed.botId !== botId || typeof parsed.message !== "string") {
+      return null;
+    }
+    sessionStorage.removeItem(QUICK_START_DRAFT_KEY);
+    return parsed.message;
+  } catch {
+    sessionStorage.removeItem(QUICK_START_DRAFT_KEY);
+    return null;
+  }
+}
+
+function taskFingerprint(botId: string | undefined, task: string): string {
+  return `${botId ?? ""}|${task}`;
+}
+
+async function readOkJson<T>(response: Response, fallback: string): Promise<T> {
+  if (!response.ok) {
+    throw await cloudApiErrorFromResponse(response, fallback);
+  }
+  return (await response.json()) as T;
+}
+
+export async function ensureQuickStartComputer(
+  session: QuickStartSession,
+): Promise<string> {
+  if (session.computerId) {
+    return session.computerId;
+  }
+  const listResponse = await cloudHostFetch("/v1/computers");
+  const computers = await readOkJson<ComputerSummary[]>(
+    listResponse,
+    "Could not load computers",
+  );
+  const existing = selectUsableComputer(computers);
+  if (existing) {
+    session.computerId = existing.id;
+    return existing.id;
+  }
+  const createResponse = await cloudHostFetch("/v1/computers", {
+    method: "POST",
+    body: JSON.stringify({ displayName: DEFAULT_CLOUD_COMPUTER_NAME }),
+  });
+  const created = await readOkJson<ComputerSummary>(
+    createResponse,
+    "Could not create a computer",
+  );
+  session.computerId = created.id;
+  return created.id;
+}
+
+export async function ensureQuickStartBot(
+  session: QuickStartSession,
+  input: { name: string; computerId: string },
+): Promise<string> {
+  if (session.botId) {
+    return session.botId;
+  }
+  const response = await cloudHostFetch("/v1/bots", {
+    method: "POST",
+    body: JSON.stringify({
+      name: input.name.trim(),
+      instructions: DEFAULT_BOT_INSTRUCTIONS,
+      computerId: input.computerId,
+      model: DEFAULT_BOT_MODEL_ID,
+      enginePreference: DEFAULT_BOT_ENGINE,
+      avatarId: DEFAULT_BOT_AVATAR_ID,
+    }),
+  });
+  const created = await readOkJson<BotSummary>(response, "Could not create bot");
+  session.botId = created.id;
+  return created.id;
+}
+
+export async function startFirstBotWork(
+  input: { name: string; task: string },
+  session: QuickStartSession = {},
+): Promise<QuickStartOutcome> {
+  const name = input.name.trim();
+  const task = input.task.trim();
+  if (!name) {
+    return { status: "failed", error: "Name your Bot to get started.", ...session };
+  }
+  if (!task) {
+    return { status: "failed", error: "Tell this Bot what to work on.", ...session };
+  }
+
+  try {
+    const computerId = await ensureQuickStartComputer(session);
+    const botId = await ensureQuickStartBot(session, { name, computerId });
+    const fingerprint = taskFingerprint(botId, task);
+    if (session.taskFingerprint !== fingerprint || !session.idempotencyKey) {
+      session.idempotencyKey = crypto.randomUUID();
+      session.taskFingerprint = fingerprint;
+    }
+
+    try {
+      const runResponse = await cloudHostFetch("/v1/runs", {
+        method: "POST",
+        headers: { "Idempotency-Key": session.idempotencyKey },
+        body: JSON.stringify({ botId, message: task }),
+      });
+      const created = await readOkJson<CreateRunResponse>(
+        runResponse,
+        "Could not start work",
+      );
+      return {
+        status: "started",
+        botId,
+        computerId,
+        runId: created.runId,
+        conversationId: created.conversationId,
+      };
+    } catch (error) {
+      const message = formatUserFacingError(error, "Could not start work");
+      if (isCodexAuthRequired(error)) {
+        return { status: "needs_codex", error: message, botId, computerId };
+      }
+      return {
+        status: "bot_ready_run_failed",
+        error: message,
+        botId,
+        computerId,
+        task,
+      };
+    }
+  } catch (error) {
+    return {
+      status: "failed",
+      error: formatUserFacingError(error, "Could not start this Bot"),
+      botId: session.botId,
+      computerId: session.computerId,
+    };
+  }
+}

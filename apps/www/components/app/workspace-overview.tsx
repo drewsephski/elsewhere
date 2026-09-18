@@ -63,18 +63,12 @@ export function WorkspaceOverview({ compact = false }: { compact?: boolean }) {
             <Bot className="h-8 w-8 text-foreground" />
             <h3 className="mt-4 text-base font-medium">Give your first bot a job</h3>
             <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
-              Connect ChatGPT from the overview, create a computer, and give your bot a name and
-              role. Then delegate a report, a draft, or a task from your project.
+              Connect ChatGPT, name your Bot, and tell it what to work on. Elsewhere sets up a
+              computer and starts using your Codex allowance.
             </p>
             <div className="mt-4 flex gap-4 text-sm">
-              <Link
-                href="/app/computers"
-                className="font-medium underline underline-offset-4"
-              >
-                Create a computer
-              </Link>
-              <Link href="/app/bots" className="font-medium underline underline-offset-4">
-                Create a bot
+              <Link href="/app" className="font-medium underline underline-offset-4">
+                Start in the workspace
               </Link>
             </div>
           </div>
