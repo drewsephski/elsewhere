@@ -27,6 +27,11 @@ kill_timeout = 300
   # HMAC key for local Mac pairing secrets and durable device credentials.
   # Set as a Fly secret (base64-encoded 32 bytes). Required in jwt mode.
   # ELSEWHERE_LOCAL_MAC_CREDENTIAL_KEY
+  # GitHub App user-token connection (set as Fly secrets; do not deploy a private key).
+  # GITHUB_CLIENT_ID
+  # GITHUB_CLIENT_SECRET
+  # GITHUB_OAUTH_REDIRECT_URI
+  # GITHUB_APP_SLUG=elsewhere-alpha
 
 [[mounts]]
   source = "codex_profiles"

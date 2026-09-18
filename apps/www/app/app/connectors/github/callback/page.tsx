@@ -17,11 +17,17 @@ export default function GitHubOAuthCallbackPage() {
       setError("Missing GitHub authorization parameters.");
       return;
     }
+    const installationIdRaw = searchParams.get("installation_id");
+    const installationId = installationIdRaw ? Number(installationIdRaw) : undefined;
 
     void (async () => {
       const response = await cloudHostFetch("/v1/connectors/github/oauth/complete", {
         method: "POST",
-        body: JSON.stringify({ code, state }),
+        body: JSON.stringify({
+          code,
+          state,
+          ...(Number.isFinite(installationId) ? { installationId } : {}),
+        }),
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;

@@ -10,8 +10,8 @@ pub mod remote;
 pub mod secret;
 pub mod service;
 
-pub use db::ConnectorRow;
-pub use github_client::GitHubClient;
+pub use db::{ConnectorRow, GitHubCredentialLoad};
+pub use github_client::{GitHubClient, GitHubCredential};
 pub use remote::{RemoteHttpClient, RemotePolicy};
 pub use secret::ConnectorSecretBox;
 pub use service::PostgresAgentConnectors;

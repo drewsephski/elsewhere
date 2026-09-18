@@ -48,6 +48,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         github_client_id: None,
         github_client_secret: None,
         github_oauth_redirect_uri: None,
+        github_app_slug: None,
         slack_client_id: None,
         slack_client_secret: None,
         slack_signing_secret: None,

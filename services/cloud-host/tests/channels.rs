@@ -106,6 +106,7 @@ fn test_config(slack_api_base: Option<String>) -> Config {
         github_client_id: None,
         github_client_secret: None,
         github_oauth_redirect_uri: None,
+        github_app_slug: None,
         slack_client_id: Some("slack-client".into()),
         slack_client_secret: Some("slack-secret".into()),
         slack_signing_secret: Some(SIGNING_SECRET.into()),

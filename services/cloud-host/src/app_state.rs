@@ -184,7 +184,13 @@ impl AppState {
             .as_deref()
             .and_then(|key| ConnectorSecretBox::from_base64_key(key).ok())
             .map(Arc::new);
-        let github_client = GitHubClient::production();
+        let mut github_client = GitHubClient::production();
+        if let (Some(client_id), Some(client_secret)) = (
+            config.github_client_id.clone(),
+            config.github_client_secret.clone(),
+        ) {
+            github_client = github_client.with_oauth(client_id, client_secret);
+        }
         let slack_api_base = config.slack_api_base.clone();
         let slack_oauth_base = slack_api_base.trim_end_matches("/api").to_string();
         let slack_client = SlackClient::with_bases(slack_api_base, slack_oauth_base);

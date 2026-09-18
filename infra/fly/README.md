@@ -51,6 +51,15 @@ The volume is named `codex_profiles` for historical reasons but is mounted at `/
 | Runner | `DATABASE_URL`, `SPRITE_TOKEN`, `ELSEWHERE_CLOUD_API_TOKEN` |
 | Web | `BETTER_AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET`, `ELSEWHERE_ALPHA_INVITE_CODE`, `RESEND_API_KEY`, `AUTH_EMAIL_FROM` (optional) |
 
+GitHub App user-token connection is implemented in cloud-host but **not deployed yet**. When operators enable it, set these runner secrets (do not generate or store a GitHub App private key for this slice):
+
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `GITHUB_OAUTH_REDIRECT_URI` (hosted callback: `https://elsewhere-alpha-web.fly.dev/app/connectors/github/callback`)
+- `GITHUB_APP_SLUG=elsewhere-alpha`
+
+`ELSEWHERE_CONNECTOR_SECRET_KEY` already encrypts connector credentials on the runner. GitHub App installation itself is a separate operator step.
+
 The Fly web-to-runner address is deployment topology, **not a secret**. `infra/fly/web.toml` sets the canonical server-only BFF upstream:
 
 ```dotenv

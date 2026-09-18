@@ -1,12 +1,20 @@
 use base64::Engine;
-use serde::Deserialize;
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+const INSTALLATION_PAGE_SIZE: u32 = 100;
+const REPO_PAGE_SIZE: u32 = 100;
+const MAX_INSTALLATIONS: usize = 50;
+const MAX_AUTHORIZED_REPOS: usize = 1000;
 
 #[derive(Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
     api_base: String,
     oauth_base: String,
+    client_id: Option<String>,
+    client_secret: Option<String>,
 }
 
 impl Default for GitHubClient {
@@ -21,6 +29,8 @@ impl GitHubClient {
             http: reqwest::Client::new(),
             api_base: "https://api.github.com".into(),
             oauth_base: "https://github.com".into(),
+            client_id: None,
+            client_secret: None,
         }
     }
 
@@ -29,16 +39,22 @@ impl GitHubClient {
             http: reqwest::Client::new(),
             api_base,
             oauth_base,
+            client_id: None,
+            client_secret: None,
         }
     }
 
-    pub fn authorize_url(&self, client_id: &str, redirect_uri: &str, state: &str) -> String {
+    pub fn with_oauth(mut self, client_id: String, client_secret: String) -> Self {
+        self.client_id = Some(client_id);
+        self.client_secret = Some(client_secret);
+        self
+    }
+
+    pub fn installation_url(&self, app_slug: &str, state: &str) -> String {
         format!(
-            "{}/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}",
-            self.oauth_base,
-            urlencoding::encode(client_id),
-            urlencoding::encode(redirect_uri),
-            urlencoding::encode("read:user,repo"),
+            "{}/apps/{}/installations/new?state={}",
+            self.oauth_base.trim_end_matches('/'),
+            urlencoding::encode(app_slug),
             urlencoding::encode(state),
         )
     }
@@ -49,74 +65,97 @@ impl GitHubClient {
         client_secret: &str,
         code: &str,
         redirect_uri: &str,
-    ) -> Result<String, String> {
-        let response = self
-            .http
-            .post(format!("{}/login/oauth/access_token", self.oauth_base))
-            .header("Accept", "application/json")
-            .json(&json!({
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-            }))
-            .send()
-            .await
-            .map_err(|e| format!("GitHub token exchange failed: {e}"))?;
+    ) -> Result<GitHubAppUserToken, String> {
+        let payload = json!({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": code,
+            "redirect_uri": redirect_uri,
+        });
+        self.request_user_token(payload).await
+    }
 
-        if !response.status().is_success() {
-            return Err(format!(
-                "GitHub token exchange returned {}",
-                response.status()
-            ));
+    pub async fn refresh_user_token(
+        &self,
+        refresh_token: &str,
+    ) -> Result<GitHubAppUserToken, GitHubRefreshError> {
+        let client_id = self
+            .client_id
+            .as_deref()
+            .ok_or(GitHubRefreshError::NotConfigured)?;
+        let client_secret = self
+            .client_secret
+            .as_deref()
+            .ok_or(GitHubRefreshError::NotConfigured)?;
+        let payload = json!({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+        });
+        match self.request_user_token(payload).await {
+            Ok(token) => Ok(token),
+            Err(message)
+                if message.contains("token exchange failed")
+                    || message.contains("API request failed") =>
+            {
+                Err(GitHubRefreshError::Provider(message))
+            }
+            Err(_) => Err(GitHubRefreshError::InvalidGrant),
         }
-
-        let body: OAuthTokenResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("GitHub token response invalid: {e}"))?;
-        if let Some(err) = body.error {
-            return Err(body.error_description.unwrap_or(err));
-        }
-        body.access_token
-            .filter(|t| !t.is_empty())
-            .ok_or_else(|| "GitHub did not return an access token".into())
     }
 
     pub async fn get_user(&self, token: &str) -> Result<GitHubUser, String> {
         self.get_json(token, "/user").await
     }
 
-    pub async fn list_repositories(
+    pub async fn list_user_installations(
         &self,
         token: &str,
-        visibility: &str,
-        per_page: u32,
-        page: u32,
-    ) -> Result<Value, String> {
-        let path = format!(
-            "/user/repos?visibility={}&sort=updated&per_page={}&page={}",
-            visibility,
-            per_page.clamp(1, 100),
-            page.max(1)
-        );
-        self.get_json(token, &path).await
+    ) -> Result<Vec<GitHubInstallation>, String> {
+        let mut installations = Vec::new();
+        let mut page = 1u32;
+        loop {
+            let path = format!("/user/installations?per_page={INSTALLATION_PAGE_SIZE}&page={page}");
+            let body: GitHubInstallationsResponse = self.get_json(token, &path).await?;
+            let batch_len = body.installations.len();
+            for installation in body.installations {
+                if installations.len() >= MAX_INSTALLATIONS {
+                    break;
+                }
+                installations.push(installation);
+            }
+            if installations.len() >= MAX_INSTALLATIONS
+                || batch_len < INSTALLATION_PAGE_SIZE as usize
+            {
+                break;
+            }
+            page += 1;
+        }
+        Ok(installations)
     }
 
-    pub async fn search_repositories(
+    pub async fn list_installation_repositories(
         &self,
         token: &str,
-        query: &str,
-        per_page: u32,
-        page: u32,
-    ) -> Result<Value, String> {
-        let path = format!(
-            "/search/repositories?q={}&per_page={}&page={}",
-            urlencoding::encode(query),
-            per_page.clamp(1, 100),
-            page.max(1)
-        );
-        self.get_json(token, &path).await
+        installation_id: i64,
+    ) -> Result<Vec<Value>, String> {
+        let mut repositories = Vec::new();
+        let mut page = 1u32;
+        loop {
+            let path = format!(
+                "/user/installations/{installation_id}/repositories?per_page={REPO_PAGE_SIZE}&page={page}"
+            );
+            let body: GitHubInstallationRepositoriesResponse = self.get_json(token, &path).await?;
+            let batch_len = body.repositories.len();
+            repositories.extend(body.repositories);
+            if repositories.len() >= MAX_AUTHORIZED_REPOS || batch_len < REPO_PAGE_SIZE as usize {
+                repositories.truncate(MAX_AUTHORIZED_REPOS);
+                break;
+            }
+            page += 1;
+        }
+        Ok(repositories)
     }
 
     pub async fn get_repository(
@@ -230,6 +269,35 @@ impl GitHubClient {
         self.get_json(token, &path).await
     }
 
+    async fn request_user_token(&self, payload: Value) -> Result<GitHubAppUserToken, String> {
+        let response = self
+            .http
+            .post(format!(
+                "{}/login/oauth/access_token",
+                self.oauth_base.trim_end_matches('/')
+            ))
+            .header("Accept", "application/json")
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub token exchange failed: {e}"))?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::BAD_REQUEST
+        {
+            return Err("GitHub rejected the stored credentials".into());
+        }
+        if !status.is_success() {
+            return Err(format!("GitHub token exchange returned {status}"));
+        }
+
+        let body: GitHubTokenResponse = response
+            .json()
+            .await
+            .map_err(|_| "GitHub token response invalid".to_string())?;
+        body.into_user_token()
+    }
+
     async fn get_json<T: for<'de> Deserialize<'de>>(
         &self,
         token: &str,
@@ -264,17 +332,265 @@ impl GitHubClient {
 }
 
 #[derive(Debug, Deserialize)]
-struct OAuthTokenResponse {
+struct GitHubTokenResponse {
     access_token: Option<String>,
+    expires_in: Option<i64>,
+    refresh_token: Option<String>,
+    refresh_token_expires_in: Option<i64>,
+    token_type: Option<String>,
+    scope: Option<String>,
     error: Option<String>,
     error_description: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+impl GitHubTokenResponse {
+    fn into_user_token(self) -> Result<GitHubAppUserToken, String> {
+        if let Some(err) = self.error {
+            return Err(self.error_description.unwrap_or(err));
+        }
+        let access_token = self
+            .access_token
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| "GitHub did not return an access token".to_string())?;
+        let refresh_token = self
+            .refresh_token
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| "GitHub did not return a refresh token".to_string())?;
+        let expires_in = self
+            .expires_in
+            .filter(|n| *n > 0)
+            .ok_or_else(|| "GitHub token response missing expires_in".to_string())?;
+        let refresh_token_expires_in = self
+            .refresh_token_expires_in
+            .filter(|n| *n > 0)
+            .ok_or_else(|| "GitHub token response missing refresh_token_expires_in".to_string())?;
+        Ok(GitHubAppUserToken {
+            access_token,
+            refresh_token,
+            expires_in,
+            refresh_token_expires_in,
+            token_type: self
+                .token_type
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "bearer".into()),
+            scope: self.scope.unwrap_or_default(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitHubAppUserToken {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub expires_in: i64,
+    pub refresh_token_expires_in: i64,
+    pub token_type: String,
+    pub scope: String,
+}
+
+impl GitHubAppUserToken {
+    pub fn into_credential(self, now: DateTime<Utc>) -> GitHubCredential {
+        GitHubCredential::from_user_token(self, now)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitHubRefreshError {
+    NotConfigured,
+    InvalidGrant,
+    Provider(String),
+}
+
+const GITHUB_CREDENTIAL_KIND: &str = "github_app_user";
+pub const ACCESS_TOKEN_SAFETY_WINDOW_SECS: i64 = 60;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHubCredential {
+    pub kind: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub access_expires_at: DateTime<Utc>,
+    pub refresh_expires_at: DateTime<Utc>,
+    pub token_type: String,
+}
+
+impl GitHubCredential {
+    pub fn from_user_token(token: GitHubAppUserToken, now: DateTime<Utc>) -> Self {
+        Self {
+            kind: GITHUB_CREDENTIAL_KIND.into(),
+            access_token: token.access_token,
+            refresh_token: token.refresh_token,
+            access_expires_at: now + Duration::seconds(token.expires_in),
+            refresh_expires_at: now + Duration::seconds(token.refresh_token_expires_in),
+            token_type: token.token_type,
+        }
+    }
+
+    pub fn from_plaintext(plaintext: &str) -> Option<Self> {
+        let parsed: Self = serde_json::from_str(plaintext).ok()?;
+        if parsed.kind != GITHUB_CREDENTIAL_KIND
+            || parsed.access_token.is_empty()
+            || parsed.refresh_token.is_empty()
+        {
+            return None;
+        }
+        Some(parsed)
+    }
+
+    pub fn to_plaintext(&self) -> Result<String, String> {
+        serde_json::to_string(self).map_err(|e| e.to_string())
+    }
+
+    pub fn access_token_is_fresh(&self, now: DateTime<Utc>) -> bool {
+        self.access_expires_at > now + Duration::seconds(ACCESS_TOKEN_SAFETY_WINDOW_SECS)
+    }
+
+    pub fn refresh_token_is_valid(&self, now: DateTime<Utc>) -> bool {
+        self.refresh_expires_at > now
+    }
+
+    pub fn secret_values(&self) -> Vec<String> {
+        vec![self.access_token.clone(), self.refresh_token.clone()]
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 pub struct GitHubUser {
     pub login: String,
     pub id: i64,
     pub name: Option<String>,
     pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubInstallationsResponse {
+    #[serde(default)]
+    installations: Vec<GitHubInstallation>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GitHubInstallation {
+    pub id: i64,
+    pub account: GitHubInstallationAccount,
+    #[serde(default)]
+    pub repository_selection: String,
+    #[serde(default)]
+    pub permissions: Value,
+}
+
+impl GitHubInstallation {
+    pub fn metadata_summary(&self) -> Value {
+        json!({
+            "id": self.id,
+            "accountLogin": self.account.login,
+            "accountId": self.account.id,
+            "accountType": self.account.account_type,
+            "repositorySelection": self.repository_selection,
+            "permissionsSummary": permissions_summary(&self.permissions),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GitHubInstallationAccount {
+    pub login: String,
+    pub id: i64,
+    #[serde(rename = "type")]
+    pub account_type: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GitHubInstallationRepositoriesResponse {
+    #[serde(default)]
+    repositories: Vec<Value>,
+}
+
+fn permissions_summary(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, perm) in map {
+                if let Some(level) = perm.as_str() {
+                    out.insert(key.clone(), json!(level));
+                }
+            }
+            Value::Object(out)
+        }
+        _ => json!({}),
+    }
+}
+
+pub fn parse_github_app_token_response_json(value: &Value) -> Result<GitHubAppUserToken, String> {
+    let parsed: GitHubTokenResponse = serde_json::from_value(value.clone())
+        .map_err(|_| "GitHub token response invalid".to_string())?;
+    parsed.into_user_token()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn installation_url_uses_app_slug_and_state_without_classic_scopes() {
+        let client = GitHubClient::production();
+        let url = client.installation_url("elsewhere-alpha", "state-token");
+        assert_eq!(
+            url,
+            "https://github.com/apps/elsewhere-alpha/installations/new?state=state-token"
+        );
+        assert!(!url.contains("scope="));
+        assert!(!url.contains("repo"));
+        assert!(!url.contains("login/oauth/authorize"));
+    }
+
+    #[test]
+    fn token_response_requires_refreshable_github_app_fields() {
+        let token = parse_github_app_token_response_json(&json!({
+            "access_token": "ghu_access",
+            "expires_in": 28800,
+            "refresh_token": "ghr_refresh",
+            "refresh_token_expires_in": 15897600,
+            "token_type": "bearer",
+            "scope": ""
+        }))
+        .expect("token");
+        assert_eq!(token.access_token, "ghu_access");
+        assert_eq!(token.refresh_token, "ghr_refresh");
+        assert_eq!(token.expires_in, 28800);
+        assert_eq!(token.refresh_token_expires_in, 15897600);
+    }
+
+    #[test]
+    fn legacy_access_token_only_response_is_rejected() {
+        let err = parse_github_app_token_response_json(&json!({
+            "access_token": "gho_legacy",
+            "token_type": "bearer",
+            "scope": "repo"
+        }))
+        .expect_err("legacy");
+        assert!(err.contains("refresh token") || err.contains("expires_in"));
+    }
+
+    #[test]
+    fn structured_credential_round_trips_and_rejects_raw_tokens() {
+        let token = GitHubAppUserToken {
+            access_token: "ghu_access".into(),
+            refresh_token: "ghr_refresh".into(),
+            expires_in: 100,
+            refresh_token_expires_in: 200,
+            token_type: "bearer".into(),
+            scope: String::new(),
+        };
+        let now = DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let credential = GitHubCredential::from_user_token(token, now);
+        let plaintext = credential.to_plaintext().unwrap();
+        assert!(GitHubCredential::from_plaintext(&plaintext).is_some());
+        assert!(GitHubCredential::from_plaintext("gho_legacy_raw_token").is_none());
+        assert_eq!(credential.access_expires_at, now + Duration::seconds(100));
+        assert_eq!(credential.refresh_expires_at, now + Duration::seconds(200));
+    }
 }

@@ -503,6 +503,17 @@ mod tests {
         assert!(names.contains(&"connected_apps_load_tool".to_string()));
         assert!(names.contains(&"connected_apps_execute_tool".to_string()));
         assert!(names.contains(&"github_list_repositories".to_string()));
+        for name in [
+            "github_search_repositories",
+            "github_get_repository",
+            "github_get_file_contents",
+            "github_list_issues",
+            "github_get_issue",
+            "github_list_pull_requests",
+            "github_get_pull_request",
+        ] {
+            assert!(names.contains(&name.to_string()), "{name}");
+        }
         assert!(names.contains(&"recall_memory".to_string()));
         assert!(names.contains(&"remember".to_string()));
         assert!(names.contains(&"forget_memory".to_string()));
