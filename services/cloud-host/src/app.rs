@@ -99,6 +99,10 @@ pub fn build_router(state: AppState) -> Router {
             post(api::skills::create_run_skill_draft),
         )
         .route(
+            "/v1/runs/{id}/skill-save",
+            post(api::skills::save_run_skill),
+        )
+        .route(
             "/v1/computers",
             get(api::computers::list).post(api::computers::create),
         )

@@ -49,6 +49,19 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Allow this routine?")).toBeTruthy();
   });
 
+  it("uses skill-specific approval titles", () => {
+    render(
+      <ApprovalCard
+        payload={{
+          ...payload,
+          tool: "skill_save_recent_work",
+          summary: 'Save "Competitor brief" and attach to Scout',
+        }}
+      />,
+    );
+    expect(screen.getByText("Allow this skill?")).toBeTruthy();
+  });
+
   it("renders resolved approvals with neutral copy and no waiting language", () => {
     render(<ApprovalCard payload={payload} externalStatus="approved" />);
     expect(screen.getByText(/Allowed · Write report\.md/)).toBeTruthy();

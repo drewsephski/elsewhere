@@ -16,6 +16,13 @@ fn is_foreign_key_violation(error: &sqlx::Error) -> bool {
         .is_some_and(|code| code == "23503")
 }
 
+fn is_unique_violation(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(|db| db.code())
+        .is_some_and(|code| code == "23505")
+}
+
 #[derive(Debug, Clone)]
 pub struct SkillRow {
     pub id: String,
@@ -92,6 +99,17 @@ pub async fn create_skill_with_version(
     package: &SkillPackage,
     extra_files: &[SkillPackageFile],
 ) -> Result<(SkillRow, SkillVersionRow), ApiError> {
+    create_skill_with_version_and_attach(pool, owner, slug, package, extra_files, None).await
+}
+
+pub async fn create_skill_with_version_and_attach(
+    pool: &PgPool,
+    owner: &str,
+    slug: &str,
+    package: &SkillPackage,
+    extra_files: &[SkillPackageFile],
+    attach_bot_id: Option<&str>,
+) -> Result<(SkillRow, SkillVersionRow), ApiError> {
     let skill_id = Uuid::new_v4().to_string();
     let version_id = Uuid::new_v4().to_string();
     let mut tx = pool.begin().await.map_err(db_err)?;
@@ -105,7 +123,15 @@ pub async fn create_skill_with_version(
     .bind(&package.frontmatter.description)
     .execute(&mut *tx)
     .await
-    .map_err(db_err)?;
+    .map_err(|e| {
+        if is_unique_violation(&e) {
+            ApiError::Conflict(format!(
+                "A skill with slug \"{slug}\" already exists for this owner"
+            ))
+        } else {
+            db_err(e)
+        }
+    })?;
     insert_version_files(
         &mut tx,
         owner,
@@ -121,6 +147,30 @@ pub async fn create_skill_with_version(
         .execute(&mut *tx)
         .await
         .map_err(db_err)?;
+
+    if let Some(bot_id) = attach_bot_id {
+        let bot_ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
+        )
+        .bind(bot_id)
+        .bind(owner)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db_err)?;
+        if !bot_ok {
+            return Err(ApiError::NotFound);
+        }
+        sqlx::query(
+            "INSERT INTO bot_skills (bot_id, skill_id, owner_id, pinned_version, enabled) VALUES ($1,$2,$3,NULL,TRUE) ON CONFLICT (bot_id, skill_id) DO UPDATE SET pinned_version = EXCLUDED.pinned_version, enabled = TRUE, updated_at = NOW()",
+        )
+        .bind(bot_id)
+        .bind(&skill_id)
+        .bind(owner)
+        .execute(&mut *tx)
+        .await
+        .map_err(db_err)?;
+    }
+
     tx.commit().await.map_err(db_err)?;
     let skill = get_skill_for_owner(pool, owner, &skill_id)
         .await?

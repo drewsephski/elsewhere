@@ -29,6 +29,16 @@ describe("permission policy activity", () => {
     );
   });
 
+  it("labels skill tools in the activity timeline", () => {
+    expect(activityText("tool_call", { tool: "skill_list" })).toBe("Checking skills");
+    expect(
+      activityText("tool_call", {
+        tool: "skill_save_recent_work",
+        arguments: { name: "Competitor brief" },
+      }),
+    ).toBe("Saving a skill (Competitor brief)");
+  });
+
   it("labels routine tools in the activity timeline", () => {
     expect(activityText("tool_call", { tool: "routine_list" })).toBe("Checking routines");
     expect(

@@ -19,7 +19,7 @@ use tokio_util::sync::CancellationToken;
 
 use agent_core::{
     AgentAttachments, AgentCollaboration, AgentComputer, AgentConnectors, AgentHumanIntervention,
-    AgentMemory, AgentRoutines, AgentSubagents, AgentUserQuestion, BrowserRecoverySession,
+    AgentMemory, AgentRoutines, AgentSkills, AgentSubagents, AgentUserQuestion, BrowserRecoverySession,
     ToolApprovalGate,
     ToolRunContext,
 };
@@ -50,6 +50,7 @@ impl ComputerMcpServer {
         subagents: Option<Arc<dyn AgentSubagents>>,
         memory: Option<Arc<dyn AgentMemory>>,
         routines: Option<Arc<dyn AgentRoutines>>,
+        skills: Option<Arc<dyn AgentSkills>>,
         attachments: Option<Arc<dyn AgentAttachments>>,
         user_questions: Option<Arc<dyn AgentUserQuestion>>,
         source_conversation_id: String,
@@ -82,6 +83,7 @@ impl ComputerMcpServer {
             subagents,
             memory,
             routines,
+            skills,
             attachments,
             user_questions,
             source_conversation_id,

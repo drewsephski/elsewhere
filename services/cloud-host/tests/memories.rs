@@ -63,6 +63,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
         local_mac_credential_key: None,
+        allow_skill_draft_heuristic: false,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
@@ -583,6 +584,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None, // subagents
         Some(&dyn_memory),
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "remember",
@@ -604,6 +606,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None, // subagents
         Some(&dyn_memory),
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "recall_memory",
@@ -627,6 +630,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None, // subagents
         Some(&dyn_memory),
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "forget_memory",
@@ -649,6 +653,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         None, // user_questions
         "remember",

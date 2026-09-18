@@ -5,9 +5,9 @@ use agent_core::{
     connector_openai_tool_definitions, dispatch_agent_tool_with_gate_and_recovery,
     human_intervention_openai_tool_definitions, is_attachment_tool, is_browser_tool,
     is_collaboration_tool, is_connector_tool, is_human_intervention_tool, is_memory_tool,
-    is_routine_tool, is_subagent_tool, is_user_question_tool, AgentAttachments, AgentCollaboration,
+    is_routine_tool, is_skill_tool, is_subagent_tool, is_user_question_tool, AgentAttachments, AgentCollaboration,
     AgentComputer, AgentConnectors, AgentHumanIntervention, AgentMemory, AgentRoutines,
-    AgentSubagents, AgentUserQuestion,
+    AgentSkills, AgentSubagents, AgentUserQuestion,
     BrowserRecoverySession, CollaborationContext, ToolApprovalGate, ToolError, ToolRunContext,
     RUN_SUBAGENT_DESCRIPTION,
 };
@@ -39,6 +39,7 @@ pub struct ComputerHandler {
     subagents: Option<Arc<dyn AgentSubagents>>,
     memory: Option<Arc<dyn AgentMemory>>,
     routines: Option<Arc<dyn AgentRoutines>>,
+    skills: Option<Arc<dyn AgentSkills>>,
     attachments: Option<Arc<dyn AgentAttachments>>,
     user_questions: Option<Arc<dyn AgentUserQuestion>>,
     source_conversation_id: String,
@@ -57,6 +58,7 @@ impl ComputerHandler {
         subagents: Option<Arc<dyn AgentSubagents>>,
         memory: Option<Arc<dyn AgentMemory>>,
         routines: Option<Arc<dyn AgentRoutines>>,
+        skills: Option<Arc<dyn AgentSkills>>,
         attachments: Option<Arc<dyn AgentAttachments>>,
         user_questions: Option<Arc<dyn AgentUserQuestion>>,
         source_conversation_id: String,
@@ -73,6 +75,7 @@ impl ComputerHandler {
             subagents,
             memory,
             routines,
+            skills,
             attachments,
             user_questions,
             source_conversation_id,
@@ -279,6 +282,10 @@ fn tool_definitions() -> Vec<Tool> {
     tools.extend(memory_mcp_tool_definitions());
     tools.extend(routine_mcp_tool_definitions());
     tools.extend(openai_mcp_tools(
+        agent_core::skill_openai_tool_definitions(),
+        "Manage Agent Skills",
+    ));
+    tools.extend(openai_mcp_tools(
         agent_core::user_question_openai_tool_definitions(),
         "Ask the owner a multiple-choice question",
     ));
@@ -438,6 +445,7 @@ impl ServerHandler for ComputerHandler {
             self.subagents.as_ref(),
             self.memory.as_ref(),
             self.routines.as_ref(),
+            self.skills.as_ref(),
             self.attachments.as_ref(),
             self.user_questions.as_ref(),
             &request.name,
@@ -494,6 +502,7 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         name if is_connector_tool(name) => Ok(()),
         name if is_memory_tool(name) => Ok(()),
         name if is_routine_tool(name) => Ok(()),
+        name if is_skill_tool(name) => Ok(()),
         name if is_attachment_tool(name) => Ok(()),
         name if is_user_question_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(

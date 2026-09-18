@@ -51,6 +51,7 @@ import { RunConversationTimeline } from "./run-conversation-timeline";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
+import { SaveAsSkillDialog } from "./save-as-skill-dialog";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
 import { Spinner } from "@/components/ui/spinner";
@@ -127,6 +128,7 @@ export function BotConversationView({
     runId?: string;
   } | null>(null);
   const [liveRunId, setLiveRunId] = useState<string | null>(null);
+  const [saveSkillRun, setSaveSkillRun] = useState<RunSummary | null>(null);
   const [liveDelegations, setLiveDelegations] = useState<DelegationSummary[]>([]);
   const requestRef = useRef<{
     fingerprint: string;
@@ -699,6 +701,22 @@ export function BotConversationView({
                   className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
                 />
               ) : null;
+            const saveSkillAction =
+              finished && run.status === "completed" ? (
+                <button
+                  type="button"
+                  className="h-7 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setSaveSkillRun(run)}
+                >
+                  Save as skill
+                </button>
+              ) : null;
+            const statusActions = (
+              <>
+                {saveSkillAction}
+                {deleteAction}
+              </>
+            );
 
             return (
               <div key={run.runId} className="space-y-2.5">
@@ -768,7 +786,7 @@ export function BotConversationView({
                         />
                       }
                     />
-                    <WorkStatusCard run={run} actions={deleteAction} className="ml-[2.25rem]">
+                    <WorkStatusCard run={run} actions={statusActions} className="ml-[2.25rem]">
                       <ChatResultCards runId={run.runId} />
                     </WorkStatusCard>
                   </>
@@ -940,6 +958,19 @@ export function BotConversationView({
           ) : null}
         </div>
       </footer>
+      {saveSkillRun && bot ? (
+        <SaveAsSkillDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setSaveSkillRun(null);
+            }
+          }}
+          runId={saveSkillRun.runId}
+          botId={bot.id}
+          botName={bot.name}
+        />
+      ) : null}
     </div>
   );
 }

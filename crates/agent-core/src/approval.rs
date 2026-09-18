@@ -8,9 +8,11 @@ pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 use crate::connectors::ConnectorToolDefinition;
 use crate::tool_catalog::{
     is_attachment_tool, is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool,
-    is_connected_apps_tool, is_github_connector_tool, is_routine_tool, is_user_question_tool,
+    is_connected_apps_tool, is_github_connector_tool, is_routine_tool, is_skill_tool,
+    is_user_question_tool,
 };
 use crate::routines::is_routine_mutation_tool;
+use crate::skills::is_skill_mutation_tool;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -139,6 +141,8 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "forget_memory" => ToolOperationKind::Mutation,
         name if is_routine_tool(name) && !is_routine_mutation_tool(name) => ToolOperationKind::Read,
         name if is_routine_mutation_tool(name) => ToolOperationKind::Mutation,
+        name if is_skill_tool(name) && !is_skill_mutation_tool(name) => ToolOperationKind::Read,
+        name if is_skill_mutation_tool(name) => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
         name if is_user_question_tool(name) => ToolOperationKind::Read,
         name if is_attachment_tool(name) => ToolOperationKind::Read,
@@ -243,6 +247,8 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         }),
         "routine_create" => sanitize_routine_create_arguments(args),
         "routine_pause" | "routine_resume" => sanitize_routine_toggle_arguments(args),
+        "skill_save_recent_work" => sanitize_skill_save_arguments(args),
+        "skill_attach" | "skill_detach" => sanitize_skill_attach_arguments(args),
         "connected_apps_execute_tool" => {
             let info = ConnectedAppApprovalInfo {
                 install_id: args
@@ -372,6 +378,47 @@ fn sanitize_routine_toggle_arguments(args: &Value) -> Value {
     })
 }
 
+fn sanitize_skill_save_arguments(args: &Value) -> Value {
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let description = args.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let bot_name = args.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+    let attach = args.get("attachToBot").and_then(|v| v.as_bool()).unwrap_or(true);
+    let preview = args
+        .get("skillMdPreview")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    json!({
+        "name": truncate_str(name, 80),
+        "description": truncate_str(description, 160),
+        "attachToBot": attach,
+        "botName": bot_name,
+        "skillMdPreview": truncate_str(preview, 480),
+        "argumentSummary": {
+            "name": name,
+            "description": description,
+            "attachToBot": attach,
+            "botName": bot_name,
+            "skillMdPreview": preview
+        }
+    })
+}
+
+fn sanitize_skill_attach_arguments(args: &Value) -> Value {
+    let skill_id = args.get("skillId").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args.get("skillName").and_then(|v| v.as_str()).unwrap_or("");
+    let bot_name = args.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+    json!({
+        "skillId": skill_id,
+        "skillName": truncate_str(name, 80),
+        "botName": bot_name,
+        "argumentSummary": {
+            "skillId": skill_id,
+            "name": name,
+            "botName": bot_name
+        }
+    })
+}
+
 fn routine_schedule_label_from_value(schedule: &Value) -> Option<String> {
     let repeat = schedule.get("repeat").and_then(|v| v.as_str())?;
     let at = schedule.get("at").and_then(|v| v.as_str());
@@ -419,6 +466,34 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .filter(|s| !s.is_empty())
                 .unwrap_or("this routine");
             format!("Resume \"{name}\"")
+        }
+        "skill_save_recent_work" => {
+            let name = sanitized.get("name").and_then(|v| v.as_str()).unwrap_or("skill");
+            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+            let attach = sanitized.get("attachToBot").and_then(|v| v.as_bool()).unwrap_or(true);
+            if attach {
+                format!("Save \"{name}\" and attach to {bot}")
+            } else {
+                format!("Save \"{name}\"")
+            }
+        }
+        "skill_attach" => {
+            let name = sanitized
+                .get("skillName")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("this skill");
+            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+            format!("Attach \"{name}\" to {bot}")
+        }
+        "skill_detach" => {
+            let name = sanitized
+                .get("skillName")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("this skill");
+            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+            format!("Remove \"{name}\" from {bot}")
         }
         "workspace_write" => {
             let path = sanitized

@@ -144,6 +144,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
         local_mac_credential_key: None,
+        allow_skill_draft_heuristic: false,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
@@ -489,6 +490,7 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
                 None, // subagents
                 None, // memory
                 None, // routines
+                None, // skills
                 None, // attachments
                 Some(&scoped),
                 "ask_user",
@@ -529,6 +531,7 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
         None, // subagents
         None, // memory
         None, // routines
+        None, // skills
         None, // attachments
         Some(&scoped),
         "ask_user",

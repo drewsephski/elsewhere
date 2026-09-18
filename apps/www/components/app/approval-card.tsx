@@ -152,7 +152,16 @@ export function ApprovalCard({
     argumentSummary && Object.keys(argumentSummary).length > 0;
   const target = humanTarget(payload);
   const isRoutineApproval = payload.tool.startsWith("routine_");
-  const pendingTitle = isRoutineApproval ? "Allow this routine?" : "Allow this action?";
+  const isSkillApproval = payload.tool.startsWith("skill_");
+  const pendingTitle = isRoutineApproval
+    ? "Allow this routine?"
+    : isSkillApproval
+      ? payload.tool === "skill_save_recent_work"
+        ? "Allow this skill?"
+        : payload.tool === "skill_detach"
+          ? "Remove this skill?"
+          : "Allow this skill change?"
+      : "Allow this action?";
 
   if (resolved) {
     return (

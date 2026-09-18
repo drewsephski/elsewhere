@@ -21,6 +21,8 @@ mod memory;
 mod memory_tools;
 mod routine_tools;
 mod routines;
+mod skill_tools;
+mod skills;
 mod model;
 mod public_http_url;
 mod readiness_cache;
@@ -112,6 +114,15 @@ pub use routines::{
     ROUTINE_CREATE_TOOL_NAME,
     ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
 };
+pub use skill_tools::{
+    dispatch_skill_tool, skill_openai_tool_definitions, truncate_skill_md_preview,
+};
+pub use skills::{
+    is_skill_mutation_tool, AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult,
+    SkillDraftFile, SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult,
+    SKILL_ATTACH_TOOL_NAME, SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME,
+    SKILL_SAVE_RECENT_WORK_TOOL_NAME,
+};
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult, ModelError,
@@ -149,7 +160,8 @@ pub use tool_catalog::{
     is_attachment_tool, is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
     is_github_connector_tool, is_known_agent_tool, is_memory_tool, is_policy_non_overridable_tool,
-    is_policy_overridable_tool, is_routine_tool, is_subagent_tool, is_user_question_tool,
+    is_policy_overridable_tool, is_routine_tool, is_skill_tool, is_subagent_tool,
+    is_user_question_tool,
     policy_action_group,
     policy_action_label, policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES,
     ALL_COMPUTER_TOOL_NAMES, ATTACHMENT_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,

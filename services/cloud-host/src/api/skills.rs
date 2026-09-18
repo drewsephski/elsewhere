@@ -12,7 +12,7 @@ use crate::skills::{
     append_skill_version, attach_bot_skill, create_skill_with_version, delete_skill,
     detach_bot_skill, generate_skill_draft_from_run, get_skill_for_owner, get_version_for_owner,
     list_bot_skills, list_skills, list_version_package_files, list_versions, patch_skill_metadata,
-    BotSkillAttachment, SkillRow, SkillVersionRow,
+    save_reviewed_skill_package, BotSkillAttachment, SkillRow, SkillVersionRow,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -291,6 +291,30 @@ pub struct SkillDraftResponse {
     pub files: Vec<SkillFileInput>,
     pub parsed_name: String,
     pub parsed_description: String,
+    pub draft_kind: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveRunSkillRequest {
+    pub skill_md: String,
+    #[serde(default)]
+    pub files: Vec<SkillFileInput>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub attach_to_bot: bool,
+    pub bot_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveRunSkillResponse {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub description: String,
+    pub current_version: i32,
+    pub attached_to_bot: bool,
 }
 
 pub async fn create_run_skill_draft(
@@ -298,14 +322,19 @@ pub async fn create_run_skill_draft(
     Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
 ) -> Result<Json<SkillDraftResponse>, ApiError> {
-    let (package, files) =
-        generate_skill_draft_from_run(&state.pool, &state.config, principal.owner_id(), &run_id)
-            .await?;
+    let (package, files, kind) = generate_skill_draft_from_run(
+        &state.pool,
+        &state.config,
+        principal.owner_id(),
+        &run_id,
+    )
+    .await?;
     Ok(Json(SkillDraftResponse {
         draft_id: Uuid::new_v4().to_string(),
         skill_md: package.skill_md,
-        parsed_name: package.frontmatter.name,
-        parsed_description: package.frontmatter.description,
+        parsed_name: package.frontmatter.name.clone(),
+        parsed_description: package.frontmatter.description.clone(),
+        draft_kind: kind.as_str().into(),
         files: files
             .into_iter()
             .map(|f| SkillFileInput {
@@ -314,5 +343,56 @@ pub async fn create_run_skill_draft(
                 content_type: f.content_type,
             })
             .collect(),
+    }))
+}
+
+pub async fn save_run_skill(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(run_id): Path<String>,
+    Json(body): Json<SaveRunSkillRequest>,
+) -> Result<Json<SaveRunSkillResponse>, ApiError> {
+    let owner = principal.owner_id();
+    let run_ok: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM agent_runs WHERE id = $1 AND owner_id = $2 AND status = 'completed')",
+    )
+    .bind(&run_id)
+    .bind(owner)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !run_ok {
+        return Err(ApiError::Validation(
+            "Only completed runs can be saved as skills".into(),
+        ));
+    }
+    let files = files_from_input(&body.files);
+    let optional_name = body.name.as_deref().filter(|s| !s.trim().is_empty());
+    let optional_description = body
+        .description
+        .as_deref()
+        .filter(|s| !s.trim().is_empty());
+    let attach_bot = if body.attach_to_bot {
+        Some(body.bot_id.as_str())
+    } else {
+        None
+    };
+    let (skill, _version) = save_reviewed_skill_package(
+        &state.pool,
+        owner,
+        &body.skill_md,
+        &files,
+        optional_name,
+        optional_description,
+        attach_bot,
+    )
+    .await?;
+    Ok(Json(SaveRunSkillResponse {
+        id: skill.id,
+        slug: skill.slug,
+        name: skill.name,
+        description: skill.description,
+        current_version: skill.current_version,
+        attached_to_bot: body.attach_to_bot,
     }))
 }
