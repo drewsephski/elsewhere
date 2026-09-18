@@ -259,11 +259,12 @@ pub fn truncate_skill_md_preview(skill_md: &str) -> String {
     if skill_md.len() <= MAX {
         return skill_md.to_string();
     }
-    let mut end = MAX;
+    let ellipsis = '…';
+    let mut end = MAX.saturating_sub(ellipsis.len_utf8());
     while end > 0 && !skill_md.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}…", &skill_md[..end])
+    format!("{ellipsis}{}", &skill_md[..end])
 }
 
 #[cfg(test)]
