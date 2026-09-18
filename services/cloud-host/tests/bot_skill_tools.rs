@@ -93,6 +93,7 @@ fn jwt_state(pool: PgPool) -> AppState {
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
         local_mac_credential_key: None,
+        allow_skill_draft_heuristic: true,
     };
     let mut state = AppState::new(pool, config);
     state.jwt_verifier = Some(JwtVerifier::from_test_decoding_key(
@@ -608,4 +609,220 @@ async fn cross_owner_skill_attach_denied(pool: PgPool) {
         .await
         .unwrap_err();
     assert!(matches!(err, agent_core::SkillError::NotFound));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn reviewed_skill_package_files_persist(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let md = "---\nname: file-test\ndescription: d\n---\n\nbody\n";
+    let files = vec![agent_skills::SkillPackageFile {
+        relative_path: "references/guide.md".into(),
+        content: "# Guide".into(),
+        content_type: None,
+    }];
+    let (skill, _) = cloud_host::skills::save_reviewed_skill_package(
+        &pool,
+        &owner,
+        md,
+        &files,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let stored = cloud_host::skills::list_version_package_files(&pool, &owner, &skill.id, 1)
+        .await
+        .unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].relative_path, "references/guide.md");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn save_reviewed_skill_name_changes_slug(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let md = "---\nname: old-slug\ndescription: d\n---\n\nbody\n";
+    let (skill, _) = cloud_host::skills::save_reviewed_skill_package(
+        &pool,
+        &owner,
+        md,
+        &[],
+        Some("Competitor Brief"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(skill.slug, "competitor-brief");
+    assert_eq!(skill.name, "competitor-brief");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn invalid_package_file_rejected_before_persist(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let md = "---\nname: bad-path\ndescription: d\n---\n\nbody\n";
+    let files = vec![agent_skills::SkillPackageFile {
+        relative_path: "../secrets.txt".into(),
+        content: "nope".into(),
+        content_type: None,
+    }];
+    let err = cloud_host::skills::save_reviewed_skill_package(
+        &pool,
+        &owner,
+        md,
+        &files,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, cloud_host::error::ApiError::Validation(_)));
+    assert!(cloud_host::skills::list_skills(&pool, &owner)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn create_with_attach_rolls_back_on_missing_bot(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let md = "---\nname: atomic-test\ndescription: d\n---\n\nbody\n";
+    let missing_bot = Uuid::new_v4().to_string();
+    let err = cloud_host::skills::save_reviewed_skill_package(
+        &pool,
+        &owner,
+        md,
+        &[],
+        None,
+        None,
+        Some(&missing_bot),
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, cloud_host::error::ApiError::NotFound));
+    assert!(cloud_host::skills::list_skills(&pool, &owner)
+        .await
+        .unwrap()
+        .is_empty());
+    let retry = cloud_host::skills::save_reviewed_skill_package(
+        &pool,
+        &owner,
+        md,
+        &[],
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(retry.slug, "atomic-test");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn archived_attach_rejected_before_approval_in_run(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let md = "---\nname: archived-run\ndescription: d\n---\n\nb\n";
+    let package =
+        agent_skills::SkillPackage::validate_and_build(md, &[], Some("archived-run")).unwrap();
+    let (skill, _) =
+        skills::create_skill_with_version(&pool, &owner, "archived-run", &package, &[])
+            .await
+            .unwrap();
+    skills::patch_skill_metadata(&pool, &owner, &skill.id, None, None, Some("archived"))
+        .await
+        .unwrap();
+    let state = jwt_state(pool.clone());
+    let request_id = Uuid::new_v4().to_string();
+    start_run(
+        &state,
+        &owner,
+        &bot_id,
+        "attach archived",
+        &request_id,
+        None,
+        ScriptedModel::calls(
+            "skill_attach",
+            &json!({ "skillId": skill.id }).to_string(),
+        ),
+    )
+    .await;
+    wait_no_active_runs(&pool, &owner).await;
+    state.clear_test_run_overrides(&request_id);
+    assert_eq!(pending_approval_count(&pool, &owner).await, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn detach_not_attached_skips_approval(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let md = "---\nname: loose-skill\ndescription: d\n---\n\nb\n";
+    let package =
+        agent_skills::SkillPackage::validate_and_build(md, &[], Some("loose-skill")).unwrap();
+    let (skill, _) =
+        skills::create_skill_with_version(&pool, &owner, "loose-skill", &package, &[])
+            .await
+            .unwrap();
+    let state = jwt_state(pool.clone());
+    let request_id = Uuid::new_v4().to_string();
+    start_run(
+        &state,
+        &owner,
+        &bot_id,
+        "detach",
+        &request_id,
+        None,
+        ScriptedModel::calls(
+            "skill_detach",
+            &json!({ "skillId": skill.id }).to_string(),
+        ),
+    )
+    .await;
+    wait_no_active_runs(&pool, &owner).await;
+    state.clear_test_run_overrides(&request_id);
+    assert_eq!(pending_approval_count(&pool, &owner).await, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn bot_persist_save_keeps_package_files(pool: PgPool) {
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let service = cloud_host::agent_skills::PostgresAgentSkills::new(
+        pool.clone(),
+        jwt_state(pool.clone()).config.as_ref().clone(),
+    );
+    let ctx = agent_core::SkillContext {
+        owner_id: owner.clone(),
+        bot_id: bot_id.clone(),
+        source_conversation_id: "conv".into(),
+    };
+    let draft = agent_core::SkillSaveDraft {
+        source_run_id: "run-src".into(),
+        slug: "with-file".into(),
+        display_name: "With file".into(),
+        description: "Has a reference file".into(),
+        skill_md: "---\nname: with-file\ndescription: Has a reference file\n---\n\nbody\n".into(),
+        files: vec![agent_core::SkillDraftFile {
+            relative_path: "references/notes.md".into(),
+            content: "Keep me".into(),
+            content_type: None,
+        }],
+        attach_to_bot: true,
+        draft_kind: None,
+    };
+    let saved = service.persist_save(&ctx, &draft).await.unwrap();
+    let stored =
+        skills::list_version_package_files(&pool, &owner, &saved.skill_id, saved.version)
+            .await
+            .unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].content, "Keep me");
+    assert_eq!(
+        skills::list_bot_skills(&pool, &owner, &bot_id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
 }

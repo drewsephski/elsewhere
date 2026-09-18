@@ -52,6 +52,8 @@ pub struct Config {
     /// HMAC key for local Mac pairing secrets and durable device credentials.
     /// Required in JWT/production mode. No insecure production fallback.
     pub local_mac_credential_key: Option<[u8; 32]>,
+    /// When true, failed Codex skill-draft generation falls back to a generic heuristic draft (tests/dev only).
+    pub allow_skill_draft_heuristic: bool,
 }
 
 impl Config {
@@ -234,6 +236,8 @@ impl Config {
             slack_oauth_redirect_uri,
             slack_api_base,
             local_mac_credential_key,
+            allow_skill_draft_heuristic: parse_bool_env("ELSEWHERE_ALLOW_SKILL_DRAFT_HEURISTIC")
+                .unwrap_or(false),
         })
     }
 

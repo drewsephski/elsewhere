@@ -4,16 +4,16 @@ use agent_core::{
     AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult, SkillError, SkillListEntry,
     SkillSaveDraft, SkillSaveResult,
 };
-use agent_skills::SkillPackageFile;
 use async_trait::async_trait;
 use sqlx::PgPool;
 
 use crate::config::Config;
 use crate::error::ApiError;
 use crate::skills::{
-    apply_skill_save_overrides, attach_bot_skill, create_skill_with_version, detach_bot_skill,
+    apply_skill_save_overrides, attach_bot_skill, detach_bot_skill, draft_files_from_package,
     get_skill_for_owner, list_bot_skills, list_skills, resolve_prior_completed_run,
-    skill_draft_from_run,
+    save_reviewed_skill_package, skill_draft_from_run, skill_package_files_from_draft,
+    SkillDraftKind,
 };
 
 pub struct PostgresAgentSkills {
@@ -33,6 +33,13 @@ fn map_api(err: ApiError) -> SkillError {
         ApiError::Validation(m) => SkillError::Validation(m),
         ApiError::Conflict(m) => SkillError::Conflict(m),
         other => SkillError::Internal(other.to_string()),
+    }
+}
+
+fn draft_kind_field(kind: SkillDraftKind) -> Option<String> {
+    match kind {
+        SkillDraftKind::Generated => None,
+        SkillDraftKind::Heuristic => Some(SkillDraftKind::Heuristic.as_str().into()),
     }
 }
 
@@ -82,7 +89,7 @@ impl AgentSkills for PostgresAgentSkills {
         .map_err(map_api)?
         .ok_or(SkillError::NoSourceRun)?;
 
-        let (package, files) = skill_draft_from_run(
+        let (package, files, kind) = skill_draft_from_run(
             &self.pool,
             &self.config,
             &ctx.owner_id,
@@ -91,7 +98,7 @@ impl AgentSkills for PostgresAgentSkills {
         .await
         .map_err(map_api)?;
 
-        let (package, _files) = apply_skill_save_overrides(
+        let (package, files) = apply_skill_save_overrides(
             &package,
             &files,
             optional_name,
@@ -122,7 +129,9 @@ impl AgentSkills for PostgresAgentSkills {
                 .unwrap_or_else(|| humanize_slug(&package.frontmatter.name)),
             description: package.frontmatter.description.clone(),
             skill_md: package.skill_md,
+            files: draft_files_from_package(&files),
             attach_to_bot,
+            draft_kind: draft_kind_field(kind),
         })
     }
 
@@ -131,28 +140,23 @@ impl AgentSkills for PostgresAgentSkills {
         ctx: &SkillContext,
         draft: &SkillSaveDraft,
     ) -> Result<SkillSaveResult, SkillError> {
-        let package = agent_skills::SkillPackage::validate_and_build(
-            &draft.skill_md,
-            &[] as &[SkillPackageFile],
-            Some(&draft.slug),
-        )
-        .map_err(|e| SkillError::Validation(e.to_string()))?;
-
-        let (skill, _version) = create_skill_with_version(
+        let files = skill_package_files_from_draft(&draft.files);
+        let attach_bot = if draft.attach_to_bot {
+            Some(ctx.bot_id.as_str())
+        } else {
+            None
+        };
+        let (skill, _version) = save_reviewed_skill_package(
             &self.pool,
             &ctx.owner_id,
-            &draft.slug,
-            &package,
-            &[],
+            &draft.skill_md,
+            &files,
+            None,
+            None,
+            attach_bot,
         )
         .await
         .map_err(map_api)?;
-
-        if draft.attach_to_bot {
-            attach_bot_skill(&self.pool, &ctx.owner_id, &ctx.bot_id, &skill.id, None)
-                .await
-                .map_err(map_api)?;
-        }
 
         let bot_name = self.bot_display_name(ctx).await?;
         let skill_name = skill.name.clone();

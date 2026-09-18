@@ -114,11 +114,14 @@ pub use routines::{
     ROUTINE_CREATE_TOOL_NAME,
     ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
 };
-pub use skill_tools::{dispatch_skill_tool, skill_openai_tool_definitions};
+pub use skill_tools::{
+    dispatch_skill_tool, skill_openai_tool_definitions, truncate_skill_md_preview,
+};
 pub use skills::{
     is_skill_mutation_tool, AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult,
-    SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult, SKILL_ATTACH_TOOL_NAME,
-    SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME, SKILL_SAVE_RECENT_WORK_TOOL_NAME,
+    SkillDraftFile, SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult,
+    SKILL_ATTACH_TOOL_NAME, SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME,
+    SKILL_SAVE_RECENT_WORK_TOOL_NAME,
 };
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,

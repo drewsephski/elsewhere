@@ -1,7 +1,6 @@
 "use client";
 
 import { cloudHostFetch } from "@/lib/cloud-api";
-import { parseSkillFrontmatterName } from "@/lib/skill-frontmatter";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -18,12 +17,26 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+interface SkillDraftFile {
+  relativePath: string;
+  content: string;
+  contentType?: string | null;
+}
+
 interface SaveAsSkillDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   runId: string;
   botId: string;
   botName?: string;
+}
+
+interface SavedSkillSummary {
+  id: string;
+  slug: string;
+  name: string;
+  currentVersion: number;
+  attachedToBot: boolean;
 }
 
 export function SaveAsSkillDialog({
@@ -37,16 +50,16 @@ export function SaveAsSkillDialog({
   const [description, setDescription] = useState("");
   const [attachToBot, setAttachToBot] = useState(true);
   const [skillMd, setSkillMd] = useState("");
-  const [slug, setSlug] = useState("");
+  const [packageFiles, setPackageFiles] = useState<SkillDraftFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedSkillId, setSavedSkillId] = useState<string | null>(null);
+  const [savedSkill, setSavedSkill] = useState<SavedSkillSummary | null>(null);
 
   useEffect(() => {
     if (!open) {
       return;
     }
-    setSavedSkillId(null);
+    setSavedSkill(null);
     setError(null);
     setBusy(true);
     void cloudHostFetch(`/v1/runs/${runId}/skill-draft`, { method: "POST" })
@@ -58,17 +71,21 @@ export function SaveAsSkillDialog({
           );
         }
         const draftSlug =
-          typeof body.parsedName === "string"
-            ? body.parsedName
-            : parseSkillFrontmatterName(body.skillMd ?? "") ?? "";
-        setSlug(draftSlug);
-        setName(
-          typeof body.parsedName === "string"
-            ? body.parsedName.replace(/-/g, " ")
-            : draftSlug.replace(/-/g, " "),
-        );
-        setDescription(typeof body.parsedDescription === "string" ? body.parsedDescription : "");
+          typeof body.parsedName === "string" ? body.parsedName : "";
         setSkillMd(typeof body.skillMd === "string" ? body.skillMd : "");
+        setPackageFiles(Array.isArray(body.files) ? body.files : []);
+        setName(
+          draftSlug
+            ? draftSlug
+                .split("-")
+                .filter(Boolean)
+                .map((part: string) => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(" ")
+            : "",
+        );
+        setDescription(
+          typeof body.parsedDescription === "string" ? body.parsedDescription : "",
+        );
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Could not prepare a skill draft");
@@ -83,54 +100,30 @@ export function SaveAsSkillDialog({
     setBusy(true);
     setError(null);
     try {
-      const draftResponse = await cloudHostFetch(`/v1/runs/${runId}/skill-draft`, {
-        method: "POST",
-      });
-      const draftBody = await draftResponse.json();
-      if (!draftResponse.ok) {
-        throw new Error(
-          typeof draftBody.error === "string" ? draftBody.error : "Could not refresh draft",
-        );
-      }
-      let nextMd = draftBody.skillMd as string;
-      const nextSlug = parseSkillFrontmatterName(nextMd) ?? slug;
-      if (name.trim() || description.trim()) {
-        const lines = nextMd.split("\n");
-        const rebuilt = lines.map((line: string) => {
-          if (line.startsWith("name:") && name.trim()) {
-            return `name: ${nextSlug}`;
-          }
-          if (line.startsWith("description:") && description.trim()) {
-            return `description: ${description.trim()}`;
-          }
-          return line;
-        });
-        nextMd = rebuilt.join("\n");
-      }
-      const createResponse = await cloudHostFetch("/v1/skills", {
+      const saveResponse = await cloudHostFetch(`/v1/runs/${runId}/skill-save`, {
         method: "POST",
         body: JSON.stringify({
-          slug: nextSlug,
-          skillMd: nextMd,
-          files: draftBody.files ?? [],
+          skillMd,
+          files: packageFiles,
+          name: name.trim() || undefined,
+          description: description.trim() || undefined,
+          attachToBot,
+          botId,
         }),
       });
-      const created = await createResponse.json();
-      if (!createResponse.ok) {
+      const saved = await saveResponse.json();
+      if (!saveResponse.ok) {
         throw new Error(
-          typeof created.error === "string" ? created.error : "Could not save skill",
+          typeof saved.error === "string" ? saved.error : "Could not save skill",
         );
       }
-      if (attachToBot) {
-        const attachResponse = await cloudHostFetch(`/v1/bots/${botId}/skills`, {
-          method: "POST",
-          body: JSON.stringify({ skillId: created.id }),
-        });
-        if (!attachResponse.ok) {
-          throw new Error("Skill saved but could not attach to this Bot");
-        }
-      }
-      setSavedSkillId(created.id as string);
+      setSavedSkill({
+        id: saved.id as string,
+        slug: saved.slug as string,
+        name: saved.name as string,
+        currentVersion: saved.currentVersion as number,
+        attachedToBot: saved.attachedToBot === true,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save skill");
     } finally {
@@ -143,13 +136,15 @@ export function SaveAsSkillDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {savedSkillId ? (
+        {savedSkill ? (
           <>
             <DialogHeader>
               <DialogTitle>Skill saved</DialogTitle>
               <DialogDescription>
-                {name.trim() || slug}
-                {attachToBot ? ` · Attached to ${targetBot} · v1` : " · v1"}
+                {savedSkill.name}
+                {savedSkill.attachedToBot
+                  ? ` · Attached to ${targetBot} · v${savedSkill.currentVersion}`
+                  : ` · v${savedSkill.currentVersion}`}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:justify-start">
@@ -157,7 +152,7 @@ export function SaveAsSkillDialog({
                 Close
               </Button>
               <Link
-                href={`/app/skills/${savedSkillId}`}
+                href={`/app/skills/${savedSkill.id}`}
                 className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
               >
                 View skill

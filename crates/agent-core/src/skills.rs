@@ -42,13 +42,25 @@ pub struct SkillListEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct SkillDraftFile {
+    pub relative_path: String,
+    pub content: String,
+    pub content_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct SkillSaveDraft {
     pub source_run_id: String,
     pub slug: String,
     pub display_name: String,
     pub description: String,
     pub skill_md: String,
+    pub files: Vec<SkillDraftFile>,
     pub attach_to_bot: bool,
+    /// When set to `heuristic`, the draft was synthesized without a full model pass.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub draft_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

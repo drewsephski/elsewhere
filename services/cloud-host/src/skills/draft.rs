@@ -27,7 +27,7 @@ pub async fn generate_skill_draft_from_run(
     config: &crate::config::Config,
     owner: &str,
     run_id: &str,
-) -> Result<(SkillPackage, Vec<SkillPackageFile>), ApiError> {
+) -> Result<(SkillPackage, Vec<SkillPackageFile>, SkillDraftKind), ApiError> {
     let (task, answer) = load_completed_run_content(pool, owner, run_id).await?;
 
     let user_prompt = format!(
@@ -51,11 +51,33 @@ pub async fn generate_skill_draft_from_run(
 
     if let Ok(raw) = codex_attempt {
         if let Ok(parsed) = parse_skill_draft_json(&raw) {
-            return Ok(parsed);
+            return Ok((parsed.0, parsed.1, SkillDraftKind::Generated));
         }
     }
 
-    heuristic_skill_draft(&task, &answer)
+    if config.allow_skill_draft_heuristic {
+        let (package, files) = heuristic_skill_draft(&task, &answer)?;
+        return Ok((package, files, SkillDraftKind::Heuristic));
+    }
+
+    Err(ApiError::Validation(
+        "Could not generate a skill draft from this run. Try again when draft generation is available, or edit the skill manually on the Skills page.".into(),
+    ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkillDraftKind {
+    Generated,
+    Heuristic,
+}
+
+impl SkillDraftKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Generated => "generated",
+            Self::Heuristic => "heuristic",
+        }
+    }
 }
 
 /// Prefer Codex when available; otherwise build a deterministic draft (tests, Responses-only hosts).
@@ -64,7 +86,7 @@ pub async fn skill_draft_from_run(
     config: &crate::config::Config,
     owner: &str,
     run_id: &str,
-) -> Result<(SkillPackage, Vec<SkillPackageFile>), ApiError> {
+) -> Result<(SkillPackage, Vec<SkillPackageFile>, SkillDraftKind), ApiError> {
     generate_skill_draft_from_run(pool, config, owner, run_id).await
 }
 
@@ -215,7 +237,7 @@ fn heuristic_skill_draft(
     Ok((package, files))
 }
 
-fn title_to_skill_slug(title: &str) -> Result<String, ApiError> {
+pub fn title_to_skill_slug(title: &str) -> Result<String, ApiError> {
     let mut slug = String::new();
     let mut last_hyphen = false;
     for ch in title.trim().to_lowercase().chars() {
@@ -253,5 +275,18 @@ fn truncate_chars(input: &str, max: usize, fallback: &str) -> String {
         "{}…",
         input.chars().take(max.saturating_sub(1)).collect::<String>()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::title_to_skill_slug;
+
+    #[test]
+    fn title_to_skill_slug_normalizes_display_titles() {
+        assert_eq!(
+            title_to_skill_slug("Competitor Brief").expect("slug"),
+            "competitor-brief"
+        );
+    }
 }
 

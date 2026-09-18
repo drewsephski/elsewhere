@@ -44,6 +44,7 @@ fn test_config(browser_profiles_dir: std::path::PathBuf) -> Config {
         slack_oauth_redirect_uri: None,
         slack_api_base: "https://slack.com/api".into(),
         local_mac_credential_key: None,
+        allow_skill_draft_heuristic: false,
     }
 }
 

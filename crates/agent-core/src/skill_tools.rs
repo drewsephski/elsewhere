@@ -129,6 +129,8 @@ pub async fn dispatch_skill_tool(
             "botName": bot_name,
             "sourceRunId": draft.source_run_id,
             "skillMdPreview": truncate_skill_md_preview(&draft.skill_md),
+            "draftKind": draft.draft_kind,
+            "packageFileCount": draft.files.len(),
         });
         let approval_ctx =
             ToolApprovalContext::for_tool(run, SKILL_SAVE_RECENT_WORK_TOOL_NAME, approval_args);
@@ -167,6 +169,29 @@ pub async fn dispatch_skill_tool(
             .iter()
             .find(|row| row.id == skill_id)
             .ok_or_else(|| ToolError::Denied("Skill not found for this owner".into()))?;
+        if name == SKILL_ATTACH_TOOL_NAME {
+            if found.status == "archived" {
+                return Err(ToolError::MalformedArguments(
+                    "Archived skills cannot be attached".into(),
+                ));
+            }
+            if found.attached_to_bot {
+                let bot_name = service.bot_display_name(ctx).await.map_err(map_skill_error)?;
+                return Ok(json!({
+                    "ok": true,
+                    "skillId": found.id,
+                    "slug": found.slug,
+                    "name": found.name,
+                    "botName": bot_name,
+                    "message": format!("{} is already attached to {bot_name}", found.name),
+                    "alreadyAttached": true,
+                }));
+            }
+        } else if !found.attached_to_bot {
+            return Err(ToolError::MalformedArguments(
+                "This skill is not attached to this Bot".into(),
+            ));
+        }
         let bot_name = service.bot_display_name(ctx).await.map_err(map_skill_error)?;
         if let Some(obj) = args.as_object_mut() {
             obj.insert("skillName".into(), json!(found.name));
@@ -234,7 +259,32 @@ fn truncate_skill_md_preview(skill_md: &str) -> String {
     if skill_md.len() <= MAX {
         return skill_md.to_string();
     }
-    format!("{}…", &skill_md[..MAX])
+    let mut end = MAX;
+    while end > 0 && !skill_md.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &skill_md[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_skill_md_preview;
+
+    #[test]
+    fn preview_truncation_is_utf8_safe() {
+        let emoji = "😀".repeat(200);
+        let preview = truncate_skill_md_preview(&emoji);
+        assert!(preview.ends_with('…'));
+        assert!(std::str::from_utf8(preview.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn preview_truncation_handles_accented_and_cjk() {
+        let text = format!("{}café{}中文", "a".repeat(400), "b".repeat(100));
+        let preview = truncate_skill_md_preview(&text);
+        assert!(std::str::from_utf8(preview.as_bytes()).is_ok());
+        assert!(preview.len() <= 481);
+    }
 }
 
 fn required_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
