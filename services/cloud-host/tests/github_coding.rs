@@ -40,8 +40,8 @@ fn minimal_tarball_with_readme() -> Vec<u8> {
     let name = "repo-main/README.md";
     let mut header = [0u8; 512];
     header[..name.len()].copy_from_slice(name.as_bytes());
-    let size_octal = format!("{:011o}", 5);
-    header[124..124 + size_octal.len()].copy_from_slice(size_octal.as_bytes());
+    let size_octal = format!("{:012o}", 5);
+    header[124..136].copy_from_slice(size_octal.as_bytes());
     header[156] = b'0';
     body.extend_from_slice(&header);
     body.extend_from_slice(b"Hello");
