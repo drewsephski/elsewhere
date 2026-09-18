@@ -254,7 +254,7 @@ pub async fn dispatch_skill_tool(
     Ok(result)
 }
 
-fn truncate_skill_md_preview(skill_md: &str) -> String {
+pub fn truncate_skill_md_preview(skill_md: &str) -> String {
     const MAX: usize = 480;
     if skill_md.len() <= MAX {
         return skill_md.to_string();
