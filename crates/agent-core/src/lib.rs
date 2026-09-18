@@ -19,6 +19,8 @@ mod local_mac_protocol;
 mod luna;
 mod memory;
 mod memory_tools;
+mod routine_tools;
+mod routines;
 mod model;
 mod public_http_url;
 mod readiness_cache;
@@ -103,6 +105,13 @@ pub use memory::{
     RECALL_MEMORY_TOOL_NAME, REMEMBER_DESCRIPTION, REMEMBER_TOOL_NAME,
 };
 pub use memory_tools::{dispatch_memory_tool, memory_openai_tool_definitions};
+pub use routine_tools::{dispatch_routine_tool, routine_openai_tool_definitions};
+pub use routines::{
+    is_routine_mutation_tool, AgentRoutines, BotRoutineSchedule, RoutineContext,
+    RoutineCreateDraft, RoutineError, RoutineMutationResult, RoutineSummary,
+    ROUTINE_CREATE_TOOL_NAME,
+    ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
+};
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult, ModelError,
@@ -140,10 +149,11 @@ pub use tool_catalog::{
     is_attachment_tool, is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
     is_github_connector_tool, is_known_agent_tool, is_memory_tool, is_policy_non_overridable_tool,
-    is_policy_overridable_tool, is_subagent_tool, is_user_question_tool, policy_action_group,
+    is_policy_overridable_tool, is_routine_tool, is_subagent_tool, is_user_question_tool,
+    policy_action_group,
     policy_action_label, policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES,
     ALL_COMPUTER_TOOL_NAMES, ATTACHMENT_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
-    CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES, MEMORY_TOOL_NAMES,
+    CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES,
     POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
     USER_QUESTION_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
 };

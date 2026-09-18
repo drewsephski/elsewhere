@@ -49,6 +49,7 @@ pub mod groups;
 pub mod human_intervention;
 pub mod local_mac;
 pub mod memory;
+pub mod agent_routines;
 pub mod message_kind;
 pub use computer_registry::ComputerRegistry;
 pub mod artifact_handoff;

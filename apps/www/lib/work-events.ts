@@ -26,6 +26,10 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     ask_user: "Waiting for your choice",
     attachment_list: "Reviewing attachments",
     attachment_read: "Reading an attachment",
+    routine_list: "Checking routines",
+    routine_create: "Scheduling recurring work",
+    routine_pause: "Pausing a routine",
+    routine_resume: "Resuming a routine",
   };
   const base = tools[tool];
   if (!base) {
@@ -35,6 +39,19 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     payload.arguments && typeof payload.arguments === "object"
       ? (payload.arguments as Record<string, unknown>)
       : null;
+  if (tool === "routine_create" && args && typeof args.name === "string" && args.name.trim()) {
+    return `Scheduling recurring work (${args.name.trim()})`;
+  }
+  if (
+    (tool === "routine_pause" || tool === "routine_resume") &&
+    args &&
+    typeof args.routineName === "string" &&
+    args.routineName.trim()
+  ) {
+    return tool === "routine_pause"
+      ? `Pausing routine (${args.routineName.trim()})`
+      : `Resuming routine (${args.routineName.trim()})`;
+  }
   if (tool === "browser_navigate" && args && typeof args.url === "string") {
     try {
       const host = new URL(args.url).hostname;

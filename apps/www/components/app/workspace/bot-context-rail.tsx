@@ -88,7 +88,11 @@ export function BotContextRail({
               </RailSection>
             ) : null}
             <RailSection title="Routines">
-              <BotRoutinesSidebar botId={bot.id} variant="minimal" />
+              <BotRoutinesSidebar
+                botId={bot.id}
+                conversationId={activeRun?.conversationId}
+                variant="minimal"
+              />
             </RailSection>
             <RailSection title="Memory">
               <BotMemoryPanel

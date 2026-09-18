@@ -486,9 +486,10 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
                 None,
                 None,
                 None,
-                None,
-                None,
-                None,
+                None, // subagents
+                None, // memory
+                None, // routines
+                None, // attachments
                 Some(&scoped),
                 "ask_user",
                 r#"{"question":"Pick one?","options":["A","B"]}"#,
@@ -525,9 +526,10 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
         None,
         None,
         None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
         Some(&scoped),
         "ask_user",
         r#"{"question":"Pick one?","options":["A","B"]}"#,

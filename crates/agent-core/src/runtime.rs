@@ -40,6 +40,7 @@ pub struct AgentLoopDeps {
     pub browser_recovery: Option<Arc<crate::browser_recovery::BrowserRecoverySession>>,
     pub subagents: Option<Arc<dyn crate::subagent::AgentSubagents>>,
     pub memory: Option<Arc<dyn crate::memory::AgentMemory>>,
+    pub routines: Option<Arc<dyn crate::routines::AgentRoutines>>,
     pub attachments: Option<Arc<dyn crate::attachments::AgentAttachments>>,
     pub user_questions: Option<Arc<dyn crate::user_question::AgentUserQuestion>>,
 }
@@ -188,6 +189,7 @@ pub async fn run_agent_loop(
                     deps.human_intervention.as_ref(),
                     deps.subagents.as_ref(),
                     deps.memory.as_ref(),
+                    deps.routines.as_ref(),
                     deps.attachments.as_ref(),
                     deps.user_questions.as_ref(),
                     &name,
@@ -721,6 +723,7 @@ mod tests {
             browser_recovery: None,
             subagents: None,
             memory: None,
+            routines: None,
             attachments: None,
             user_questions: None,
         };

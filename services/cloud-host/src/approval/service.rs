@@ -534,7 +534,9 @@ impl ApprovalService {
             },
             "connectedAppName": context.connected_app.as_ref().map(|a| a.app_name.clone()),
             "connectedToolName": context.connected_app.as_ref().map(|a| a.remote_tool.clone()),
-            "argumentSummary": context.arguments.get("argumentSummary"),
+            "argumentSummary": sanitized
+                .get("argumentSummary")
+                .or_else(|| context.arguments.get("argumentSummary")),
         });
 
         let persist_emit = async {

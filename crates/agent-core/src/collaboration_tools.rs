@@ -12,9 +12,11 @@ use crate::subagent::{
     AgentSubagents, SubagentContext, SubagentError, SubagentRequest, RUN_SUBAGENT_DESCRIPTION,
     RUN_SUBAGENT_TOOL_NAME,
 };
+use crate::routine_tools::dispatch_routine_tool;
+use crate::routines::RoutineContext;
 use crate::tool_catalog::{
-    is_attachment_tool, is_collaboration_tool, is_connector_tool, is_memory_tool, is_subagent_tool,
-    is_user_question_tool,
+    is_attachment_tool, is_collaboration_tool, is_connector_tool, is_memory_tool, is_routine_tool,
+    is_subagent_tool, is_user_question_tool,
 };
 use crate::tools::ToolError;
 use crate::user_question_tools::dispatch_user_question_tool;
@@ -93,6 +95,7 @@ pub fn all_openai_tool_definitions() -> Vec<Value> {
     tools.extend(collaboration_openai_tool_definitions());
     tools.extend(crate::connector_tools::connector_openai_tool_definitions());
     tools.extend(crate::memory_tools::memory_openai_tool_definitions());
+    tools.extend(crate::routine_tools::routine_openai_tool_definitions());
     tools
 }
 
@@ -113,17 +116,18 @@ pub async fn dispatch_agent_tool_with_gate(
         collaboration,
         connectors,
         human_intervention,
-        None,
-        None,
-        None,
-        None,
+        None, // subagents
+        None, // memory
+        None, // routines
+        None, // attachments
+        None, // user_questions
         name,
         arguments,
         cancel,
         gate,
         run,
         collaboration_ctx,
-        None,
+        None, // browser_recovery
     )
     .await
 }
@@ -135,6 +139,7 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     human_intervention: Option<&Arc<dyn crate::human_intervention::AgentHumanIntervention>>,
     subagents: Option<&Arc<dyn AgentSubagents>>,
     memory: Option<&Arc<dyn crate::memory::AgentMemory>>,
+    routines: Option<&Arc<dyn crate::routines::AgentRoutines>>,
     attachments: Option<&Arc<dyn crate::attachments::AgentAttachments>>,
     user_questions: Option<&Arc<dyn crate::user_question::AgentUserQuestion>>,
     name: &str,
@@ -145,6 +150,23 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     collaboration_ctx: Option<&CollaborationContext>,
     browser_recovery: Option<&Arc<BrowserRecoverySession>>,
 ) -> Result<Value, ToolError> {
+    if is_routine_tool(name) {
+        let routine_ctx = collaboration_ctx.map(|ctx| RoutineContext {
+            owner_id: ctx.owner_id.clone(),
+            bot_id: ctx.source_bot_id.clone(),
+            source_conversation_id: ctx.source_conversation_id.clone(),
+        });
+        return dispatch_routine_tool(
+            routines,
+            name,
+            arguments,
+            cancel,
+            gate,
+            run,
+            routine_ctx.as_ref(),
+        )
+        .await;
+    }
     if is_human_intervention_tool(name) {
         return dispatch_human_intervention_tool(
             human_intervention,
@@ -493,6 +515,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,
             &cancel,
@@ -536,6 +559,7 @@ mod tests {
             None,
             None,
             Some(&subagents),
+            None,
             None,
             None,
             None,

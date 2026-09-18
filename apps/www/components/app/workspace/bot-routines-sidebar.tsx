@@ -3,19 +3,21 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { Routine } from "@/lib/api-types";
 import { cn } from "cn";
-import { CalendarClock, Pause, Play } from "@/components/icons/lucide";
+import { CalendarClock, Pause, Play, Plus } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { formatRoutineNextRun, formatRoutineTrigger } from "@/lib/routine-time";
 
 interface BotRoutinesSidebarProps {
   botId: string;
+  conversationId?: string;
   className?: string;
   variant?: "default" | "minimal";
 }
 
 export function BotRoutinesSidebar({
   botId,
+  conversationId,
   className,
   variant = "default",
 }: BotRoutinesSidebarProps) {
@@ -61,6 +63,10 @@ export function BotRoutinesSidebar({
     }
   }
 
+  const newRoutineHref = conversationId
+    ? `/app/routines?bot=${encodeURIComponent(botId)}&conversation=${encodeURIComponent(conversationId)}`
+    : `/app/routines?bot=${encodeURIComponent(botId)}`;
+
   const list = (
     <>
       {error ? (
@@ -88,12 +94,16 @@ export function BotRoutinesSidebar({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium leading-tight">{routine.name}</p>
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{formatRoutineTrigger(routine)}</p>
-                {routine.enabled && routine.triggerMode !== "webhook" ? (
-                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                    Next {formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}
-                  </p>
-                ) : null}
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {formatRoutineTrigger(routine)}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                  {routine.enabled && routine.triggerMode !== "webhook"
+                    ? `Next ${formatRoutineNextRun(routine.nextRunAt, routine.timezone || "UTC")}`
+                    : routine.enabled
+                      ? "Webhook"
+                      : "Paused"}
+                </p>
               </div>
               <button
                 type="button"
@@ -112,21 +122,13 @@ export function BotRoutinesSidebar({
       {!routines.length ? (
         variant === "minimal" ? (
           <p className="px-1 py-3 text-[11px] leading-snug text-muted-foreground">
-            Recurring tasks this bot runs on a schedule or webhook. Ask it in chat, or{" "}
-            <Link
-              href="/app/routines"
-              className="text-foreground underline-offset-2 hover:underline"
-            >
-              create one
-            </Link>
-            .
+            No recurring work yet. Tell this Bot in chat what to run on a schedule — for example,
+            &ldquo;Every weekday at 8 AM, send my morning brief.&rdquo;
           </p>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            No routines yet.{" "}
-            <Link href="/app/routines" className="underline underline-offset-2">
-              Create one
-            </Link>
+            No routines yet. Describe recurring work in chat, or use the advanced page to configure
+            webhooks and cron.
           </p>
         )
       ) : null}
@@ -137,16 +139,23 @@ export function BotRoutinesSidebar({
     return (
       <div className={cn("min-w-0", className)}>
         {list}
-        {routines.length ? (
-          <div className="mt-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+          <Link
+            href={newRoutineHref}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            <Plus className="size-3" aria-hidden />
+            New routine
+          </Link>
+          {routines.length ? (
             <Link
               href="/app/routines"
               className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
-              All routines
+              Advanced routines
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -157,12 +166,21 @@ export function BotRoutinesSidebar({
         <h2 id="routines-panel-title" className="text-sm font-semibold">
           Routines
         </h2>
-        <Link
-          href="/app/routines"
-          className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-        >
-          All routines
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={newRoutineHref}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            <Plus className="size-3" aria-hidden />
+            New
+          </Link>
+          <Link
+            href="/app/routines"
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Advanced
+          </Link>
+        </div>
       </div>
       {list}
     </section>
