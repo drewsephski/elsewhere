@@ -156,9 +156,12 @@ export function SaveAsSkillDialog({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
-              <Button type="button" variant="default" asChild={false}>
-                <Link href={`/app/skills/${savedSkillId}`}>View skill</Link>
-              </Button>
+              <Link
+                href={`/app/skills/${savedSkillId}`}
+                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+              >
+                View skill
+              </Link>
             </DialogFooter>
           </>
         ) : (
