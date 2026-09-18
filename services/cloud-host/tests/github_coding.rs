@@ -54,7 +54,7 @@ fn minimal_tarball_with_readme() -> Vec<u8> {
 
 async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
     Mock::given(method("GET"))
-        .and(path_regex(r"/user/installations.*"))
+        .and(path_regex(r"^/user/installations$"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "total_count": 1,
             "installations": [{
