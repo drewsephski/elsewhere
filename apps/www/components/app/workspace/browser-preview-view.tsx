@@ -25,7 +25,15 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "cn";
 import { Maximize2, Monitor, PictureInPicture2 } from "@/components/icons/lucide";
-import { forwardRef, useImperativeHandle, useMemo, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 export type BrowserPreviewVariant = "embedded" | "floating" | "work";
 
@@ -61,10 +69,10 @@ function BrowserIdleScene({
 }) {
   const idleCopy =
     variant === "work"
-      ? "Live view appears when your bot opens a page."
+      ? "Your bot's computer. Live view appears when it opens a page."
       : enabled
-        ? "Live view appears when your bot opens a page."
-        : "Send a message to watch the screen here.";
+        ? "Your bot's computer. Live view appears when it opens a page."
+        : "Your bot's computer. Send a message to watch it here.";
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#111111]" aria-hidden>
@@ -165,18 +173,83 @@ function PreviewChrome({
   );
 }
 
-function ExpandPreviewOverlay() {
+function originFromNode(node: HTMLElement | null): string | undefined {
+  if (!node) {
+    return undefined;
+  }
+  const rect = node.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return undefined;
+  }
+  const x = ((rect.left + rect.width / 2) / window.innerWidth) * 100;
+  const y = ((rect.top + rect.height / 2) / window.innerHeight) * 100;
+  return `${x}% ${y}%`;
+}
+
+const COMPUTER_DIALOG_CLASS =
+  "flex h-[min(92dvh,56rem)] max-h-[92dvh] w-[min(96vw,90rem)] max-w-[min(96vw,90rem)] sm:max-w-[min(96vw,90rem)] flex-col gap-0 overflow-hidden p-0 shadow-2xl duration-300 ease-out data-open:zoom-in-75 data-closed:zoom-out-90 motion-reduce:duration-0";
+
+function ComputerPreviewDialog({
+  open,
+  onOpenChange,
+  frame,
+  host,
+  origin,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  frame: BrowserPreviewFrame | null;
+  host: string | null;
+  origin?: string;
+}) {
+  const originStyle = origin ? ({ transformOrigin: origin } satisfies CSSProperties) : undefined;
+
   return (
-    <div
-      className="pointer-events-none absolute inset-0 z-[3] flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100"
-      aria-hidden
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className={COMPUTER_DIALOG_CLASS}
+        overlayClassName="duration-300 data-open:fade-in-0 data-closed:fade-out-0 motion-reduce:duration-0"
+        style={originStyle}
+      >
+        <DialogHeader className="border-b border-border px-4 py-3 pr-12 text-left">
+          <DialogTitle className="truncate text-base">
+            {frame?.title || host || "Computer"}
+          </DialogTitle>
+          <DialogDescription className="truncate text-xs">
+            {frame?.url ?? "Fullscreen view of your bot's computer."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2 sm:p-4">
+          {frame?.imageDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={frame.imageDataUrl}
+              alt={frame.title ? `Computer: ${frame.title}` : "Computer fullscreen"}
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+              No page to show yet.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PreviewOpenButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Open computer"
+      title="Open computer"
+      className="flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-zinc-950 shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/5 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
     >
-      <span className="absolute inset-0 bg-black/45" />
-      <span className="relative flex items-center gap-2 rounded-full bg-white/95 px-5 py-3 text-sm font-medium text-zinc-950 shadow-[0_8px_28px_rgba(0,0,0,0.45)] ring-1 ring-black/5">
-        <Maximize2 className="size-5" />
-        Expand
-      </span>
-    </div>
+      <Maximize2 className="size-3.5" aria-hidden />
+      Open computer
+    </button>
   );
 }
 
@@ -247,6 +320,8 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   }, [browserState, enabled, frame?.url]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogOrigin, setDialogOrigin] = useState<string | undefined>();
+  const previewShellRef = useRef<HTMLDivElement>(null);
 
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const addressLabel = host ?? statusLabel;
@@ -255,11 +330,13 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const isWork = variant === "work";
   const isEmbedded = variant === "embedded";
   const chromeCompact = variant === "floating" || isWork;
+  const canOpenComputer = hasImage && !humanControl.humanActive;
 
   function handleOpenDialog() {
     if (!hasImage) {
       return;
     }
+    setDialogOrigin(originFromNode(previewShellRef.current));
     setDialogOpen(true);
   }
 
@@ -343,56 +420,39 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           onPressKey={(key) => void handleHumanPressKey(key)}
           className="mb-1.5 px-2 pt-1"
         />
-        <PreviewChrome
-          frame={frame}
-          loading={loading}
-          enabled={enabled}
-          addressLabel={addressLabel}
-          addressBar={addressBar}
-          attached={chromeAttached}
-          compact
-          variant="floating"
-        >
-          {frame?.imageDataUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={frame.imageDataUrl}
-              alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
-              className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
+        <div ref={previewShellRef}>
+          <PreviewChrome
+            frame={frame}
+            loading={loading}
+            enabled={enabled}
+            addressLabel={addressLabel}
+            addressBar={addressBar}
+            attached={chromeAttached}
+            compact
+            variant="floating"
+          >
+            {frame?.imageDataUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={frame.imageDataUrl}
+                alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
+                className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
+              />
+            ) : null}
+            <BrowserHumanPreviewClickOverlay
+              humanActive={humanControl.humanActive}
+              busy={humanClickBusy || humanInputBusy}
+              onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
-          ) : null}
-          <BrowserHumanPreviewClickOverlay
-            humanActive={humanControl.humanActive}
-            busy={humanClickBusy || humanInputBusy}
-            onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
-          />
-        </PreviewChrome>
-        <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
-          <DialogContent className="flex max-h-[92vh] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0">
-            <DialogHeader className="border-b border-border px-4 py-3 text-left">
-              <DialogTitle className="truncate text-base">
-                {frame?.title || host || "Live computer"}
-              </DialogTitle>
-              <DialogDescription className="truncate text-xs">
-                {frame?.url ?? "Updates every few seconds while work is in progress."}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-auto bg-black p-2 sm:p-3">
-              {frame?.imageDataUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={frame.imageDataUrl}
-                  alt={frame.title ? `Browser: ${frame.title}` : "Expanded browser preview"}
-                  className="mx-auto max-h-[calc(92vh-5.5rem)] w-full rounded-lg object-contain"
-                />
-              ) : (
-                <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
-                  No page to show yet.
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+          </PreviewChrome>
+        </div>
+        <ComputerPreviewDialog
+          open={dialogOpen}
+          onOpenChange={handleDialogChange}
+          frame={frame}
+          host={host}
+          origin={dialogOrigin}
+        />
       </div>
     );
   }
@@ -429,39 +489,9 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           className,
         )}
       >
-        {isEmbedded ? (
-          <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-            <p className="text-[11px] font-medium text-muted-foreground">Live computer</p>
-            {ctx ? (
-              <button
-                type="button"
-                onClick={() => ctx.openPip()}
-                aria-label="Float preview over chat"
-                title="Float preview over chat"
-                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <PictureInPicture2 className="size-3.5" aria-hidden />
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          className={cn(
-            "group relative block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-            isEmbedded && "rounded-lg",
-            hasImage && !humanControl.humanActive ? "cursor-zoom-in" : "cursor-default",
-          )}
-          onClick={handleOpenDialog}
-          disabled={!hasImage || humanControl.humanActive}
-          aria-label={
-            hasImage
-              ? isEmbedded
-                ? "Expand preview"
-                : "Open expanded browser preview"
-              : "Browser preview placeholder"
-          }
+        <div
+          ref={previewShellRef}
+          className={cn("relative", isEmbedded && "rounded-lg")}
         >
           <PreviewChrome
             frame={frame}
@@ -486,18 +516,33 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               busy={humanClickBusy}
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
-            {hasImage && !((isEmbedded || isWork) && !humanControl.humanActive) ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-black/75 to-transparent px-2.5 pb-2 pt-6 opacity-0 transition-opacity group-hover:opacity-100">
-                <p className="truncate text-[10px] text-white/85">
-                  {frame?.title || host || "Live page"}
-                </p>
-              </div>
-            ) : null}
-            {(isEmbedded || isWork) && hasImage && !humanControl.humanActive ? (
-              <ExpandPreviewOverlay />
-            ) : null}
           </PreviewChrome>
-        </button>
+          {canOpenComputer ? (
+            <div
+              className="absolute inset-0 z-[3] cursor-zoom-in rounded-lg"
+              onClick={handleOpenDialog}
+              aria-hidden
+            />
+          ) : null}
+          <div className="pointer-events-none absolute inset-0 z-[4] flex items-start justify-end gap-1 p-2">
+            {isEmbedded && ctx ? (
+              <button
+                type="button"
+                onClick={() => ctx.openPip()}
+                aria-label="Float preview over chat"
+                title="Float preview over chat"
+                className="pointer-events-auto flex size-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
+                <PictureInPicture2 className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
+            {canOpenComputer ? (
+              <span className="pointer-events-auto">
+                <PreviewOpenButton onClick={handleOpenDialog} />
+              </span>
+            ) : null}
+          </div>
+        </div>
 
         {caption}
 
@@ -543,32 +588,13 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
         ) : null}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
-        <DialogContent className="flex max-h-[92vh] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="border-b border-border px-4 py-3 text-left">
-            <DialogTitle className="truncate text-base">
-              {frame?.title || host || "Live browser"}
-            </DialogTitle>
-            <DialogDescription className="truncate text-xs">
-              {frame?.url ?? "Updates every few seconds while work is in progress."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto bg-black p-2 sm:p-3">
-            {frame?.imageDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={frame.imageDataUrl}
-                alt={frame.title ? `Browser: ${frame.title}` : "Expanded browser preview"}
-                className="mx-auto max-h-[calc(92vh-5.5rem)] w-full rounded-lg object-contain"
-              />
-            ) : (
-              <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
-                No page to show yet.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ComputerPreviewDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogChange}
+        frame={frame}
+        host={host}
+        origin={dialogOrigin}
+      />
     </>
   );
 });

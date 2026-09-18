@@ -83,22 +83,32 @@ describe("BrowserPreviewView dock/float", () => {
     expect(openPip).toHaveBeenCalledTimes(1);
   });
 
-  it("places expand on the live screen, separate from the float control", () => {
+  it("opens a large computer dialog from the labeled control", () => {
     previewState.pipOpen = false;
     render(<BrowserPreviewView variant="embedded" />);
-    const expand = screen.getByRole("button", { name: "Expand preview" });
+    fireEvent.click(screen.getByRole("button", { name: "Open computer" }));
+    expect(screen.getByRole("heading", { name: "Example" })).toBeTruthy();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("sm:max-w-[min(96vw,90rem)]");
+    expect(dialog.className).toContain("data-open:zoom-in-75");
+  });
+
+  it("places open-computer on the live screen, separate from the float control", () => {
+    previewState.pipOpen = false;
+    render(<BrowserPreviewView variant="embedded" />);
+    const expand = screen.getByRole("button", { name: "Open computer" });
     const float = screen.getByRole("button", { name: "Float preview over chat" });
     expect(expand).toBeTruthy();
     expect(float).toBeTruthy();
     expect(expand).not.toBe(float);
-    expect(expand.textContent).toContain("Expand");
+    expect(expand.textContent).toContain("Open computer");
   });
 
   it("fills the work pane instead of a centered thumbnail", () => {
     previewState.pipOpen = false;
     const { container } = render(<BrowserPreviewView variant="work" />);
     expect(screen.queryByText("Browser")).toBeNull();
-    expect(screen.getByRole("button", { name: "Open expanded browser preview" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open computer" })).toBeTruthy();
     expect(container.firstElementChild?.className).not.toContain("max-w-xs");
     expect(container.firstElementChild?.className).not.toContain("max-w-sm");
   });

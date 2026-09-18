@@ -7,10 +7,8 @@ import { workStatus } from "@/lib/work-events";
 import { cn } from "cn";
 import { Monitor } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ComputerBrowserPreview } from "./computer-browser-preview";
-import type { BrowserPreviewHandle } from "./browser-preview-view";
 import { isLocalMacProvider } from "@/lib/computer-kind";
 
 interface ComputerStatePanelProps {
@@ -28,8 +26,6 @@ export function ComputerStatePanel({
 }: ComputerStatePanelProps) {
   const [computer, setComputer] = useState<ComputerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const previewRef = useRef<BrowserPreviewHandle>(null);
-  const router = useRouter();
 
   const { timeline } = useActiveRun();
   const latestActivity = useMemo(() => {
@@ -107,7 +103,7 @@ export function ComputerStatePanel({
         ) : (
           <>
             {isLocalMacProvider(computer?.provider ?? "") ? null : (
-              <ComputerBrowserPreview ref={previewRef} />
+              <ComputerBrowserPreview />
             )}
             <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[12px]">
               <p className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground" title={displayName ?? undefined}>
@@ -117,21 +113,12 @@ export function ComputerStatePanel({
                 />
                 <span>{readyLabel}</span>
               </p>
-              <button
-                type="button"
-                aria-label="Expand live view"
-                title="Expand live view"
-                className="shrink-0 rounded-md px-1 text-[12px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                onClick={() => {
-                  if (previewRef.current?.canExpand) {
-                    previewRef.current.expand();
-                    return;
-                  }
-                  router.push("/app/computers");
-                }}
+              <Link
+                href="/app/computers"
+                className="shrink-0 rounded-md px-1 text-[12px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                Expand
-              </button>
+                Manage
+              </Link>
             </div>
           </>
         )}

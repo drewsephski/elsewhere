@@ -25,14 +25,7 @@ import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill } from "@/components/app/status-pill";
 import { useActiveRun } from "@/contexts/active-run-context";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   ChevronLeft,
-  FileText,
   MessageSquare,
   PanelRight,
   Plus,
@@ -642,10 +635,10 @@ export function BotConversationView({
           >
             <MessageSquare className="size-4" aria-hidden />
           </ComposerIconButton>
-          {onOpenSettings ? (
+          {onOpenSettings && railCollapsed ? (
             <ComposerIconButton
               label="Bot settings"
-              className="hidden size-7 sm:flex"
+              className="hidden size-7 lg:flex"
               onClick={() => onOpenSettings?.()}
             >
               <Settings2 className="size-4" aria-hidden />
@@ -903,35 +896,13 @@ export function BotConversationView({
               />
             }
             leading={
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={<ComposerIconButton label="More" disabled={startingNewChat} />}
-                >
-                  <Plus className="size-4" aria-hidden />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="top" sideOffset={8} className="w-44">
-                  <DropdownMenuItem
-                    disabled={startingNewChat || pending || composerFiles.files.length >= 4}
-                    onClick={() => composerFiles.inputRef.current?.click()}
-                  >
-                    <FileText className="size-4" aria-hidden />
-                    Add files
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={startingNewChat || pending}
-                    onClick={() => void handleStartNewChat()}
-                  >
-                    <MessageSquare className="size-4" aria-hidden />
-                    New chat
-                  </DropdownMenuItem>
-                  {onOpenSettings ? (
-                    <DropdownMenuItem onClick={() => onOpenSettings?.()}>
-                      <Settings2 className="size-4" aria-hidden />
-                      Bot settings
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ComposerIconButton
+                label="Add files"
+                disabled={pending || composerFiles.files.length >= 4}
+                onClick={() => composerFiles.inputRef.current?.click()}
+              >
+                <Plus className="size-4" aria-hidden />
+              </ComposerIconButton>
             }
           >
             <input
