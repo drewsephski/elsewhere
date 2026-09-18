@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { BotSummary } from "@/lib/api-types";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceAuthenticatedFrame } from "./workspace-authenticated-frame";
@@ -105,5 +105,10 @@ describe("workspace chat mount", () => {
     });
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
+    const starter = await screen.findByRole("button", { name: "What can you take on?" });
+    fireEvent.click(starter);
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      "What can you take on?",
+    );
   });
 });

@@ -8,6 +8,7 @@ import { BotSelect } from "@/components/app/bot-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SlackLogo } from "@/components/icons/slack-logo";
 import { toast } from "sonner";
 
 interface ChannelConnectionSummary {
@@ -144,7 +145,12 @@ export function ChannelsManager() {
       ) : null}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Slack</CardTitle>
+          <CardTitle className="flex items-center gap-2.5 text-base">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-background ring-1 ring-foreground/10">
+              <SlackLogo className="size-4" />
+            </span>
+            Slack
+          </CardTitle>
           <Badge variant={connected ? "default" : "secondary"}>
             {connected ? "Connected" : "Disconnected"}
           </Badge>

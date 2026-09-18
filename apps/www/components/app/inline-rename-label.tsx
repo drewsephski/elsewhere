@@ -16,7 +16,7 @@ interface InlineRenameLabelProps {
   /** When true, opens the inline editor (e.g. from a context menu). */
   startEditing?: boolean;
   onEditingChange?: (editing: boolean) => void;
-  /** Use inside another button (e.g. file tree row); rename via double-click or startEditing. */
+  /** Use inside another button or link (e.g. sidebar row); rename via double-click or startEditing. */
   nested?: boolean;
 }
 

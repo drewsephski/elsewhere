@@ -38,6 +38,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { MarkdownContent } from "@/components/app/markdown-content";
+import { botPresetPrompts } from "@/lib/bot-preset-prompts";
+import { BotPresetPrompts } from "./bot-preset-prompts";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
   ComposerAttachmentStrip,
@@ -108,6 +110,7 @@ export function BotConversationView({
     key: string;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
   const loadScopeRef = useRef(createLoadScopeRef());
   const [conversationLoading, setConversationLoading] = useState(true);
@@ -517,6 +520,17 @@ export function BotConversationView({
   const chronologicalRuns = [...runs].reverse();
   const canSend =
     composerCanSend(message, composerFiles.files) && Boolean(bot?.computerId) && !pending;
+  const presetPrompts = useMemo(() => (bot ? botPresetPrompts(bot) : []), [bot]);
+  const showPresetPrompts =
+    Boolean(bot) &&
+    !conversationLoading &&
+    chronologicalRuns.length === 0 &&
+    !pendingTurn;
+
+  function handleSelectPreset(prompt: string) {
+    setMessage(prompt);
+    composerRef.current?.focus();
+  }
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -785,7 +799,14 @@ export function BotConversationView({
       </div>
 
       <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl space-y-2">
+          {showPresetPrompts ? (
+            <BotPresetPrompts
+              prompts={presetPrompts}
+              onSelect={handleSelectPreset}
+              disabled={pending}
+            />
+          ) : null}
           <ChatComposerFrame
             onSubmit={(event) => void handleSubmit(event)}
             canSend={canSend}
@@ -840,6 +861,7 @@ export function BotConversationView({
               }}
             />
             <ChatComposerTextarea
+              ref={composerRef}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               disabled={pending}
@@ -849,12 +871,12 @@ export function BotConversationView({
             />
           </ChatComposerFrame>
           {bot && !bot.computerId ? (
-            <p className="mt-2 px-3 text-[11px] text-warning">
+            <p className="px-3 text-[11px] text-warning">
               Assign a computer in bot settings before delegating work.
             </p>
           ) : null}
           {error || streamError ? (
-            <p className="mt-2 px-3 text-[11px] text-destructive" role="alert">
+            <p className="px-3 text-[11px] text-destructive" role="alert">
               {error ?? streamError}
             </p>
           ) : null}

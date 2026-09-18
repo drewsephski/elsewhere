@@ -5,6 +5,7 @@ import { appRoutes } from "@/lib/app-routes";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -55,7 +56,9 @@ export function ProfileFooter({ email, onOpenSettings, compact }: ProfileFooterP
           <span className="min-w-0 flex-1 truncate">{email}</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" sideOffset={6} className="w-56">
-          <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           {onOpenSettings ? (
             <DropdownMenuItem onClick={() => onOpenSettings("chatgpt")}>

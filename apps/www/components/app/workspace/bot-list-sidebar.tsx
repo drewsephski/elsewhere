@@ -329,6 +329,7 @@ export function BotListSidebar({
                           {onRenameGroup ? (
                             <InlineRenameLabel
                               value={group.name}
+                              nested
                               onCommit={(next) => onRenameGroup(group.id, next)}
                               className="text-[13px] font-medium leading-tight"
                               inputClassName="text-[13px]"
@@ -393,6 +394,7 @@ export function BotListSidebar({
                     {onRenameBot ? (
                       <InlineRenameLabel
                         value={bot.name}
+                        nested
                         onCommit={(next) => onRenameBot(bot.id, next)}
                         className="text-[13px] font-medium leading-tight"
                         inputClassName="text-[13px]"

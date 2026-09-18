@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -566,20 +567,22 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                     <FileText className="size-4" aria-hidden />
                     Add files
                   </DropdownMenuItem>
-                  <DropdownMenuLabel>Add to group</DropdownMenuLabel>
-                  {addableBots.map((bot) => (
-                    <DropdownMenuItem
-                      key={bot.id}
-                      onClick={() => void handleAddParticipant(bot.id)}
-                    >
-                      <BotCreatureAvatar
-                        name={bot.name}
-                        avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                        size="xs"
-                      />
-                      <span className="truncate">{bot.name}</span>
-                    </DropdownMenuItem>
-                  ))}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Add to group</DropdownMenuLabel>
+                    {addableBots.map((bot) => (
+                      <DropdownMenuItem
+                        key={bot.id}
+                        onClick={() => void handleAddParticipant(bot.id)}
+                      >
+                        <BotCreatureAvatar
+                          name={bot.name}
+                          avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                          size="xs"
+                        />
+                        <span className="truncate">{bot.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
             }

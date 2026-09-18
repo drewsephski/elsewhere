@@ -39,11 +39,13 @@ export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
           >
             <AppShellNav layout="sidebar" showBackToChat />
           </aside>
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background">
+          <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-background">
             <div className="mb-3 px-4 pt-3 md:hidden">
               <AppShellNav layout="mobile" showBackToChat />
             </div>
-            <div className="mx-auto w-full max-w-6xl px-4 py-4 sm:px-6 sm:py-5">{children}</div>
+            <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-4 sm:px-6 sm:py-5">
+              {children}
+            </div>
           </main>
         </div>
       </div>

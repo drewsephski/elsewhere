@@ -46,7 +46,7 @@ export function WorkspaceDataGrid<TData extends object>({
         headerBackground: true,
         headerBorder: true,
         cellBorder: false,
-        width: "auto",
+        width: "fixed",
         columnsVisibility: false,
         columnsResizable: false,
         columnsMovable: false,
@@ -61,9 +61,7 @@ export function WorkspaceDataGrid<TData extends object>({
     >
       <div className={cn("space-y-3", className)}>
         {toolbar}
-        <Card
-          className="min-w-0 overflow-hidden rounded-xl border-border bg-card p-0"
-        >
+        <Card className="min-w-0 overflow-hidden rounded-xl border-border bg-card p-0">
           <DataGridContainer className="min-w-0">
             <DataGridScrollArea orientation="vertical">
               <DataGridTable />

@@ -28,6 +28,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 type WorkTab = "active" | "archived";
 
+const fitContentColumn = {
+  headerClassName: "w-[1%] whitespace-nowrap",
+  cellClassName: "w-[1%] whitespace-nowrap",
+} as const;
+
 function canArchiveRun(status: string): boolean {
   return status !== "queued" && status !== "running";
 }
@@ -122,57 +127,72 @@ export function RecentRunsPanel({
         accessorKey: "task",
         id: "task",
         header: "Assignment",
+        meta: {
+          headerClassName: "min-w-0",
+          cellClassName: "min-w-0 overflow-hidden",
+        },
         cell: ({ row }) => (
           <Link
             href={`/app/work/${row.original.runId}`}
-            className="block truncate font-medium leading-snug text-foreground hover:underline"
+            className="block min-w-0 truncate font-medium leading-snug text-foreground hover:underline"
             title={row.original.task}
           >
             {row.original.task}
           </Link>
         ),
-        size: 320,
+        size: 240,
+        minSize: 140,
         enableSorting: false,
       },
       {
         accessorKey: "botName",
         header: "Bot",
+        meta: fitContentColumn,
         cell: ({ row }) => (
-          <span className="text-muted-foreground">{row.original.botName}</span>
+          <span className="block truncate text-muted-foreground" title={row.original.botName}>
+            {row.original.botName}
+          </span>
         ),
-        size: 120,
+        size: 148,
       },
       {
         accessorKey: "model",
         header: "Model",
+        meta: fitContentColumn,
         cell: ({ row }) => (
-          <span className="text-muted-foreground" title={row.original.model}>
+          <span className="block whitespace-nowrap text-muted-foreground" title={row.original.model}>
             {row.original.model || "—"}
           </span>
         ),
+        size: 176,
+        minSize: 160,
         enableSorting: false,
       },
       {
         accessorKey: "createdAt",
         id: "createdAt",
         header: "Started",
+        meta: fitContentColumn,
         cell: ({ row }) => (
-          <span className="text-muted-foreground tabular-nums">
+          <span className="whitespace-nowrap text-muted-foreground tabular-nums">
             {formatMessageTime(row.original.createdAt)}
           </span>
         ),
-        size: 100,
+        size: 96,
         sortingFn: "datetime",
       },
       {
         accessorKey: "status",
         header: "Status",
-        cell: ({ row }) => <RunStatusDot status={row.original.status} />,
-        size: 110,
+        meta: fitContentColumn,
+        cell: ({ row }) => <RunStatusDot status={row.original.status} className="whitespace-nowrap" />,
+        size: 156,
+        minSize: 140,
       },
       {
         id: "actions",
         header: "",
+        meta: fitContentColumn,
         cell: ({ row }) =>
           tab === "active" && canArchiveRun(row.original.status) ? (
             <Button
@@ -187,7 +207,7 @@ export function RecentRunsPanel({
               <Archive className="size-4" aria-hidden />
             </Button>
           ) : null,
-        size: 52,
+        size: 48,
         enableSorting: false,
       },
     ],
@@ -211,7 +231,7 @@ export function RecentRunsPanel({
       : "Delegate a task to a bot. Its progress and finished work will appear here.";
 
   return (
-    <section className={cn("space-y-4", className)}>
+    <section className={cn("min-w-0 space-y-4", className)}>
       {error ? (
         <p className="text-xs text-destructive" role="alert">{error}</p>
       ) : null}

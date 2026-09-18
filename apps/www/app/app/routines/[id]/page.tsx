@@ -91,10 +91,10 @@ export default function RoutineDetailPage() {
           Test run
         </Button>
         <Link
-          href="/app/routines"
+          href={`/app/routines?edit=${routine.id}`}
           className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent"
         >
-          Edit in list
+          Edit routine
         </Link>
       </div>
       <section className="space-y-3">

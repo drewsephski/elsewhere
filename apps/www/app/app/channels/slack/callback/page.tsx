@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { Spinner } from "@/components/ui/spinner";
 import { appRoutes } from "@/lib/app-routes";
+import { consumeSlackOAuthReturn } from "@/lib/slack-oauth-return";
 
 export default function SlackOAuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -31,7 +32,7 @@ export default function SlackOAuthCallbackPage() {
         setError(body?.error ?? "Could not complete Slack connection.");
         return;
       }
-      router.replace(appRoutes.channels);
+      router.replace(consumeSlackOAuthReturn(appRoutes.channels));
       router.refresh();
     })();
   }, [router, searchParams]);
