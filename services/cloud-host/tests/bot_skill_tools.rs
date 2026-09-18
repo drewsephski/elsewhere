@@ -705,7 +705,7 @@ async fn create_with_attach_rolls_back_on_missing_bot(pool: PgPool) {
         .await
         .unwrap()
         .is_empty());
-    let retry = cloud_host::skills::save_reviewed_skill_package(
+    let (retry, _) = cloud_host::skills::save_reviewed_skill_package(
         &pool,
         &owner,
         md,
