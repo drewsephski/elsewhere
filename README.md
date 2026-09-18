@@ -2,6 +2,10 @@
 
 **Create AI workers. Give them computers.** Elsewhere combines persistent bots, ChatGPT/Codex subscription execution, durable work history, private computers, and human approvals.
 
+<img width="1774" height="887" alt="ChatGPT Image Sep 18, 2026, 01_49_41 PM" src="https://github.com/user-attachments/assets/2c9aca1f-6613-4305-95de-a5dc1dbd6c5a" />
+
+---
+
 The product lives in [`apps/www`](apps/www) (Next.js + Better Auth). The Rust control plane is [`services/cloud-host`](services/cloud-host). The macOS Tauri app in the repo root is still available for local/desktop experiments. For full setup, see [authenticated cloud setup](docs/PHASE_3C1.md) and [product progress](docs/PRODUCT_PROGRESS.md).
 
 ## Prerequisites
