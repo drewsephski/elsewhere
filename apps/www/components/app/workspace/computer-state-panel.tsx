@@ -86,7 +86,7 @@ export function ComputerStatePanel({
         </h2>
 
         {!bot?.computerId ? (
-          <div className="flex aspect-[16/10] flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 text-center">
+          <div className="flex aspect-[16/10] min-h-[10rem] flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 text-center">
             <span
               className="flex size-9 items-center justify-center rounded-xl bg-surface-active text-muted-foreground"
               aria-hidden
@@ -118,13 +118,15 @@ export function ComputerStatePanel({
               </p>
               <button
                 type="button"
-                className="shrink-0 text-[12px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label="Open computer"
+                title="Open computer"
+                className="shrink-0 rounded-md px-1 text-[12px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 onClick={() => {
                   if (previewRef.current?.canExpand) {
                     previewRef.current.expand();
                     return;
                   }
-                    router.push("/app/computers");
+                  router.push("/app/computers");
                 }}
               >
                 Open computer

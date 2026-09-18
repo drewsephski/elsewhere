@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 
 import type { BotSummary } from "@/lib/api-types";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BotContextRail } from "./bot-context-rail";
 
 vi.mock("@/lib/cloud-api", () => ({
@@ -23,6 +23,9 @@ const bot: BotSummary = {
 };
 
 describe("BotContextRail", () => {
+  afterEach(() => {
+    cleanup();
+  });
   it("keeps the gear and live context, without embedding Settings forms", () => {
     const onOpenSettings = vi.fn();
     render(
@@ -38,6 +41,7 @@ describe("BotContextRail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Bot settings" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Collapse sidebar" })).toBeNull();
     expect(screen.getByText("Routines")).toBeTruthy();
     expect(screen.getByText("Files")).toBeTruthy();
     expect(screen.getByText("Memory")).toBeTruthy();
@@ -45,5 +49,27 @@ describe("BotContextRail", () => {
     expect(screen.queryByRole("button", { name: "Delete bot" })).toBeNull();
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(screen.queryByText("Permissions")).toBeNull();
+  });
+
+  it("places the collapse control in the sidebar header beside settings", () => {
+    const onCollapseRail = vi.fn();
+    render(
+      <MemoryRouter>
+        <BotContextRail
+          bot={bot}
+          activeRun={null}
+          onBotSaved={vi.fn()}
+          onOpenSettings={vi.fn()}
+          onCollapseRail={onCollapseRail}
+        />
+      </MemoryRouter>,
+    );
+
+    const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
+    const settings = screen.getByRole("button", { name: "Bot settings" });
+    expect(collapse.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(collapse);
+    expect(onCollapseRail).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
   });
 });

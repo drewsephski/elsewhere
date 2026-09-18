@@ -33,7 +33,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, ChevronsLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
+import { ChevronLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
@@ -580,21 +580,22 @@ export function BotConversationView({
           </ComposerIconButton>
           {railCollapsed && onExpandRail ? (
             <ComposerIconButton
-              label="Show details"
+              label="Expand sidebar"
               className="hidden size-7 lg:flex"
               onClick={onExpandRail}
             >
-              <ChevronsLeft className="size-4" />
+              <PanelRight className="size-4" />
             </ComposerIconButton>
           ) : null}
         </div>
       </header>
 
-      <div
-        ref={scrollRef}
-        onScroll={handleConversationScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
-      >
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={scrollRef}
+          onScroll={handleConversationScroll}
+          className="h-full min-h-0 overflow-y-auto px-3 py-4 sm:px-5"
+        >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {!conversationLoading
             ? chronologicalRuns.map((run) => {
@@ -779,9 +780,9 @@ export function BotConversationView({
             </div>
           ) : null}
         </div>
+        </div>
+        <FloatingBrowserPreview />
       </div>
-
-      <FloatingBrowserPreview />
 
       <footer className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
         <div className="mx-auto max-w-3xl">

@@ -61,12 +61,13 @@ function WorkspaceRowActions({
           : "pointer-events-none opacity-0 group-hover/entry:pointer-events-auto group-hover/entry:opacity-100 group-focus-within/entry:pointer-events-auto group-focus-within/entry:opacity-100",
       )}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        className="size-6 text-muted-foreground"
-        aria-label={`Rename ${name}`}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="size-6 text-muted-foreground"
+          aria-label={`Rename ${name}`}
+          title={`Rename ${name}`}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -81,6 +82,7 @@ function WorkspaceRowActions({
         size="icon-xs"
         className="size-6 text-muted-foreground hover:text-destructive"
         aria-label={`Delete ${name}`}
+        title={`Delete ${name}`}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -131,21 +133,6 @@ function WorkspaceTreeExpansionLoader({
   return null;
 }
 
-/** Compact card height when nothing is expanded; grow with the tree when folders open. */
-function WorkspaceTreeCompactSync({
-  onCompactChange,
-}: {
-  onCompactChange: (compact: boolean) => void;
-}) {
-  const { expandedItems } = useTree();
-
-  useEffect(() => {
-    onCompactChange((expandedItems?.length ?? 0) === 0);
-  }, [expandedItems, onCompactChange]);
-
-  return null;
-}
-
 function WorkspaceEntryName({
   entry,
   computerId,
@@ -173,6 +160,7 @@ function WorkspaceEntryName({
       className={cn("truncate text-xs font-normal", className)}
       inputClassName="text-xs font-normal"
       ariaLabel={`Rename ${entry.name}`}
+      title={entry.name}
       nested
     />
   );
@@ -228,6 +216,7 @@ function WorkspaceTreeBranch({
           handleSelect={onOpenFile}
           onContextMenu={handleContextMenu}
           aria-label={`Open ${entry.name}`}
+          title={entry.name}
           className="min-w-0"
         >
           <WorkspaceEntryName
@@ -256,6 +245,7 @@ function WorkspaceTreeBranch({
       <Folder
         className="min-w-0"
         value={entry.path}
+        title={entry.name}
         element={
           <WorkspaceEntryName
             entry={entry}
@@ -321,11 +311,6 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
   const [deleteEntry, setDeleteEntry] = useState<WorkspaceEntry | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [treeCompact, setTreeCompact] = useState(true);
-
-  const handleTreeCompactChange = useCallback((compact: boolean) => {
-    setTreeCompact(compact);
-  }, []);
 
   const handleOpenFile = useCallback((path: string) => {
     setOpenFilePath(path);
@@ -414,6 +399,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
           className="size-7 shrink-0 text-muted-foreground"
           onClick={() => refresh()}
           aria-label="Refresh workspace files"
+          title="Refresh workspace files"
         >
           <RefreshCw className="size-3.5" aria-hidden />
         </Button>
@@ -441,22 +427,16 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
       ) : null}
 
       <div
-        className={cn(
-          "min-w-0 rounded-lg border border-border bg-card py-1 transition-[max-height] duration-200 ease-out",
-          treeCompact
-            ? "max-h-64 min-h-[8rem] overflow-y-auto overflow-x-hidden"
-            : "overflow-x-hidden",
-        )}
+        className="min-w-0 overflow-x-hidden rounded-lg border border-border bg-card py-1"
         aria-label="Workspace file tree"
       >
         {rootEntries && rootEntries.length > 0 ? (
           <Tree
-            scrollable={treeCompact}
+            scrollable={false}
             indicator
             initialExpandedItems={[]}
             header={treeHeader}
           >
-            <WorkspaceTreeCompactSync onCompactChange={handleTreeCompactChange} />
             <WorkspaceTreeExpansionLoader loadDir={loadDirStable} />
             {rootEntries.map((entry) => (
               <WorkspaceTreeBranch
@@ -489,6 +469,7 @@ export function ComputerWorkspaceTree({ computerId, className }: ComputerWorkspa
                 className="size-7 shrink-0 text-muted-foreground"
                 onClick={() => refresh()}
                 aria-label="Refresh workspace files"
+                title="Refresh workspace files"
               >
                 <RefreshCw className="size-3.5" aria-hidden />
               </Button>

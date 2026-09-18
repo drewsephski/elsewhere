@@ -105,7 +105,7 @@ function PreviewChrome({
       <div
         className={cn(
           "overflow-hidden bg-card",
-          attached ? "rounded-none border-0" : "rounded-xl border border-border",
+          attached ? "rounded-none border-0" : "rounded-lg border border-border",
         )}
       >
         {bare ? null : (
@@ -133,7 +133,7 @@ function PreviewChrome({
         <div
           className={cn(
             "relative w-full overflow-hidden bg-[#111111]",
-            compact ? "aspect-[16/11]" : "aspect-[16/10]",
+            compact ? "aspect-[16/11]" : "min-h-[10rem] aspect-[16/10]",
             viewportClassName,
           )}
         >
@@ -361,6 +361,32 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
           />
         </PreviewChrome>
+        <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
+          <DialogContent className="flex max-h-[92vh] w-[min(96vw,1100px)] max-w-none flex-col gap-0 overflow-hidden p-0">
+            <DialogHeader className="border-b border-border px-4 py-3 text-left">
+              <DialogTitle className="truncate text-base">
+                {frame?.title || host || "Live computer"}
+              </DialogTitle>
+              <DialogDescription className="truncate text-xs">
+                {frame?.url ?? "Updates every few seconds while work is in progress."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-auto bg-black p-2 sm:p-3">
+              {frame?.imageDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={frame.imageDataUrl}
+                  alt={frame.title ? `Browser: ${frame.title}` : "Expanded browser preview"}
+                  className="mx-auto max-h-[calc(92vh-5.5rem)] w-full rounded-lg object-contain"
+                />
+              ) : (
+                <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+                  No page to show yet.
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -369,7 +395,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     return (
       <div
         className={cn(
-          "flex aspect-[16/10] flex-col items-center justify-center rounded-xl border border-dashed border-border px-5 text-center",
+          "rounded-lg border border-border bg-card px-3 py-2",
           className,
         )}
       >
@@ -377,7 +403,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           Preview is floating over the chat.{" "}
           <button
             type="button"
-            className="font-medium text-foreground underline-offset-2 hover:underline"
+            className="font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             onClick={() => ctx?.dockPip()}
           >
             Dock it here
@@ -415,11 +441,28 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           </div>
         ) : null}
 
+        {isEmbedded ? (
+          <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
+            <p className="text-[11px] font-medium text-muted-foreground">Live computer</p>
+            {ctx ? (
+              <button
+                type="button"
+                onClick={() => ctx.openPip()}
+                aria-label="Float preview over chat"
+                title="Float preview over chat"
+                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <PanelRight className="size-3.5" aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         <button
           type="button"
           className={cn(
             "group relative block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-            isEmbedded && "rounded-xl",
+            isEmbedded && "rounded-lg",
             hasImage && !humanControl.humanActive ? "cursor-zoom-in" : "cursor-default",
           )}
           onClick={handleOpenDialog}
@@ -460,11 +503,6 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
 
         {isEmbedded && hasImage ? (
           <div className="absolute top-2 right-2 z-[3] flex items-center gap-1 opacity-0 transition-opacity group-hover/screen:opacity-100 focus-within:opacity-100">
-            {ctx ? (
-              <OverlayIconButton label="Float preview over chat" onClick={() => ctx.openPip()}>
-                <PanelRight className="size-3.5" aria-hidden />
-              </OverlayIconButton>
-            ) : null}
             <OverlayIconButton label="Expand preview" onClick={handleOpenDialog}>
               <ArrowUpRight className="size-3.5" aria-hidden />
             </OverlayIconButton>

@@ -155,6 +155,7 @@ pub use user_question::{
 };
 pub use user_question_tools::{dispatch_user_question_tool, user_question_openai_tool_definitions};
 pub use workspace_entries::{
-    filter_workspace_listing, is_internal_workspace_entry, normalize_workspace_path,
+    filter_workspace_listing, is_hidden_workspace_listing_name, is_internal_workspace_entry,
+    is_user_visible_workspace_entry, normalize_workspace_path, validate_workspace_list_path,
     validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,
 };

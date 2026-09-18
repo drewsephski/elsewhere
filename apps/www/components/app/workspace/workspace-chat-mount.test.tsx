@@ -103,5 +103,7 @@ describe("workspace chat mount", () => {
     await waitFor(() => {
       expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
     });
+    expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
   });
 });

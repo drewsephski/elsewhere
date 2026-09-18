@@ -12,7 +12,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "cn";
-import { ChevronDown, Settings2 } from "@/components/icons/lucide";
+import { ChevronDown, PanelRight, Settings2 } from "@/components/icons/lucide";
 import type { ReactNode } from "react";
 
 interface BotContextRailProps {
@@ -20,6 +20,7 @@ interface BotContextRailProps {
   activeRun: RunSummary | null;
   onBotSaved: (bot: BotSummary) => void;
   onOpenSettings?: () => void;
+  onCollapseRail?: () => void;
   className?: string;
 }
 
@@ -54,11 +55,21 @@ export function BotContextRail({
   activeRun,
   onBotSaved,
   onOpenSettings,
+  onCollapseRail,
   className,
 }: BotContextRailProps) {
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-      <div className="flex h-11 shrink-0 items-center justify-end px-2">
+      <div className="flex h-11 shrink-0 items-center justify-end gap-0.5 px-2">
+        {onCollapseRail ? (
+          <ComposerIconButton
+            label="Collapse sidebar"
+            className="hidden size-7 lg:flex"
+            onClick={onCollapseRail}
+          >
+            <PanelRight className="size-4" aria-hidden />
+          </ComposerIconButton>
+        ) : null}
         {bot && onOpenSettings ? (
           <ComposerIconButton label="Bot settings" className="size-7" onClick={onOpenSettings}>
             <Settings2 className="size-4" aria-hidden />

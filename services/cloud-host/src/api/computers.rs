@@ -6,7 +6,7 @@ use crate::db::resources::{
 };
 use crate::error::ApiError;
 use agent_core::{
-    filter_workspace_listing, normalize_workspace_path, validate_public_http_url,
+    filter_workspace_listing, validate_public_http_url, validate_workspace_list_path,
     validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,
     AgentComputer, ComputerError,
 };
@@ -599,7 +599,7 @@ fn map_computer_error(err: ComputerError) -> ApiError {
 
 fn workspace_list_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {
     let path = query.path.as_deref().unwrap_or("/workspace");
-    normalize_workspace_path(path).map_err(map_workspace_validation)
+    validate_workspace_list_path(path).map_err(map_workspace_validation)
 }
 
 fn workspace_read_path(query: &WorkspacePathQuery) -> Result<String, ApiError> {

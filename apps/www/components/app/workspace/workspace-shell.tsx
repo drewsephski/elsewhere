@@ -20,7 +20,6 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import { parseSettingsSection, type SettingsSection } from "@/lib/settings-sections";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
-import { ChevronsRight } from "@/components/icons/lucide";
 import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
 
 /** Must be module-scoped — an inline component remounts the whole workspace on every parent render. */
@@ -75,6 +74,8 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [contextSheetOpen, setContextSheetOpen] = useState(false);
+  // Sidebar collapse is independent of preview dock/float. A docked preview
+  // hides with the rail; a floating preview stays over the chat pane.
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
@@ -389,24 +390,17 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const contextRail = selectedBotId ? (
     <aside
       className={cn(
-        "group/rail relative hidden w-[min(100%,18.5rem)] min-w-0 shrink-0 overflow-hidden border-l border-border bg-surface lg:flex lg:flex-col",
+        "relative hidden w-[min(100%,18.5rem)] min-w-0 shrink-0 overflow-hidden border-l border-border bg-surface lg:flex lg:flex-col",
         railCollapsed && "lg:hidden",
       )}
       aria-label="Bot context"
     >
-      <button
-        type="button"
-        aria-label="Hide details"
-        onClick={() => setRailCollapsed(true)}
-        className="absolute top-1/2 left-1 z-20 hidden size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:flex group-hover/rail:opacity-100"
-      >
-        <ChevronsRight className="size-3.5" aria-hidden />
-      </button>
       <BotContextRail
         bot={bot}
         activeRun={activeRun}
         onBotSaved={handleBotSaved}
         onOpenSettings={() => handleOpenSettings("general")}
+        onCollapseRail={() => setRailCollapsed(true)}
       />
     </aside>
   ) : null;

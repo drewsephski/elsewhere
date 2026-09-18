@@ -11,6 +11,8 @@ interface InlineRenameLabelProps {
   inputClassName?: string;
   ariaLabel: string;
   disabled?: boolean;
+  /** Shown when the truncated label overflows. */
+  title?: string;
   /** When true, opens the inline editor (e.g. from a context menu). */
   startEditing?: boolean;
   onEditingChange?: (editing: boolean) => void;
@@ -25,6 +27,7 @@ export function InlineRenameLabel({
   inputClassName,
   ariaLabel,
   disabled = false,
+  title,
   startEditing = false,
   onEditingChange,
   nested = false,
@@ -121,6 +124,7 @@ export function InlineRenameLabel({
         onPointerDown={(event) => event.stopPropagation()}
         className={displayClassName}
         aria-label={ariaLabel}
+        title={title ?? value}
       >
         {value}
       </span>
@@ -136,6 +140,7 @@ export function InlineRenameLabel({
       disabled={disabled}
       className={displayClassName}
       aria-label={ariaLabel}
+      title={title ?? value}
     >
       {value}
     </button>

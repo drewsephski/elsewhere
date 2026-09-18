@@ -101,6 +101,7 @@ export function BotRoutinesSidebar({
                 onClick={() => void handleToggle(routine)}
                 className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-surface-active hover:text-foreground disabled:opacity-50"
                 aria-label={routine.enabled ? "Pause routine" : "Resume routine"}
+                title={routine.enabled ? "Pause routine" : "Resume routine"}
               >
                 {routine.enabled ? <Pause className="size-4" /> : <Play className="size-4" />}
               </button>
