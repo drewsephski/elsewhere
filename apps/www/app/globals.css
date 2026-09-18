@@ -482,6 +482,7 @@
   background-color: var(--color-background);
 }
 
+/* Tauri desktop shell: native window chrome instead of the marketing “window” frame. */
 html.tauri .workspace-window {
   background-color: var(--color-background);
   padding: 0;
@@ -498,6 +499,7 @@ html.tauri .tauri-titlebar {
   width: 100%;
   flex-shrink: 0;
   -webkit-app-region: drag;
+  app-region: drag;
 }
 
 html.tauri .tauri-traffic-safe-l {

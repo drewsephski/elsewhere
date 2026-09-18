@@ -21,6 +21,7 @@ import { parseSettingsSection, type SettingsSection } from "@/lib/settings-secti
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 import { ChevronsRight } from "@/components/icons/lucide";
+import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
 
 /** Must be module-scoped — an inline component remounts the whole workspace on every parent render. */
 function WorkspaceBrowserPreviewLayer({
@@ -119,6 +120,29 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       stopped = true;
       clearInterval(timer);
     };
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey) || event.key !== ",") {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      setSettingsSection("general");
+      setSettingsOpen(true);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   useEffect(() => {
@@ -467,6 +491,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   return (
     <div className="workspace-window flex h-[100dvh] flex-col overflow-hidden text-foreground">
+      <DesktopTitlebar />
       {/* Keep router outlet mounted for desktop shell + any future page slots. */}
       <div className="hidden" aria-hidden inert>
         {children}

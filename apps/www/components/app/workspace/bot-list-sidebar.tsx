@@ -217,7 +217,7 @@ export function BotListSidebar({
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col", className)}>
-      <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3">
+      <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3 tauri-traffic-safe-l">
         <Link
           href="/app"
           className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"

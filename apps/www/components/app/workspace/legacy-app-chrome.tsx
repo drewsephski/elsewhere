@@ -4,6 +4,7 @@ import { AppShellNav } from "@/components/app/app-shell-nav";
 import { ProductLogo } from "@/components/product-logo";
 import Link from "next/link";
 import { siteConfig } from "@elsewhere/brand";
+import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
 
 interface LegacyAppChromeProps {
   children: React.ReactNode;
@@ -14,9 +15,10 @@ interface LegacyAppChromeProps {
 export function LegacyAppChrome({ children, userEmail }: LegacyAppChromeProps) {
   return (
     <div className="workspace-window flex h-[100dvh] flex-col overflow-hidden text-foreground">
+      <DesktopTitlebar />
       <div className="workspace-window-frame flex min-h-0 flex-1 flex-col overflow-hidden">
         <header className="shrink-0 border-b border-border">
-          <div className="flex h-11 items-center justify-between gap-4 px-3 lg:px-4">
+          <div className="flex h-11 items-center justify-between gap-4 px-3 tauri-traffic-safe-l lg:px-4">
             <Link
               href="/app"
               className="flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
