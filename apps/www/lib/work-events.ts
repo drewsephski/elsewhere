@@ -72,7 +72,22 @@ export function activityText(event: string, payload: Record<string, unknown>): s
   if (event === "user_question_requested" || event === "user_question_answered" || event === "user_question_cancelled") {
     return null;
   }
-  if (event === "approval_resolved") return `Approval ${String(payload.decision ?? "updated")}`;
+  if (event === "approval_resolved") {
+    const decision = String(payload.decision ?? "");
+    if (decision === "approved") return "You allowed the action";
+    if (decision === "denied") return "You denied the action";
+    if (decision === "cancelled") return "Approval cancelled";
+    if (decision === "expired") return "Approval expired";
+    return null;
+  }
+  if (event === "tool_result" && payload.ok === false) {
+    const tool = typeof payload.tool === "string" ? payload.tool : typeof payload.name === "string" ? payload.name : "";
+    const labeled = tool ? toolLabel(tool, payload) : null;
+    if (labeled) {
+      return `${labeled} did not complete`;
+    }
+    return "A step did not complete";
+  }
   if (event === "permission_policy_resolved") {
     if (payload.decision === "allow") {
       return null;

@@ -82,7 +82,7 @@ export function ComputerStatePanel({
     return (
       <section className={cn("pb-1", className)} aria-labelledby="computer-panel-title">
         <h2 id="computer-panel-title" className="sr-only">
-          Computer
+          Live view
         </h2>
 
         {!bot?.computerId ? (
@@ -94,14 +94,14 @@ export function ComputerStatePanel({
               <Monitor className="size-4" />
             </span>
             <p className="text-[11px] leading-snug text-muted-foreground">
-              This Bot does not have a workspace yet. Open Bot settings or create a new Bot to
-              get one automatically.
+              No workspace yet. New Bots get one automatically, or pick one in Advanced
+              settings.
             </p>
             <Link
               href="/app/computers"
               className="text-[11px] font-medium text-foreground underline-offset-2 hover:underline"
             >
-              Manage computers
+              Manage workspaces
             </Link>
           </div>
         ) : (
@@ -119,8 +119,8 @@ export function ComputerStatePanel({
               </p>
               <button
                 type="button"
-                aria-label="Open computer"
-                title="Open computer"
+                aria-label="Expand live view"
+                title="Expand live view"
                 className="shrink-0 rounded-md px-1 text-[12px] font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 onClick={() => {
                   if (previewRef.current?.canExpand) {
@@ -130,7 +130,7 @@ export function ComputerStatePanel({
                   router.push("/app/computers");
                 }}
               >
-                Open computer
+                Expand
               </button>
             </div>
           </>

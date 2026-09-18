@@ -23,6 +23,12 @@ describe("permission policy activity", () => {
     ).toBe("Blocked: Writing a file");
   });
 
+  it("humanizes approval resolutions", () => {
+    expect(activityText("approval_resolved", { decision: "approved" })).toBe(
+      "You allowed the action",
+    );
+  });
+
   it("does not flatten user questions into generic timeline text", () => {
     expect(
       activityText("user_question_requested", {

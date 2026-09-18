@@ -1,5 +1,6 @@
 "use client";
 
+import { NeedsYouCard } from "@/components/app/needs-you-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cn } from "cn";
 import { useState } from "react";
@@ -48,9 +49,10 @@ export function UserQuestionCard({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const answered = selected !== null || question.status === "answered";
+  const cancelled = question.status === "cancelled";
 
   async function handleSelect(index: number) {
-    if (answered || pending) {
+    if (answered || pending || cancelled) {
       return;
     }
     setPending(true);
@@ -75,40 +77,73 @@ export function UserQuestionCard({
     }
   }
 
+  const chosenIndex =
+    selected !== null
+      ? selected
+      : typeof question.selectedIndex === "number"
+        ? question.selectedIndex
+        : null;
+  const chosenLabel =
+    chosenIndex !== null && question.options[chosenIndex]
+      ? question.options[chosenIndex]
+      : null;
+
+  if (cancelled) {
+    return (
+      <NeedsYouCard
+        tone="resolved"
+        title="Choice cancelled"
+        reason="This question was dismissed before an answer was saved."
+      />
+    );
+  }
+
+  if (answered && chosenLabel) {
+    return (
+      <NeedsYouCard
+        tone="resolved"
+        title={`Choice saved · ${chosenLabel}`}
+        reason={question.question}
+      />
+    );
+  }
+
   return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-        {botName ? `${botName} needs a choice` : "Needs a choice"}
-      </p>
-      <p className="mt-1 text-[13px] font-medium text-foreground">{question.question}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {question.options.map((option, index) => {
-          const isSelected = selected === index;
-          return (
-            <button
-              key={`${option}-${index}`}
-              type="button"
-              disabled={answered || pending}
-              onClick={() => void handleSelect(index)}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-[12px] transition-colors",
-                isSelected
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-surface-raised text-foreground hover:bg-surface-hover",
-                (answered || pending) && !isSelected ? "opacity-50" : null,
-              )}
-              aria-pressed={isSelected}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
-      {error ? (
-        <p className="mt-2 text-[11px] text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
+    <NeedsYouCard
+      tone="pending"
+      title={botName ? `${botName} needs your choice` : "Your bot needs your choice"}
+      reason={question.question}
+      continuation="Pick one option to continue this assignment."
+      actions={
+        <>
+          <div className="flex w-full flex-wrap gap-2">
+            {question.options.map((option, index) => {
+              const isSelected = selected === index;
+              return (
+                <button
+                  key={`${option}-${index}`}
+                  type="button"
+                  disabled={answered || pending}
+                  onClick={() => void handleSelect(index)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-[12px] transition-colors",
+                    isSelected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-surface-raised text-foreground hover:bg-surface-hover",
+                    (answered || pending) && !isSelected ? "opacity-50" : null,
+                  )}
+                  aria-pressed={isSelected}
+                >
+                  {option}
+                </button>
+              );
+            })}
+          </div>
+          {error ? (
+            <p className="w-full text-[11px] text-destructive" role="alert">{error}</p>
+          ) : null}
+        </>
+      }
+    />
   );
 }

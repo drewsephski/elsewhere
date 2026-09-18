@@ -123,7 +123,7 @@ export function useBrowserPreview(
         );
         return;
       }
-      setError(err instanceof Error ? err.message : "Preview unavailable");
+      setError(err instanceof Error ? err.message : "Live view unavailable");
     } finally {
       window.clearTimeout(timeoutId);
       if (seq === fetchSeqRef.current) {

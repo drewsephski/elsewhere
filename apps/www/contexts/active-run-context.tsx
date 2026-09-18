@@ -7,15 +7,14 @@ import {
   emptyAssistantStream,
   type AssistantStreamState,
 } from "@/lib/assistant-stream";
-import { activityText } from "@/lib/work-events";
-import {
-  isSubagentEvent,
-  subagentActivityFromPayload,
-  type SubagentActivity,
-} from "@/lib/subagent-events";
 import type { ApprovalRequestedPayload, ApprovalTerminalState } from "@/components/app/approval-card";
 import type { UserQuestionPayload } from "@/components/app/user-question-card";
-import { userQuestionFromPayload } from "@/components/app/user-question-card";
+import {
+  applyRunStreamEvent,
+  emptyRunTimelineState,
+  type RunTimelineState,
+} from "@/lib/run-event-timeline";
+import type { SubagentActivity } from "@/lib/subagent-events";
 import {
   fetchHumanInterventionStatus,
   type PendingHumanIntervention,
@@ -31,7 +30,7 @@ import {
 } from "react";
 
 export type RunActivityItem =
-  | { id: string; kind: "text"; text: string }
+  | { id: string; kind: "text"; text: string; technical?: string }
   | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState }
   | { id: string; kind: "subagent"; subagent: SubagentActivity }
   | { id: string; kind: "question"; question: UserQuestionPayload };
@@ -101,7 +100,9 @@ export function ActiveRunProvider({
   children: ReactNode;
 }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
-  const [timeline, setTimeline] = useState<RunActivityItem[]>([]);
+  const [timelineState, setTimelineState] = useState<RunTimelineState>(emptyRunTimelineState);
+  const timeline = timelineState.items;
+  const pendingHumanIntervention = timelineState.pendingHumanIntervention;
   const [assistantStream, setAssistantStream] = useState<AssistantStreamState>(emptyAssistantStream);
   const [lastEventId, setLastEventId] = useState<string | null>(null);
   const [browserPreviewGeneration, setBrowserPreviewGeneration] = useState(0);
@@ -109,13 +110,10 @@ export function ActiveRunProvider({
   const [lastBrowserToolError, setLastBrowserToolError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connection, setConnection] = useState<string | null>(null);
-  const [pendingHumanIntervention, setPendingHumanIntervention] =
-    useState<PendingHumanIntervention | null>(null);
-
   useEffect(() => {
     if (!runId) {
       setDetail(null);
-      setTimeline([]);
+      setTimelineState(emptyRunTimelineState());
       setAssistantStream(emptyAssistantStream());
       setLastEventId(null);
       setBrowserPreviewGeneration(0);
@@ -123,7 +121,6 @@ export function ActiveRunProvider({
       setLastBrowserToolError(null);
       setError(null);
       setConnection(null);
-      setPendingHumanIntervention(null);
       return;
     }
 
@@ -158,15 +155,16 @@ export function ActiveRunProvider({
           return;
         }
         setDetail(current);
-        setConnection(
-          runIsActive(current.status) ? "Following progress" : "Saved work history",
-        );
+        setConnection(runIsActive(current.status) ? "Working" : "Saved");
         setError(null);
 
         try {
           const intervention = await fetchHumanInterventionStatus(activeRunId);
           if (!controller.signal.aborted) {
-            setPendingHumanIntervention(intervention.pending);
+            setTimelineState((previous) => ({
+              ...previous,
+              pendingHumanIntervention: intervention.pending,
+            }));
           }
         } catch {
           /* non-fatal */
@@ -197,28 +195,6 @@ export function ActiveRunProvider({
               return;
             }
 
-            if (
-              event.event === "human_intervention_requested" &&
-              typeof payload.interventionId === "string"
-            ) {
-              setDetail((previous) => {
-                const computerId = String(
-                  payload.computerId ?? previous?.computerId ?? "",
-                );
-                setPendingHumanIntervention({
-                  id: payload.interventionId as string,
-                  runId: activeRunId,
-                  computerId,
-                  reason: String(payload.reason ?? "other"),
-                  message: String(payload.message ?? "The Bot needs your help"),
-                  requestedAt: new Date().toISOString(),
-                });
-                return previous;
-              });
-            } else if (event.event === "human_intervention_resolved") {
-              setPendingHumanIntervention(null);
-            }
-
             if (event.event === "terminal") {
               setBrowserPreviewGeneration((value) => value + 1);
               setWorkspaceRefreshGeneration((value) => value + 1);
@@ -247,142 +223,29 @@ export function ActiveRunProvider({
                 previous ? { ...previous, status: payload.status as string } : previous,
               );
             }
-            const id = event.id ?? `terminal-${activeRunId}`;
-            if (
-              event.event === "approval_requested" &&
-              typeof payload.approvalId === "string" &&
-              typeof payload.summary === "string"
-            ) {
-              const approval: ApprovalRequestedPayload = {
-                approvalId: payload.approvalId,
-                summary: payload.summary,
-                tool: String(payload.tool ?? ""),
-                operationKind: String(payload.operationKind ?? ""),
-                botId: typeof payload.botId === "string" ? payload.botId : undefined,
-                botName: typeof payload.botName === "string" ? payload.botName : undefined,
-                policyOverridable:
-                  typeof payload.policyOverridable === "boolean"
-                    ? payload.policyOverridable
-                    : undefined,
-                policyActionLabel:
-                  typeof payload.policyActionLabel === "string"
-                    ? payload.policyActionLabel
-                    : undefined,
-              };
-              setTimeline((previous) =>
-                previous.some((item) => item.id === id)
-                  ? previous
-                  : [...previous, { id, kind: "approval", approval }],
-              );
-            } else if (event.event === "approval_resolved") {
-              const decision = payload.decision;
-              if (
-                ["approved", "denied", "cancelled", "expired"].includes(String(decision))
-              ) {
-                setTimeline((previous) =>
-                  previous.map((item) =>
-                    item.kind === "approval" &&
-                    item.approval.approvalId === payload.approvalId
-                      ? { ...item, decision: decision as ApprovalTerminalState }
-                      : item,
-                  ),
-                );
+            setTimelineState((previous) =>
+              applyRunStreamEvent(previous, activeRunId, event, {
+                skipIfSeenId: () => isNew,
+              }),
+            );
+
+            if (event.event === "tool_result" && normalizedToolName(payload).includes("browser")) {
+              if (payload.ok === false) {
+                const message =
+                  typeof payload.error === "string"
+                    ? payload.error
+                    : typeof payload.output === "string"
+                      ? payload.output
+                      : "Browser operation failed";
+                setLastBrowserToolError(message);
+                setBrowserPreviewGeneration((value) => value + 1);
+              } else {
+                setLastBrowserToolError(null);
+                setBrowserPreviewGeneration((value) => value + 1);
               }
-            } else if (event.event === "user_question_requested") {
-              const question = userQuestionFromPayload(activeRunId, payload);
-              if (question) {
-                setTimeline((previous) =>
-                  previous.some(
-                    (item) =>
-                      item.kind === "question" &&
-                      item.question.questionId === question.questionId,
-                  )
-                    ? previous
-                    : [...previous, { id, kind: "question", question }],
-                );
-              }
-            } else if (event.event === "user_question_answered") {
-              const selectedIndex =
-                typeof payload.selectedIndex === "number" ? payload.selectedIndex : null;
-              setTimeline((previous) =>
-                previous.map((item) =>
-                  item.kind === "question" &&
-                  item.question.questionId === payload.questionId
-                    ? {
-                        ...item,
-                        question: {
-                          ...item.question,
-                          selectedIndex,
-                          status: "answered",
-                        },
-                      }
-                    : item,
-                ),
-              );
-            } else if (event.event === "user_question_cancelled") {
-              setTimeline((previous) =>
-                previous.map((item) =>
-                  item.kind === "question" &&
-                  item.question.questionId === payload.questionId
-                    ? {
-                        ...item,
-                        question: { ...item.question, status: "cancelled" },
-                      }
-                    : item,
-                ),
-              );
-            } else if (isSubagentEvent(event.event)) {
-              const activity = subagentActivityFromPayload(payload);
-              if (activity) {
-                setTimeline((previous) => {
-                  const existing = previous.findIndex(
-                    (item) =>
-                      item.kind === "subagent" &&
-                      item.subagent.subagentId === activity.subagentId,
-                  );
-                  if (existing >= 0) {
-                    return previous.map((item, index) =>
-                      index === existing && item.kind === "subagent"
-                        ? { ...item, subagent: { ...item.subagent, ...activity } }
-                        : item,
-                    );
-                  }
-                  if (!isNew) {
-                    return previous;
-                  }
-                  return [
-                    ...previous.slice(-199),
-                    { id, kind: "subagent" as const, subagent: activity },
-                  ];
-                });
-              }
-            } else {
-              const text = activityText(event.event, payload);
-              if (text && isNew) {
-                setTimeline((previous) =>
-                  previous.some((item) => item.id === id)
-                    ? previous
-                    : [...previous.slice(-199), { id, kind: "text", text }],
-                );
-              }
-              if (event.event === "tool_result" && normalizedToolName(payload).includes("browser")) {
-                if (payload.ok === false) {
-                  const message =
-                    typeof payload.error === "string"
-                      ? payload.error
-                      : typeof payload.output === "string"
-                        ? payload.output
-                        : "Browser operation failed";
-                  setLastBrowserToolError(message);
-                  setBrowserPreviewGeneration((value) => value + 1);
-                } else {
-                  setLastBrowserToolError(null);
-                  setBrowserPreviewGeneration((value) => value + 1);
-                }
-              }
-              if (isWorkspaceMutationToolResult(event.event, payload)) {
-                setWorkspaceRefreshGeneration((value) => value + 1);
-              }
+            }
+            if (isWorkspaceMutationToolResult(event.event, payload)) {
+              setWorkspaceRefreshGeneration((value) => value + 1);
             }
           },
         });
@@ -418,7 +281,7 @@ export function ActiveRunProvider({
     }
 
     setDetail(null);
-    setTimeline([]);
+    setTimelineState(emptyRunTimelineState());
     setAssistantStream(emptyAssistantStream());
     void sync();
 

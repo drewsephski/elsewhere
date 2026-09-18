@@ -1,10 +1,9 @@
 "use client";
 
-import { ApprovalCard } from "@/components/app/approval-card";
+import { RunFailureCard } from "@/components/app/run-failure-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cloudApiErrorFromResponse } from "@/lib/cloud-api-error";
 import { formatUserFacingError } from "@/lib/format-api-error";
-import { HumanInterventionBanner } from "@/components/app/human-intervention-banner";
 import type {
   BotSummary,
   ConversationSummary,
@@ -15,7 +14,6 @@ import type {
   RunSummary,
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
-import { SubagentCard } from "@/components/app/subagent-card";
 import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
@@ -32,14 +30,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronLeft, FileText, MessageSquare, Monitor, PanelRight, Plus } from "@/components/icons/lucide";
+import {
+  ChevronLeft,
+  FileText,
+  MessageSquare,
+  PanelRight,
+  Plus,
+  Settings2,
+} from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
+import { useHistoricalRunTimelines } from "@/hooks/use-historical-run-timelines";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { botPresetPrompts } from "@/lib/bot-preset-prompts";
 import { BotPresetPrompts } from "./bot-preset-prompts";
-import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
 import {
   ComposerAttachmentStrip,
@@ -49,7 +54,7 @@ import {
   useComposerAttachments,
 } from "./composer-attachments";
 import { MessageAttachmentList } from "./message-attachments";
-import { UserQuestionCard } from "@/components/app/user-question-card";
+import { RunConversationTimeline } from "./run-conversation-timeline";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
@@ -62,6 +67,11 @@ import {
   isActiveLoadScope,
 } from "@/lib/conversation-load-scope";
 import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
+import {
+  buildConversationRunsListPath,
+  retryPrefillText,
+} from "@/lib/conversation-runs";
+import type { SettingsSection } from "@/lib/settings-sections";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -95,6 +105,7 @@ interface BotConversationViewProps {
   /** Desktop context rail is hidden; show an affordance to bring it back. */
   railCollapsed?: boolean;
   onExpandRail?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
 }
 
 export function BotConversationView({
@@ -106,6 +117,7 @@ export function BotConversationView({
   onStreamRunIdChange,
   railCollapsed = false,
   onExpandRail,
+  onOpenSettings,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -114,7 +126,6 @@ export function BotConversationView({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [modelBusy, setModelBusy] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<{
     idempotencyKey: string;
     message: string;
@@ -275,7 +286,7 @@ export function BotConversationView({
         return;
       }
       const response = await cloudHostFetch(
-        `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
+        buildConversationRunsListPath(botId, activeConversationId),
       );
       if (!isActiveLoadScope(loadScopeRef.current, generation)) {
         return;
@@ -544,6 +555,22 @@ export function BotConversationView({
   }
 
   const chronologicalRuns = [...runs].reverse();
+  const runStatusById = useMemo(
+    () => Object.fromEntries(runs.map((run) => [run.runId, run.status])),
+    [runs],
+  );
+  const historicalTimelines = useHistoricalRunTimelines(
+    runs.map((run) => run.runId),
+    runStatusById,
+    streamRunId,
+  );
+
+  const handlePrefillRetry = useCallback((run: RunSummary) => {
+    setMessage(retryPrefillText(run));
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }, []);
   const canSend =
     composerCanSend(message, composerFiles.files) && Boolean(bot?.computerId) && !pending;
   const presetPrompts = useMemo(() => (bot ? botPresetPrompts(bot) : []), [bot]);
@@ -552,36 +579,6 @@ export function BotConversationView({
     !conversationLoading &&
     chronologicalRuns.length === 0 &&
     !pendingTurn;
-
-  async function handleModelChange(nextModel: string) {
-    if (!bot || nextModel === bot.model || modelBusy) {
-      return;
-    }
-    const previousModel = bot.model;
-    setModelBusy(true);
-    setBot({ ...bot, model: nextModel });
-    setError(null);
-    try {
-      const response = await cloudHostFetch(`/v1/bots/${bot.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ model: nextModel }),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          typeof body.error === "string" ? body.error : "Could not update model",
-        );
-      }
-      const saved = body as BotSummary;
-      setBot(saved);
-      onBotLoaded?.(saved);
-    } catch (err) {
-      setBot((current) => (current ? { ...current, model: previousModel } : current));
-      setError(formatUserFacingError(err, "Could not update model"));
-    } finally {
-      setModelBusy(false);
-    }
-  }
 
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
@@ -635,16 +632,6 @@ export function BotConversationView({
               {connection ?? "Working"}
             </StatusPill>
           ) : null}
-          {bot ? (
-            <BotModelSelect
-              id="conversation-bot-model"
-              value={bot.model}
-              onValueChange={(next) => void handleModelChange(next)}
-              disabled={modelBusy}
-              compact
-              className="hidden shrink-0 sm:block"
-            />
-          ) : null}
         </div>
         <div className="flex items-center gap-0.5">
           <ComposerIconButton
@@ -655,14 +642,15 @@ export function BotConversationView({
           >
             <MessageSquare className="size-4" aria-hidden />
           </ComposerIconButton>
-          <Link
-            href="/app/computers"
-            className="hidden size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground sm:flex"
-            aria-label="Computer settings"
-            title="Computer settings"
-          >
-            <Monitor className="size-4" />
-          </Link>
+          {onOpenSettings ? (
+            <ComposerIconButton
+              label="Bot settings"
+              className="hidden size-7 sm:flex"
+              onClick={() => onOpenSettings?.()}
+            >
+              <Settings2 className="size-4" aria-hidden />
+            </ComposerIconButton>
+          ) : null}
           <ComposerIconButton
             label="Bot details"
             className="size-7 lg:hidden"
@@ -705,6 +693,11 @@ export function BotConversationView({
               (isLive || !run.task?.trim()) &&
               run.runId === liveRunId;
             const finished = !isLive && !runIsActive(run.status);
+            const historical = finished ? historicalTimelines[run.runId] : undefined;
+            const runErrorCode =
+              isLive && liveDetail?.errorCode
+                ? liveDetail.errorCode
+                : run.errorCode ?? null;
             const deleteAction =
               canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
                 <MessageDeleteButton
@@ -739,34 +732,31 @@ export function BotConversationView({
                   </div>
                 ) : null}
 
-                {isLive && pendingHumanIntervention ? (
-                  <HumanInterventionBanner pending={pendingHumanIntervention} />
+                {isLive ? (
+                  <RunConversationTimeline
+                    items={timeline}
+                    botName={bot?.name}
+                    pendingHumanIntervention={pendingHumanIntervention}
+                  />
                 ) : null}
 
-                {(isLive ? timeline : []).map((item) =>
-                  item.kind === "approval" ? (
-                    <ApprovalCard
-                      key={item.id}
-                      payload={item.approval}
-                      externalStatus={item.decision}
-                    />
-                  ) : item.kind === "subagent" ? (
-                    <SubagentCard key={item.id} activity={item.subagent} />
-                  ) : item.kind === "question" ? (
-                    <UserQuestionCard
-                      key={item.id}
-                      question={item.question}
-                      botName={bot?.name}
-                    />
-                  ) : (
-                    <p key={item.id} className="text-center text-[11px] text-muted-foreground">
-                      {item.text}
-                    </p>
-                  ),
-                )}
+                {finished && historical ? (
+                  <RunConversationTimeline
+                    items={historical.items}
+                    botName={bot?.name}
+                    pendingHumanIntervention={historical.pendingHumanIntervention}
+                  />
+                ) : null}
 
                 {finished ? (
                   <>
+                    <RunFailureCard
+                      runId={run.runId}
+                      status={run.status}
+                      errorCode={runErrorCode}
+                      onOpenSettings={onOpenSettings}
+                      onRetryMessage={() => handlePrefillRetry(run)}
+                    />
                     <RunDelegationList runId={run.runId} enabled={finished} />
                     <RunAssistantSnippet
                       runId={run.runId}
@@ -934,10 +924,12 @@ export function BotConversationView({
                     <MessageSquare className="size-4" aria-hidden />
                     New chat
                   </DropdownMenuItem>
-                  <DropdownMenuItem render={<Link href="/app/computers" />}>
-                    <Monitor className="size-4" aria-hidden />
-                    Computer settings
-                  </DropdownMenuItem>
+                  {onOpenSettings ? (
+                    <DropdownMenuItem onClick={() => onOpenSettings?.()}>
+                      <Settings2 className="size-4" aria-hidden />
+                      Bot settings
+                    </DropdownMenuItem>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
             }
@@ -966,7 +958,8 @@ export function BotConversationView({
           </ChatComposerFrame>
           {bot && !bot.computerId ? (
             <p className="px-3 text-[11px] text-warning">
-              Assign a computer in bot settings before delegating work.
+              This Bot needs a workspace before it can work. Open Bot settings → Advanced to assign
+              one, or create a new Bot to get one automatically.
             </p>
           ) : null}
           {error || streamError ? (

@@ -44,6 +44,7 @@ export interface RunSummary {
   startedAt: string | null;
   finishedAt: string | null;
   archivedAt?: string | null;
+  errorCode?: string | null;
   attachments?: MessageAttachment[];
 }
 

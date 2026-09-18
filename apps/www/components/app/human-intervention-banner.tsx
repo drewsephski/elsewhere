@@ -1,18 +1,27 @@
 "use client";
 
+import { NeedsYouCard } from "@/components/app/needs-you-card";
 import { Button } from "@/components/ui/button";
 import {
   humanInterventionReasonLabel,
   type PendingHumanIntervention,
 } from "@/lib/human-intervention";
 import { takeBrowserControl } from "@/lib/browser-control";
-import { Alert, AlertDescription, AlertTitle } from "@/components/reui/alert";
-import { HandHelping } from "lucide-react";
 import { useState } from "react";
 
 interface HumanInterventionBannerProps {
   pending: PendingHumanIntervention;
   onTakeControlComplete?: () => void;
+}
+
+function primaryActionLabel(reason: string): string {
+  if (reason === "login" || reason === "credentials") {
+    return "Sign in in browser";
+  }
+  if (reason === "captcha" || reason === "two_factor" || reason === "passkey") {
+    return "Take control";
+  }
+  return "Take control";
 }
 
 export function HumanInterventionBanner({
@@ -35,25 +44,23 @@ export function HumanInterventionBanner({
     }
   }
 
+  const reasonLabel = humanInterventionReasonLabel(pending.reason);
+
   return (
-    <Alert variant="warning" className="border-warning/30 bg-warning/10">
-      <HandHelping className="size-4" aria-hidden />
-      <AlertTitle>Bot needs you</AlertTitle>
-      <AlertDescription className="space-y-3">
-        <p>
-          <span className="font-medium">{humanInterventionReasonLabel(pending.reason)}</span>
-          {" — "}
-          {pending.message}
-        </p>
-        <p className="text-muted-foreground text-sm">
-          Take control to complete this step in the browser, then use Return control to bot when
-          finished.
-        </p>
-        {error ? <p className="text-destructive text-sm">{error}</p> : null}
-        <Button type="button" size="sm" disabled={busy} onClick={() => void handleTakeControl()}>
-          {busy ? "Taking control…" : "Take control"}
-        </Button>
-      </AlertDescription>
-    </Alert>
+    <NeedsYouCard
+      title="Your bot needs you in the browser"
+      reason={`${reasonLabel} — ${pending.message}`}
+      continuation="Use Watch in the sidebar to follow along. Choose Return to bot when you are done so work can continue."
+      actions={
+        <>
+          <Button type="button" size="sm" disabled={busy} onClick={() => void handleTakeControl()}>
+            {busy ? "Opening…" : primaryActionLabel(pending.reason)}
+          </Button>
+          {error ? (
+            <p className="w-full text-xs text-destructive" role="alert">{error}</p>
+          ) : null}
+        </>
+      }
+    />
   );
 }

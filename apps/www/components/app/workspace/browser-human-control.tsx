@@ -71,7 +71,7 @@ export function BrowserHumanControlBar({
               disabled={loading}
               onClick={onReturnControl}
             >
-              Return control to bot
+              Return to bot
             </Button>
           </>
         ) : (

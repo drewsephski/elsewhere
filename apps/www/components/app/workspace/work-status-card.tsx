@@ -32,7 +32,7 @@ export function WorkStatusCard({
           href={`/app/work/${run.runId}`}
           className="inline-flex items-center gap-1 rounded-md py-0.5 text-[12px] text-muted-foreground/70 transition-colors hover:text-foreground"
         >
-          View work
+          Details
           <ArrowUpRight className="size-3.5" aria-hidden />
         </Link>
         {actions}

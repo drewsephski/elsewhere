@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import type { BotSummary, ComputerSummary } from "@/lib/api-types";
-import { cloudHostFetch } from "@/lib/cloud-api";
-import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { BotModelSelect } from "@/components/app/bot-model-select";
 import { ComputerSelect } from "@/components/app/computer-select";
 import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
+import { cloudHostFetch } from "@/lib/cloud-api";
+import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,7 @@ export function BotGeneralSettings({
 }) {
   const [name, setName] = useState(bot.name);
   const [instructions, setInstructions] = useState(bot.instructions);
-  const [computer, setComputer] = useState(bot.computerId ?? "");
-  const [model, setModel] = useState(bot.model || DEFAULT_BOT_MODEL_ID);
   const [avatarId, setAvatarId] = useState(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
-  const [computers, setComputers] = useState<ComputerSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -36,27 +33,10 @@ export function BotGeneralSettings({
   useEffect(() => {
     setName(bot.name);
     setInstructions(bot.instructions);
-    setComputer(bot.computerId ?? "");
-    setModel(bot.model || DEFAULT_BOT_MODEL_ID);
     setAvatarId(bot.avatarId ?? DEFAULT_BOT_AVATAR_ID);
     setNotice("");
     setError(null);
   }, [bot]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    cloudHostFetch("/v1/computers", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Could not load computers");
-        setComputers(await response.json());
-      })
-      .catch((err) => {
-        if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : "Could not load computers");
-        }
-      });
-    return () => controller.abort();
-  }, []);
 
   function handleAvatarChange(nextAvatarId: string) {
     if (nextAvatarId === avatarId) {
@@ -80,15 +60,13 @@ export function BotGeneralSettings({
         body: JSON.stringify({
           name,
           instructions,
-          computerId: computer,
-          model,
           avatarId,
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not update bot");
       onSaved(body);
-      setNotice("Saved. Existing work keeps its original instructions, model, and computer.");
+      setNotice("Saved. Work already in progress keeps its earlier instructions.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update bot");
     } finally {
@@ -125,24 +103,6 @@ export function BotGeneralSettings({
             maxLength={16000}
           />
         </FormItem>
-        <BotModelSelect
-          id="settings-model"
-          value={model}
-          onValueChange={setModel}
-          disabled={busy}
-        />
-        <ComputerSelect
-          id="settings-computer"
-          label="Assigned computer"
-          value={computer}
-          onValueChange={setComputer}
-          computers={computers}
-          allowEmpty
-          unavailableId={computer}
-        />
-        <p className="text-[12px] leading-snug text-muted-foreground">
-          Computer changes apply to new work only. Queued and running work keeps its original snapshot.
-        </p>
       </FormFields>
       <div className="sticky bottom-0 mt-6 flex items-center justify-end gap-3 border-t border-border bg-card pt-3">
         {notice ? (
@@ -156,6 +116,110 @@ export function BotGeneralSettings({
           </p>
         ) : null}
         <Button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Saving…" : "Save changes"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+export function BotAdvancedSettings({
+  bot,
+  onSaved,
+}: {
+  bot: BotSummary;
+  onSaved: (bot: BotSummary) => void;
+}) {
+  const [computer, setComputer] = useState(bot.computerId ?? "");
+  const [model, setModel] = useState(bot.model || DEFAULT_BOT_MODEL_ID);
+  const [computers, setComputers] = useState<ComputerSummary[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    setComputer(bot.computerId ?? "");
+    setModel(bot.model || DEFAULT_BOT_MODEL_ID);
+    setNotice("");
+    setError(null);
+  }, [bot]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    cloudHostFetch("/v1/computers", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load workspaces");
+        setComputers(await response.json());
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : "Could not load workspaces");
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    setNotice("");
+    try {
+      const response = await cloudHostFetch(`/v1/bots/${bot.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          computerId: computer,
+          model,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Could not update bot");
+      onSaved(body);
+      setNotice("Saved. New messages use these settings; in-flight work is unchanged.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update bot");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="flex min-h-0 flex-1 flex-col" onSubmit={(event) => void save(event)}>
+      <FormFields className="min-w-0 gap-5">
+        <BotModelSelect
+          id="settings-model"
+          label="Model"
+          value={model}
+          onValueChange={setModel}
+          disabled={busy}
+        />
+        <ComputerSelect
+          id="settings-computer"
+          label="Workspace"
+          value={computer}
+          onValueChange={setComputer}
+          computers={computers}
+          allowEmpty
+          unavailableId={computer}
+        />
+        <p className="text-[12px] leading-snug text-muted-foreground">
+          Workspace changes apply to new work only. Queued and running work keeps its original
+          environment.
+        </p>
+      </FormFields>
+      <div className="sticky bottom-0 mt-6 flex items-center justify-end gap-3 border-t border-border bg-card pt-3">
+        {notice ? (
+          <p role="status" className="mr-auto text-[12px] text-muted-foreground">
+            {notice}
+          </p>
+        ) : null}
+        {error ? (
+          <p role="alert" className="mr-auto text-[12px] text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save changes"}
         </Button>
       </div>

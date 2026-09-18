@@ -370,6 +370,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           onStreamRunIdChange={handleStreamRunIdChange}
           railCollapsed={railCollapsed}
           onExpandRail={() => setRailCollapsed(false)}
+          onOpenSettings={(section) => handleOpenSettings(section ?? "general")}
         />
       ) : workspaceLoading ? (
         <div className="flex flex-1 items-center justify-center px-6 py-8">

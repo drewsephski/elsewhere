@@ -86,7 +86,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByLabelText("Name")).toBeTruthy();
     expect(screen.getByLabelText("Role and instructions")).toBeTruthy();
-    expect(screen.getByLabelText("Model")).toBeTruthy();
+    expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
   });
 
@@ -130,7 +130,7 @@ describe("SettingsDialog", () => {
 
     renderDialog("workspace");
     expect(
-      screen.getByText("Defaults for all Bots. Individual Bot settings can override these."),
+      screen.getByText(/Default permission rules for every Bot/),
     ).toBeTruthy();
     cleanup();
 
@@ -139,6 +139,7 @@ describe("SettingsDialog", () => {
     cleanup();
 
     renderDialog("advanced");
+    expect(screen.getByLabelText("Model")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete Bot" }));
     expect(screen.getByText("Delete Researcher?")).toBeTruthy();
   });

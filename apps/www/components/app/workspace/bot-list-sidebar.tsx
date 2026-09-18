@@ -8,7 +8,7 @@ import {
   activityPreview,
   presenceDotClass,
   presenceIsActive,
-  presenceShortLabel,
+  presenceSidebarTrailing,
   type WorkspaceBotPresence,
 } from "@/lib/workspace-types";
 import { cn } from "cn";
@@ -409,7 +409,7 @@ export function BotListSidebar({
             <ul className="space-y-px">
               {filtered.map((bot) => {
                 const selected = bot.id === selectedBotId;
-                const statusLabel = presenceShortLabel(bot.presence);
+                const { statusLabel, emphasis } = presenceSidebarTrailing(bot.presence);
                 const activityIso = runActivityAt[bot.id];
                 const timeLabel = activityIso ? formatMessageTime(activityIso) : null;
                 const trailingLabel = statusLabel ?? timeLabel;
@@ -447,7 +447,16 @@ export function BotListSidebar({
                             </span>
                           )}
                           {trailingLabel ? (
-                            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground/80">
+                            <span
+                              className={cn(
+                                "ml-auto inline-flex shrink-0 items-center gap-1 text-[10px]",
+                                emphasis === "attention"
+                                  ? "rounded-full bg-warning/15 px-1.5 py-0.5 font-medium text-warning"
+                                  : emphasis === "active"
+                                    ? "font-medium text-info"
+                                    : "text-muted-foreground/80",
+                              )}
+                            >
                               {statusLabel ? (
                                 <span
                                   className={cn("size-1.5 rounded-full", presenceDotClass(bot.presence))}

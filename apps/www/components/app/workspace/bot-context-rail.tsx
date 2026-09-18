@@ -82,14 +82,14 @@ export function BotContextRail({
 
         {bot ? (
           <div className="mt-2">
-            <RailSection title="Routines" defaultOpen>
-              <BotRoutinesSidebar botId={bot.id} variant="minimal" />
-            </RailSection>
             {bot.computerId ? (
-              <RailSection title="Files">
+              <RailSection title="Files" defaultOpen>
                 <ComputerWorkspaceTree computerId={bot.computerId} />
               </RailSection>
             ) : null}
+            <RailSection title="Routines">
+              <BotRoutinesSidebar botId={bot.id} variant="minimal" />
+            </RailSection>
             <RailSection title="Memory">
               <BotMemoryPanel
                 botId={bot.id}

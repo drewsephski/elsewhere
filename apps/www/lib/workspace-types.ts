@@ -43,10 +43,10 @@ export const presenceLabels: Record<string, string> = {
 export const presenceShortLabels: Record<string, string> = {
   working: "Working",
   queued: "Queued",
-  waiting_approval: "Attention",
+  waiting_approval: "Approve",
   saving_results: "Saving",
-  needs_computer: "Attention",
-  needs_attention: "Attention",
+  needs_computer: "Computer",
+  needs_attention: "Needs you",
   ready: "Ready",
 };
 
@@ -88,6 +88,21 @@ export function presenceNeedsAttention(presence: string): boolean {
 
 export function presenceIsActive(presence: string): boolean {
   return ["working", "queued", "saving_results"].includes(presence);
+}
+
+/** Sidebar trailing chip: attention and in-progress states beat quiet timestamps. */
+export function presenceSidebarTrailing(presence: string): {
+  statusLabel: string | null;
+  emphasis: "attention" | "active" | null;
+} {
+  const statusLabel = presenceShortLabel(presence);
+  if (presenceNeedsAttention(presence) && statusLabel) {
+    return { statusLabel, emphasis: "attention" };
+  }
+  if (statusLabel && presenceIsActive(presence)) {
+    return { statusLabel, emphasis: "active" };
+  }
+  return { statusLabel: null, emphasis: null };
 }
 
 export function activityPreview(bot: WorkspaceBotPresence): string {

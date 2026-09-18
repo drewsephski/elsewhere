@@ -230,17 +230,17 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const statusLabel = useMemo(() => {
     switch (browserState) {
       case "idle":
-        return enabled ? "Waiting for browser work" : "Browser idle";
+        return enabled ? "Watch when your bot opens a page" : "Watch";
       case "preparing computer":
-        return "Starting computer…";
+        return "Workspace starting…";
       case "preparing browser":
-        return "Preparing browser…";
+        return "Opening browser…";
       case "navigating":
-        return "Navigating…";
+        return "Loading page…";
       case "ready":
-        return frame?.url ? previewHostname(frame.url) ?? "Live page" : "Live page";
+        return frame?.url ? previewHostname(frame.url) ?? "Live view" : "Live view";
       case "error":
-        return "Browser error";
+        return "Live view unavailable";
       default:
         return "Browser";
     }
