@@ -2,9 +2,10 @@ use serde_json::{json, Value};
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::skills::{
-    is_skill_mutation_tool, AgentSkills, SkillContext, SkillError, SKILL_ATTACH_TOOL_NAME,
+    is_skill_mutation_tool, AgentSkills, SkillContext, SkillError, SKILL_ATTACH_DESCRIPTION,
     SKILL_DETACH_TOOL_NAME, SKILL_LIST_DESCRIPTION, SKILL_LIST_TOOL_NAME,
     SKILL_SAVE_RECENT_WORK_DESCRIPTION, SKILL_SAVE_RECENT_WORK_TOOL_NAME,
+    SKILL_ATTACH_TOOL_NAME, SKILL_DETACH_DESCRIPTION,
 };
 use crate::tool_catalog::is_skill_tool;
 use crate::tools::ToolError;
