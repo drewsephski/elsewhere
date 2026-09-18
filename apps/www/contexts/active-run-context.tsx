@@ -7,7 +7,7 @@ import {
   emptyAssistantStream,
   type AssistantStreamState,
 } from "@/lib/assistant-stream";
-import { activityText } from "@/lib/work-events";
+import { activityLineFromEvent } from "@/lib/run-activity";
 import {
   isSubagentEvent,
   subagentActivityFromPayload,
@@ -31,7 +31,7 @@ import {
 } from "react";
 
 export type RunActivityItem =
-  | { id: string; kind: "text"; text: string }
+  | { id: string; kind: "text"; text: string; technical?: string }
   | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState }
   | { id: string; kind: "subagent"; subagent: SubagentActivity }
   | { id: string; kind: "question"; question: UserQuestionPayload };
@@ -158,9 +158,7 @@ export function ActiveRunProvider({
           return;
         }
         setDetail(current);
-        setConnection(
-          runIsActive(current.status) ? "Following progress" : "Saved work history",
-        );
+        setConnection(runIsActive(current.status) ? "Working" : "Saved");
         setError(null);
 
         try {
@@ -357,12 +355,20 @@ export function ActiveRunProvider({
                 });
               }
             } else {
-              const text = activityText(event.event, payload);
-              if (text && isNew) {
+              const line = activityLineFromEvent(event.event, payload);
+              if (line && isNew) {
                 setTimeline((previous) =>
                   previous.some((item) => item.id === id)
                     ? previous
-                    : [...previous.slice(-199), { id, kind: "text", text }],
+                    : [
+                        ...previous.slice(-199),
+                        {
+                          id,
+                          kind: "text",
+                          text: line.headline,
+                          technical: line.technical,
+                        },
+                      ],
                 );
               }
               if (event.event === "tool_result" && normalizedToolName(payload).includes("browser")) {

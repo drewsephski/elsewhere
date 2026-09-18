@@ -1,10 +1,9 @@
 "use client";
 
-import { ApprovalCard } from "@/components/app/approval-card";
+import { RunFailureCard } from "@/components/app/run-failure-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cloudApiErrorFromResponse } from "@/lib/cloud-api-error";
 import { formatUserFacingError } from "@/lib/format-api-error";
-import { HumanInterventionBanner } from "@/components/app/human-intervention-banner";
 import type {
   BotSummary,
   ConversationSummary,
@@ -15,7 +14,6 @@ import type {
   RunSummary,
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
-import { SubagentCard } from "@/components/app/subagent-card";
 import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
@@ -55,7 +53,7 @@ import {
   useComposerAttachments,
 } from "./composer-attachments";
 import { MessageAttachmentList } from "./message-attachments";
-import { UserQuestionCard } from "@/components/app/user-question-card";
+import { RunConversationTimeline } from "./run-conversation-timeline";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
@@ -68,6 +66,7 @@ import {
   isActiveLoadScope,
 } from "@/lib/conversation-load-scope";
 import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
+import type { SettingsSection } from "@/lib/settings-sections";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -101,7 +100,7 @@ interface BotConversationViewProps {
   /** Desktop context rail is hidden; show an affordance to bring it back. */
   railCollapsed?: boolean;
   onExpandRail?: () => void;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
 }
 
 export function BotConversationView({
@@ -626,7 +625,7 @@ export function BotConversationView({
             <ComposerIconButton
               label="Bot settings"
               className="hidden size-7 sm:flex"
-              onClick={onOpenSettings}
+              onClick={() => onOpenSettings?.()}
             >
               <Settings2 className="size-4" aria-hidden />
             </ComposerIconButton>
@@ -707,34 +706,23 @@ export function BotConversationView({
                   </div>
                 ) : null}
 
-                {isLive && pendingHumanIntervention ? (
-                  <HumanInterventionBanner pending={pendingHumanIntervention} />
+                {isLive ? (
+                  <RunConversationTimeline
+                    items={timeline}
+                    botName={bot?.name}
+                    pendingHumanIntervention={pendingHumanIntervention}
+                  />
                 ) : null}
-
-                {(isLive ? timeline : []).map((item) =>
-                  item.kind === "approval" ? (
-                    <ApprovalCard
-                      key={item.id}
-                      payload={item.approval}
-                      externalStatus={item.decision}
-                    />
-                  ) : item.kind === "subagent" ? (
-                    <SubagentCard key={item.id} activity={item.subagent} />
-                  ) : item.kind === "question" ? (
-                    <UserQuestionCard
-                      key={item.id}
-                      question={item.question}
-                      botName={bot?.name}
-                    />
-                  ) : (
-                    <p key={item.id} className="text-center text-[11px] text-muted-foreground">
-                      {item.text}
-                    </p>
-                  ),
-                )}
 
                 {finished ? (
                   <>
+                    <RunFailureCard
+                      runId={run.runId}
+                      status={run.status}
+                      errorCode={run.runId === streamRunId ? liveDetail?.errorCode : null}
+                      onOpenSettings={onOpenSettings}
+                      onFocusComposer={() => composerRef.current?.focus()}
+                    />
                     <RunDelegationList runId={run.runId} enabled={finished} />
                     <RunAssistantSnippet
                       runId={run.runId}
@@ -903,7 +891,7 @@ export function BotConversationView({
                     New chat
                   </DropdownMenuItem>
                   {onOpenSettings ? (
-                    <DropdownMenuItem onClick={onOpenSettings}>
+                    <DropdownMenuItem onClick={() => onOpenSettings?.()}>
                       <Settings2 className="size-4" aria-hidden />
                       Bot settings
                     </DropdownMenuItem>
