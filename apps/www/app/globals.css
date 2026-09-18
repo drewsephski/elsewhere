@@ -482,6 +482,32 @@
   background-color: var(--color-background);
 }
 
+html.tauri .workspace-window {
+  background-color: var(--color-background);
+  padding: 0;
+}
+
+html.tauri .workspace-window > .workspace-window-frame {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+html.tauri .tauri-titlebar {
+  height: 28px;
+  width: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+html.tauri .tauri-traffic-safe-l {
+  padding-left: 4.75rem;
+}
+
+html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
+  height: 32px;
+}
+
 @keyframes bot-bob {
   0%,
   100% {

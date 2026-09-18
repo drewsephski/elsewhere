@@ -1,12 +1,19 @@
 import {
   useLocation,
   useNavigate,
+  useParams as useRouterParams,
   useSearchParams as useRouterSearchParams,
 } from "react-router-dom";
 import { useCallback, useMemo } from "react";
 
 export function usePathname(): string {
   return useLocation().pathname;
+}
+
+export function useParams<
+  T extends Record<string, string | undefined> = Record<string, string | undefined>,
+>(): T {
+  return useRouterParams() as T;
 }
 
 export function useRouter() {

@@ -1,21 +1,15 @@
-<<<<<<< HEAD
-import AppHomePage from "@/app/app/page";
-import BotWorkspacePage from "@/app/app/bots/[id]/page";
-import GroupWorkspacePage from "@/app/app/groups/[id]/page";
 import { WorkspaceAuthenticatedFrame } from "@/components/app/workspace/workspace-authenticated-frame";
-=======
-import { ProductThemeScope } from "@/components/app/product-theme-scope";
-import { WorkspaceAppLayout } from "@/components/app/workspace/workspace-app-layout";
 import { WorkspaceRouteOutlet } from "@/components/app/workspace/workspace-route-outlet";
-import { Toaster } from "@/components/ui/sonner";
->>>>>>> bbbf20e (Document shared workspace route outlet and add shell wiring tests)
 import { authClient } from "@/lib/auth-client";
 import ApprovalsPage from "@/app/app/approvals/page";
 import ComputersPage from "@/app/app/computers/page";
 import ResultsPage from "@/app/app/results/page";
 import RoutinesPage from "@/app/app/routines/page";
+import SkillsPage from "@/app/app/skills/page";
+import SkillDetailPage from "@/app/app/skills/[id]/page";
 import WorkPage from "@/app/app/work/page";
 import { SignInView } from "@/app/sign-in/sign-in-view";
+import { settingsDialogHref } from "@/lib/settings-sections";
 import { Suspense, useEffect, useRef, useState } from "react";
 import {
   Navigate,
@@ -108,34 +102,30 @@ function BotsIndexRedirect() {
   return <Navigate to="/app?create=1" replace />;
 }
 
+function SettingsRedirect() {
+  return <Navigate to={settingsDialogHref("workspace")} replace />;
+}
+
 export default function CloudShell() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/app" replace />} />
       <Route path="/sign-in" element={<SignInRoute />} />
       <Route path="/sign-up" element={<SignInRoute />} />
-<<<<<<< HEAD
       <Route path="/app" element={<AuthenticatedWorkspace />}>
-        <Route index element={<AppHomePage />} />
-        <Route path="bots" element={<BotsIndexRedirect />} />
-        <Route path="bots/:id" element={<BotWorkspacePage />} />
-        <Route path="groups/:id" element={<GroupWorkspacePage />} />
-=======
-      <Route
-        path="/app"
-        element={<AuthenticatedWorkspace />}
-      >
         <Route index element={<WorkspaceRouteOutlet />} />
         <Route path="bots" element={<BotsIndexRedirect />} />
         <Route path="bots/:id" element={<WorkspaceRouteOutlet />} />
         <Route path="groups/:id" element={<WorkspaceRouteOutlet />} />
->>>>>>> bbbf20e (Document shared workspace route outlet and add shell wiring tests)
         <Route path="computers" element={<ComputersPage />} />
         <Route path="routines" element={<RoutinesPage />} />
         <Route path="approvals" element={<ApprovalsPage />} />
         <Route path="work" element={<WorkPage />} />
         <Route path="work/:id" element={<WorkDetailPage />} />
         <Route path="results" element={<ResultsPage />} />
+        <Route path="skills" element={<SkillsPage />} />
+        <Route path="skills/:id" element={<SkillDetailPage />} />
+        <Route path="settings" element={<SettingsRedirect />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

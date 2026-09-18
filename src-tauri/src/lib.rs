@@ -50,6 +50,35 @@ pub fn run() {
             });
 
             tracing::info!(path = %db_path.display(), "database initialized");
+
+            if let Ok(external_url) = std::env::var("ELSEWHERE_DESKTOP_WEBVIEW_URL") {
+                let trimmed = external_url.trim();
+                if !trimmed.is_empty() {
+                    if let Some(window) = app.get_webview_window("main") {
+                        match trimmed.parse::<url::Url>() {
+                            Ok(parsed) => {
+                                if let Err(error) = window.navigate(parsed) {
+                                    tracing::warn!(
+                                        %error,
+                                        url = %trimmed,
+                                        "ELSEWHERE_DESKTOP_WEBVIEW_URL navigation failed"
+                                    );
+                                } else {
+                                    tracing::info!(url = %trimmed, "desktop webview navigated to hosted workspace");
+                                }
+                            }
+                            Err(error) => {
+                                tracing::warn!(
+                                    %error,
+                                    url = %trimmed,
+                                    "invalid ELSEWHERE_DESKTOP_WEBVIEW_URL"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

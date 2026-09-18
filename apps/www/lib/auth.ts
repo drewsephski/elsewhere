@@ -4,7 +4,11 @@ import { nextCookies } from "better-auth/next-js";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { acceptsAlphaInvitation } from "@/lib/alpha-admission";
 import { getAuthPool } from "@/lib/db";
-import { CLOUD_HOST_JWT_AUDIENCE, publicAppOrigin } from "@/lib/auth.shared";
+import {
+  authTrustedOrigins,
+  CLOUD_HOST_JWT_AUDIENCE,
+  publicAppOrigin,
+} from "@/lib/auth.shared";
 import { sendAuthEmail } from "@/lib/send-auth-email";
 import { siteConfig } from "@elsewhere/brand";
 
@@ -31,7 +35,7 @@ export const auth = betterAuth({
   baseURL,
   secret: process.env.BETTER_AUTH_SECRET,
   database: getAuthPool(),
-  trustedOrigins: [appOrigin, baseURL],
+  trustedOrigins: authTrustedOrigins({ appOrigin, baseURL }),
   hooks: {
     before: createAuthMiddleware(async (context) => {
       // Reject uninvited requests before expensive password hashing.
