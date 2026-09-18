@@ -3,7 +3,7 @@
 import { ProductLogo } from "@/components/product-logo";
 import { siteConfig } from "@elsewhere/brand";
 import { authClient } from "@/lib/auth-client";
-import { authModeFromPathname, authModeToggleHref } from "@/lib/auth-mode";
+import { authModeFromPathname, authModeToggleHref, safeAuthNextPath } from "@/lib/auth-mode";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ export function SignInView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const resetSuccess = searchParams.get("reset") === "success";
+  const nextPath = safeAuthNextPath(searchParams.get("next")) ?? "/app";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -49,7 +50,7 @@ export function SignInView() {
           return;
         }
       }
-      router.push("/app");
+      router.push(nextPath);
       router.refresh();
     } catch {
       setError(mode === "sign-up" ? "Sign up failed. Please try again." : "Sign in failed. Please try again.");
@@ -64,7 +65,7 @@ export function SignInView() {
     try {
       await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/app",
+        callbackURL: nextPath,
       });
     } catch {
       setError("Google sign-in failed. Please try again.");

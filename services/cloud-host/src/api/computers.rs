@@ -8,7 +8,7 @@ use crate::error::ApiError;
 use agent_core::{
     filter_workspace_listing, normalize_workspace_path, validate_public_http_url,
     validate_workspace_mutation_path, validate_workspace_readable_path, workspace_rename_target,
-    AgentComputer, ComputerError, ToolError,
+    AgentComputer, ComputerError,
 };
 use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
@@ -36,9 +36,11 @@ pub struct ComputerResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ProviderMetadata {
     pub provisioned: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connected: Option<bool>,
 }
 
-fn to_response(row: crate::db::resources::SandboxRow) -> ComputerResponse {
+fn to_response(row: crate::db::resources::SandboxRow, connected: Option<bool>) -> ComputerResponse {
     ComputerResponse {
         id: row.id.clone(),
         display_name: if row.display_name.is_empty() {
@@ -51,7 +53,20 @@ fn to_response(row: crate::db::resources::SandboxRow) -> ComputerResponse {
         last_used_at: row.last_used_at,
         provider_metadata: ProviderMetadata {
             provisioned: row.state == "active",
+            connected,
         },
+    }
+}
+
+fn connected_for(
+    state: &AppState,
+    owner_id: &str,
+    row: &crate::db::resources::SandboxRow,
+) -> Option<bool> {
+    if row.provider == crate::local_mac::PROVIDER {
+        Some(state.local_mac_sessions.is_connected(owner_id, &row.id))
+    } else {
+        None
     }
 }
 
@@ -62,7 +77,14 @@ pub async fn list(
     let rows = list_computers(&state.pool, principal.owner_id())
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(Json(rows.into_iter().map(to_response).collect()))
+    Ok(Json(
+        rows.into_iter()
+            .map(|row| {
+                let connected = connected_for(&state, principal.owner_id(), &row);
+                to_response(row, connected)
+            })
+            .collect(),
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,7 +106,7 @@ pub async fn create(
     let row =
         insert_computer_placeholder(&state.pool, principal.owner_id(), body.display_name.trim())
             .await?;
-    Ok(Json(to_response(row)))
+    Ok(Json(to_response(row, None)))
 }
 
 pub async fn get(
@@ -96,7 +118,8 @@ pub async fn get(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound)?;
-    Ok(Json(to_response(row)))
+    let connected = connected_for(&state, principal.owner_id(), &row);
+    Ok(Json(to_response(row, connected)))
 }
 
 #[derive(Debug, Serialize)]
@@ -569,6 +592,7 @@ fn map_computer_error(err: ComputerError) -> ApiError {
         }
         ComputerError::GuestUnavailable(m) => ApiError::Internal(m),
         ComputerError::BootFailed(m) | ComputerError::ExecutionFailed(m) => ApiError::Internal(m),
+        ComputerError::AmbiguousOutcome(m) => ApiError::Internal(m),
         ComputerError::Cancelled => ApiError::Internal("cancelled".into()),
     }
 }

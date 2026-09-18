@@ -9,6 +9,7 @@ use sprite_computer::{default_deny_network_policy, SpriteComputer, SpriteCompute
 
 use crate::config::Config;
 use crate::error::ApiError;
+use crate::local_mac::session::{LocalMacSessionRegistry, RemoteLocalMacComputer};
 use crate::runner::sprite_resource_for_computer;
 
 const MAX_CACHED_COMPUTERS: usize = 128;
@@ -28,6 +29,11 @@ pub struct ComputerRegistry {
 }
 
 impl ComputerRegistry {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn cached_sprite_count(&self) -> usize {
+        self.sprites.len()
+    }
+
     pub fn evict(&self, owner_id: &str, computer_id: &str) {
         self.sprites
             .remove(&(owner_id.to_string(), computer_id.to_string()));
@@ -63,21 +69,22 @@ impl ComputerRegistry {
         owner_id: &str,
         computer_id: &str,
     ) -> Result<(), ApiError> {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(
-                SELECT 1 FROM sandboxes
-                WHERE id = $1 AND owner_id = $2 AND state <> 'archived'
-            )",
+        let provider: Option<String> = sqlx::query_scalar(
+            "SELECT provider FROM sandboxes
+             WHERE id = $1 AND owner_id = $2 AND state <> 'archived'",
         )
         .bind(computer_id)
         .bind(owner_id)
-        .fetch_one(pool)
+        .fetch_optional(pool)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-        if !exists {
-            return Err(ApiError::NotFound);
+        match provider.as_deref() {
+            None => Err(ApiError::NotFound),
+            Some(crate::local_mac::PROVIDER) => Err(ApiError::Validation(
+                "This Mac is not available for hosted Sprite operations yet.".into(),
+            )),
+            Some(_) => Ok(()),
         }
-        Ok(())
     }
 
     fn build_sprite(
@@ -176,5 +183,44 @@ impl ComputerRegistry {
         Ok(self
             .connect_sprite(config, pool, owner_id, computer_id, browser_enabled)
             .await?)
+    }
+
+    /// Provider-neutral computer resolver (`fly_sprite` → Sprite, `local_mac` → outbound Mac session).
+    pub async fn connect_agent_computer(
+        &self,
+        config: &Config,
+        pool: &sqlx::PgPool,
+        owner_id: &str,
+        computer_id: &str,
+        local_mac_sessions: &LocalMacSessionRegistry,
+        browser_enabled: bool,
+    ) -> Result<Arc<dyn AgentComputer>, ApiError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "SELECT provider, provider_resource_id FROM sandboxes
+             WHERE id = $1 AND owner_id = $2 AND state <> 'archived'",
+        )
+        .bind(computer_id)
+        .bind(owner_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let Some((provider, resource_id)) = row else {
+            return Err(ApiError::NotFound);
+        };
+        match provider.as_str() {
+            "fly_sprite" => {
+                self.connect_sprite_computer(config, pool, owner_id, computer_id, browser_enabled)
+                    .await
+            }
+            crate::local_mac::PROVIDER => Ok(Arc::new(RemoteLocalMacComputer::new(
+                owner_id,
+                computer_id,
+                resource_id,
+                local_mac_sessions.clone(),
+            ))),
+            other => Err(ApiError::Validation(format!(
+                "unsupported computer provider: {other}"
+            ))),
+        }
     }
 }

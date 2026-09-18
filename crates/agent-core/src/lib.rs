@@ -15,6 +15,7 @@ mod fake_computer;
 mod human_intervention;
 mod human_intervention_tools;
 mod input;
+mod local_mac_protocol;
 mod luna;
 mod memory;
 mod memory_tools;
@@ -82,6 +83,15 @@ pub use human_intervention::{
 };
 pub use human_intervention_tools::human_intervention_openai_tool_definitions;
 pub use input::{build_responses_input, ConversationMessage, MessageRole, MessageStatus};
+pub use local_mac_protocol::{
+    computer_error_from_rpc, computer_info_from_result, decode_bytes, encode_bytes,
+    exec_result_from_result, is_mutation_method, read_file_bytes_from_result,
+    rpc_error_from_computer, workspace_entries_from_result, ExecParams, HostToMacMessage,
+    LocalMacRpcDispatcher, MacToHostMessage, PathParams, ReadFileResult, RpcError, WriteFileParams,
+    AMBIGUOUS_MUTATION_MESSAGE, CONTENT_ENCODING_BASE64, LOCAL_MAC_NOT_CONNECTED,
+    METHOD_ENSURE_READY, METHOD_EXEC, METHOD_LIST_DIR, METHOD_READ_FILE, METHOD_WRITE_FILE,
+    PROTOCOL_VERSION,
+};
 pub use luna::{default_model_id, luna_model_id, DEFAULT_MODEL};
 pub use memory::{
     is_memory_mutation_tool, AgentMemory, MemoryContext, MemoryError, MemoryRecallItem,

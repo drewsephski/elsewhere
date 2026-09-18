@@ -27,7 +27,7 @@ export interface ComputerSummary {
   provider: string;
   state: string;
   lastUsedAt: string | null;
-  providerMetadata: { provisioned: boolean };
+  providerMetadata: { provisioned: boolean; connected?: boolean };
 }
 
 export interface RunSummary {

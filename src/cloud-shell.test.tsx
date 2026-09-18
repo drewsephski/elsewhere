@@ -23,7 +23,22 @@ vi.mock("@/app/sign-in/sign-in-view", () => ({
   SignInView: () => <div>sign-in</div>,
 }));
 
-vi.mock("@/app/app/computers/page", () => ({ default: () => <div>computers</div> }));
+vi.mock("@/app/pair/mac/pair-mac-view", () => ({
+  PairMacView: () => <div>pair-mac</div>,
+}));
+
+vi.mock("./mac-companion-connect", () => ({
+  MacCompanionConnect: () => <div>mac-companion-connect</div>,
+}));
+
+vi.mock("@/app/app/computers/page", () => ({
+  default: ({ headerAction }: { headerAction?: React.ReactNode }) => (
+    <div>
+      computers
+      {headerAction}
+    </div>
+  ),
+}));
 vi.mock("@/app/app/routines/page", () => ({ default: () => <div>routines</div> }));
 vi.mock("@/app/app/approvals/page", () => ({ default: () => <div>approvals</div> }));
 vi.mock("@/app/app/work/page", () => ({ default: () => <div>work</div> }));
@@ -42,6 +57,31 @@ describe("CloudShell", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("workspace-authenticated-frame")).toBeTruthy();
+    });
+  });
+
+  it("keeps /pair/mac instead of redirecting to /app", async () => {
+    render(
+      <MemoryRouter initialEntries={["/pair/mac?pairingId=abc&userCode=xyz"]}>
+        <CloudShell />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("pair-mac")).toBeTruthy();
+    });
+  });
+
+  it("mounts Mac Companion connect on /app/computers", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/computers"]}>
+        <CloudShell />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("computers")).toBeTruthy();
+      expect(screen.getByText("mac-companion-connect")).toBeTruthy();
     });
   });
 });

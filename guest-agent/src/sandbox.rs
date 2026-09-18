@@ -56,18 +56,24 @@ pub fn resolve_workspace_path(path: &str) -> Result<PathBuf, String> {
 }
 
 /// Read a file only if its canonical location stays under the workspace root.
-pub fn read_workspace_file(path: &str) -> Result<String, String> {
+pub fn read_workspace_file_bytes(path: &str) -> Result<Vec<u8>, String> {
     let resolved = resolve_workspace_path(path)?;
     let workspace_canon = workspace_canonical_root()?;
     let canonical = fs::canonicalize(&resolved).map_err(|e| e.to_string())?;
     if !canonical.starts_with(&workspace_canon) {
         return Err("path resolves outside the workspace sandbox".into());
     }
-    fs::read_to_string(&canonical).map_err(|e| e.to_string())
+    fs::read(&canonical).map_err(|e| e.to_string())
+}
+
+/// UTF-8 convenience wrapper used by legacy hosts that omit `encoding=base64`.
+pub fn read_workspace_file(path: &str) -> Result<String, String> {
+    let bytes = read_workspace_file_bytes(path)?;
+    String::from_utf8(bytes).map_err(|_| "file is not valid UTF-8".to_string())
 }
 
 /// Write a file only under the workspace; creates parent directories as needed.
-pub fn write_workspace_file(path: &str, content: &str) -> Result<(), String> {
+pub fn write_workspace_file(path: &str, content: &[u8]) -> Result<(), String> {
     let resolved = resolve_workspace_path(path)?;
     let workspace_canon = workspace_canonical_root()?;
 
@@ -99,7 +105,7 @@ pub fn write_workspace_file(path: &str, content: &str) -> Result<(), String> {
 fn write_workspace_file_non_unix(
     parent_canon: &Path,
     file_name: &std::ffi::OsStr,
-    content: &str,
+    content: &[u8],
     workspace_canon: &Path,
 ) -> Result<(), String> {
     let write_path = parent_canon.join(file_name);
@@ -115,8 +121,7 @@ fn write_workspace_file_non_unix(
         .create_new(true)
         .open(&write_path)
         .map_err(|e| e.to_string())?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| e.to_string())?;
+    file.write_all(content).map_err(|e| e.to_string())?;
 
     match canonical_path_under_workspace(&write_path, workspace_canon) {
         Ok(_) => Ok(()),
@@ -256,7 +261,7 @@ fn fd_canonical_path(dir: &fs::File) -> Result<PathBuf, String> {
 fn write_file_at_parent(
     parent: &fs::File,
     file_name: &std::ffi::OsStr,
-    content: &str,
+    content: &[u8],
 ) -> Result<(), String> {
     let cname = osstr_to_cstring(file_name)?;
     let truncate_flags = libc::O_WRONLY | libc::O_TRUNC | libc::O_NOFOLLOW | libc::O_CLOEXEC;
@@ -278,7 +283,7 @@ fn write_file_at_parent(
 }
 
 #[cfg(unix)]
-fn write_fd(fd: i32, content: &str) -> Result<(), String> {
+fn write_fd(fd: i32, content: &[u8]) -> Result<(), String> {
     let mut stat: libc::stat = unsafe { std::mem::zeroed() };
     if unsafe { libc::fstat(fd, &mut stat) } != 0 {
         let err = std::io::Error::last_os_error().to_string();
@@ -294,8 +299,7 @@ fn write_fd(fd: i32, content: &str) -> Result<(), String> {
         return Err("path is not a regular file".into());
     }
     let mut file = unsafe { fs::File::from_raw_fd(fd) };
-    file.write_all(content.as_bytes())
-        .map_err(|e| e.to_string())
+    file.write_all(content).map_err(|e| e.to_string())
 }
 
 pub fn validate_exec_command(command: &str) -> Result<(), String> {

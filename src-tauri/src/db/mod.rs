@@ -575,6 +575,55 @@ When information might be outdated, say what you know and what you would verify.
         }
         Ok(())
     }
+
+    pub fn get_meta(&self, key: &str) -> Result<Option<String>, AppError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM app_meta WHERE key = ?1")?;
+        match stmt.query_row(params![key], |row| row.get::<_, String>(0)) {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(AppError::Database(error)),
+        }
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<(), AppError> {
+        self.conn.execute(
+            "INSERT INTO app_meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    pub fn installation_id(&self) -> Result<String, AppError> {
+        if let Some(existing) = self.get_meta("installation_id")? {
+            return Ok(existing);
+        }
+        let id = Uuid::new_v4().to_string();
+        self.set_meta("installation_id", &id)?;
+        Ok(id)
+    }
+
+    pub fn elsewhere_pairing_identity(&self) -> Result<Option<(String, String)>, AppError> {
+        match (
+            self.get_meta("elsewhere_node_id")?,
+            self.get_meta("elsewhere_computer_id")?,
+        ) {
+            (Some(node_id), Some(computer_id)) => Ok(Some((node_id, computer_id))),
+            _ => Ok(None),
+        }
+    }
+
+    pub fn set_elsewhere_pairing_identity(
+        &self,
+        node_id: &str,
+        computer_id: &str,
+    ) -> Result<(), AppError> {
+        self.set_meta("elsewhere_node_id", node_id)?;
+        self.set_meta("elsewhere_computer_id", computer_id)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -836,5 +885,14 @@ mod tests {
             .get_conversation_for_bot(&conv_a.id, &bot_b.id)
             .expect_err("foreign");
         assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn installation_id_is_stable_opaque_metadata() {
+        let db = Database::open_in_memory().expect("db");
+        let first = db.installation_id().expect("first");
+        let second = db.installation_id().expect("second");
+        assert_eq!(first, second);
+        assert!(uuid::Uuid::parse_str(&first).is_ok());
     }
 }

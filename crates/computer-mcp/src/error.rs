@@ -31,6 +31,7 @@ impl ComputerMcpError {
             ComputerError::MalformedArguments(d) => Self::MalformedArguments(d),
             ComputerError::SandboxRejected(d) => Self::SandboxRejected(d),
             ComputerError::ExecutionFailed(d) => Self::ExecutionFailed(d),
+            ComputerError::AmbiguousOutcome(d) => Self::ExecutionFailed(d),
             ComputerError::Cancelled => Self::Cancelled,
         }
     }

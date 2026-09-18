@@ -47,6 +47,20 @@ pub fn redact_secrets(input: &str) -> String {
     }
     out = redact_github_oauth_tokens(&out);
     out = redact_slack_tokens(&out);
+    out = redact_emac_credentials(&out);
+    out
+}
+
+fn redact_emac_credentials(input: &str) -> String {
+    let mut out = input.to_string();
+    let marker = "emac_";
+    while let Some(idx) = out.find(marker) {
+        let rest = &out[idx..];
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ')' || c == ',')
+            .unwrap_or(rest.len());
+        out.replace_range(idx..idx + end, "[redacted]");
+    }
     out
 }
 

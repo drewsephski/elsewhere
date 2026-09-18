@@ -15,3 +15,17 @@ export function authModeFromPathname(pathname: string | null | undefined): AuthF
 export function authModeToggleHref(mode: AuthFormMode): string {
   return mode === "sign-in" ? "/sign-up" : "/sign-in";
 }
+
+/** Allow only the Mac pairing return path through sign-in `next`. */
+export function safeAuthNextPath(raw: string | null | undefined): string | null {
+  if (!raw) {
+    return null;
+  }
+  if (!raw.startsWith("/pair/mac")) {
+    return null;
+  }
+  if (raw.startsWith("//") || raw.includes("://") || raw.includes("\\")) {
+    return null;
+  }
+  return raw;
+}

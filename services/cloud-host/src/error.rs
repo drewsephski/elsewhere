@@ -18,6 +18,8 @@ pub enum ApiError {
     Conflict(String),
     #[error("too many requests")]
     TooManyRequests,
+    #[error("{0}")]
+    RateLimited(String),
     #[error("payload too large")]
     PayloadTooLarge,
     #[error("unsupported media type")]
@@ -42,6 +44,7 @@ impl IntoResponse for ApiError {
                 StatusCode::TOO_MANY_REQUESTS,
                 "too many concurrent runs".into(),
             ),
+            ApiError::RateLimited(m) => (StatusCode::TOO_MANY_REQUESTS, m.clone()),
             ApiError::PayloadTooLarge => {
                 (StatusCode::PAYLOAD_TOO_LARGE, "payload too large".into())
             }

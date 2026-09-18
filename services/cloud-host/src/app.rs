@@ -103,6 +103,18 @@ pub fn build_router(state: AppState) -> Router {
             get(api::computers::list).post(api::computers::create),
         )
         .route(
+            "/v1/local-mac/pairings/{pairingId}",
+            get(api::local_mac::get_pairing),
+        )
+        .route(
+            "/v1/local-mac/pairings/{pairingId}/approve",
+            post(api::local_mac::approve_pairing),
+        )
+        .route(
+            "/v1/local-mac/nodes/{nodeId}/revoke",
+            post(api::local_mac::revoke_node),
+        )
+        .route(
             "/v1/computers/{id}",
             get(api::computers::get).delete(api::computers::delete),
         )
@@ -356,6 +368,21 @@ pub fn build_router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(crate::channels::MAX_EVENT_BODY_BYTES)),
         )
         .merge(protected)
+        .merge(
+            Router::new()
+                .route(
+                    "/v1/local-mac/pairings",
+                    post(api::local_mac::create_pairing),
+                )
+                .route(
+                    "/v1/local-mac/pairings/{pairingId}/exchange",
+                    post(api::local_mac::exchange_pairing),
+                )
+                .route(
+                    "/v1/local-mac/sessions",
+                    get(api::local_mac_session::local_mac_session),
+                ),
+        )
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http());
 

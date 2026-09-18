@@ -3,6 +3,8 @@ pub mod agent;
 mod commands;
 mod db;
 mod error;
+#[cfg(target_os = "macos")]
+mod host_link;
 mod models;
 mod openai;
 mod secrets;
@@ -37,16 +39,22 @@ pub fn run() {
             let db_path = data_dir.join("gptbot.sqlite3");
             let database = Database::open(&db_path)?;
             let secrets: Arc<dyn secrets::SecretStore> = Arc::new(KeychainSecretStore);
+            let db = Arc::new(parking_lot::Mutex::new(database));
 
             #[cfg(target_os = "macos")]
             let vm = Arc::new(crate::vm::VirtualMachineManager::new(&data_dir));
+            #[cfg(target_os = "macos")]
+            let host_link =
+                crate::host_link::start_host_link(db.clone(), secrets.clone(), vm.clone());
 
             app.manage(AppState {
-                db: Arc::new(parking_lot::Mutex::new(database)),
+                db,
                 secrets,
                 active_streams: parking_lot::Mutex::new(std::collections::HashMap::new()),
                 #[cfg(target_os = "macos")]
                 vm,
+                #[cfg(target_os = "macos")]
+                host_link,
             });
 
             tracing::info!(path = %db_path.display(), "database initialized");
@@ -92,6 +100,8 @@ pub fn run() {
             commands::get_api_key_status,
             commands::set_openai_api_key,
             commands::clear_openai_api_key,
+            commands::get_elsewhere_pairing_status,
+            commands::start_elsewhere_pairing,
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,

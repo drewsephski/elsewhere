@@ -12,6 +12,8 @@ pub struct AppState {
     pub active_streams: Mutex<HashMap<String, Arc<AtomicBool>>>,
     #[cfg(target_os = "macos")]
     pub vm: SharedVirtualMachineManager,
+    #[cfg(target_os = "macos")]
+    pub host_link: crate::host_link::HostLinkHandle,
 }
 
 impl AppState {

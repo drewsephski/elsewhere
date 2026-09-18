@@ -16,6 +16,8 @@ pub mod connectors;
 pub mod conversations;
 pub mod delegations;
 pub mod installs;
+pub mod local_mac;
+pub mod local_mac_session;
 pub mod memories;
 pub mod permission_policies;
 pub mod skills;

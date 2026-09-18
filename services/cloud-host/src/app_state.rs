@@ -17,6 +17,8 @@ use crate::config::Config;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::events::registry::RunRegistry;
 use crate::human_intervention::HumanInterventionService;
+use crate::local_mac::session::LocalMacSessionRegistry;
+use crate::local_mac::PairingStartLimiter;
 use crate::permission_policies::PermissionPolicyService;
 use crate::provider_status_cache::ProviderStatusCache;
 use crate::user_questions::UserQuestionService;
@@ -24,7 +26,9 @@ use crate::user_questions::UserQuestionService;
 #[cfg(any(test, feature = "test-utils"))]
 #[derive(Clone)]
 pub struct TestRunOverrides {
-    pub computer: Arc<dyn AgentComputer>,
+    /// When set, bypasses `build_computer` (hosted resolver). When `None`, the run uses
+    /// `ComputerRegistry::connect_agent_computer` (provider-neutral path).
+    pub computer: Option<Arc<dyn AgentComputer>>,
     pub model: Arc<dyn ResponsesModel>,
 }
 
@@ -73,6 +77,8 @@ pub struct AppState {
     pub connector_secret_box: Option<Arc<ConnectorSecretBox>>,
     pub github_client: GitHubClient,
     pub slack_client: SlackClient,
+    pub local_mac_pairing_limiter: PairingStartLimiter,
+    pub local_mac_sessions: LocalMacSessionRegistry,
     #[cfg(any(test, feature = "test-utils"))]
     pub test_group_route_decider: Arc<std::sync::Mutex<Option<TestGroupRouteDecider>>>,
     #[cfg(any(test, feature = "test-utils"))]
@@ -206,6 +212,8 @@ impl AppState {
             connector_secret_box,
             github_client,
             slack_client,
+            local_mac_pairing_limiter: PairingStartLimiter::default(),
+            local_mac_sessions: LocalMacSessionRegistry::default(),
             #[cfg(any(test, feature = "test-utils"))]
             test_group_route_decider: Arc::new(std::sync::Mutex::new(None)),
             #[cfg(any(test, feature = "test-utils"))]

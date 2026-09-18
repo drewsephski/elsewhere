@@ -16,24 +16,32 @@ interface SettingsModalProps {
   open: boolean;
   apiKeyConfigured: boolean;
   apiKeyDraft: string;
+  elsewhereConnected: boolean;
+  elsewhereReauthRequired: boolean;
+  elsewherePairing: boolean;
   error: string | null;
   saving: boolean;
   onClose: () => void;
   onApiKeyChange: (value: string) => void;
   onSave: () => void;
   onClear: () => void;
+  onConnectElsewhere: () => void;
 }
 
 export function SettingsModal({
   open,
   apiKeyConfigured,
   apiKeyDraft,
+  elsewhereConnected,
+  elsewhereReauthRequired,
+  elsewherePairing,
   error,
   saving,
   onClose,
   onApiKeyChange,
   onSave,
   onClear,
+  onConnectElsewhere,
 }: SettingsModalProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -66,6 +74,28 @@ export function SettingsModal({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
+          <div className="space-y-1.5 border-t border-border pt-3">
+            <p className="text-sm font-medium">Elsewhere account</p>
+            <p className="text-xs text-muted-foreground">
+              {elsewhereReauthRequired
+                ? "This Mac needs to reconnect. Pair again to refresh the device credential."
+                : elsewhereConnected
+                  ? "This Mac is connected to your hosted Elsewhere account."
+                  : "Connect this Mac so it can appear as a Computer in your workspace."}
+            </p>
+            <Button
+              type="button"
+              variant={elsewhereConnected ? "outline" : "default"}
+              onClick={onConnectElsewhere}
+              disabled={saving || elsewherePairing}
+            >
+              {elsewherePairing
+                ? "Waiting for approval…"
+                : elsewhereConnected
+                  ? "Reconnect to Elsewhere"
+                  : "Connect to Elsewhere"}
+            </Button>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

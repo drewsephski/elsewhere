@@ -316,6 +316,7 @@ async fn execute_run(
         &pool,
         &input,
         &owner_id,
+        &host_state.local_mac_sessions,
         run_overrides.as_ref(),
     )
     .await?;
@@ -326,6 +327,7 @@ async fn execute_run(
         &pool,
         &input,
         &owner_id,
+        &host_state.local_mac_sessions,
     )
     .await?;
 
@@ -665,27 +667,31 @@ async fn build_computer(
     pool: &sqlx::PgPool,
     input: &RunExecutionInput,
     owner_id: &str,
+    local_mac_sessions: &crate::local_mac::session::LocalMacSessionRegistry,
     #[cfg(any(test, feature = "test-utils"))] run_overrides: Option<
         &crate::app_state::TestRunOverrides,
     >,
 ) -> Result<Arc<dyn AgentComputer>, String> {
     #[cfg(any(test, feature = "test-utils"))]
     if let Some(o) = run_overrides {
-        return Ok(Arc::new(ReadinessCachedComputer::new(o.computer.clone())));
+        if let Some(computer) = &o.computer {
+            return Ok(Arc::new(ReadinessCachedComputer::new(computer.clone())));
+        }
     }
 
-    let sprite = registry
-        .connect_sprite(
+    let computer = registry
+        .connect_agent_computer(
             config,
             pool,
             owner_id,
             &input.records.computer_id,
+            local_mac_sessions,
             config.browser_enabled,
         )
         .await
         .map_err(|e| e.to_string())?;
 
-    Ok(Arc::new(ReadinessCachedComputer::new(sprite)))
+    Ok(Arc::new(ReadinessCachedComputer::new(computer)))
 }
 
 pub(crate) async fn sprite_resource_for_computer(
