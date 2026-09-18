@@ -123,7 +123,7 @@ async fn seed_bot(pool: &PgPool, owner: &str) -> (String, String) {
         "Helpful",
         "gpt-5.6-luna",
         Some(&computer.id),
-        "codex",
+        "responses",
         "sky-wisp",
     )
     .await
@@ -438,6 +438,26 @@ async fn validate_create_rejects_schedule_and_timezone_errors(pool: PgPool) {
             "expected {needle} in {message}"
         );
     }
+
+    let weekday = BotRoutineSchedule {
+        repeat: "weekdays".into(),
+        every_minutes: None,
+        at: Some("08:00".into()),
+        days: None,
+    };
+    let draft = service
+        .validate_create(
+            &ctx,
+            "Morning brief",
+            "Summarize overnight competitor news.",
+            &weekday,
+            "America/Chicago",
+            None,
+        )
+        .await
+        .expect("valid weekday schedule");
+    assert_eq!(draft.name, "Morning brief");
+    assert_eq!(draft.timezone, "America/Chicago");
 }
 
 #[sqlx::test(migrations = "./migrations")]
