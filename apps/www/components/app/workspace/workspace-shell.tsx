@@ -343,7 +343,6 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-8 text-center">
-          {children}
           <ProviderStatusCard variant="featured" />
           <div className="max-w-md space-y-3">
             <p className="text-[13px] text-muted-foreground">
@@ -468,6 +467,10 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
 
   return (
     <div className="workspace-window flex h-[100dvh] flex-col overflow-hidden text-foreground">
+      {/* Keep router outlet mounted for desktop shell + any future page slots. */}
+      <div className="hidden" aria-hidden inert>
+        {children}
+      </div>
       <div className="workspace-window-frame flex min-h-0 flex-1 flex-col overflow-hidden">
         {selectedBotId ? (
           <ActiveRunProvider runId={streamRunId}>

@@ -17,3 +17,34 @@ export function publicAppOrigin(): string {
     "http://localhost:3000";
   return raw.replace(/\/api\/auth\/?$/, "").replace(/\/$/, "");
 }
+
+const DEFAULT_DESKTOP_SHELL_ORIGINS = [
+  "http://localhost:1420",
+  "http://127.0.0.1:1420",
+] as const;
+
+function parseCommaSeparatedOrigins(raw: string | undefined): string[] {
+  if (!raw?.trim()) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
+/** Origins allowed to call Better Auth (includes the Tauri/Vite dev shell on :1420). */
+export function authTrustedOrigins(options?: {
+  appOrigin?: string;
+  baseURL?: string;
+  desktopOrigins?: string[];
+}): string[] {
+  const appOrigin = options?.appOrigin ?? publicAppOrigin();
+  const baseURL = options?.baseURL ?? process.env.BETTER_AUTH_URL ?? appOrigin;
+  const desktopOrigins =
+    options?.desktopOrigins ??
+    parseCommaSeparatedOrigins(process.env.ELSEWHERE_DESKTOP_TRUSTED_ORIGINS);
+  const resolvedDesktop =
+    desktopOrigins.length > 0 ? desktopOrigins : [...DEFAULT_DESKTOP_SHELL_ORIGINS];
+  return [...new Set([appOrigin, baseURL, ...resolvedDesktop])];
+}
