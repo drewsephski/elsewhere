@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronLeft, FileText, Plus, X } from "@/components/icons/lucide";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { toast } from "sonner";
 import { ChatComposerFrame, ComposerIconButton } from "./chat-composer";
@@ -116,6 +116,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   const [removingParticipant, setRemovingParticipant] = useState(false);
   const idempotencyRef = useRef<string | null>(null);
   const loadScopeRef = useRef(createLoadScopeRef());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments({
     conversationId: groupId,
   });
@@ -128,6 +130,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     setMentions([]);
     setTranscriptLoading(true);
     idempotencyRef.current = null;
+    stickToBottomRef.current = true;
     resetComposerAttachments();
   }, [resetComposerAttachments]);
 
@@ -197,12 +200,32 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     return () => clearInterval(timer);
   }, [groupId, loadMessages]);
 
+  function handleTranscriptScroll() {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    stickToBottomRef.current = distanceFromBottom < 96;
+  }
+
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current) {
+      return;
+    }
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages.length]);
+
   async function handleSubmit() {
     const attachmentIds = readyAttachmentIds(composerFiles.files);
     if (!composerCanSend(message, composerFiles.files) || pending) {
       return;
     }
     setPending(true);
+    stickToBottomRef.current = true;
     const trimmed = message.trim();
     const payload = buildGroupSendPayload(trimmed, mentions, group?.participants ?? []);
     const idempotencyKey = idempotencyRef.current ?? crypto.randomUUID();
@@ -374,7 +397,11 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5">
+      <div
+        ref={scrollRef}
+        onScroll={handleTranscriptScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
+      >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {transcriptLoading ? (
             <div className="flex justify-center py-16" role="status" aria-label="Loading group chat">

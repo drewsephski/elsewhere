@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
 import { useState } from "react";
 
 export function SignInView() {
@@ -78,7 +79,9 @@ export function SignInView() {
       : false;
 
   return (
-    <main className="app-shell-bg flex min-h-screen flex-col items-center justify-center px-6">
+    <main className="app-shell-bg flex min-h-screen flex-col">
+      <DesktopTitlebar />
+      <div className="flex flex-1 flex-col items-center justify-center px-6">
       <div className="surface-panel w-full max-w-md p-8">
         <div className="flex items-center gap-2.5">
           <ProductLogo size="md" />
@@ -193,6 +196,7 @@ export function SignInView() {
         >
           Back to home
         </Link>
+      </div>
       </div>
     </main>
   );
