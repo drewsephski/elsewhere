@@ -50,7 +50,8 @@ Bots store `computer_enabled` (not bot name):
 
 ## Process boundary (desktop)
 
-- **Tauri webview**: React UI — `src/surfaces/desktop/`.
+- **Tauri webview**: React UI — `src/cloud-shell.tsx` (same workspace chat as `apps/www`, via Vite aliases).
+- **Local-only chat shell** (OpenAI API key + Tauri commands): `src/surfaces/desktop/desktop-app.tsx` — reuses shared chat bubbles/composer from `apps/www/components/app/workspace/`.
 - **Rust host**: SQLite, Keychain, OpenAI HTTP, streaming, Tauri commands.
 - **Swift VMM helper**: `gptbot-vmm` — Virtualization.framework + Virtio socket (legacy binary name).
 

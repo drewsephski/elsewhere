@@ -468,7 +468,7 @@ export default function DesktopApp() {
   }
 
   return (
-    <div className="flex h-full bg-[#fafafa]">
+    <div className="workspace-window flex h-full bg-background text-foreground">
       <BotSidebar
         bots={bots}
         selectedBotId={selectedBotId}
@@ -480,7 +480,7 @@ export default function DesktopApp() {
         isStreaming={isStreaming}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col bg-white">
+      <main className="flex min-w-0 flex-1 flex-col bg-background">
         <ChatHeader
           bot={selectedBot}
           mobileNavOpen={mobileNavOpen}
@@ -541,7 +541,7 @@ export default function DesktopApp() {
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto"
         >
-          <div className="mx-auto w-full max-w-2xl px-4 py-6 sm:px-6">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-3 py-4 sm:px-5">
             {!selectedBot && (
               <EmptyChat
                 apiKeyConfigured={apiKeyConfigured}

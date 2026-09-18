@@ -42,6 +42,7 @@ export default defineConfig(({ mode }) => ({
     environment: "node",
     include: [
       "src/**/*.test.ts",
+      "src/**/*.test.tsx",
       "apps/www/lib/**/*.test.ts",
       "apps/www/hooks/**/*.test.ts",
       "apps/www/components/**/*.hook.test.ts",

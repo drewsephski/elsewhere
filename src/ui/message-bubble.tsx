@@ -1,8 +1,8 @@
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { Message } from "@desktop/lib/definitions";
+import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
+import { MarkdownContent } from "@/components/app/markdown-content";
+import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { Skeleton } from "@desktop/components/ui/skeleton";
-import { cn } from "@desktop/lib/utils";
 
 interface MessageBubbleProps {
   message: Message;
@@ -67,13 +67,8 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const timelineLabel = formatTimelineLabel(message);
   if (timelineLabel) {
     return (
-      <div
-        className="mb-2 flex w-full justify-center"
-        data-message-id={message.id}
-      >
-        <div className="rounded-full border border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-          {timelineLabel}
-        </div>
+      <div className="mb-2 flex w-full justify-center" data-message-id={message.id}>
+        <p className="text-center text-[11px] text-muted-foreground">{timelineLabel}</p>
       </div>
     );
   }
@@ -82,44 +77,39 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isError = message.status === "error";
   const isStreaming = message.status === "streaming" && !message.body;
 
+  if (isUser) {
+    return (
+      <div className="space-y-2.5" data-message-id={message.id}>
+        <UserPromptBubble
+          sentAt={new Date(message.createdAt).toISOString()}
+        >
+          {message.body}
+        </UserPromptBubble>
+        {isError && message.errorMessage ? (
+          <p className="text-center text-[11px] text-destructive" role="alert">
+            {message.errorMessage}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "mb-3 flex w-full",
-        isUser ? "justify-end" : "justify-start",
-      )}
-      data-message-id={message.id}
-    >
-      <div
-        className={cn(
-          "max-w-[min(520px,88%)] px-4 py-2.5 text-sm leading-relaxed",
-          isUser
-            ? "rounded-[1.25rem] rounded-br-md bg-foreground text-background shadow-sm"
-            : "rounded-[1.25rem] rounded-bl-md bg-[#ececef] text-foreground",
-          isError && "border border-destructive/40 bg-destructive/5 text-foreground",
-        )}
-      >
-        {isUser ? (
-          <p className="whitespace-pre-wrap">{message.body}</p>
-        ) : isStreaming ? (
+    <div className="space-y-2.5" data-message-id={message.id}>
+      <AssistantMessageBubble>
+        {isStreaming ? (
           <div className="space-y-2 py-0.5" aria-label="Assistant is typing">
             <Skeleton className="h-3 w-[90%] bg-foreground/10" />
             <Skeleton className="h-3 w-[70%] bg-foreground/10" />
             <Skeleton className="h-3 w-[50%] bg-foreground/10" />
           </div>
-        ) : (
-          <div className="prose-chat text-foreground">
-            {message.body ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.body}
-              </ReactMarkdown>
-            ) : null}
-          </div>
-        )}
-        {isError && message.errorMessage && (
-          <p className="mt-2 text-sm text-destructive">{message.errorMessage}</p>
-        )}
-      </div>
+        ) : message.body ? (
+          <MarkdownContent text={message.body} />
+        ) : null}
+        {isError && message.errorMessage ? (
+          <p className="mt-2 text-[11px] text-destructive">{message.errorMessage}</p>
+        ) : null}
+      </AssistantMessageBubble>
     </div>
   );
 }

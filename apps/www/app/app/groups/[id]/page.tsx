@@ -1,3 +1,5 @@
+import { WorkspaceRouteOutlet } from "@/components/app/workspace/workspace-route-outlet";
+
 export default function GroupWorkspacePage() {
-  return null;
+  return <WorkspaceRouteOutlet />;
 }
