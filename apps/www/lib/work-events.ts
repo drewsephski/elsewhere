@@ -34,6 +34,17 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     skill_save_recent_work: "Saving a skill",
     skill_attach: "Attaching a skill",
     skill_detach: "Removing a skill",
+    github_open_repository: "Opening repository",
+    github_review_publish: "Reviewing changes",
+    github_publish_pull_request: "Opening pull request",
+    github_list_repositories: "Listing GitHub repositories",
+    github_search_repositories: "Searching GitHub repositories",
+    github_get_repository: "Inspecting repository",
+    github_get_file_contents: "Reading repository file",
+    github_list_issues: "Listing issues",
+    github_get_issue: "Reading issue",
+    github_list_pull_requests: "Listing pull requests",
+    github_get_pull_request: "Reading pull request",
   };
   const base = tools[tool];
   if (!base) {

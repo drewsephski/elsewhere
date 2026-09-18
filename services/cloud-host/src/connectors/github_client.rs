@@ -269,6 +269,248 @@ impl GitHubClient {
         self.get_json(token, &path).await
     }
 
+    pub async fn download_tarball(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        git_ref: &str,
+    ) -> Result<Vec<u8>, String> {
+        let path = format!(
+            "/repos/{}/{}/tarball/{}",
+            urlencoding::encode(owner),
+            urlencoding::encode(repo),
+            urlencoding::encode(git_ref),
+        );
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .get(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .send()
+            .await
+            .map_err(|e| format!("GitHub zipball download failed: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!("GitHub zipball error {}", response.status()));
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| format!("GitHub zipball body invalid: {e}"))?;
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn get_branch_head_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+    ) -> Result<String, String> {
+        let path = format!(
+            "/repos/{}/{}/git/ref/heads/{}",
+            owner,
+            repo,
+            urlencoding::encode(branch),
+        );
+        let body: Value = self.get_json(token, &path).await?;
+        body.get("object")
+            .and_then(|o| o.get("sha"))
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "GitHub ref response missing sha".into())
+    }
+
+    pub async fn find_open_pull_for_head(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        head_branch: &str,
+    ) -> Result<Option<Value>, String> {
+        let head = format!("{}:{}", owner, head_branch);
+        let path = format!(
+            "/repos/{}/{}/pulls?state=open&head={}&per_page=5",
+            owner,
+            repo,
+            urlencoding::encode(&head),
+        );
+        let pulls: Vec<Value> = self.get_json(token, &path).await?;
+        Ok(pulls.into_iter().next())
+    }
+
+    pub async fn create_pull_request(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        title: &str,
+        body: &str,
+        head_branch: &str,
+        base_branch: &str,
+    ) -> Result<Value, String> {
+        let path = format!("/repos/{}/{}/pulls", owner, repo);
+        self.post_json(
+            token,
+            &path,
+            &json!({
+                "title": title,
+                "body": body,
+                "head": head_branch,
+                "base": base_branch,
+            }),
+        )
+        .await
+    }
+
+    pub async fn publish_tree_commit(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        base_sha: &str,
+        branch: &str,
+        message: &str,
+        files: &[(&str, &str)],
+    ) -> Result<String, String> {
+        let mut tree_items = Vec::new();
+        for (path, content) in files {
+            let blob: Value = self
+                .post_json(
+                    token,
+                    &format!("/repos/{}/{}/git/blobs", owner, repo),
+                    &json!({
+                        "content": content,
+                        "encoding": "utf-8"
+                    }),
+                )
+                .await?;
+            let sha = blob
+                .get("sha")
+                .and_then(|s| s.as_str())
+                .ok_or_else(|| "blob missing sha".to_string())?;
+            tree_items.push(json!({
+                "path": path,
+                "mode": "100644",
+                "type": "blob",
+                "sha": sha
+            }));
+        }
+        let tree: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/trees", owner, repo),
+                &json!({
+                    "base_tree": base_sha,
+                    "tree": tree_items
+                }),
+            )
+            .await?;
+        let tree_sha = tree
+            .get("sha")
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "tree missing sha".to_string())?;
+        let commit: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/commits", owner, repo),
+                &json!({
+                    "message": message,
+                    "tree": tree_sha,
+                    "parents": [base_sha]
+                }),
+            )
+            .await?;
+        let commit_sha = commit
+            .get("sha")
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "commit missing sha".to_string())?;
+        let ref_path = format!("/repos/{}/{}/git/refs/heads/{}", owner, repo, branch);
+        let update: Result<Value, String> = self
+            .patch_json(
+                token,
+                &ref_path,
+                &json!({ "sha": commit_sha, "force": false }),
+            )
+            .await;
+        if update.is_err() {
+            let _: Value = self
+                .post_json(
+                    token,
+                    &format!("/repos/{}/{}/git/refs", owner, repo),
+                    &json!({
+                        "ref": format!("refs/heads/{branch}"),
+                        "sha": commit_sha
+                    }),
+                )
+                .await?;
+        }
+        Ok(commit_sha.to_string())
+    }
+
+    async fn post_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        token: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<T, String> {
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .post(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub API request failed: {e}"))?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err("GitHub rejected the stored credentials".into());
+        }
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            let detail = crate::redact::redact_secrets(&detail);
+            return Err(format!("GitHub API error {status}: {detail}"));
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| format!("GitHub API response invalid: {e}"))
+    }
+
+    async fn patch_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        token: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<T, String> {
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .patch(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub API request failed: {e}"))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            let detail = crate::redact::redact_secrets(&detail);
+            return Err(format!("GitHub API error {status}: {detail}"));
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| format!("GitHub API response invalid: {e}"))
+    }
+
     async fn request_user_token(&self, payload: Value) -> Result<GitHubAppUserToken, String> {
         let response = self
             .http

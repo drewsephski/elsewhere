@@ -40,6 +40,12 @@ pub const ATTACHMENT_TOOL_NAMES: &[&str] = &["attachment_list", "attachment_read
 
 pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
 
+pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
+    "github_open_repository",
+    "github_review_publish",
+    "github_publish_pull_request",
+];
+
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_list_repositories",
     "github_search_repositories",
@@ -111,12 +117,21 @@ pub fn is_github_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_github_coding_tool(name: &str) -> bool {
+    GITHUB_CODING_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_connected_apps_tool(name: &str) -> bool {
     CONNECTED_APPS_TOOL_NAMES.contains(&name)
 }
 
 pub fn is_connector_tool(name: &str) -> bool {
     is_github_connector_tool(name) || is_connected_apps_tool(name)
+}
+
+#[allow(dead_code)]
+pub fn is_github_coding_dispatch_tool(name: &str) -> bool {
+    is_github_coding_tool(name)
 }
 
 pub fn is_connected_apps_execute_tool(name: &str) -> bool {
@@ -143,6 +158,7 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "skill_save_recent_work",
     "skill_attach",
     "skill_detach",
+    "github_publish_pull_request",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -217,6 +233,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "skill_save_recent_work" | "skill_attach" | "skill_detach" => {
             Some(PolicyActionGroup::Skills)
         }
+        "github_publish_pull_request" => Some(PolicyActionGroup::ConnectedApps),
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -244,6 +261,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "skill_save_recent_work" => "Save skills",
         "skill_attach" => "Attach skills",
         "skill_detach" => "Remove skills",
+        "github_publish_pull_request" => "Publish to GitHub",
         _ => "This action",
     }
 }
@@ -270,6 +288,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "skill_save_recent_work" => "This Bot is not allowed to save skills.".into(),
         "skill_attach" => "This Bot is not allowed to attach skills.".into(),
         "skill_detach" => "This Bot is not allowed to remove skills.".into(),
+        "github_publish_pull_request" => {
+            "This Bot is not allowed to publish pull requests to GitHub.".into()
+        }
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -300,6 +321,9 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_get_issue",
     "github_list_pull_requests",
     "github_get_pull_request",
+    "github_open_repository",
+    "github_review_publish",
+    "github_publish_pull_request",
     "connected_apps_search_tools",
     "connected_apps_load_tool",
     "connected_apps_execute_tool",

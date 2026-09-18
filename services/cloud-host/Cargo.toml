@@ -134,6 +134,10 @@ uuid = { version = "1", features = ["v4"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect"] }
 
 [[test]]
+name = "github_coding"
+required-features = ["test-utils"]
+
+[[test]]
 name = "local_mac_remote"
 required-features = ["test-utils"]
 

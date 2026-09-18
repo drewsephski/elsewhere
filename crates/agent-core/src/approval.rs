@@ -8,9 +8,10 @@ pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 use crate::connectors::ConnectorToolDefinition;
 use crate::tool_catalog::{
     is_attachment_tool, is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool,
-    is_connected_apps_tool, is_github_connector_tool, is_routine_tool, is_skill_tool,
-    is_user_question_tool,
+    is_connected_apps_tool, is_github_coding_tool, is_github_connector_tool, is_routine_tool,
+    is_skill_tool, is_user_question_tool,
 };
+use crate::github_coding::is_github_coding_mutation_tool;
 use crate::routines::is_routine_mutation_tool;
 use crate::skills::is_skill_mutation_tool;
 
@@ -147,6 +148,10 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         name if is_user_question_tool(name) => ToolOperationKind::Read,
         name if is_attachment_tool(name) => ToolOperationKind::Read,
         name if is_github_connector_tool(name) => ToolOperationKind::Read,
+        name if is_github_coding_tool(name) && !is_github_coding_mutation_tool(name) => {
+            ToolOperationKind::Read
+        }
+        name if is_github_coding_mutation_tool(name) => ToolOperationKind::Mutation,
         name if is_connected_apps_tool(name) && !is_connected_apps_execute_tool(name) => {
             ToolOperationKind::Read
         }
@@ -249,6 +254,18 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         "routine_pause" | "routine_resume" => sanitize_routine_toggle_arguments(args),
         "skill_save_recent_work" => sanitize_skill_save_arguments(args),
         "skill_attach" | "skill_detach" => sanitize_skill_attach_arguments(args),
+        "github_open_repository" => json!({
+            "owner": args.get("owner").and_then(|v| v.as_str()).unwrap_or(""),
+            "repo": args.get("repo").and_then(|v| v.as_str()).unwrap_or(""),
+            "taskSlug": args.get("taskSlug").and_then(|v| v.as_str()).unwrap_or("")
+        }),
+        "github_review_publish" => {
+            let checks = args.get("checks").and_then(|v| v.as_array());
+            json!({
+                "checkCount": checks.map(|c| c.len()).unwrap_or(0)
+            })
+        }
+        "github_publish_pull_request" => sanitize_github_publish_arguments(args),
         "connected_apps_execute_tool" => {
             let info = ConnectedAppApprovalInfo {
                 install_id: args
@@ -277,6 +294,22 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         _ if is_collaboration_tool(tool_name) => json!({}),
         _ => json!({}),
     }
+}
+
+fn sanitize_github_publish_arguments(args: &Value) -> Value {
+    json!({
+        "title": truncate_str(
+            args.get("title").and_then(|v| v.as_str()).unwrap_or(""),
+            120,
+        ),
+        "bodyLength": args.get("body").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
+        "publishAnyway": args.get("publishAnyway").and_then(|v| v.as_bool()).unwrap_or(false),
+        "repository": args.get("repository").and_then(|v| v.as_str()).unwrap_or(""),
+        "branch": args.get("branch").and_then(|v| v.as_str()).unwrap_or(""),
+        "baseBranch": args.get("baseBranch").and_then(|v| v.as_str()).unwrap_or(""),
+        "changedPaths": args.get("changedPaths").cloned().unwrap_or_else(|| json!([])),
+        "checksPassed": args.get("checksPassed").and_then(|v| v.as_bool()),
+    })
 }
 
 fn sanitize_connected_app_execute_arguments(
@@ -539,6 +572,19 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .unwrap_or("helper");
             format!("Run subagent {name}")
+        }
+        "github_publish_pull_request" => {
+            let repo = sanitized
+                .get("repository")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("repository");
+            let branch = sanitized
+                .get("branch")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("branch");
+            format!("Publish {repo} ({branch}) to GitHub")
         }
         "connected_apps_execute_tool" => {
             let app = sanitized
