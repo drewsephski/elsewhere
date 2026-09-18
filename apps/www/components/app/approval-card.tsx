@@ -138,6 +138,12 @@ export function ApprovalCard({
   }
 
   const resolved = status !== "pending";
+  const resolvedTitle =
+    status === "approved"
+      ? `Allowed · ${payload.summary}`
+      : status === "denied"
+        ? `Denied · ${payload.summary}`
+        : `${labelForStatus(status)} · ${payload.summary}`;
   const botName = payload.botName?.trim() || "this Bot";
   const actionLabel = (payload.policyActionLabel ?? payload.tool).toLowerCase();
   const showPersistent = payload.policyOverridable === true;
@@ -146,8 +152,45 @@ export function ApprovalCard({
     argumentSummary && Object.keys(argumentSummary).length > 0;
   const target = humanTarget(payload);
 
+  if (resolved) {
+    return (
+      <NeedsYouCard
+        tone="resolved"
+        title={resolvedTitle}
+        reason={payload.summary}
+        detail={
+          target ? (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground/80">Target:</span> {target}
+            </p>
+          ) : null
+        }
+        actions={
+          hasDetails ? (
+            <div className="w-full pt-1">
+              <button
+                type="button"
+                className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                onClick={() => setDetailsOpen((open) => !open)}
+                aria-expanded={detailsOpen}
+              >
+                {detailsOpen ? "Hide details" : "Show details"}
+              </button>
+              {detailsOpen ? (
+                <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-background/40 p-2 text-xs text-foreground/80">
+                  {JSON.stringify(argumentSummary, null, 2)}
+                </pre>
+              ) : null}
+            </div>
+          ) : null
+        }
+      />
+    );
+  }
+
   return (
     <NeedsYouCard
+      tone="pending"
       title="Allow this action?"
       reason={payload.summary}
       detail={
@@ -163,7 +206,7 @@ export function ApprovalCard({
           <Button
             type="button"
             size="sm"
-            disabled={resolved || busy}
+            disabled={busy}
             onClick={() => void handleDecision("approve")}
           >
             Allow
@@ -172,16 +215,11 @@ export function ApprovalCard({
             type="button"
             size="sm"
             variant="outline"
-            disabled={resolved || busy}
+            disabled={busy}
             onClick={() => void handleDecision("deny")}
           >
             Deny
           </Button>
-          {resolved ? (
-            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {labelForStatus(status)}
-            </span>
-          ) : null}
           {showPersistent && !resolved ? (
             <div className="flex w-full flex-col items-start gap-1 pt-1">
               <Button

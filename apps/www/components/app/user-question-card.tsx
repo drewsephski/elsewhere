@@ -77,18 +77,45 @@ export function UserQuestionCard({
     }
   }
 
+  const chosenIndex =
+    selected !== null
+      ? selected
+      : typeof question.selectedIndex === "number"
+        ? question.selectedIndex
+        : null;
+  const chosenLabel =
+    chosenIndex !== null && question.options[chosenIndex]
+      ? question.options[chosenIndex]
+      : null;
+
   if (cancelled) {
     return (
       <NeedsYouCard
+        tone="resolved"
         title="Choice cancelled"
         reason="This question was dismissed before an answer was saved."
-        continuation="Send a follow-up in chat if you still need this decided."
+      />
+    );
+  }
+
+  if (answered && chosenLabel) {
+    return (
+      <NeedsYouCard
+        tone="resolved"
+        title={`Choice saved · ${chosenLabel}`}
+        reason={question.question}
+        actions={
+          <p className="text-xs text-muted-foreground">
+            Saved answer: <span className="font-medium text-foreground/80">{chosenLabel}</span>
+          </p>
+        }
       />
     );
   }
 
   return (
     <NeedsYouCard
+      tone="pending"
       title={botName ? `${botName} needs your choice` : "Your bot needs your choice"}
       reason={question.question}
       continuation="Pick one option to continue this assignment."

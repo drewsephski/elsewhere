@@ -41,6 +41,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
+import { useHistoricalRunTimelines } from "@/hooks/use-historical-run-timelines";
 import { MarkdownContent } from "@/components/app/markdown-content";
 import { botPresetPrompts } from "@/lib/bot-preset-prompts";
 import { BotPresetPrompts } from "./bot-preset-prompts";
@@ -550,6 +551,27 @@ export function BotConversationView({
   }
 
   const chronologicalRuns = [...runs].reverse();
+  const runStatusById = useMemo(
+    () => Object.fromEntries(runs.map((run) => [run.runId, run.status])),
+    [runs],
+  );
+  const historicalTimelines = useHistoricalRunTimelines(
+    runs.map((run) => run.runId),
+    runStatusById,
+    streamRunId,
+  );
+
+  const handlePrefillRetry = useCallback((run: RunSummary) => {
+    const trimmed = run.task?.trim() ?? "";
+    const text =
+      run.status === "interrupted" && trimmed
+        ? `Please continue where you left off: ${trimmed}`
+        : trimmed;
+    setMessage(text);
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }, []);
   const canSend =
     composerCanSend(message, composerFiles.files) && Boolean(bot?.computerId) && !pending;
   const presetPrompts = useMemo(() => (bot ? botPresetPrompts(bot) : []), [bot]);
@@ -672,6 +694,11 @@ export function BotConversationView({
               (isLive || !run.task?.trim()) &&
               run.runId === liveRunId;
             const finished = !isLive && !runIsActive(run.status);
+            const historical = finished ? historicalTimelines[run.runId] : undefined;
+            const runErrorCode =
+              isLive && liveDetail?.errorCode
+                ? liveDetail.errorCode
+                : run.errorCode ?? null;
             const deleteAction =
               canArchiveWorkRun(run.status) && !runIsActive(run.status) ? (
                 <MessageDeleteButton
@@ -714,14 +741,22 @@ export function BotConversationView({
                   />
                 ) : null}
 
+                {finished && historical ? (
+                  <RunConversationTimeline
+                    items={historical.items}
+                    botName={bot?.name}
+                    pendingHumanIntervention={historical.pendingHumanIntervention}
+                  />
+                ) : null}
+
                 {finished ? (
                   <>
                     <RunFailureCard
                       runId={run.runId}
                       status={run.status}
-                      errorCode={run.runId === streamRunId ? liveDetail?.errorCode : null}
+                      errorCode={runErrorCode}
                       onOpenSettings={onOpenSettings}
-                      onFocusComposer={() => composerRef.current?.focus()}
+                      onRetryMessage={() => handlePrefillRetry(run)}
                     />
                     <RunDelegationList runId={run.runId} enabled={finished} />
                     <RunAssistantSnippet

@@ -33,6 +33,7 @@ pub struct RunSummaryResponse {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
     pub archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub error_code: Option<String>,
     #[sqlx(skip)]
     #[serde(default)]
     pub attachments: Vec<agent_core::AttachmentDescriptor>,
@@ -46,7 +47,7 @@ pub async fn list_runs(
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let archived_only = query.archived.unwrap_or(false);
     let rows = sqlx::query_as::<_,RunSummaryResponse>(
-        "SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.archived_at, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task \
+        "SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.archived_at, r.error_code, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task \
          FROM agent_runs r \
          JOIN bots b ON b.id = r.bot_id \
          LEFT JOIN work_queue q ON q.run_id = r.id \

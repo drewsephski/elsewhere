@@ -14,16 +14,18 @@ interface RunFailureCardProps {
   errorCode?: string | null;
   onOpenSettings?: (section: "chatgpt" | "general" | "advanced") => void;
   onFocusComposer?: () => void;
+  /** Prefill composer with the original task; must not auto-send. */
+  onRetryMessage?: () => void;
 }
 
 function RecoveryActionButton({
   action,
   onOpenSettings,
-  onFocusComposer,
+  onRetryMessage,
 }: {
   action: RunRecoveryAction;
   onOpenSettings?: (section: "chatgpt" | "general" | "advanced") => void;
-  onFocusComposer?: () => void;
+  onRetryMessage?: () => void;
 }) {
   if (action.kind === "view_details") {
     return (
@@ -48,7 +50,7 @@ function RecoveryActionButton({
   }
   if (action.kind === "retry_message") {
     return (
-      <Button type="button" size="sm" variant="outline" onClick={onFocusComposer}>
+      <Button type="button" size="sm" variant="outline" onClick={onRetryMessage}>
         {action.label}
       </Button>
     );
@@ -61,7 +63,7 @@ export function RunFailureCard({
   status,
   errorCode,
   onOpenSettings,
-  onFocusComposer,
+  onRetryMessage,
 }: RunFailureCardProps) {
   const guide = runRecoveryGuide(status, errorCode, runId);
   if (!guide) {
@@ -70,6 +72,7 @@ export function RunFailureCard({
 
   return (
     <NeedsYouCard
+      tone="neutral"
       title={guide.title}
       reason={guide.reason}
       continuation={guide.continuation}
@@ -78,7 +81,7 @@ export function RunFailureCard({
           key={`${action.kind}-${action.label}`}
           action={action}
           onOpenSettings={onOpenSettings}
-          onFocusComposer={onFocusComposer}
+          onRetryMessage={onRetryMessage}
         />
       ))}
     />

@@ -35,4 +35,11 @@ describe("ApprovalCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(document.querySelector("pre")?.textContent).toContain("report.md");
   });
+
+  it("renders resolved approvals with neutral copy and no waiting language", () => {
+    render(<ApprovalCard payload={payload} externalStatus="approved" />);
+    expect(screen.getByText(/Allowed · Write report\.md/)).toBeTruthy();
+    expect(screen.queryByText(/waits until you choose/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Allow" })).toBeNull();
+  });
 });
