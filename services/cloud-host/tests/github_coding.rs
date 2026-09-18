@@ -40,20 +40,29 @@ fn app_credential(access: &str) -> cloud_host::connectors::github_client::GitHub
 }
 
 fn minimal_tarball_with_readme() -> Vec<u8> {
-    let mut body = Vec::new();
-    let name = "repo-main/README.md";
-    let mut header = [0u8; 512];
-    header[..name.len()].copy_from_slice(name.as_bytes());
-    let size_octal = format!("{:012o}", 5);
-    header[124..136].copy_from_slice(size_octal.as_bytes());
-    header[156] = b'0';
-    body.extend_from_slice(&header);
-    body.extend_from_slice(b"Hello");
-    body.extend(vec![0u8; 512 - 5]);
-    body.extend([0u8; 512]);
-    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    std::io::Write::write_all(&mut encoder, &body).unwrap();
-    encoder.finish().unwrap()
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+    use tar::EntryType;
+
+    let mut tar_buf = Vec::new();
+    {
+        let mut builder = tar::Builder::new(&mut tar_buf);
+        let data = b"Hello";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o100644);
+        header.set_entry_type(EntryType::Regular);
+        header.set_path("repo-main/README.md").unwrap();
+        header.set_cksum();
+        builder.append(&header, &data[..]).unwrap();
+        builder.finish().unwrap();
+    }
+    let mut gz = Vec::new();
+    let mut enc = GzEncoder::new(&mut gz, Compression::default());
+    enc.write_all(&tar_buf).unwrap();
+    enc.finish().unwrap();
+    gz
 }
 
 async fn mock_github_api(server: &MockServer, tarball_bytes: Vec<u8>) {
