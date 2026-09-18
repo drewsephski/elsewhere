@@ -67,6 +67,10 @@ import {
   isActiveLoadScope,
 } from "@/lib/conversation-load-scope";
 import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
+import {
+  buildConversationRunsListPath,
+  retryPrefillText,
+} from "@/lib/conversation-runs";
 import type { SettingsSection } from "@/lib/settings-sections";
 
 function runIsActive(status: string): boolean {
@@ -282,7 +286,7 @@ export function BotConversationView({
         return;
       }
       const response = await cloudHostFetch(
-        `/v1/runs?limit=40&bot_id=${encodeURIComponent(botId)}&conversation_id=${encodeURIComponent(activeConversationId)}`,
+        buildConversationRunsListPath(botId, activeConversationId),
       );
       if (!isActiveLoadScope(loadScopeRef.current, generation)) {
         return;
@@ -562,12 +566,7 @@ export function BotConversationView({
   );
 
   const handlePrefillRetry = useCallback((run: RunSummary) => {
-    const trimmed = run.task?.trim() ?? "";
-    const text =
-      run.status === "interrupted" && trimmed
-        ? `Please continue where you left off: ${trimmed}`
-        : trimmed;
-    setMessage(text);
+    setMessage(retryPrefillText(run));
     window.requestAnimationFrame(() => {
       composerRef.current?.focus();
     });

@@ -15,6 +15,8 @@ pub struct ListRunsQuery {
     pub limit: Option<i64>,
     /// When true, return only archived runs. When false or omitted, return active runs only.
     pub archived: Option<bool>,
+    /// When true, return the full user message for each run (conversation history). Default truncates to 180 chars.
+    pub full_task: Option<bool>,
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -46,8 +48,10 @@ pub async fn list_runs(
 ) -> Result<Json<Vec<RunSummaryResponse>>, ApiError> {
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let archived_only = query.archived.unwrap_or(false);
+    let full_task = query.full_task.unwrap_or(false);
     let rows = sqlx::query_as::<_,RunSummaryResponse>(
-        "SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.archived_at, r.error_code, r.created_at, b.name AS bot_name, LEFT(COALESCE(q.user_message, 'Delegated work'), 180) AS task \
+        "SELECT r.id AS run_id, r.request_id, r.bot_id, r.conversation_id, r.status, r.model, r.computer_id, r.started_at, r.finished_at, r.archived_at, r.error_code, r.created_at, b.name AS bot_name, \
+         CASE WHEN $6::bool THEN COALESCE(q.user_message, 'Delegated work') ELSE LEFT(COALESCE(q.user_message, 'Delegated work'), 180) END AS task \
          FROM agent_runs r \
          JOIN bots b ON b.id = r.bot_id \
          LEFT JOIN work_queue q ON q.run_id = r.id \
@@ -62,6 +66,7 @@ pub async fn list_runs(
         .bind(query.bot_id)
         .bind(archived_only)
         .bind(query.conversation_id)
+        .bind(full_task)
         .fetch_all(&state.pool)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;

@@ -157,14 +157,7 @@ export function ApprovalCard({
       <NeedsYouCard
         tone="resolved"
         title={resolvedTitle}
-        reason={payload.summary}
-        detail={
-          target ? (
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground/80">Target:</span> {target}
-            </p>
-          ) : null
-        }
+        reason={target ? `Target: ${target}` : "Recorded in this conversation."}
         actions={
           hasDetails ? (
             <div className="w-full pt-1">

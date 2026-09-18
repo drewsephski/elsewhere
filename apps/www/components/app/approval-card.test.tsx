@@ -41,5 +41,7 @@ describe("ApprovalCard", () => {
     expect(screen.getByText(/Allowed · Write report\.md/)).toBeTruthy();
     expect(screen.queryByText(/waits until you choose/i)).toBeNull();
     expect(screen.queryByRole("button", { name: "Allow" })).toBeNull();
+    const region = screen.getByRole("region", { name: /Allowed ·/ });
+    expect(region.textContent?.split(payload.summary).length).toBe(2);
   });
 });

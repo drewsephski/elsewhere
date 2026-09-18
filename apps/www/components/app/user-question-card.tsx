@@ -104,11 +104,6 @@ export function UserQuestionCard({
         tone="resolved"
         title={`Choice saved · ${chosenLabel}`}
         reason={question.question}
-        actions={
-          <p className="text-xs text-muted-foreground">
-            Saved answer: <span className="font-medium text-foreground/80">{chosenLabel}</span>
-          </p>
-        }
       />
     );
   }
