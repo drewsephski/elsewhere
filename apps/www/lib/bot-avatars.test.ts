@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BOT_AVATAR_PRESETS,
+  botAvatarFormDefaults,
   botAvatarImage,
   DEFAULT_BOT_AVATAR_ID,
   JOB_BOT_IMAGES,
@@ -47,5 +48,14 @@ describe("BOT_AVATAR_PRESETS", () => {
     expect(BOT_AVATAR_PRESETS.some((preset) => preset.id === DEFAULT_BOT_AVATAR_ID)).toBe(
       true,
     );
+  });
+});
+
+describe("botAvatarFormDefaults", () => {
+  it("returns the suggested name and role for a picker avatar", () => {
+    expect(botAvatarFormDefaults("rose-sprout")).toEqual({
+      name: "Writer",
+      instructions: expect.stringContaining("writing specialist"),
+    });
   });
 });
