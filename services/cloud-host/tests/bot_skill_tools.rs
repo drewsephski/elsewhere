@@ -269,7 +269,7 @@ async fn skill_list_includes_attachment_state(pool: PgPool) {
 
     let service = cloud_host::agent_skills::PostgresAgentSkills::new(
         pool.clone(),
-        jwt_state(pool.clone()).config.clone(),
+        jwt_state(pool.clone()).config.as_ref().clone(),
     );
     let rows = service
         .list(&agent_core::SkillContext {
@@ -566,7 +566,7 @@ async fn archived_skill_attach_rejected(pool: PgPool) {
         .unwrap();
     let service = cloud_host::agent_skills::PostgresAgentSkills::new(
         pool.clone(),
-        jwt_state(pool.clone()).config.clone(),
+        jwt_state(pool.clone()).config.as_ref().clone(),
     );
     let err = service
         .attach(
@@ -594,7 +594,7 @@ async fn cross_owner_skill_attach_denied(pool: PgPool) {
         .unwrap();
     let service = cloud_host::agent_skills::PostgresAgentSkills::new(
         pool.clone(),
-        jwt_state(pool.clone()).config.clone(),
+        jwt_state(pool.clone()).config.as_ref().clone(),
     );
     let err = service
         .attach(
