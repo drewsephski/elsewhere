@@ -506,7 +506,7 @@ Browser recovery:\n\
         routines: Some(crate::agent_routines::PostgresAgentRoutines::new(pool.clone())),
         skills: Some(crate::agent_skills::PostgresAgentSkills::new(
             pool.clone(),
-            host_state.config.clone(),
+            host_state.config.as_ref().clone(),
         )),
         attachments: Some(crate::attachments::RunScopedAttachments::new(
             pool.clone(),

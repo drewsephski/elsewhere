@@ -118,8 +118,8 @@ impl AgentSkills for PostgresAgentSkills {
             display_name: optional_name
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| humanize_slug(&package.frontmatter.name))
-                .to_string(),
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| humanize_slug(&package.frontmatter.name)),
             description: package.frontmatter.description.clone(),
             skill_md: package.skill_md,
             attach_to_bot,
@@ -155,16 +155,17 @@ impl AgentSkills for PostgresAgentSkills {
         }
 
         let bot_name = self.bot_display_name(ctx).await?;
+        let skill_name = skill.name.clone();
         Ok(SkillSaveResult {
             skill_id: skill.id,
             slug: skill.slug,
-            name: skill.name,
+            name: skill_name.clone(),
             version: skill.current_version,
             attached_to_bot: draft.attach_to_bot,
             bot_name: bot_name.clone(),
             message: format!(
                 "Skill saved as \"{}\"{}",
-                skill.name,
+                skill_name,
                 if draft.attach_to_bot {
                     format!(" and attached to {bot_name}")
                 } else {
@@ -187,12 +188,13 @@ impl AgentSkills for PostgresAgentSkills {
             .await
             .map_err(map_api)?;
         let bot_name = self.bot_display_name(ctx).await?;
+        let skill_name = skill.name.clone();
         Ok(SkillAttachResult {
             skill_id: skill.id,
             slug: skill.slug,
-            name: skill.name,
+            name: skill_name.clone(),
             bot_name: bot_name.clone(),
-            message: format!("Attached \"{}\" to {bot_name}", skill.name),
+            message: format!("Attached \"{}\" to {bot_name}", skill_name),
         })
     }
 
@@ -209,12 +211,13 @@ impl AgentSkills for PostgresAgentSkills {
             .await
             .map_err(map_api)?;
         let bot_name = self.bot_display_name(ctx).await?;
+        let skill_name = skill.name.clone();
         Ok(SkillDetachResult {
             skill_id: skill.id,
             slug: skill.slug,
-            name: skill.name,
+            name: skill_name.clone(),
             bot_name: bot_name.clone(),
-            message: format!("Removed \"{}\" from {bot_name}", skill.name),
+            message: format!("Removed \"{}\" from {bot_name}", skill_name),
         })
     }
 
