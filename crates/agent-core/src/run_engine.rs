@@ -57,6 +57,7 @@ pub struct SharedRunDeps {
     pub browser_recovery: Option<Arc<BrowserRecoverySession>>,
     pub subagents: Option<Arc<dyn crate::subagent::AgentSubagents>>,
     pub memory: Option<Arc<dyn crate::memory::AgentMemory>>,
+    pub routines: Option<Arc<dyn crate::routines::AgentRoutines>>,
     pub attachments: Option<Arc<dyn crate::attachments::AgentAttachments>>,
     pub user_questions: Option<Arc<dyn crate::user_question::AgentUserQuestion>>,
     /// Provider-neutral user text plus immutable attachment descriptors for this run.
@@ -90,6 +91,7 @@ impl SharedRunDeps {
             browser_recovery: None,
             subagents: None,
             memory: None,
+            routines: None,
             attachments: None,
             user_questions: None,
             user_input: RunUserInput::from_text(""),
@@ -144,6 +146,7 @@ pub fn responses_loop_deps(shared: SharedRunDeps, model: Arc<dyn ResponsesModel>
         browser_recovery: shared.browser_recovery.clone(),
         subagents: shared.subagents.clone(),
         memory: shared.memory.clone(),
+        routines: shared.routines.clone(),
         attachments: shared.attachments.clone(),
         user_questions: shared.user_questions.clone(),
     }

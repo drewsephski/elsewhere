@@ -5,8 +5,9 @@ use agent_core::{
     connector_openai_tool_definitions, dispatch_agent_tool_with_gate_and_recovery,
     human_intervention_openai_tool_definitions, is_attachment_tool, is_browser_tool,
     is_collaboration_tool, is_connector_tool, is_human_intervention_tool, is_memory_tool,
-    is_subagent_tool, is_user_question_tool, AgentAttachments, AgentCollaboration, AgentComputer,
-    AgentConnectors, AgentHumanIntervention, AgentMemory, AgentSubagents, AgentUserQuestion,
+    is_routine_tool, is_subagent_tool, is_user_question_tool, AgentAttachments, AgentCollaboration,
+    AgentComputer, AgentConnectors, AgentHumanIntervention, AgentMemory, AgentRoutines,
+    AgentSubagents, AgentUserQuestion,
     BrowserRecoverySession, CollaborationContext, ToolApprovalGate, ToolError, ToolRunContext,
     RUN_SUBAGENT_DESCRIPTION,
 };
@@ -37,6 +38,7 @@ pub struct ComputerHandler {
     browser_recovery: Option<Arc<BrowserRecoverySession>>,
     subagents: Option<Arc<dyn AgentSubagents>>,
     memory: Option<Arc<dyn AgentMemory>>,
+    routines: Option<Arc<dyn AgentRoutines>>,
     attachments: Option<Arc<dyn AgentAttachments>>,
     user_questions: Option<Arc<dyn AgentUserQuestion>>,
     source_conversation_id: String,
@@ -54,6 +56,7 @@ impl ComputerHandler {
         browser_recovery: Option<Arc<BrowserRecoverySession>>,
         subagents: Option<Arc<dyn AgentSubagents>>,
         memory: Option<Arc<dyn AgentMemory>>,
+        routines: Option<Arc<dyn AgentRoutines>>,
         attachments: Option<Arc<dyn AgentAttachments>>,
         user_questions: Option<Arc<dyn AgentUserQuestion>>,
         source_conversation_id: String,
@@ -69,6 +72,7 @@ impl ComputerHandler {
             browser_recovery,
             subagents,
             memory,
+            routines,
             attachments,
             user_questions,
             source_conversation_id,
@@ -273,6 +277,7 @@ fn tool_definitions() -> Vec<Tool> {
     );
     tools.extend(connector_mcp_tool_definitions());
     tools.extend(memory_mcp_tool_definitions());
+    tools.extend(routine_mcp_tool_definitions());
     tools.extend(openai_mcp_tools(
         agent_core::user_question_openai_tool_definitions(),
         "Ask the owner a multiple-choice question",
@@ -296,6 +301,29 @@ fn openai_mcp_tools(defs: Vec<serde_json::Value>, fallback: &str) -> Vec<Tool> {
                 .get("description")
                 .and_then(|v| v.as_str())
                 .unwrap_or(fallback)
+                .to_string();
+            let parameters = value
+                .get("parameters")
+                .cloned()
+                .unwrap_or_else(|| json!({"type": "object"}));
+            Tool::new(name, description, schema_object(parameters))
+        })
+        .collect()
+}
+
+fn routine_mcp_tool_definitions() -> Vec<Tool> {
+    agent_core::routine_openai_tool_definitions()
+        .into_iter()
+        .map(|value| {
+            let name = value
+                .get("name")
+                .and_then(|v| v.as_str())
+                .expect("routine tool name")
+                .to_string();
+            let description = value
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Routine tool")
                 .to_string();
             let parameters = value
                 .get("parameters")
@@ -409,6 +437,7 @@ impl ServerHandler for ComputerHandler {
             self.human_intervention.as_ref(),
             self.subagents.as_ref(),
             self.memory.as_ref(),
+            self.routines.as_ref(),
             self.attachments.as_ref(),
             self.user_questions.as_ref(),
             &request.name,
@@ -464,6 +493,7 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         name if is_subagent_tool(name) => Ok(()),
         name if is_connector_tool(name) => Ok(()),
         name if is_memory_tool(name) => Ok(()),
+        name if is_routine_tool(name) => Ok(()),
         name if is_attachment_tool(name) => Ok(()),
         name if is_user_question_tool(name) => Ok(()),
         other => Err(ComputerMcpError::MalformedArguments(format!(
@@ -514,6 +544,8 @@ mod tests {
         ] {
             assert!(names.contains(&name.to_string()), "{name}");
         }
+        assert!(names.contains(&"routine_list".to_string()));
+        assert!(names.contains(&"routine_create".to_string()));
         assert!(names.contains(&"recall_memory".to_string()));
         assert!(names.contains(&"remember".to_string()));
         assert!(names.contains(&"forget_memory".to_string()));

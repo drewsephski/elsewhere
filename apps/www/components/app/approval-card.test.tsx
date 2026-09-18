@@ -36,6 +36,19 @@ describe("ApprovalCard", () => {
     expect(document.querySelector("pre")?.textContent).toContain("report.md");
   });
 
+  it("uses routine-specific title for routine tools", () => {
+    render(
+      <ApprovalCard
+        payload={{
+          ...payload,
+          tool: "routine_create",
+          summary: 'Run "Morning brief" every weekday at 08:00 (America/Chicago)',
+        }}
+      />,
+    );
+    expect(screen.getByText("Allow this routine?")).toBeTruthy();
+  });
+
   it("renders resolved approvals with neutral copy and no waiting language", () => {
     render(<ApprovalCard payload={payload} externalStatus="approved" />);
     expect(screen.getByText(/Allowed · Write report\.md/)).toBeTruthy();

@@ -151,6 +151,8 @@ export function ApprovalCard({
   const hasDetails =
     argumentSummary && Object.keys(argumentSummary).length > 0;
   const target = humanTarget(payload);
+  const isRoutineApproval = payload.tool.startsWith("routine_");
+  const pendingTitle = isRoutineApproval ? "Allow this routine?" : "Allow this action?";
 
   if (resolved) {
     return (
@@ -184,7 +186,7 @@ export function ApprovalCard({
   return (
     <NeedsYouCard
       tone="pending"
-      title="Allow this action?"
+      title={pendingTitle}
       reason={payload.summary}
       detail={
         target ? (

@@ -8,8 +8,9 @@ pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 use crate::connectors::ConnectorToolDefinition;
 use crate::tool_catalog::{
     is_attachment_tool, is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool,
-    is_connected_apps_tool, is_github_connector_tool, is_user_question_tool,
+    is_connected_apps_tool, is_github_connector_tool, is_routine_tool, is_user_question_tool,
 };
+use crate::routines::is_routine_mutation_tool;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -136,6 +137,8 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "recall_memory" => ToolOperationKind::Read,
         "remember" => ToolOperationKind::Mutation,
         "forget_memory" => ToolOperationKind::Mutation,
+        name if is_routine_tool(name) && !is_routine_mutation_tool(name) => ToolOperationKind::Read,
+        name if is_routine_mutation_tool(name) => ToolOperationKind::Mutation,
         "browser_request_human" => ToolOperationKind::Read,
         name if is_user_question_tool(name) => ToolOperationKind::Read,
         name if is_attachment_tool(name) => ToolOperationKind::Read,
@@ -238,6 +241,8 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "source": args.get("source").and_then(|v| v.as_str()).unwrap_or(""),
             "toolId": args.get("toolId").and_then(|v| v.as_str()).unwrap_or("")
         }),
+        "routine_create" => sanitize_routine_create_arguments(args),
+        "routine_pause" | "routine_resume" => sanitize_routine_toggle_arguments(args),
         "connected_apps_execute_tool" => {
             let info = ConnectedAppApprovalInfo {
                 install_id: args
@@ -323,8 +328,92 @@ fn summarize_connected_app_args(args: &Value) -> Value {
     json!(out)
 }
 
+fn sanitize_routine_create_arguments(args: &Value) -> Value {
+    let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let timezone = args.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+    let schedule_label = args
+        .get("schedule")
+        .and_then(|s| routine_schedule_label_from_value(s))
+        .unwrap_or_else(|| "on a schedule".to_string());
+    json!({
+        "name": truncate_str(name, 80),
+        "timezone": timezone,
+        "scheduleLabel": schedule_label,
+        "argumentSummary": {
+            "name": name,
+            "timezone": timezone,
+            "schedule": schedule_label
+        }
+    })
+}
+
+fn sanitize_routine_toggle_arguments(args: &Value) -> Value {
+    let routine_id = args.get("routineId").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args.get("routineName").and_then(|v| v.as_str()).unwrap_or("");
+    let schedule_label = args
+        .get("scheduleLabel")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    json!({
+        "routineId": routine_id,
+        "routineName": truncate_str(name, 80),
+        "scheduleLabel": schedule_label,
+        "argumentSummary": {
+            "routineId": routine_id,
+            "name": name,
+            "schedule": schedule_label
+        }
+    })
+}
+
+fn routine_schedule_label_from_value(schedule: &Value) -> Option<String> {
+    let repeat = schedule.get("repeat").and_then(|v| v.as_str())?;
+    let at = schedule.get("at").and_then(|v| v.as_str());
+    match repeat {
+        "every_minutes" => {
+            let minutes = schedule.get("everyMinutes").and_then(|v| v.as_i64()).unwrap_or(60);
+            Some(format!("every {minutes} minutes"))
+        }
+        "daily" => Some(format!("every day at {}", at.unwrap_or("08:00"))),
+        "weekdays" => Some(format!("every weekday at {}", at.unwrap_or("08:00"))),
+        "weekly" => {
+            let days = schedule
+                .get("days")
+                .and_then(|v| v.as_str())
+                .unwrap_or("weekdays");
+            Some(format!("{days} at {}", at.unwrap_or("08:00")))
+        }
+        _ => None,
+    }
+}
+
 pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
     match tool_name {
+        "routine_create" => {
+            let name = sanitized.get("name").and_then(|v| v.as_str()).unwrap_or("routine");
+            let schedule = sanitized
+                .get("scheduleLabel")
+                .and_then(|v| v.as_str())
+                .unwrap_or("on a schedule");
+            let timezone = sanitized.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+            format!("Run \"{name}\" {schedule} ({timezone})")
+        }
+        "routine_pause" => {
+            let name = sanitized
+                .get("routineName")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("this routine");
+            format!("Pause \"{name}\"")
+        }
+        "routine_resume" => {
+            let name = sanitized
+                .get("routineName")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("this routine");
+            format!("Resume \"{name}\"")
+        }
         "workspace_write" => {
             let path = sanitized
                 .get("path")

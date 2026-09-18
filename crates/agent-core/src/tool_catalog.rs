@@ -22,6 +22,13 @@ pub const SUBAGENT_TOOL_NAMES: &[&str] = &["run_subagent"];
 
 pub const MEMORY_TOOL_NAMES: &[&str] = &["recall_memory", "remember", "forget_memory"];
 
+pub const ROUTINE_TOOL_NAMES: &[&str] = &[
+    "routine_list",
+    "routine_create",
+    "routine_pause",
+    "routine_resume",
+];
+
 pub const ATTACHMENT_TOOL_NAMES: &[&str] = &["attachment_list", "attachment_read"];
 
 pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
@@ -77,6 +84,10 @@ pub fn is_memory_tool(name: &str) -> bool {
     MEMORY_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_routine_tool(name: &str) -> bool {
+    ROUTINE_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_attachment_tool(name: &str) -> bool {
     ATTACHMENT_TOOL_NAMES.contains(&name)
 }
@@ -115,6 +126,9 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "run_subagent",
     "remember",
     "forget_memory",
+    "routine_create",
+    "routine_pause",
+    "routine_resume",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -133,6 +147,7 @@ pub enum PolicyActionGroup {
     Delegation,
     ConnectedApps,
     Memory,
+    Routines,
 }
 
 impl PolicyActionGroup {
@@ -144,6 +159,7 @@ impl PolicyActionGroup {
             Self::Delegation => "delegation",
             Self::ConnectedApps => "connected_apps",
             Self::Memory => "memory",
+            Self::Routines => "routines",
         }
     }
 
@@ -155,6 +171,7 @@ impl PolicyActionGroup {
             Self::Delegation => "Delegation",
             Self::ConnectedApps => "Connected apps",
             Self::Memory => "Memory",
+            Self::Routines => "Routines",
         }
     }
 }
@@ -179,6 +196,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         | "browser_download" => Some(PolicyActionGroup::Browser),
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
         "remember" | "forget_memory" => Some(PolicyActionGroup::Memory),
+        "routine_create" | "routine_pause" | "routine_resume" => Some(PolicyActionGroup::Routines),
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -200,6 +218,9 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "remember" => "Remember things",
         "forget_memory" => "Forget memories",
         "connected_apps_execute_tool" => "Use a connected app",
+        "routine_create" => "Create routines",
+        "routine_pause" => "Pause routines",
+        "routine_resume" => "Resume routines",
         _ => "This action",
     }
 }
@@ -220,6 +241,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "connected_apps_execute_tool" => {
             "This Bot is not allowed to use this connected app.".into()
         }
+        "routine_create" => "This Bot is not allowed to create routines.".into(),
+        "routine_pause" => "This Bot is not allowed to pause routines.".into(),
+        "routine_resume" => "This Bot is not allowed to resume routines.".into(),
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -256,6 +280,10 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "recall_memory",
     "remember",
     "forget_memory",
+    "routine_list",
+    "routine_create",
+    "routine_pause",
+    "routine_resume",
 ];
 
 #[cfg(test)]
