@@ -347,6 +347,42 @@ impl PostgresAgentConnectors {
         }
         Ok(repos)
     }
+
+    pub async fn assert_repo_authorized(
+        &self,
+        owner_id: &str,
+        owner: &str,
+        repo: &str,
+    ) -> Result<(), ConnectorError> {
+        let token = self.github_access_token(owner_id).await?;
+        let catalog = self.authorized_catalog(owner_id, &token).await?;
+        require_authorized_repo(&catalog, owner, repo)?;
+        Ok(())
+    }
+
+    /// Fresh installation catalog lookup for mutation boundaries (bypasses TTL cache).
+    pub async fn assert_repo_authorized_fresh(
+        &self,
+        owner_id: &str,
+        owner: &str,
+        repo: &str,
+    ) -> Result<(), ConnectorError> {
+        self.invalidate_owner_catalog(owner_id);
+        self.assert_repo_authorized(owner_id, owner, repo).await
+    }
+
+    fn invalidate_owner_catalog(&self, owner_id: &str) {
+        if let Ok(mut catalogs) = self.catalogs.lock() {
+            catalogs.remove(owner_id);
+        }
+    }
+
+    pub async fn github_access_token_for_owner(
+        &self,
+        owner_id: &str,
+    ) -> Result<String, ConnectorError> {
+        self.github_access_token(owner_id).await
+    }
 }
 
 pub(crate) async fn fetch_authorized_repositories(

@@ -42,6 +42,7 @@ pub struct AgentLoopDeps {
     pub memory: Option<Arc<dyn crate::memory::AgentMemory>>,
     pub routines: Option<Arc<dyn crate::routines::AgentRoutines>>,
     pub skills: Option<Arc<dyn crate::skills::AgentSkills>>,
+    pub github_coding: Option<Arc<dyn crate::github_coding::AgentGithubCoding>>,
     pub attachments: Option<Arc<dyn crate::attachments::AgentAttachments>>,
     pub user_questions: Option<Arc<dyn crate::user_question::AgentUserQuestion>>,
 }
@@ -192,6 +193,7 @@ pub async fn run_agent_loop(
                     deps.memory.as_ref(),
                     deps.routines.as_ref(),
                     deps.skills.as_ref(),
+                    deps.github_coding.as_ref(),
                     deps.attachments.as_ref(),
                     deps.user_questions.as_ref(),
                     &name,
@@ -729,6 +731,7 @@ mod tests {
             skills: None,
             attachments: None,
             user_questions: None,
+            github_coding: None,
         };
 
         let ctx = AgentLoopContext {

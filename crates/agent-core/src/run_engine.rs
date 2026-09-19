@@ -12,6 +12,7 @@ use crate::browser_recovery::BrowserRecoverySession;
 use crate::collaboration::AgentCollaboration;
 use crate::computer::AgentComputer;
 use crate::connectors::AgentConnectors;
+use crate::github_coding::AgentGithubCoding;
 use crate::events::{EventSink, RuntimeError};
 use crate::model::ResponsesModel;
 use crate::run_store::RunStore;
@@ -59,6 +60,7 @@ pub struct SharedRunDeps {
     pub memory: Option<Arc<dyn crate::memory::AgentMemory>>,
     pub routines: Option<Arc<dyn crate::routines::AgentRoutines>>,
     pub skills: Option<Arc<dyn crate::skills::AgentSkills>>,
+    pub github_coding: Option<Arc<dyn AgentGithubCoding>>,
     pub attachments: Option<Arc<dyn crate::attachments::AgentAttachments>>,
     pub user_questions: Option<Arc<dyn crate::user_question::AgentUserQuestion>>,
     /// Provider-neutral user text plus immutable attachment descriptors for this run.
@@ -94,6 +96,7 @@ impl SharedRunDeps {
             memory: None,
             routines: None,
             skills: None,
+            github_coding: None,
             attachments: None,
             user_questions: None,
             user_input: RunUserInput::from_text(""),
@@ -150,6 +153,7 @@ pub fn responses_loop_deps(shared: SharedRunDeps, model: Arc<dyn ResponsesModel>
         memory: shared.memory.clone(),
         routines: shared.routines.clone(),
         skills: shared.skills.clone(),
+        github_coding: shared.github_coding.clone(),
         attachments: shared.attachments.clone(),
         user_questions: shared.user_questions.clone(),
     }

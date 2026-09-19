@@ -158,6 +158,7 @@ impl CodexRunEngine {
             shared.memory.clone(),
             shared.routines.clone(),
             shared.skills.clone(),
+            shared.github_coding.clone(),
             shared.attachments.clone(),
             shared.user_questions.clone(),
             ctx.conversation_id.clone(),

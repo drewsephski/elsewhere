@@ -491,6 +491,7 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
                 None, // memory
                 None, // routines
                 None, // skills
+                None, // github_coding
                 None, // attachments
                 Some(&scoped),
                 "ask_user",
@@ -532,6 +533,7 @@ async fn one_pending_max_three_and_duplicate_invocation(pool: PgPool) {
         None, // memory
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         Some(&scoped),
         "ask_user",

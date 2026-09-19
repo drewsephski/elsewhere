@@ -40,6 +40,13 @@ pub const ATTACHMENT_TOOL_NAMES: &[&str] = &["attachment_list", "attachment_read
 
 pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
 
+pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
+    "github_open_repository",
+    "github_run_check",
+    "github_review_publish",
+    "github_publish_pull_request",
+];
+
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
     "github_list_repositories",
     "github_search_repositories",
@@ -111,12 +118,21 @@ pub fn is_github_connector_tool(name: &str) -> bool {
     CONNECTOR_TOOL_NAMES.contains(&name)
 }
 
+pub fn is_github_coding_tool(name: &str) -> bool {
+    GITHUB_CODING_TOOL_NAMES.contains(&name)
+}
+
 pub fn is_connected_apps_tool(name: &str) -> bool {
     CONNECTED_APPS_TOOL_NAMES.contains(&name)
 }
 
 pub fn is_connector_tool(name: &str) -> bool {
     is_github_connector_tool(name) || is_connected_apps_tool(name)
+}
+
+#[allow(dead_code)]
+pub fn is_github_coding_dispatch_tool(name: &str) -> bool {
+    is_github_coding_tool(name)
 }
 
 pub fn is_connected_apps_execute_tool(name: &str) -> bool {
@@ -128,6 +144,7 @@ pub fn is_connected_apps_execute_tool(name: &str) -> bool {
 pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "workspace_write",
     "workspace_exec",
+    "github_run_check",
     "browser_navigate",
     "browser_click",
     "browser_type",
@@ -143,6 +160,7 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "skill_save_recent_work",
     "skill_attach",
     "skill_detach",
+    "github_publish_pull_request",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -208,7 +226,7 @@ pub fn is_policy_non_overridable_tool(name: &str) -> bool {
 pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
     match name {
         "workspace_write" => Some(PolicyActionGroup::Files),
-        "workspace_exec" => Some(PolicyActionGroup::Terminal),
+        "workspace_exec" | "github_run_check" => Some(PolicyActionGroup::Terminal),
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
@@ -217,6 +235,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "skill_save_recent_work" | "skill_attach" | "skill_detach" => {
             Some(PolicyActionGroup::Skills)
         }
+        "github_publish_pull_request" => Some(PolicyActionGroup::ConnectedApps),
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -228,6 +247,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
     match name {
         "workspace_write" => "Write files",
         "workspace_exec" => "Run commands",
+        "github_run_check" => "Run checks",
         "browser_navigate" => "Open pages",
         "browser_click" => "Click",
         "browser_type" => "Type",
@@ -244,6 +264,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "skill_save_recent_work" => "Save skills",
         "skill_attach" => "Attach skills",
         "skill_detach" => "Remove skills",
+        "github_publish_pull_request" => "Publish to GitHub",
         _ => "This action",
     }
 }
@@ -251,7 +272,9 @@ pub fn policy_action_label(name: &str) -> &'static str {
 pub fn policy_denied_message(name: &str) -> String {
     match name {
         "workspace_write" => "This Bot is not allowed to write files.".into(),
-        "workspace_exec" => "This Bot is not allowed to run terminal commands.".into(),
+        "workspace_exec" | "github_run_check" => {
+            "This Bot is not allowed to run terminal commands.".into()
+        }
         "browser_navigate" => "This Bot is not allowed to open web pages.".into(),
         "browser_click" => "This Bot is not allowed to click in the browser.".into(),
         "browser_type" => "This Bot is not allowed to type in the browser.".into(),
@@ -270,6 +293,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "skill_save_recent_work" => "This Bot is not allowed to save skills.".into(),
         "skill_attach" => "This Bot is not allowed to attach skills.".into(),
         "skill_detach" => "This Bot is not allowed to remove skills.".into(),
+        "github_publish_pull_request" => {
+            "This Bot is not allowed to publish pull requests to GitHub.".into()
+        }
         other => format!("This Bot is not allowed to use {other}."),
     }
 }
@@ -300,6 +326,10 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_get_issue",
     "github_list_pull_requests",
     "github_get_pull_request",
+    "github_open_repository",
+    "github_run_check",
+    "github_review_publish",
+    "github_publish_pull_request",
     "connected_apps_search_tools",
     "connected_apps_load_tool",
     "connected_apps_execute_tool",

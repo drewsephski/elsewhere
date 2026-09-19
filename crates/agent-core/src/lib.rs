@@ -10,6 +10,8 @@ mod collaboration_tools;
 mod computer;
 mod connector_tools;
 mod connectors;
+mod github_coding;
+mod github_coding_tools;
 mod events;
 mod fake_computer;
 mod human_intervention;
@@ -71,6 +73,14 @@ pub use computer::{
     WorkspaceEntry, WorkspaceRevisionCounter,
 };
 pub use connector_tools::connector_openai_tool_definitions;
+pub use github_coding::{
+    is_github_coding_mutation_tool, AgentGithubCoding, GithubCodingError, GITHUB_CODING_TOOL_NAMES,
+    GITHUB_OPEN_REPOSITORY_TOOL, GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL,
+    GITHUB_RUN_CHECK_TOOL,
+};
+pub use github_coding_tools::{
+    dispatch_github_coding_tool, github_coding_openai_tool_definitions,
+};
 pub use connectors::{
     bound_connector_tool_result, truncate_connector_tool_result, AgentConnectors, ConnectorError,
     ConnectorToolDefinition, ConnectorToolRoute, CONNECTED_APPS_EXECUTE_TOOL,
@@ -159,7 +169,8 @@ pub use subagent::{
 pub use tool_catalog::{
     is_attachment_tool, is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
-    is_github_connector_tool, is_known_agent_tool, is_memory_tool, is_policy_non_overridable_tool,
+    is_github_coding_tool, is_github_connector_tool, is_known_agent_tool, is_memory_tool,
+    is_policy_non_overridable_tool,
     is_policy_overridable_tool, is_routine_tool, is_skill_tool, is_subagent_tool,
     is_user_question_tool,
     policy_action_group,

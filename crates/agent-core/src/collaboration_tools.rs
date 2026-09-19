@@ -4,6 +4,8 @@ use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::attachment_tools::dispatch_attachment_tool;
 use crate::collaboration::{AgentCollaboration, CollaborationContext, CollaborationError};
 use crate::connector_tools::dispatch_connector_tool_with_gate;
+use crate::github_coding::AgentGithubCoding;
+use crate::github_coding_tools::dispatch_github_coding_tool;
 use crate::human_intervention::is_human_intervention_tool;
 use crate::human_intervention_tools::dispatch_human_intervention_tool;
 use crate::memory::MemoryContext;
@@ -17,8 +19,8 @@ use crate::routines::RoutineContext;
 use crate::skill_tools::dispatch_skill_tool;
 use crate::skills::SkillContext;
 use crate::tool_catalog::{
-    is_attachment_tool, is_collaboration_tool, is_connector_tool, is_memory_tool, is_routine_tool,
-    is_skill_tool, is_subagent_tool, is_user_question_tool,
+    is_attachment_tool, is_collaboration_tool, is_connector_tool, is_github_coding_tool,
+    is_memory_tool, is_routine_tool, is_skill_tool, is_subagent_tool, is_user_question_tool,
 };
 use crate::tools::ToolError;
 use crate::user_question_tools::dispatch_user_question_tool;
@@ -99,6 +101,7 @@ pub fn all_openai_tool_definitions() -> Vec<Value> {
     tools.extend(crate::memory_tools::memory_openai_tool_definitions());
     tools.extend(crate::routine_tools::routine_openai_tool_definitions());
     tools.extend(crate::skill_tools::skill_openai_tool_definitions());
+    tools.extend(crate::github_coding_tools::github_coding_openai_tool_definitions());
     tools
 }
 
@@ -123,6 +126,7 @@ pub async fn dispatch_agent_tool_with_gate(
         None, // memory
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         None, // user_questions
         name,
@@ -145,6 +149,7 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
     memory: Option<&Arc<dyn crate::memory::AgentMemory>>,
     routines: Option<&Arc<dyn crate::routines::AgentRoutines>>,
     skills: Option<&Arc<dyn crate::skills::AgentSkills>>,
+    github_coding: Option<&Arc<dyn AgentGithubCoding>>,
     attachments: Option<&Arc<dyn crate::attachments::AgentAttachments>>,
     user_questions: Option<&Arc<dyn crate::user_question::AgentUserQuestion>>,
     name: &str,
@@ -249,6 +254,18 @@ pub async fn dispatch_agent_tool_with_gate_and_recovery(
             gate,
             run,
             collaboration_ctx,
+        )
+        .await;
+    }
+    if is_github_coding_tool(name) {
+        return dispatch_github_coding_tool(
+            github_coding,
+            computer,
+            name,
+            arguments,
+            cancel,
+            gate,
+            run,
         )
         .await;
     }
@@ -539,6 +556,7 @@ mod tests {
             None,
             None,
             None,
+            None,
             "run_subagent",
             r#"{"name":"Reviewer","task":"check the plan"}"#,
             &cancel,
@@ -582,6 +600,7 @@ mod tests {
             None,
             None,
             Some(&subagents),
+            None,
             None,
             None,
             None,

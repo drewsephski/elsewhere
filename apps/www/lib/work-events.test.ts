@@ -29,6 +29,15 @@ describe("permission policy activity", () => {
     );
   });
 
+  it("labels GitHub coding tools in the activity timeline", () => {
+    expect(activityText("tool_call", { tool: "github_open_repository" })).toBe(
+      "Opening repository",
+    );
+    expect(activityText("tool_call", { tool: "github_publish_pull_request" })).toBe(
+      "Opening pull request",
+    );
+  });
+
   it("labels skill tools in the activity timeline", () => {
     expect(activityText("tool_call", { tool: "skill_list" })).toBe("Checking skills");
     expect(

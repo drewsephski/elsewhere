@@ -8,6 +8,14 @@ const REPO_PAGE_SIZE: u32 = 100;
 const MAX_INSTALLATIONS: usize = 50;
 const MAX_AUTHORIZED_REPOS: usize = 1000;
 
+#[derive(Debug, Clone)]
+pub struct GitHubTreeChange {
+    pub path: String,
+    pub mode: String,
+    pub deleted: bool,
+    pub content: Option<Vec<u8>>,
+}
+
 #[derive(Clone)]
 pub struct GitHubClient {
     http: reqwest::Client,
@@ -267,6 +275,418 @@ impl GitHubClient {
     ) -> Result<Value, String> {
         let path = format!("/repos/{}/{}/pulls/{}", owner, repo, number);
         self.get_json(token, &path).await
+    }
+
+    pub async fn download_tarball(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        git_ref: &str,
+    ) -> Result<Vec<u8>, String> {
+        let path = format!(
+            "/repos/{}/{}/tarball/{}",
+            urlencoding::encode(owner),
+            urlencoding::encode(repo),
+            urlencoding::encode(git_ref),
+        );
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .get(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .send()
+            .await
+            .map_err(|e| format!("GitHub zipball download failed: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!("GitHub zipball error {}", response.status()));
+        }
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| format!("GitHub zipball body invalid: {e}"))?;
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn get_commit_tree_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        commit_sha: &str,
+    ) -> Result<String, String> {
+        let path = format!("/repos/{}/{}/git/commits/{}", owner, repo, commit_sha);
+        let body: Value = self.get_json(token, &path).await?;
+        body.get("tree")
+            .and_then(|t| t.get("sha"))
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "GitHub commit response missing tree sha".into())
+    }
+
+    pub async fn get_branch_head_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+    ) -> Result<String, String> {
+        let path = format!(
+            "/repos/{}/{}/git/ref/heads/{}",
+            owner,
+            repo,
+            urlencoding::encode(branch),
+        );
+        let body: Value = self.get_json(token, &path).await?;
+        body.get("object")
+            .and_then(|o| o.get("sha"))
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "GitHub ref response missing sha".into())
+    }
+
+    pub async fn find_open_pull_for_head(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        head_branch: &str,
+    ) -> Result<Option<Value>, String> {
+        let head = format!("{}:{}", owner, head_branch);
+        let path = format!(
+            "/repos/{}/{}/pulls?state=open&head={}&per_page=5",
+            owner,
+            repo,
+            urlencoding::encode(&head),
+        );
+        let pulls: Vec<Value> = self.get_json(token, &path).await?;
+        Ok(pulls.into_iter().next())
+    }
+
+    pub async fn create_pull_request(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        title: &str,
+        body: &str,
+        head_branch: &str,
+        base_branch: &str,
+    ) -> Result<Value, String> {
+        let path = format!("/repos/{}/{}/pulls", owner, repo);
+        self.post_json(
+            token,
+            &path,
+            &json!({
+                "title": title,
+                "body": body,
+                "head": head_branch,
+                "base": base_branch,
+            }),
+        )
+        .await
+    }
+
+    pub async fn ref_head_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        branch: &str,
+    ) -> Result<Option<String>, String> {
+        let path = format!(
+            "/repos/{}/{}/git/ref/heads/{}",
+            owner,
+            repo,
+            urlencoding::encode(branch),
+        );
+        let body: Result<Value, String> = self.get_json(token, &path).await;
+        match body {
+            Ok(value) => Ok(value
+                .get("object")
+                .and_then(|o| o.get("sha"))
+                .and_then(|s| s.as_str())
+                .map(|s| s.to_string())),
+            Err(message) if message.contains("404") => Ok(None),
+            Err(message) => Err(message),
+        }
+    }
+
+    pub async fn publish_file_changes(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        base_commit_sha: &str,
+        base_tree_sha: &str,
+        branch: &str,
+        message: &str,
+        changes: &[GitHubTreeChange],
+        expected_existing_commit: Option<&str>,
+    ) -> Result<String, String> {
+        let existing_ref = self.ref_head_sha(token, owner, repo, branch).await?;
+        if let Some(head) = existing_ref {
+            if let Some(expected) = expected_existing_commit {
+                if head != expected {
+                    return Err(
+                        "working branch already exists for another Elsewhere change".into(),
+                    );
+                }
+                return Ok(head);
+            }
+            if self
+                .commit_matches_prepared_changes(token, owner, repo, &head, base_commit_sha, changes)
+                .await?
+            {
+                return Ok(head);
+            }
+            return Err("working branch already exists for another Elsewhere change".into());
+        }
+
+        let mut tree_items = Vec::new();
+        for change in changes {
+            if change.deleted {
+                tree_items.push(json!({
+                    "path": change.path,
+                    "mode": change.mode,
+                    "type": "blob",
+                    "sha": null
+                }));
+                continue;
+            }
+            let content = change
+                .content
+                .as_ref()
+                .ok_or_else(|| format!("missing content for {}", change.path))?;
+            let blob_body = if std::str::from_utf8(content).is_err() {
+                json!({
+                    "content": base64::engine::general_purpose::STANDARD.encode(content),
+                    "encoding": "base64"
+                })
+            } else {
+                json!({
+                    "content": String::from_utf8_lossy(content),
+                    "encoding": "utf-8"
+                })
+            };
+            let blob: Value = self
+                .post_json(
+                    token,
+                    &format!("/repos/{}/{}/git/blobs", owner, repo),
+                    &blob_body,
+                )
+                .await?;
+            let sha = blob
+                .get("sha")
+                .and_then(|s| s.as_str())
+                .ok_or_else(|| "blob missing sha".to_string())?;
+            tree_items.push(json!({
+                "path": change.path,
+                "mode": change.mode,
+                "type": "blob",
+                "sha": sha
+            }));
+        }
+        let tree: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/trees", owner, repo),
+                &json!({
+                    "base_tree": base_tree_sha,
+                    "tree": tree_items
+                }),
+            )
+            .await?;
+        let tree_sha = tree
+            .get("sha")
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "tree missing sha".to_string())?;
+        let commit: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/commits", owner, repo),
+                &json!({
+                    "message": message,
+                    "tree": tree_sha,
+                    "parents": [base_commit_sha]
+                }),
+            )
+            .await?;
+        let commit_sha = commit
+            .get("sha")
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "commit missing sha".to_string())?;
+
+        let _: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/refs", owner, repo),
+                &json!({
+                    "ref": format!("refs/heads/{branch}"),
+                    "sha": commit_sha
+                }),
+            )
+            .await?;
+        Ok(commit_sha.to_string())
+    }
+
+    pub async fn commit_matches_prepared_changes(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        commit_sha: &str,
+        base_commit_sha: &str,
+        changes: &[GitHubTreeChange],
+    ) -> Result<bool, String> {
+        let path = format!("/repos/{}/{}/git/commits/{}", owner, repo, commit_sha);
+        let commit: Value = self.get_json(token, &path).await?;
+        let parents = commit
+            .get("parents")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "commit missing parents".to_string())?;
+        let parent = parents
+            .first()
+            .and_then(|p| p.get("sha"))
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "commit missing parent sha".to_string())?;
+        if parent != base_commit_sha {
+            return Ok(false);
+        }
+        let tree_sha = commit
+            .get("tree")
+            .and_then(|t| t.get("sha"))
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| "commit missing tree sha".to_string())?;
+        let tree_path = format!(
+            "/repos/{}/{}/git/trees/{}?recursive=1",
+            owner,
+            repo,
+            tree_sha
+        );
+        let tree: Value = self.get_json(token, &tree_path).await?;
+        let entries = tree
+            .get("tree")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "tree missing entries".to_string())?;
+        for change in changes {
+            if change.deleted {
+                if entries.iter().any(|e| e.get("path").and_then(|p| p.as_str()) == Some(&change.path)) {
+                    return Ok(false);
+                }
+                continue;
+            }
+            let content = change
+                .content
+                .as_ref()
+                .ok_or_else(|| format!("missing content for {}", change.path))?;
+            let expected_blob = self
+                .create_blob_sha(token, owner, repo, content)
+                .await?;
+            let actual = entries
+                .iter()
+                .find(|e| e.get("path").and_then(|p| p.as_str()) == Some(&change.path))
+                .and_then(|e| e.get("sha"))
+                .and_then(|s| s.as_str());
+            if actual != Some(expected_blob.as_str()) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    async fn create_blob_sha(
+        &self,
+        token: &str,
+        owner: &str,
+        repo: &str,
+        content: &[u8],
+    ) -> Result<String, String> {
+        let blob_body = if std::str::from_utf8(content).is_err() {
+            json!({
+                "content": base64::engine::general_purpose::STANDARD.encode(content),
+                "encoding": "base64"
+            })
+        } else {
+            json!({
+                "content": String::from_utf8_lossy(content),
+                "encoding": "utf-8"
+            })
+        };
+        let blob: Value = self
+            .post_json(
+                token,
+                &format!("/repos/{}/{}/git/blobs", owner, repo),
+                &blob_body,
+            )
+            .await?;
+        blob.get("sha")
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| "blob missing sha".to_string())
+    }
+
+    async fn post_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        token: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<T, String> {
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .post(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub API request failed: {e}"))?;
+        if response.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err("GitHub rejected the stored credentials".into());
+        }
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            let detail = crate::redact::redact_secrets(&detail);
+            return Err(format!("GitHub API error {status}: {detail}"));
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| format!("GitHub API response invalid: {e}"))
+    }
+
+    async fn patch_json<T: for<'de> Deserialize<'de>>(
+        &self,
+        token: &str,
+        path: &str,
+        body: &Value,
+    ) -> Result<T, String> {
+        let url = format!("{}{}", self.api_base, path);
+        let response = self
+            .http
+            .patch(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Authorization", format!("Bearer {token}"))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("GitHub API request failed: {e}"))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let detail = response.text().await.unwrap_or_default();
+            let detail = crate::redact::redact_secrets(&detail);
+            return Err(format!("GitHub API error {status}: {detail}"));
+        }
+        response
+            .json()
+            .await
+            .map_err(|e| format!("GitHub API response invalid: {e}"))
     }
 
     async fn request_user_token(&self, payload: Value) -> Result<GitHubAppUserToken, String> {

@@ -585,6 +585,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         Some(&dyn_memory),
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         None, // user_questions
         "remember",
@@ -607,6 +608,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         Some(&dyn_memory),
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         None, // user_questions
         "recall_memory",
@@ -631,6 +633,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         Some(&dyn_memory),
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         None, // user_questions
         "forget_memory",
@@ -654,6 +657,7 @@ async fn explicit_memory_tools_persist_and_subagents_have_no_access(pool: PgPool
         None, // memory
         None, // routines
         None, // skills
+        None, // github_coding
         None, // attachments
         None, // user_questions
         "remember",
