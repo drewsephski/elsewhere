@@ -27,4 +27,17 @@ describe("BotCreatureAvatar", () => {
     expect(root.getAttribute("data-working")).toBe("off");
     expect(root.querySelector("[data-creature-aura]")).toBeNull();
   });
+
+  it("puts a tablet phosphor on sm+ working portraits and skips it at xs", () => {
+    const { rerender } = render(
+      <BotCreatureAvatar name="Engineer" avatarId="teal-wisp" size="md" animated />,
+    );
+    const hero = screen.getByRole("img", { name: "Engineer avatar" });
+    expect(hero.querySelector(".creature-tablet")).toBeTruthy();
+    expect(hero.style.getPropertyValue("--creature-phase")).toMatch(/-?\d+(\.\d+)?s/);
+
+    rerender(<BotCreatureAvatar name="Engineer" avatarId="teal-wisp" size="xs" animated />);
+    const compact = screen.getByRole("img", { name: "Engineer avatar" });
+    expect(compact.querySelector(".creature-tablet")).toBeNull();
+  });
 });

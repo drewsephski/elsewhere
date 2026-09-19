@@ -551,6 +551,16 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   }
 }
 
+@keyframes creature-tablet-pulse {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.42;
+  }
+}
+
 .creature-breathe {
   animation: creature-breathe 3.2s ease-in-out infinite;
   transform-origin: 50% 80%;
@@ -561,6 +571,10 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   inset: -35%;
   z-index: 0;
   pointer-events: none;
+}
+
+[data-creature-aura][data-intensity="compact"] {
+  inset: -18%;
 }
 
 .creature-halo {
@@ -578,6 +592,7 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   filter: blur(14px);
   opacity: 0.55;
   animation: creature-halo-drift 6.4s ease-in-out infinite;
+  animation-delay: var(--creature-phase, 0s);
 }
 
 .creature-halo-b {
@@ -590,7 +605,7 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   filter: blur(12px);
   opacity: 0.45;
   animation: creature-halo-drift 5.1s ease-in-out infinite reverse;
-  animation-delay: -1.6s;
+  animation-delay: calc(var(--creature-phase, 0s) - 1.6s);
 }
 
 .creature-halo-c {
@@ -603,7 +618,7 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   filter: blur(10px);
   opacity: 0.4;
   animation: creature-halo-drift 4.4s ease-in-out infinite;
-  animation-delay: -2.8s;
+  animation-delay: calc(var(--creature-phase, 0s) - 2.8s);
 }
 
 [data-creature-aura][data-intensity="compact"] .creature-halo {
@@ -639,10 +654,12 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
 
 .creature-ring-spin {
   animation: creature-ring-spin 16s linear infinite;
+  animation-delay: var(--creature-phase, 0s);
 }
 
 .creature-ring-reverse {
   animation: creature-ring-spin 22s linear infinite reverse;
+  animation-delay: calc(var(--creature-phase, 0s) - 2.2s);
   opacity: 0.35;
   stroke-dasharray: 3 9;
 }
@@ -659,13 +676,29 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   offset-path: circle(42% at 50% 58%);
   offset-anchor: center;
   animation: creature-spark-orbit 6.2s linear infinite;
+  animation-delay: var(--creature-phase, 0s);
 }
 
 .creature-spark-b {
   width: 3px;
   height: 3px;
   opacity: 0.75;
-  animation-delay: -3.1s;
+  animation-delay: calc(var(--creature-phase, 0s) - 3.1s);
+}
+
+.creature-tablet {
+  position: absolute;
+  left: 29%;
+  top: 51%;
+  width: 42%;
+  height: 22%;
+  border-radius: 18%;
+  background: color-mix(in srgb, var(--creature-accent) 55%, white);
+  opacity: 0.28;
+  mix-blend-mode: screen;
+  filter: blur(0.4px);
+  animation: creature-tablet-pulse 2.4s ease-in-out infinite;
+  animation-delay: var(--creature-phase, 0s);
 }
 
 [data-creature-aura][data-intensity="compact"] .creature-spark {
@@ -713,7 +746,8 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   [data-creature-aura] .creature-halo,
   [data-creature-aura] .creature-rings,
   [data-creature-aura] .creature-spark,
-  [data-creature-aura] .creature-sheen {
+  [data-creature-aura] .creature-sheen,
+  [data-creature-aura] .creature-tablet {
     display: none;
   }
 

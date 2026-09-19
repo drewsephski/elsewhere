@@ -41,6 +41,15 @@ interface BotCreatureAvatarProps {
   variant?: "plain" | "tile";
 }
 
+function creaturePhaseDelay(seed: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${-((hash >>> 0) % 2800) / 1000}s`;
+}
+
 function CreatureWorkingAura({ intensity }: { intensity: CreatureWorkingIntensity }) {
   return (
     <span data-creature-aura data-intensity={intensity} className="pointer-events-none" aria-hidden>
@@ -70,6 +79,7 @@ function CreatureWorkingAura({ intensity }: { intensity: CreatureWorkingIntensit
       </svg>
       <span className="creature-spark" />
       {intensity !== "compact" ? <span className="creature-spark creature-spark-b" /> : null}
+      {intensity !== "compact" ? <span className="creature-tablet" /> : null}
       {intensity === "hero" ? <span className="creature-sheen" /> : null}
     </span>
   );
@@ -93,6 +103,7 @@ export function BotCreatureAvatar({
     ? ({
         "--creature-accent": colors.accent,
         "--creature-body": colors.body,
+        "--creature-phase": creaturePhaseDelay(avatarId ?? name),
       } as CSSProperties)
     : undefined;
 
