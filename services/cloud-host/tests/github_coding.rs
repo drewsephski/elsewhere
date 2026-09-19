@@ -1197,7 +1197,7 @@ async fn mock_publish_with_existing_branch(server: &MockServer, working_branch: 
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch\?recursive=1"))
+        .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": "tree_on_branch",
             "tree": [{
