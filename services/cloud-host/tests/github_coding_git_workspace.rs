@@ -20,7 +20,6 @@ async fn baseline_checkout(computer: &ShellWorkspaceComputer, suffix: &str) -> (
 }
 
 #[tokio::test]
-#[tokio::test]
 async fn run_check_executes_from_repository_checkout() {
     let computer = ShellWorkspaceComputer::new();
     let (checkout, _baseline) = baseline_checkout(&computer, "cwd").await;
