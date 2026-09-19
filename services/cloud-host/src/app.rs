@@ -159,6 +159,10 @@ pub fn build_router(state: AppState) -> Router {
             post(api::computers::browser_press_key),
         )
         .route(
+            "/v1/computers/{id}/browser/close",
+            post(api::computers::browser_close),
+        )
+        .route(
             "/v1/computers/{id}/browser-profile/reset",
             post(api::computers::reset_browser_sign_in),
         )

@@ -814,3 +814,33 @@ export const ROSTER_BOTS = [
       "Runs the week: briefings, bookings, and handoffs between your other bots.",
   },
 ] as const;
+
+export type DemoDockAppId = "browser" | "mail" | "calendar" | "github" | "docs" | "figma";
+
+export function demoDockAppIdForPage(kind: DemoBrowserPage["kind"]): DemoDockAppId | null {
+  switch (kind) {
+    case "mail":
+      return "mail";
+    case "calendar":
+      return "calendar";
+    case "github":
+      return "github";
+    case "figma":
+      return "figma";
+    case "sheet":
+      return "docs";
+    default:
+      return null;
+  }
+}
+
+export function demoComputerForDockApp(
+  appId: Exclude<DemoDockAppId, "browser">,
+): DemoComputer {
+  const kind = appId === "docs" ? "sheet" : appId;
+  const bot = DEMO_BOTS.find((item) => item.computer.page.kind === kind);
+  if (!bot) {
+    throw new Error(`Missing demo computer for ${appId}`);
+  }
+  return bot.computer;
+}

@@ -466,6 +466,29 @@ pub async fn browser_press_key(
     Ok(Json(result))
 }
 
+pub async fn browser_close(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke("close", &json!({}))
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
 pub async fn browser_preview(
     State(state): State<AppState>,
     Extension(principal): Extension<Principal>,

@@ -29,6 +29,7 @@ const previewState = {
   error: null,
   refresh,
   navigateBrowser: vi.fn(),
+  closeBrowser: vi.fn(),
 };
 
 vi.mock("@/contexts/browser-preview-context", () => ({

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Calendar">
+  <rect width="128" height="128" rx="28" fill="#f4f5f7"/>
+  <rect x="18" y="28" width="92" height="82" rx="16" fill="#ffffff"/>
+  <rect x="18" y="28" width="92" height="28" rx="16" fill="#ff3b30"/>
+  <rect x="18" y="42" width="92" height="14" fill="#ff3b30"/>
+  <text x="64" y="94" text-anchor="middle" font-family="ui-rounded, system-ui, sans-serif" font-size="46" font-weight="700" fill="#1d1d1f">19</text>
+</svg>

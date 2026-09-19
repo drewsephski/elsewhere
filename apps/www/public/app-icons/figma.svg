@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Figma">
+  <rect width="128" height="128" rx="28" fill="#1e1e1e"/>
+  <circle cx="76" cy="64" r="14" fill="#1abcfe"/>
+  <rect x="50" y="22" width="28" height="28" rx="14" fill="#ff7262"/>
+  <rect x="50" y="50" width="28" height="28" rx="14" fill="#a259ff"/>
+  <rect x="50" y="78" width="28" height="28" rx="14" fill="#0acf83"/>
+  <rect x="36" y="22" width="28" height="28" rx="14" fill="#f24e1e"/>
+  <rect x="36" y="50" width="28" height="28" rx="14" fill="#a259ff"/>
+</svg>

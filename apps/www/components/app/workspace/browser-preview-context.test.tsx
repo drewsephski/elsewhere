@@ -23,6 +23,7 @@ vi.mock("@/hooks/use-browser-preview", () => ({
     error: null,
     refresh: vi.fn(),
     navigateBrowser: vi.fn(),
+    closeBrowser: vi.fn(),
   }),
 }));
 

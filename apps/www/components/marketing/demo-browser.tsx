@@ -9,10 +9,25 @@ import {
   X,
 } from "@/components/icons/lucide";
 import { BrowserPage } from "@/components/marketing/demo-browser-pages";
-import type { DemoBrowserPage, DemoComputer } from "@/lib/marketing/landing";
+import { MacOSDock } from "@/components/ui/mac-os-dock";
+import { BROWSER_DOCK_ICON_APPS } from "@/lib/browser-dock";
+import {
+  demoComputerForDockApp,
+  demoDockAppIdForPage,
+  type DemoBrowserPage,
+  type DemoComputer,
+  type DemoDockAppId,
+} from "@/lib/marketing/landing";
 import { cn } from "cn";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
+
+type DemoNavAppId = DemoDockAppId | "session";
+
+interface DemoNavFrame {
+  appId: DemoNavAppId;
+  path: string;
+}
 
 interface DemoBrowserProps {
   computer: DemoComputer;
@@ -118,26 +133,64 @@ export function locationFor(
   }
 }
 
+function initialNavFrame(computer: DemoComputer): DemoNavFrame {
+  return {
+    appId: demoDockAppIdForPage(computer.page.kind) ?? "session",
+    path: "home",
+  };
+}
+
+function computerForNavFrame(computer: DemoComputer, frame: DemoNavFrame): DemoComputer {
+  if (frame.appId === "browser" || frame.appId === "session") {
+    return computer;
+  }
+  return demoComputerForDockApp(frame.appId);
+}
+
 export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
-  const [stack, setStack] = useState<string[]>(["home"]);
+  const [stack, setStack] = useState<DemoNavFrame[]>(() => [initialNavFrame(computer)]);
   const [cursor, setCursor] = useState(0);
   const [reloading, setReloading] = useState(false);
   const [omniboxOpen, setOmniboxOpen] = useState(false);
   const [bookmarked, setBookmarked] = useState(true);
   const [closedHome, setClosedHome] = useState(false);
 
-  const path = stack[cursor] ?? "home";
-  const location = useMemo(() => locationFor(computer, path), [computer, path]);
-  const site = SITE_CHROME[computer.page.kind];
+  const frame = stack[cursor] ?? initialNavFrame(computer);
+  const path = frame.path;
+  const activeComputer = computerForNavFrame(computer, frame);
+  const location = useMemo(
+    () => locationFor(activeComputer, path),
+    [activeComputer, path],
+  );
+  const site = SITE_CHROME[activeComputer.page.kind];
   const onNtp = path === "ntp" || path === "ntp-miss" || closedHome;
+  const activeDockAppId: DemoDockAppId | null = onNtp
+    ? "browser"
+    : demoDockAppIdForPage(activeComputer.page.kind);
   const canBack = cursor > 0;
   const canForward = cursor < stack.length - 1;
 
-  function goTo(next: string) {
-    if (next === path && !closedHome) return;
+  function goTo(nextPath: string, appId: DemoNavAppId = frame.appId) {
+    if (nextPath === path && appId === frame.appId && !closedHome) return;
     setClosedHome(false);
-    setStack((current) => [...current.slice(0, cursor + 1), next]);
+    setStack((current) => [...current.slice(0, cursor + 1), { appId, path: nextPath }]);
     setCursor((current) => current + 1);
+  }
+
+  function handleDockAppClick(appId: string) {
+    const dockAppId = appId as DemoDockAppId;
+    if (activeDockAppId === dockAppId) {
+      if (dockAppId === "browser") {
+        return;
+      }
+      goTo("ntp", "browser");
+      return;
+    }
+    if (dockAppId === "browser") {
+      goTo("ntp", "browser");
+      return;
+    }
+    goTo("home", dockAppId);
   }
 
   function handleBack() {
@@ -156,27 +209,29 @@ export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
   }
 
   function handleNewTab() {
-    goTo("ntp");
+    goTo("ntp", "browser");
   }
 
   function handleCloseHomeTab() {
     setClosedHome(true);
-    if (!onNtp) goTo("ntp");
+    if (!onNtp) goTo("ntp", "browser");
   }
 
   function handleCloseNtpTab() {
+    const homeApp = demoDockAppIdForPage(computer.page.kind) ?? "session";
     setClosedHome(false);
-    goTo("home");
+    goTo("home", homeApp);
   }
 
   function handleOmniboxSubmit(value: string) {
     const query = value.trim().toLowerCase();
     setOmniboxOpen(false);
     if (!query || query === location.url || query === `https://${location.url}`) {
-      goTo("home");
+      const homeApp = demoDockAppIdForPage(computer.page.kind) ?? "session";
+      goTo("home", homeApp);
       return;
     }
-    goTo("ntp-miss");
+    goTo("ntp-miss", "browser");
   }
 
   return (
@@ -191,7 +246,14 @@ export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
             color={site.color}
             letter={site.letter}
             title={onNtp ? computer.tab : location.title}
-            onSelect={() => goTo("home")}
+            onSelect={() =>
+              goTo(
+                "home",
+                frame.appId === "browser"
+                  ? (demoDockAppIdForPage(computer.page.kind) ?? "session")
+                  : frame.appId,
+              )
+            }
             onClose={handleCloseHomeTab}
           />
         ) : null}
@@ -201,7 +263,7 @@ export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
             color="#9aa0a6"
             letter="+"
             title="New Tab"
-            onSelect={() => goTo("ntp")}
+            onSelect={() => goTo("ntp", "browser")}
             onClose={handleCloseNtpTab}
           />
         ) : null}
@@ -293,17 +355,27 @@ export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
         {path === "ntp" || closedHome ? (
           <NewTabPage
             computer={computer}
-            onOpenHome={() => {
+            onOpenApp={(appId) => {
               setClosedHome(false);
-              goTo("home");
+              goTo("home", appId);
             }}
-            onMiss={() => goTo("ntp-miss")}
+            onMiss={() => goTo("ntp-miss", "browser")}
           />
         ) : path === "ntp-miss" ? (
-          <MissPage onBack={() => goTo("ntp")} />
+          <MissPage onBack={() => goTo("ntp", "browser")} />
         ) : (
-          <BrowserPage page={computer.page} path={path} goTo={goTo} />
+          <BrowserPage page={activeComputer.page} path={path} goTo={goTo} />
         )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-2">
+          <div className="pointer-events-auto w-full max-w-[280px]">
+            <MacOSDock
+              apps={BROWSER_DOCK_ICON_APPS}
+              onAppClick={handleDockAppClick}
+              openApps={activeDockAppId ? [activeDockAppId] : []}
+              size="mini"
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -421,13 +493,14 @@ function OmniboxEditor({
 
 function NewTabPage({
   computer,
-  onOpenHome,
+  onOpenApp,
   onMiss,
 }: {
   computer: DemoComputer;
-  onOpenHome: () => void;
+  onOpenApp: (appId: DemoNavAppId) => void;
   onMiss: () => void;
 }) {
+  const homeApp = demoDockAppIdForPage(computer.page.kind) ?? "session";
   const site = SITE_CHROME[computer.page.kind];
   const [query, setQuery] = useState("");
 
@@ -439,7 +512,7 @@ function NewTabPage({
         onSubmit={(event) => {
           event.preventDefault();
           if (!query.trim()) {
-            onOpenHome();
+            onOpenApp(homeApp);
             return;
           }
           onMiss();
@@ -462,10 +535,20 @@ function NewTabPage({
           color={site.color}
           letter={site.letter}
           label={site.product}
-          onClick={onOpenHome}
+          onClick={() => onOpenApp(homeApp)}
         />
-        <ShortcutTile color="#1a73e8" letter="C" label="Calendar" muted />
-        <ShortcutTile color="#0f9d58" letter="D" label="Docs" muted />
+        <ShortcutTile
+          color="#1a73e8"
+          letter="C"
+          label="Calendar"
+          onClick={() => onOpenApp("calendar")}
+        />
+        <ShortcutTile
+          color="#0f9d58"
+          letter="D"
+          label="Docs"
+          onClick={() => onOpenApp("docs")}
+        />
         <ShortcutTile color="#7c3aed" letter="E" label="Elsewhere" muted />
       </div>
     </div>

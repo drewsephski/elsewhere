@@ -15,6 +15,7 @@ import {
 } from "./browser-human-control";
 import { useBrowserHumanControl } from "@/hooks/use-browser-human-control";
 import { Button } from "@/components/ui/button";
+import { BrowserAppDock } from "./browser-app-dock";
 import {
   Dialog,
   DialogContent,
@@ -331,6 +332,18 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const isEmbedded = variant === "embedded";
   const chromeCompact = variant === "floating" || isWork;
   const canOpenComputer = hasImage && !humanControl.humanActive;
+  const appDock = ctx ? (
+    <BrowserAppDock
+      url={frame?.url}
+      enabled={enabled}
+      humanActive={humanControl.humanActive}
+      controlLoading={humanControl.loading || humanClickBusy || humanInputBusy}
+      size={isWork ? "compact" : "mini"}
+      onTakeControl={() => humanControl.takeControl()}
+      onNavigate={(url) => ctx.navigateBrowser(url)}
+      onClose={() => ctx.closeBrowser()}
+    />
+  ) : null;
 
   function handleOpenDialog() {
     if (!hasImage) {
@@ -420,7 +433,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           onPressKey={(key) => void handleHumanPressKey(key)}
           className="mb-1.5 px-2 pt-1"
         />
-        <div ref={previewShellRef}>
+        <div ref={previewShellRef} className="relative">
           <PreviewChrome
             frame={frame}
             loading={loading}
@@ -445,6 +458,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
           </PreviewChrome>
+          {appDock}
         </div>
         <ComputerPreviewDialog
           open={dialogOpen}
@@ -542,6 +556,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               </span>
             ) : null}
           </div>
+          {appDock}
         </div>
 
         {caption}

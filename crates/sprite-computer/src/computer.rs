@@ -392,7 +392,7 @@ mod tests {
         for action in ["navigate", "download", "click", "type"] {
             assert!(browser_action_requires_network_egress(action));
         }
-        for action in ["snapshot", "screenshot", "preview", "health"] {
+        for action in ["snapshot", "screenshot", "preview", "health", "close", "press"] {
             assert!(!browser_action_requires_network_egress(action));
         }
     }

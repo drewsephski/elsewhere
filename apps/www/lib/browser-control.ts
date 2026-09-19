@@ -141,6 +141,16 @@ export async function typeComputerBrowserFocused(
   }
 }
 
+export async function closeComputerBrowser(computerId: string): Promise<void> {
+  const response = await cloudHostFetch(
+    `/v1/computers/${encodeURIComponent(computerId)}/browser/close`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw new Error(await readJsonError(response, "Could not close the current browser page"));
+  }
+}
+
 export async function pressComputerBrowserKey(computerId: string, key: string): Promise<void> {
   const response = await cloudHostFetch(
     `/v1/computers/${encodeURIComponent(computerId)}/browser/press-key`,

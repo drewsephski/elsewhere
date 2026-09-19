@@ -239,6 +239,26 @@ async function handleRequest(req) {
       fs.writeFileSync(outPath, body);
       return { ok: true, path: outPath, bytes: body.length };
     }
+    case "close": {
+      const blank = await context.newPage();
+      for (const extra of context.pages()) {
+        if (extra !== blank) {
+          await extra.close().catch(() => {});
+        }
+      }
+      const remaining = context.pages();
+      const nextPage =
+        remaining.find((item) => item === blank) ??
+        remaining[0] ??
+        (await context.newPage());
+      await refreshPreviewCache(nextPage);
+      return {
+        ok: true,
+        closed: true,
+        url: nextPage.url(),
+        title: await nextPage.title().catch(() => ""),
+      };
+    }
     default:
       throw new Error(`unknown browser action: ${action}`);
   }
