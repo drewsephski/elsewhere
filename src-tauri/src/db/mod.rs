@@ -624,6 +624,30 @@ When information might be outdated, say what you know and what you would verify.
         self.set_meta("elsewhere_computer_id", computer_id)?;
         Ok(())
     }
+
+    pub fn this_mac_paused(&self) -> Result<bool, AppError> {
+        Ok(self.get_meta("this_mac_paused")?.as_deref() == Some("1"))
+    }
+
+    pub fn set_this_mac_paused(&self, paused: bool) -> Result<(), AppError> {
+        self.set_meta("this_mac_paused", if paused { "1" } else { "0" })
+    }
+
+    /// First-run onboarding auto-present suppressed (Not now or successful Continue).
+    pub fn this_mac_onboarding_dismissed(&self) -> Result<bool, AppError> {
+        if self.get_meta("this_mac_onboarding_dismissed")?.as_deref() == Some("1") {
+            return Ok(true);
+        }
+        // Legacy key from earlier alpha builds.
+        Ok(self.get_meta("this_mac_onboarding_skipped")?.as_deref() == Some("1"))
+    }
+
+    pub fn set_this_mac_onboarding_dismissed(&self, dismissed: bool) -> Result<(), AppError> {
+        self.set_meta(
+            "this_mac_onboarding_dismissed",
+            if dismissed { "1" } else { "0" },
+        )
+    }
 }
 
 #[cfg(test)]
@@ -885,6 +909,14 @@ mod tests {
             .get_conversation_for_bot(&conv_a.id, &bot_b.id)
             .expect_err("foreign");
         assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn this_mac_pause_round_trips_in_meta() {
+        let db = Database::open_in_memory().expect("db");
+        assert!(!db.this_mac_paused().expect("read"));
+        db.set_this_mac_paused(true).expect("write");
+        assert!(db.this_mac_paused().expect("read"));
     }
 
     #[test]

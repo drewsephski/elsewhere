@@ -10,7 +10,9 @@ import {
 export type { CloudApiErrorBody };
 export { isRunnerUnreachableStatus, readCloudApiErrorBody };
 
-/** Same-origin BFF; avoids CORS and localhost vs 127.0.0.1 cookie/port issues in the browser. */
+import { cloudBffHttpUrl } from "@/lib/workspace-http-origin";
+
+/** Same-origin BFF in the browser; absolute hosted BFF in the packaged desktop shell. */
 const CLOUD_BROWSER_PREFIX = "/api/cloud";
 
 export type CloudHostFetchInit = RequestInit & {
@@ -20,7 +22,9 @@ export type CloudHostFetchInit = RequestInit & {
 
 function cloudRequestUrl(path: string): string {
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  return `${CLOUD_BROWSER_PREFIX}${normalized}`;
+  const relative = `${CLOUD_BROWSER_PREFIX}${normalized}`;
+  const absolute = cloudBffHttpUrl(normalized);
+  return absolute !== relative ? absolute : relative;
 }
 
 function wrapNetworkError(error: unknown): Error {

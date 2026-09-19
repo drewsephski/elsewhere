@@ -1,9 +1,14 @@
 "use client";
 
+import { authHttpUrl, hostedWorkspaceOrigin } from "@/lib/workspace-http-origin";
 import { createAuthClient } from "better-auth/react";
 import { jwtClient } from "better-auth/client/plugins";
 
 function authClientBaseUrl(): string | undefined {
+  const hosted = hostedWorkspaceOrigin();
+  if (hosted) {
+    return hosted;
+  }
   if (typeof window !== "undefined") {
     return window.location.origin;
   }
@@ -16,10 +21,7 @@ export const authClient = createAuthClient({
 });
 
 export async function fetchCloudHostJwt(signal?: AbortSignal): Promise<string> {
-  const tokenPath =
-    typeof window !== "undefined"
-      ? "/api/auth/token"
-      : `${process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? "http://localhost:3000"}/api/auth/token`;
+  const tokenPath = authHttpUrl("/token");
   const response = await fetch(tokenPath, {
     method: "GET",
     cache: "no-store",

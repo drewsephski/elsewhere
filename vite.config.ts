@@ -43,6 +43,7 @@ export default defineConfig(({ mode }) => ({
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
+      "src/**/*.route-matrix.test.ts",
       "apps/www/lib/**/*.test.ts",
       "apps/www/hooks/**/*.test.ts",
       "apps/www/components/**/*.hook.test.ts",

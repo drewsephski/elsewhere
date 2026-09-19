@@ -2,6 +2,8 @@ import type { BotSummary, ComputerSummary, CreateRunResponse } from "@/lib/api-t
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
 import { isLocalMacProvider } from "@/lib/computer-kind";
+import { isThisMacLiveForQuickStart } from "@/lib/this-mac-status";
+import type { ThisMacStatusSnapshot } from "@/lib/this-mac-status";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { formatUserFacingError } from "@/lib/format-api-error";
@@ -62,6 +64,7 @@ export type CreateBotWorkInput = {
   computerId?: string;
   model?: string;
   avatarId?: string;
+  thisMac?: ThisMacStatusSnapshot | null;
 };
 
 export function isUsableComputer(computer: ComputerSummary): boolean {
@@ -74,12 +77,40 @@ export function isUsableComputer(computer: ComputerSummary): boolean {
   return true;
 }
 
+export interface SelectUsableComputerOptions {
+  /** When set and live, prefer this cloud computer id for This Mac. */
+  thisMac?: ThisMacStatusSnapshot | null;
+}
+
 export function selectUsableComputer(
   computers: ComputerSummary[],
+  options?: SelectUsableComputerOptions,
 ): ComputerSummary | null {
   const usable = computers.filter(isUsableComputer);
   if (!usable.length) {
     return null;
+  }
+  const liveThisMac = isThisMacLiveForQuickStart(options?.thisMac);
+  if (liveThisMac && options?.thisMac?.computerId) {
+    const match = usable.find((c) => c.id === options.thisMac?.computerId);
+    if (match) {
+      return match;
+    }
+  }
+  if (liveThisMac) {
+    const localMac = usable.filter((computer) =>
+      isLocalMacProvider(computer.provider),
+    );
+    if (localMac.length) {
+      const pool = localMac;
+      return (
+        [...pool].sort((a, b) => {
+          const aTime = a.lastUsedAt ?? "";
+          const bTime = b.lastUsedAt ?? "";
+          return bTime.localeCompare(aTime);
+        })[0] ?? null
+      );
+    }
   }
   const cloud = usable.filter((computer) => !isLocalMacProvider(computer.provider));
   const pool = cloud.length ? cloud : usable;
@@ -143,16 +174,21 @@ async function readOkJson<T>(response: Response, fallback: string): Promise<T> {
 
 export async function ensureQuickStartComputer(
   session: QuickStartSession,
+  options?: SelectUsableComputerOptions,
 ): Promise<string> {
   if (session.computerId) {
     return session.computerId;
+  }
+  if (isThisMacLiveForQuickStart(options?.thisMac) && options?.thisMac?.computerId) {
+    session.computerId = options.thisMac.computerId;
+    return options.thisMac.computerId;
   }
   const listResponse = await cloudHostFetch("/v1/computers");
   const computers = await readOkJson<ComputerSummary[]>(
     listResponse,
     "Could not load computers",
   );
-  const existing = selectUsableComputer(computers);
+  const existing = selectUsableComputer(computers, options);
   if (existing) {
     session.computerId = existing.id;
     return existing.id;
@@ -261,7 +297,9 @@ export async function createBotAndMaybeStartWork(
   }
 
   try {
-    const computerId = await ensureQuickStartComputer(session);
+    const computerId = await ensureQuickStartComputer(session, {
+      thisMac: input.thisMac,
+    });
     const botId = await ensureQuickStartBot(session, {
       name,
       computerId,

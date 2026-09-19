@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local-dev",
+  "description": "Development: bundled Vite shell on localhost:1420 — companion only",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:1420/**", "http://127.0.0.1:1420/**"]
+  },
+  "permissions": [
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:event:default",
+    "opener:default",
+    "companion-commands",
+    "deny-legacy-desktop-commands",
+    "notification:default"
+  ]
+}

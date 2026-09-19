@@ -19,6 +19,10 @@ vi.mock("@/components/app/workspace/workspace-authenticated-frame", () => ({
   ),
 }));
 
+vi.mock("@/components/app/desktop-shell-bootstrap", () => ({
+  DesktopShellBootstrap: () => null,
+}));
+
 vi.mock("@/app/sign-in/sign-in-view", () => ({
   SignInView: () => <div>sign-in</div>,
 }));

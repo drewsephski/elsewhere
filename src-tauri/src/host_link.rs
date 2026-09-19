@@ -35,12 +35,16 @@ pub enum HostLinkState {
     Connecting,
     Connected,
     ReauthRequired,
+    Paused,
 }
 
 #[derive(Clone)]
 pub struct HostLinkHandle {
     wakeup: Arc<Notify>,
     state: Arc<ParkingMutex<HostLinkState>>,
+    reconnecting: Arc<ParkingMutex<bool>>,
+    /// Wakes an active WebSocket session so pause / credential rotation can drop the link.
+    session_break: Arc<Notify>,
 }
 
 impl HostLinkHandle {
@@ -51,6 +55,15 @@ impl HostLinkHandle {
     pub fn notify_credential_ready(&self) {
         self.wakeup.notify_waiters();
         self.wakeup.notify_one();
+    }
+
+    pub fn reconnecting(&self) -> bool {
+        *self.reconnecting.lock()
+    }
+
+    pub fn break_active_session(&self) {
+        self.session_break.notify_waiters();
+        self.session_break.notify_one();
     }
 }
 
@@ -78,6 +91,8 @@ pub fn start_host_link(
     let handle = HostLinkHandle {
         wakeup: Arc::new(Notify::new()),
         state: Arc::new(ParkingMutex::new(HostLinkState::Disconnected)),
+        reconnecting: Arc::new(ParkingMutex::new(false)),
+        session_break: Arc::new(Notify::new()),
     };
     let supervisor = handle.clone();
     tauri::async_runtime::spawn(async move {
@@ -97,6 +112,12 @@ async fn run_supervisor(
     ))));
     let mut attempt: u32 = 0;
     loop {
+        if this_mac_paused(&db) {
+            set_state(&handle, HostLinkState::Paused);
+            *handle.reconnecting.lock() = false;
+            handle.wakeup.notified().await;
+            continue;
+        }
         let identity = {
             let db = db.lock();
             match db.elsewhere_pairing_identity() {
@@ -121,6 +142,7 @@ async fn run_supervisor(
         };
 
         set_state(&handle, HostLinkState::Connecting);
+        *handle.reconnecting.lock() = attempt > 0;
         match connect_and_serve(
             &handle,
             dispatcher.clone(),
@@ -132,9 +154,11 @@ async fn run_supervisor(
         {
             Ok(()) => {
                 attempt = 0;
+                *handle.reconnecting.lock() = false;
                 set_state(&handle, HostLinkState::Disconnected);
             }
             Err(LinkError::AuthRejected) => {
+                *handle.reconnecting.lock() = false;
                 set_state(&handle, HostLinkState::ReauthRequired);
                 tracing::warn!("local Mac device credential was rejected; waiting to re-pair");
                 handle.wakeup.notified().await;
@@ -143,6 +167,7 @@ async fn run_supervisor(
             Err(LinkError::Transport(reason)) => {
                 set_state(&handle, HostLinkState::Disconnected);
                 attempt = attempt.saturating_add(1);
+                *handle.reconnecting.lock() = attempt > 0;
                 let delay = backoff_delay(attempt);
                 tracing::info!(error = %reason, ?delay, "local Mac host link reconnecting");
                 tokio::select! {
@@ -227,6 +252,11 @@ async fn connect_and_serve(
 
     loop {
         tokio::select! {
+            _ = handle.session_break.notified() => {
+                let _ = sink.send(Message::Close(None)).await;
+                set_state(handle, HostLinkState::Disconnected);
+                return Ok(());
+            }
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
@@ -293,6 +323,11 @@ async fn connect_and_serve(
 
 fn set_state(handle: &HostLinkHandle, state: HostLinkState) {
     *handle.state.lock() = state;
+}
+
+fn this_mac_paused(db: &Arc<ParkingMutex<Database>>) -> bool {
+    let db = db.lock();
+    db.this_mac_paused().unwrap_or(false)
 }
 
 pub fn backoff_delay(attempt: u32) -> Duration {

@@ -29,6 +29,9 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import { cn } from "cn";
 import { ChevronDown } from "@/components/icons/lucide";
 import Link from "next/link";
+import { useThisMacStatus } from "@/hooks/use-this-mac-status";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
+import { isThisMacLiveForQuickStart } from "@/lib/this-mac-status";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export interface CreateBotFormProps {
@@ -73,6 +76,8 @@ export function CreateBotForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<QuickStartSession>({});
+  const { status: thisMac } = useThisMacStatus(isTauriRuntime());
+  const thisMacLive = isThisMacLiveForQuickStart(thisMac);
 
   const needsCodex =
     showProviderCard &&
@@ -137,6 +142,7 @@ export function CreateBotForm({
           computerId: advancedOpen && computerId ? computerId : undefined,
           model: advancedOpen ? model : undefined,
           avatarId: advancedOpen ? avatarId : undefined,
+          thisMac: thisMacLive ? thisMac : null,
         },
         sessionRef.current,
       );
@@ -201,6 +207,12 @@ export function CreateBotForm({
               disabled={busy || disabled}
             />
           </FormItem>
+          {thisMacLive && !advancedOpen ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="size-2 rounded-full bg-emerald-500" aria-hidden />
+              Runs on · This Mac
+            </p>
+          ) : null}
           <FormItem>
             <Label htmlFor="create-bot-task">
               {requireTask ? "What should this Bot work on?" : "First task (optional)"}

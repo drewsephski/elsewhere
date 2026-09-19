@@ -2,6 +2,8 @@
 pub mod agent;
 mod commands;
 mod db;
+mod desktop_lifecycle;
+pub mod desktop_origin;
 mod error;
 #[cfg(target_os = "macos")]
 mod host_link;
@@ -31,6 +33,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -57,32 +60,17 @@ pub fn run() {
                 host_link,
             });
 
-            tracing::info!(path = %db_path.display(), "database initialized");
-
-            if let Ok(external_url) = std::env::var("ELSEWHERE_DESKTOP_WEBVIEW_URL") {
-                let trimmed = external_url.trim();
-                if !trimmed.is_empty() {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let script = format!(
-                            "window.location.replace({});",
-                            serde_json::to_string(trimmed).unwrap_or_else(|_| "\"\"".to_string())
-                        );
-                        if let Err(error) = window.eval(&script) {
-                            tracing::warn!(
-                                %error,
-                                url = %trimmed,
-                                "ELSEWHERE_DESKTOP_WEBVIEW_URL navigation failed"
-                            );
-                        } else {
-                            tracing::info!(url = %trimmed, "desktop webview navigated to hosted workspace");
-                        }
-                    }
-                }
-            }
+            tracing::info!(
+                path = %db_path.display(),
+                web_origin = %desktop_origin::production_web_origin(),
+                "database initialized"
+            );
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_focus();
             }
+
+            desktop_lifecycle::attach(app)?;
 
             Ok(())
         })
@@ -102,6 +90,10 @@ pub fn run() {
             commands::clear_openai_api_key,
             commands::get_elsewhere_pairing_status,
             commands::start_elsewhere_pairing,
+            commands::get_this_mac_status,
+            commands::set_this_mac_paused,
+            commands::start_this_mac_pairing,
+            commands::set_this_mac_onboarding_dismissed,
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,
@@ -124,6 +116,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             commands::vm_guest_request,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            desktop_lifecycle::handle_run_event(app, &event);
+        });
 }

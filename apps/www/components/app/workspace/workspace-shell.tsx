@@ -20,6 +20,7 @@ import { parseSettingsSection, type SettingsSection } from "@/lib/settings-secti
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
 
 /** Must be module-scoped — an inline component remounts the whole workspace on every parent render. */
 function WorkspaceBrowserPreviewLayer({
@@ -124,23 +125,38 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   }, []);
 
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (!(event.metaKey || event.ctrlKey) || event.key !== ",") {
-        return;
-      }
-      const target = event.target;
-      if (
+    function isTypingTarget(target: EventTarget | null): boolean {
+      return (
         target instanceof HTMLElement &&
         (target.isContentEditable ||
           target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.tagName === "SELECT")
-      ) {
+      );
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) {
         return;
       }
-      event.preventDefault();
-      setSettingsSection("general");
-      setSettingsOpen(true);
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+      if (event.key === ",") {
+        event.preventDefault();
+        setSettingsSection("general");
+        setSettingsOpen(true);
+        return;
+      }
+      if (
+        event.key.toLowerCase() === "n" &&
+        isTauriRuntime() &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        setCreateOpen(true);
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

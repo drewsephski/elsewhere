@@ -10,10 +10,12 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
         "title": "Elsewhere",
+        "url": "https://elsewhere-alpha-web.fly.dev/app",
         "width": 1180,
         "height": 780,
         "minWidth": 900,

@@ -3,6 +3,7 @@ export const SETTINGS_SECTIONS = [
   "permissions",
   "skills",
   "workspace",
+  "thisMac",
   "chatgpt",
   "advanced",
 ] as const;
@@ -18,6 +19,7 @@ export const SETTINGS_SECTION_ITEMS: readonly {
   { value: "permissions", label: "Permissions", botScoped: true },
   { value: "skills", label: "Skills", botScoped: true },
   { value: "workspace", label: "Team rules", botScoped: false },
+  { value: "thisMac", label: "This Mac", botScoped: false },
   { value: "chatgpt", label: "ChatGPT", botScoped: false },
   { value: "advanced", label: "Advanced", botScoped: true },
 ];

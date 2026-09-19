@@ -13,6 +13,10 @@ import {
 } from "@desktop/providers/pre-ack-stream-buffer";
 import type { ProviderStreamEvent } from "@desktop/providers/types";
 import { isDemoAgent } from "@desktop/lib/demo-agent";
+/**
+ * @deprecated Legacy local OpenAI + SQLite chat shell. Canonical product UI is
+ * `src/cloud-shell.tsx` (hosted Elsewhere workspace). Kept for internal recovery only.
+ */
 import { botService } from "@desktop/services/bot-service";
 import { chatService } from "@desktop/services/chat-service";
 import { tauriApi } from "@desktop/lib/tauri-api";
