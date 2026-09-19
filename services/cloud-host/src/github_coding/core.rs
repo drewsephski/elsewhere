@@ -2,8 +2,15 @@ use std::collections::HashMap;
 
 pub const BRANCH_PREFIX: &str = "elsewhere/";
 
-pub fn checkout_root(owner: &str, repo: &str) -> String {
-    format!("/workspace/repos/{}/{}", owner, repo)
+pub fn checkout_root(owner: &str, repo: &str, run_id: &str) -> String {
+    let suffix = run_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(16)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let suffix = if suffix.is_empty() { "run" } else { suffix.as_str() };
+    format!("/workspace/repos/{}/{}/{}", owner, repo, suffix)
 }
 
 #[allow(dead_code)]
@@ -113,6 +120,14 @@ mod tests {
     #[test]
     fn rejects_path_escape() {
         assert!(path_within_checkout("/workspace/repos/o/r", "../secret").is_err());
+    }
+
+    #[test]
+    fn checkout_paths_are_run_scoped() {
+        let a = checkout_root("acme", "demo", "run-parallel-a");
+        let b = checkout_root("acme", "demo", "run-parallel-b");
+        assert_ne!(a, b);
+        assert!(a.contains("/acme/demo/"));
     }
 
     #[test]

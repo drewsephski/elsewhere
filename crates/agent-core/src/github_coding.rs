@@ -5,11 +5,13 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 pub const GITHUB_OPEN_REPOSITORY_TOOL: &str = "github_open_repository";
+pub const GITHUB_RUN_CHECK_TOOL: &str = "github_run_check";
 pub const GITHUB_REVIEW_PUBLISH_TOOL: &str = "github_review_publish";
 pub const GITHUB_PUBLISH_PULL_REQUEST_TOOL: &str = "github_publish_pull_request";
 
 pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
     GITHUB_OPEN_REPOSITORY_TOOL,
+    GITHUB_RUN_CHECK_TOOL,
     GITHUB_REVIEW_PUBLISH_TOOL,
     GITHUB_PUBLISH_PULL_REQUEST_TOOL,
 ];

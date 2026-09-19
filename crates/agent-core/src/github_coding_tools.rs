@@ -6,7 +6,8 @@ use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::computer::AgentComputer;
 use crate::github_coding::{
     AgentGithubCoding, GITHUB_OPEN_REPOSITORY_TOOL, GITHUB_PUBLISH_PULL_REQUEST_TOOL,
-    GITHUB_REVIEW_PUBLISH_TOOL, GithubCodingError, is_github_coding_mutation_tool,
+    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GithubCodingError,
+    is_github_coding_mutation_tool,
 };
 use crate::tool_catalog::is_github_coding_tool;
 use crate::tools::ToolError;
@@ -34,15 +35,29 @@ pub fn github_coding_openai_tool_definitions() -> Vec<Value> {
         }),
         json!({
             "type": "function",
+            "name": GITHUB_RUN_CHECK_TOOL,
+            "description": "Run a shell check command in the repository workspace and certify the result against the current publishable source state. Use this instead of workspace_exec when the result should count toward github_review_publish.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string" }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+            },
+            "strict": true
+        }),
+        json!({
+            "type": "function",
             "name": GITHUB_REVIEW_PUBLISH_TOOL,
-            "description": "Summarize local changes, checks you ran, and the publish preview before asking the owner to approve GitHub publish.",
+            "description": "Summarize local changes and certified checks before asking the owner to approve GitHub publish.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "checkCommands": {
                         "type": "array",
                         "items": { "type": "string" },
-                        "description": "Shell commands already executed via workspace_exec in this run. Elsewhere verifies results from durable tool events; do not report exit codes yourself."
+                        "description": "Commands previously certified with github_run_check for the current workspace state."
                     }
                 },
                 "additionalProperties": false
@@ -175,5 +190,6 @@ mod tests {
         assert!(is_github_coding_mutation_tool(GITHUB_PUBLISH_PULL_REQUEST_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_OPEN_REPOSITORY_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_REVIEW_PUBLISH_TOOL));
+        assert!(!is_github_coding_mutation_tool(GITHUB_RUN_CHECK_TOOL));
     }
 }

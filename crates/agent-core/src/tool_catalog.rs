@@ -42,6 +42,7 @@ pub const USER_QUESTION_TOOL_NAMES: &[&str] = &["ask_user"];
 
 pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
     "github_open_repository",
+    "github_run_check",
     "github_review_publish",
     "github_publish_pull_request",
 ];
@@ -224,7 +225,7 @@ pub fn is_policy_non_overridable_tool(name: &str) -> bool {
 pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
     match name {
         "workspace_write" => Some(PolicyActionGroup::Files),
-        "workspace_exec" => Some(PolicyActionGroup::Terminal),
+        "workspace_exec" | "github_run_check" => Some(PolicyActionGroup::Terminal),
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
         "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),

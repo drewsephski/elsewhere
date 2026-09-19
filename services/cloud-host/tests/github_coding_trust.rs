@@ -2,7 +2,8 @@
 
 use cloud_host::github_coding::archive::{extract_tarball_files, MAX_COMPRESSED_TARBALL_BYTES};
 use cloud_host::github_coding::check_evidence::{
-    reject_forged_check_fields, verify_check_commands_from_events,
+    reject_forged_check_fields, verify_check_commands_for_review, verify_check_commands_from_events,
+    CertifiedCheck,
 };
 use serde_json::json;
 
@@ -56,4 +57,21 @@ fn workspace_exec_failed_check_recorded() {
     assert_eq!(verified.len(), 1);
     assert!(!verified[0].ok);
     assert_eq!(verified[0].exit_code, 2);
+}
+
+#[test]
+fn review_requires_fingerprint_bound_certified_checks() {
+    let certified = vec![CertifiedCheck {
+        command: "pnpm test".into(),
+        exit_code: 0,
+        ok: true,
+        workspace_fingerprint: "old-fingerprint".into(),
+    }];
+    let err = verify_check_commands_for_review(
+        &certified,
+        &[String::from("pnpm test")],
+        "current-fingerprint",
+    )
+    .expect_err("stale check");
+    assert!(err.message().contains("not certified"));
 }

@@ -76,6 +76,7 @@ pub use connector_tools::connector_openai_tool_definitions;
 pub use github_coding::{
     is_github_coding_mutation_tool, AgentGithubCoding, GithubCodingError, GITHUB_CODING_TOOL_NAMES,
     GITHUB_OPEN_REPOSITORY_TOOL, GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL,
+    GITHUB_RUN_CHECK_TOOL,
 };
 pub use github_coding_tools::{
     dispatch_github_coding_tool, github_coding_openai_tool_definitions,

@@ -158,7 +158,7 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         "connected_apps_execute_tool" => ToolOperationKind::Mutation,
         "workspace_list" | "workspace_read" => ToolOperationKind::Read,
         "browser_snapshot" => ToolOperationKind::Read,
-        "workspace_write" | "workspace_exec" => ToolOperationKind::Mutation,
+        "workspace_write" | "workspace_exec" | "github_run_check" => ToolOperationKind::Mutation,
         name if is_browser_tool(name) && name != "browser_snapshot" => ToolOperationKind::Mutation,
         _ => ToolOperationKind::Mutation,
     }
@@ -183,7 +183,7 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
                 "contentPreview": preview
             })
         }
-        "workspace_exec" => {
+        "workspace_exec" | "github_run_check" => {
             let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
             let command = truncate_str(command, MAX_EXEC_COMMAND_CHARS);
             json!({ "command": command })
@@ -538,7 +538,7 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .unwrap_or("/workspace");
             format!("Write {path}")
         }
-        "workspace_exec" => {
+        "workspace_exec" | "github_run_check" => {
             let command = sanitized
                 .get("command")
                 .and_then(|v| v.as_str())

@@ -6,6 +6,53 @@ pub struct VerifiedCheck {
     pub command: String,
     pub exit_code: i32,
     pub ok: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub workspace_fingerprint: String,
+}
+
+/// Certified by `github_run_check` with a bound workspace fingerprint.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CertifiedCheck {
+    pub command: String,
+    pub exit_code: i32,
+    pub ok: bool,
+    pub workspace_fingerprint: String,
+}
+
+pub fn verify_check_commands_for_review(
+    certified: &[CertifiedCheck],
+    requested_commands: &[String],
+    reviewed_fingerprint: &str,
+) -> Result<Vec<VerifiedCheck>, GithubCodingError> {
+    if requested_commands.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut verified = Vec::new();
+    for requested in requested_commands {
+        let command = requested.trim();
+        if command.is_empty() {
+            return Err(GithubCodingError::Validation(
+                "checkCommands entries must be non-empty".into(),
+            ));
+        }
+        let match_check = certified
+            .iter()
+            .filter(|c| c.command == command)
+            .filter(|c| c.workspace_fingerprint == reviewed_fingerprint)
+            .last()
+            .ok_or_else(|| {
+                GithubCodingError::Validation(format!(
+                    "check command is not certified for the current workspace state: {command}. Run github_run_check after your latest edits."
+                ))
+            })?;
+        verified.push(VerifiedCheck {
+            command: match_check.command.clone(),
+            exit_code: match_check.exit_code,
+            ok: match_check.ok,
+            workspace_fingerprint: match_check.workspace_fingerprint.clone(),
+        });
+    }
+    Ok(verified)
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +145,7 @@ pub fn verify_check_commands_from_events(
             command: command.to_string(),
             exit_code: result.exit_code,
             ok: result.ok,
+            workspace_fingerprint: String::new(),
         });
     }
     Ok(verified)
@@ -182,5 +230,61 @@ mod tests {
         let err = verify_check_commands_from_events(&events, &[String::from("pnpm test")])
             .expect_err("missing");
         assert!(matches!(err, GithubCodingError::Validation(_)));
+    }
+
+    #[test]
+    fn stale_certified_check_rejected_after_fingerprint_change() {
+        let certified = vec![CertifiedCheck {
+            command: "true".into(),
+            exit_code: 0,
+            ok: true,
+            workspace_fingerprint: "fp-before-edit".into(),
+        }];
+        let err = verify_check_commands_for_review(
+            &certified,
+            &[String::from("true")],
+            "fp-after-edit",
+        )
+        .expect_err("stale");
+        assert!(matches!(err, GithubCodingError::Validation(_)));
+    }
+
+    #[test]
+    fn certified_check_matches_reviewed_fingerprint() {
+        let certified = vec![CertifiedCheck {
+            command: "true".into(),
+            exit_code: 0,
+            ok: true,
+            workspace_fingerprint: "fp-current".into(),
+        }];
+        let verified = verify_check_commands_for_review(
+            &certified,
+            &[String::from("true")],
+            "fp-current",
+        )
+        .expect("verified");
+        assert_eq!(verified[0].workspace_fingerprint, "fp-current");
+    }
+
+    #[test]
+    fn failed_check_remains_failed_for_matching_fingerprint() {
+        let certified = vec![CertifiedCheck {
+            command: "false".into(),
+            exit_code: 1,
+            ok: false,
+            workspace_fingerprint: "fp-1".into(),
+        }];
+        let verified =
+            verify_check_commands_for_review(&certified, &[String::from("false")], "fp-1")
+                .expect("verified");
+        assert!(!verified[0].ok);
+        assert_eq!(verified[0].exit_code, 1);
+    }
+
+    #[test]
+    fn explicit_no_checks_empty_ok() {
+        let verified =
+            verify_check_commands_for_review(&[], &[], "fp-any").expect("empty");
+        assert!(verified.is_empty());
     }
 }

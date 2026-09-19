@@ -23,6 +23,14 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use github_coding_shell::ShellWorkspaceComputer;
 
+fn demo_checkout_path(run_id: &str) -> String {
+    cloud_host::github_coding::checkout_root("acme", "demo", run_id)
+}
+
+fn demo_readme_path(run_id: &str) -> String {
+    format!("{}/README.md", demo_checkout_path(run_id))
+}
+
 fn test_secret_box() -> ConnectorSecretBox {
     let key = base64::engine::general_purpose::STANDARD.encode([9u8; 32]);
     ConnectorSecretBox::from_base64_key(&key).expect("test key")
@@ -105,7 +113,7 @@ async fn mock_github_api_without_branch_head(server: &MockServer, tarball_bytes:
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/tarball/.*"))
+        .and(path_regex(r"/repos/acme/demo/tarball/base_sha_abc123$"))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(tarball_bytes))
         .mount(server)
         .await;
@@ -287,10 +295,7 @@ async fn github_coding_publish_denied_does_not_hit_github(pool: PgPool) {
     .expect("open");
 
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-2"), b"Hello from Elsewhere")
         .await
         .unwrap();
 
@@ -432,19 +437,26 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
     .expect("open");
 
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-3"), b"Hello from Elsewhere")
         .await
         .unwrap();
 
-    insert_workspace_exec_events(&pool, "req-3", "pnpm test", 0, true).await;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_run_check",
+        r#"{"command":"true"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("certified check");
     dispatch_github_coding_tool(
         Some(&coding),
         &computer,
         "github_review_publish",
-        r#"{"checkCommands":["pnpm test"]}"#,
+        r#"{"checkCommands":["true"]}"#,
         &cancel,
         &gate,
         &run,
@@ -579,10 +591,7 @@ async fn github_coding_publish_without_review_rejected(pool: PgPool) {
     .await
     .expect("open");
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-noreview"), b"Hello from Elsewhere")
         .await
         .unwrap();
     let err = dispatch_github_coding_tool(
@@ -641,10 +650,7 @@ async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
     .await
     .expect("open");
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-stale"), b"Hello from Elsewhere")
         .await
         .unwrap();
     dispatch_github_coding_tool(
@@ -660,10 +666,7 @@ async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
     .expect("review");
     mock_github_open_pulls_empty(&server).await;
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Changed again after review",
-        )
+        .write_file(&demo_readme_path("run-stale"), b"Changed again after review")
         .await
         .unwrap();
     let err = dispatch_github_coding_tool(
@@ -729,10 +732,7 @@ async fn github_coding_base_drift_blocks_publish(pool: PgPool) {
     .await
     .expect("open");
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-drift"), b"Hello from Elsewhere")
         .await
         .unwrap();
     dispatch_github_coding_tool(
@@ -816,10 +816,7 @@ async fn github_coding_session_survives_service_reconstruction(pool: PgPool) {
     .await
     .expect("open");
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-reload"), b"Hello from Elsewhere")
         .await
         .unwrap();
     dispatch_github_coding_tool(
@@ -896,10 +893,7 @@ async fn github_coding_revoked_install_blocks_publish(pool: PgPool) {
     .await
     .expect("open");
     computer
-        .write_file(
-            "/workspace/repos/acme/demo/README.md",
-            b"Hello from Elsewhere",
-        )
+        .write_file(&demo_readme_path("run-revoke"), b"Hello from Elsewhere")
         .await
         .unwrap();
     dispatch_github_coding_tool(
@@ -946,4 +940,373 @@ async fn github_coding_revoked_install_blocks_publish(pool: PgPool) {
     );
     let posts = server.received_requests().await.unwrap_or_default();
     assert!(!posts.iter().any(|r| r.method.as_str() == "POST"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_stale_check_rejected_after_edit(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-stale-check".into(),
+        request_id: "req-stale-check".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_run_check",
+        r#"{"command":"true"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("check before edit");
+    computer
+        .write_file(&demo_readme_path("run-stale-check"), b"Edited after check")
+        .await
+        .unwrap();
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":["true"]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("stale certified check");
+    assert!(
+        err.message().contains("not certified"),
+        "unexpected: {}",
+        err.message()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_run_check_rejects_mutating_command(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-mut-check".into(),
+        request_id: "req-mut-check".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    let readme = demo_readme_path("run-mut-check");
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_run_check",
+        &format!(
+            r#"{{"command":"printf 'x' > {}"}}"#,
+            readme.replace('\\', "\\\\")
+        ),
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("mutating check");
+    assert!(
+        err.message().contains("modified publishable"),
+        "unexpected: {}",
+        err.message()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_parallel_runs_use_isolated_checkouts(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+
+    let run_a = ToolRunContext {
+        run_id: "run-parallel-a".into(),
+        request_id: "req-parallel-a".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let run_b = ToolRunContext {
+        run_id: "run-parallel-b".into(),
+        request_id: "req-parallel-b".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+
+    for run in [&run_a, &run_b] {
+        dispatch_github_coding_tool(
+            Some(&coding),
+            &computer,
+            "github_open_repository",
+            r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+            &cancel,
+            &gate,
+            run,
+        )
+        .await
+        .expect("open");
+    }
+
+    let path_a = demo_checkout_path("run-parallel-a");
+    let path_b = demo_checkout_path("run-parallel-b");
+    assert_ne!(path_a, path_b);
+
+    computer
+        .write_file(&demo_readme_path("run-parallel-a"), b"Run A")
+        .await
+        .unwrap();
+    computer
+        .write_file(&demo_readme_path("run-parallel-b"), b"Run B")
+        .await
+        .unwrap();
+
+    let review_a = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run_a,
+    )
+    .await
+    .expect("review a");
+    let review_b = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run_b,
+    )
+    .await
+    .expect("review b");
+
+    let fp_a = review_a
+        .get("workspaceFingerprint")
+        .and_then(|v| v.as_str())
+        .unwrap();
+    let fp_b = review_b
+        .get("workspaceFingerprint")
+        .and_then(|v| v.as_str())
+        .unwrap();
+    assert_ne!(fp_a, fp_b);
+}
+
+async fn mock_publish_with_existing_branch(server: &MockServer, working_branch: &str) {
+    let branch_encoded = urlencoding::encode(working_branch);
+    mock_github_open_pulls_empty(server).await;
+    Mock::given(method("GET"))
+        .and(path_regex(format!(
+            r"/repos/acme/demo/git/refs/heads/{}$",
+            branch_encoded
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": "commit_sha_1" }
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/commits/commit_sha_1$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "commit_sha_1",
+            "parents": [{ "sha": "base_sha_abc123" }],
+            "tree": { "sha": "tree_on_branch" }
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch\?recursive=1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "tree_on_branch",
+            "tree": [{
+                "path": "README.md",
+                "mode": "100644",
+                "type": "blob",
+                "sha": "blob_sha_1"
+            }]
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path_regex(r"/repos/acme/demo/git/blobs"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "blob_sha_1" })))
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path_regex(r"/repos/acme/demo/pulls$"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "number": 99,
+            "html_url": "https://github.com/acme/demo/pull/99"
+        })))
+        .mount(server)
+        .await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_adopts_existing_branch_when_db_lags(pool: PgPool) {
+    let server = MockServer::start().await;
+    let tarball = minimal_tarball_with_readme();
+    mock_github_api(&server, tarball).await;
+    let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-retry");
+    mock_publish_with_existing_branch(&server, &working_branch).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-retry".into(),
+        request_id: "req-retry".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(&demo_readme_path("run-retry"), b"Hello from Elsewhere")
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+
+    let published = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello from Elsewhere"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("publish adopts branch");
+
+    assert_eq!(
+        published
+            .get("pullRequest")
+            .and_then(|v| v.get("number"))
+            .and_then(|v| v.as_u64()),
+        Some(99)
+    );
+
+    let posts = server.received_requests().await.unwrap_or_default();
+    assert!(
+        !posts
+            .iter()
+            .any(|r| r.method.as_str() == "POST" && r.url.path().contains("/git/trees")),
+        "must not create a new tree when branch already matches"
+    );
 }

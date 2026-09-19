@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use agent_core::{
     AgentComputer, AgentGithubCoding, ComputerError, GithubCodingError, GITHUB_OPEN_REPOSITORY_TOOL,
-    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL,
+    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -12,13 +12,14 @@ use crate::connectors::github_client::{GitHubClient, GitHubTreeChange};
 use crate::connectors::service::PostgresAgentConnectors;
 use crate::github_coding::archive::{extract_tarball_files, MAX_COMPRESSED_TARBALL_BYTES};
 use crate::github_coding::check_evidence::{
-    reject_forged_check_fields, verify_check_commands_from_events, VerifiedCheck,
+    reject_forged_check_fields, verify_check_commands_for_review, CertifiedCheck, VerifiedCheck,
 };
 use crate::github_coding::core::{checkout_root, path_within_checkout, sanitize_task_slug, working_branch};
+use crate::github_coding::publish_snapshot::PreparedPublish;
 use crate::github_coding::session_store::{CodingSessionRow, SessionStore};
 use crate::github_coding::workspace_git::{
     assert_git_available, collect_publish_changes, init_baseline_repo, reset_checkout_dir,
-    working_tree_fingerprint, GitFileChange,
+    GitFileChange,
 };
 use crate::redact::redact_secrets;
 use agent_core::ConnectorError;
@@ -76,6 +77,9 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                 self.open_repository(owner_id, run_id, request_id, computer, arguments)
                     .await
             }
+            GITHUB_RUN_CHECK_TOOL => {
+                self.run_check(owner_id, run_id, computer, arguments).await
+            }
             GITHUB_REVIEW_PUBLISH_TOOL => {
                 self.review_publish(owner_id, run_id, request_id, computer, arguments)
                     .await
@@ -105,12 +109,15 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                 "Run github_review_publish before publishing.".into(),
             ));
         }
-        let fingerprint = working_tree_fingerprint(computer, &session.checkout_path).await?;
-        if session.reviewed_fingerprint.as_deref() != Some(fingerprint.as_str()) {
+        let prepared = self.build_prepared_publish(&session, computer).await?;
+        if session.reviewed_fingerprint.as_deref() != Some(prepared.fingerprint.as_str()) {
             return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
         }
-        let changes = collect_publish_changes(computer, &session.checkout_path).await?;
-        let changed_paths = changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>();
+        let changed_paths = prepared
+            .changes
+            .iter()
+            .map(|c| c.path.clone())
+            .collect::<Vec<_>>();
         let verified_checks = validations_to_json(&session.validations);
         let mut merged = arguments.clone();
         if let Some(obj) = merged.as_object_mut() {
@@ -118,7 +125,7 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
             obj.insert("branch".into(), json!(session.working_branch));
             obj.insert("baseBranch".into(), json!(session.base_branch));
             obj.insert("changedPaths".into(), json!(changed_paths));
-            obj.insert("workspaceFingerprint".into(), json!(fingerprint));
+            obj.insert("workspaceFingerprint".into(), json!(prepared.fingerprint));
             obj.insert("verifiedChecks".into(), verified_checks);
             obj.insert("checksPassed".into(), json!(session.checks_passed));
             obj.insert(
@@ -143,12 +150,12 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
         computer: &dyn AgentComputer,
     ) -> Result<(), GithubCodingError> {
         let session = self.require_session(owner_id, run_id).await?;
-        let fingerprint = working_tree_fingerprint(computer, &session.checkout_path).await?;
-        if session.reviewed_fingerprint.as_deref() != Some(fingerprint.as_str()) {
+        let prepared = self.build_prepared_publish(&session, computer).await?;
+        if session.reviewed_fingerprint.as_deref() != Some(prepared.fingerprint.as_str()) {
             return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
         }
         self.sessions
-            .set_approved_fingerprint(owner_id, run_id, &fingerprint)
+            .set_approved_publish(owner_id, run_id, &prepared)
             .await?;
         Ok(())
     }
@@ -209,7 +216,7 @@ impl PostgresAgentGithubCoding {
 
         let archive_bytes = self
             .github
-            .download_tarball(&token, &owner, &repo, &base_branch)
+            .download_tarball(&token, &owner, &repo, &base_commit_sha)
             .await
             .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
         if archive_bytes.len() > MAX_COMPRESSED_TARBALL_BYTES {
@@ -220,7 +227,7 @@ impl PostgresAgentGithubCoding {
 
         let files = extract_tarball_files(&archive_bytes)?;
         let file_count = files.len();
-        let checkout_path = checkout_root(&owner, &repo);
+        let checkout_path = checkout_root(&owner, &repo, run_id);
         let branch = working_branch(&slug, run_id);
 
         computer.ensure_ready().await.map_err(map_computer_error)?;
@@ -262,6 +269,8 @@ impl PostgresAgentGithubCoding {
             approved_fingerprint: None,
             review_completed: false,
             validations: Vec::new(),
+            certified_checks: Vec::new(),
+            prepared_publish: None,
             checks_passed: None,
             explicit_no_checks: false,
             publish_phase: None,
@@ -283,19 +292,66 @@ impl PostgresAgentGithubCoding {
         }))
     }
 
+    async fn run_check(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        computer: &dyn AgentComputer,
+        args: &Value,
+    ) -> Result<Value, GithubCodingError> {
+        let command = required_str(args, "command")?;
+        let session = self.require_session(owner_id, run_id).await?;
+        let prepared_before = self.build_prepared_publish(&session, computer).await?;
+        let result = computer
+            .exec(&command)
+            .await
+            .map_err(map_computer_error)?;
+        let prepared_after = self.build_prepared_publish(&session, computer).await?;
+        if prepared_before.fingerprint != prepared_after.fingerprint {
+            return Err(GithubCodingError::Validation(
+                "Check modified publishable source files. Re-run the check after your edits settle, or review before changing files."
+                    .into(),
+            ));
+        }
+        let exit_code = result.exit_code;
+        let ok = result.ok && exit_code == 0;
+        let certified = CertifiedCheck {
+            command,
+            exit_code,
+            ok,
+            workspace_fingerprint: prepared_before.fingerprint.clone(),
+        };
+        self.sessions
+            .append_certified_check(owner_id, run_id, &certified)
+            .await?;
+        Ok(json!({
+            "ok": ok,
+            "command": certified.command,
+            "exitCode": exit_code,
+            "workspaceFingerprint": certified.workspace_fingerprint,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "phase": "check_certified"
+        }))
+    }
+
     async fn review_publish(
         &self,
         owner_id: &str,
         run_id: &str,
-        request_id: &str,
+        _request_id: &str,
         computer: &dyn AgentComputer,
         args: &Value,
     ) -> Result<Value, GithubCodingError> {
         reject_forged_check_fields(args)?;
         let session = self.require_session(owner_id, run_id).await?;
         let check_commands = parse_check_commands(args)?;
-        let events = self.sessions.load_run_events(request_id).await?;
-        let verified = verify_check_commands_from_events(&events, &check_commands)?;
+        let prepared = self.build_prepared_publish(&session, computer).await?;
+        let verified = verify_check_commands_for_review(
+            &session.certified_checks,
+            &check_commands,
+            &prepared.fingerprint,
+        )?;
         let explicit_no_checks = check_commands.is_empty();
         let checks_passed = if explicit_no_checks {
             None
@@ -303,20 +359,22 @@ impl PostgresAgentGithubCoding {
             Some(verified.iter().all(|v| v.ok))
         };
 
-        let changes = collect_publish_changes(computer, &session.checkout_path).await?;
-        let fingerprint = working_tree_fingerprint(computer, &session.checkout_path).await?;
         self.sessions
             .save_review(
                 owner_id,
                 run_id,
-                &fingerprint,
+                &prepared,
                 &verified,
                 checks_passed,
                 explicit_no_checks,
             )
             .await?;
 
-        let changed_paths = changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>();
+        let changed_paths = prepared
+            .changes
+            .iter()
+            .map(|c| c.path.clone())
+            .collect::<Vec<_>>();
         Ok(json!({
             "ok": true,
             "repository": session.full_name,
@@ -324,12 +382,12 @@ impl PostgresAgentGithubCoding {
             "baseBranch": session.base_branch,
             "workingBranch": session.working_branch,
             "changedPaths": changed_paths,
-            "changeCount": changes.len(),
+            "changeCount": prepared.changes.len(),
             "verifiedChecks": validations_to_json(&verified),
             "checksPassed": checks_passed,
             "explicitNoChecks": explicit_no_checks,
-            "workspaceFingerprint": fingerprint,
-            "readyToPublish": !changes.is_empty(),
+            "workspaceFingerprint": prepared.fingerprint,
+            "readyToPublish": !prepared.changes.is_empty(),
             "phase": "reviewing_changes"
         }))
     }
@@ -355,11 +413,19 @@ impl PostgresAgentGithubCoding {
             ));
         }
 
-        let fingerprint = working_tree_fingerprint(computer, &session.checkout_path).await?;
-        if session.reviewed_fingerprint.as_deref() != Some(fingerprint.as_str()) {
+        let fresh = self.build_prepared_publish(&session, computer).await?;
+        if session.reviewed_fingerprint.as_deref() != Some(fresh.fingerprint.as_str()) {
             return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
         }
-        if session.approved_fingerprint.as_deref() != Some(fingerprint.as_str()) {
+        if session.approved_fingerprint.as_deref() != Some(fresh.fingerprint.as_str()) {
+            return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
+        }
+        let prepared = session.prepared_publish.clone().ok_or_else(|| {
+            GithubCodingError::Validation(
+                "Missing approved publish snapshot. Re-run review and approval.".into(),
+            )
+        })?;
+        if prepared.fingerprint != fresh.fingerprint {
             return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
         }
 
@@ -395,8 +461,7 @@ impl PostgresAgentGithubCoding {
             return Err(GithubCodingError::Validation(BASE_DRIFT_MSG.into()));
         }
 
-        let changes = collect_publish_changes(computer, &session.checkout_path).await?;
-        if changes.is_empty() {
+        if prepared.changes.is_empty() {
             return Err(GithubCodingError::Validation(
                 "No file changes to publish.".into(),
             ));
@@ -450,7 +515,7 @@ impl PostgresAgentGithubCoding {
             }
         }
 
-        let tree_changes = to_github_tree_changes(&changes);
+        let tree_changes = to_github_tree_changes(&prepared.changes);
         let commit_message = format!("{title}\n\n{body}");
         let expected_commit = session.publish_commit_sha.as_deref();
 
@@ -525,11 +590,28 @@ impl PostgresAgentGithubCoding {
             "baseBranch": session.base_branch,
             "commitSha": commit_sha,
             "pullRequest": { "number": number, "url": url },
-            "changedPaths": changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>(),
+            "changedPaths": prepared.changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>(),
             "verifiedChecks": validations_to_json(&session.validations),
             "checksPassed": session.checks_passed,
             "phase": "pull_request_opened"
         }))
+    }
+
+    async fn build_prepared_publish(
+        &self,
+        session: &CodingSessionRow,
+        computer: &dyn AgentComputer,
+    ) -> Result<PreparedPublish, GithubCodingError> {
+        let changes = collect_publish_changes(
+            computer,
+            &session.checkout_path,
+            &session.local_baseline_commit_sha,
+        )
+        .await?;
+        Ok(PreparedPublish::from_changes(
+            &session.local_baseline_commit_sha,
+            changes,
+        ))
     }
 
     async fn require_session(

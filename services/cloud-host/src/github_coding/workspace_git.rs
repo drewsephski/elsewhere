@@ -1,12 +1,11 @@
 use agent_core::{AgentComputer, ComputerError, GithubCodingError};
-use sha2::{Digest, Sha256};
 
 use crate::redact::redact_secrets;
 
 const GIT_UNAVAILABLE: &str =
     "This workspace does not support local Git metadata required for GitHub coding.";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GitFileChange {
     pub path: String,
     pub mode: String,
@@ -47,53 +46,55 @@ pub async fn init_baseline_repo(
 pub async fn working_tree_fingerprint(
     computer: &dyn AgentComputer,
     checkout_path: &str,
+    baseline_sha: &str,
 ) -> Result<String, GithubCodingError> {
-    let head_script = format!(
-        "cd {} && git rev-parse HEAD",
-        shell_quote(checkout_path)
-    );
-    let head = exec_stdout(computer, &head_script).await?;
-    let changes = collect_publish_changes(computer, checkout_path).await?;
-    let mut hasher = Sha256::new();
-    hasher.update(head.trim().as_bytes());
-    for change in changes {
-        hasher.update(change.path.as_bytes());
-        hasher.update(change.mode.as_bytes());
-        hasher.update([u8::from(change.deleted)]);
-        if let Some(bytes) = &change.bytes {
-            hasher.update(bytes);
-        }
-    }
-    Ok(hex::encode(hasher.finalize()))
+    let changes = collect_publish_changes(computer, checkout_path, baseline_sha).await?;
+    Ok(super::publish_snapshot::fingerprint_changes(baseline_sha, &changes))
 }
 
 pub async fn collect_publish_changes(
     computer: &dyn AgentComputer,
     checkout_path: &str,
+    baseline_sha: &str,
 ) -> Result<Vec<GitFileChange>, GithubCodingError> {
-    let script = format!(
-        "cd {} && git status --porcelain=v1 -z",
+    let diff_script = format!(
+        "cd {} && git diff --name-status -z --no-renames {}",
+        shell_quote(checkout_path),
+        shell_quote(baseline_sha)
+    );
+    let diff_out = exec_stdout(computer, &diff_script).await?;
+    let untracked_script = format!(
+        "cd {} && git ls-files --others --exclude-standard -z",
         shell_quote(checkout_path)
     );
-    let status = exec_stdout(computer, &script).await?;
-    let entries = parse_porcelain_z(&status);
-    if entries.is_empty() {
-        return Ok(Vec::new());
+    let untracked_out = exec_stdout(computer, &untracked_script).await?;
+
+    let mut paths: Vec<PathMutation> = Vec::new();
+    parse_name_status_z(&diff_out, &mut paths);
+    for path in parse_nul_paths(&untracked_out) {
+        paths.push(PathMutation {
+            path,
+            status: 'A',
+        });
     }
+    paths.sort_by(|a, b| a.path.cmp(&b.path));
+    paths.dedup_by(|a, b| a.path == b.path);
+
     let mut changes = Vec::new();
-    for entry in entries {
+    for entry in paths {
         let path = entry.path;
-        let full = format!("{}/{}", checkout_path.trim_end_matches('/'), path);
-        if entry.deleted {
+        if entry.status == 'D' {
+            let mode = baseline_blob_mode(computer, checkout_path, baseline_sha, &path).await?;
             changes.push(GitFileChange {
                 path,
-                mode: "100644".into(),
+                mode,
                 deleted: true,
                 bytes: None,
             });
             continue;
         }
-        let mode = file_mode(computer, checkout_path, &path).await?;
+        let full = format!("{}/{}", checkout_path.trim_end_matches('/'), path);
+        let mode = worktree_file_mode(computer, &full).await?;
         let bytes = computer
             .read_file(&full)
             .await
@@ -108,41 +109,56 @@ pub async fn collect_publish_changes(
     Ok(changes)
 }
 
-struct PorcelainEntry {
+struct PathMutation {
     path: String,
-    deleted: bool,
+    status: char,
 }
 
-fn parse_porcelain_z(status: &str) -> Vec<PorcelainEntry> {
-    let mut out = Vec::new();
-    let mut parts: Vec<&str> = status.split('\0').filter(|s| !s.is_empty()).collect();
+fn parse_nul_paths(raw: &str) -> Vec<String> {
+    raw.split('\0')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn parse_name_status_z(raw: &str, out: &mut Vec<PathMutation>) {
+    let parts: Vec<&str> = raw.split('\0').filter(|s| !s.is_empty()).collect();
     let mut i = 0;
     while i < parts.len() {
-        let line = parts[i];
-        if line.len() < 4 {
-            i += 1;
+        let token = parts[i];
+        if token.len() == 1 {
+            if i + 1 >= parts.len() {
+                break;
+            }
+            let status = token.chars().next().unwrap_or('M');
+            out.push(PathMutation {
+                path: parts[i + 1].to_string(),
+                status,
+            });
+            i += 2;
             continue;
         }
-        let xy = &line[..2];
-        let path = line[3..].to_string();
-        let deleted = xy.contains('D');
-        out.push(PorcelainEntry { path, deleted });
+        let status = token.chars().next().unwrap_or('M');
+        let path = token
+            .strip_prefix(&format!("{status}\t"))
+            .or_else(|| token.strip_prefix(&format!("{status} ")))
+            .unwrap_or(token)
+            .to_string();
+        out.push(PathMutation { path, status });
         i += 1;
-        if xy.starts_with('R') || xy.starts_with('C') {
-            i += 1;
-        }
     }
-    out
 }
 
-async fn file_mode(
+async fn baseline_blob_mode(
     computer: &dyn AgentComputer,
     checkout_path: &str,
+    baseline_sha: &str,
     relative: &str,
 ) -> Result<String, GithubCodingError> {
     let script = format!(
-        "cd {} && git ls-files -s -- {} | awk '{{print $1}}'",
+        "cd {} && git ls-tree {} -- {} | awk '{{print $1}}'",
         shell_quote(checkout_path),
+        shell_quote(baseline_sha),
         shell_quote(relative)
     );
     let out = exec_stdout(computer, &script).await?;
@@ -151,6 +167,20 @@ async fn file_mode(
         return Ok(mode.to_string());
     }
     Ok("100644".into())
+}
+
+async fn worktree_file_mode(computer: &dyn AgentComputer, full_path: &str) -> Result<String, GithubCodingError> {
+    let script = format!(
+        "if [ -x {} ]; then echo 100755; else echo 100644; fi",
+        shell_quote(full_path)
+    );
+    let out = exec_stdout(computer, &script).await?;
+    let mode = out.lines().next().unwrap_or("100644").trim();
+    if mode == "100755" {
+        Ok("100755".into())
+    } else {
+        Ok("100644".into())
+    }
 }
 
 pub async fn assert_git_available(computer: &dyn AgentComputer) -> Result<(), GithubCodingError> {
