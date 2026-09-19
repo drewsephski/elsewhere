@@ -11,9 +11,11 @@ import { useCallback, useState } from "react";
 
 interface DesktopThisMacOnboardingProps {
   open: boolean;
+  pairingFlowActive: boolean;
   status: ThisMacStatusSnapshot | null;
+  onPairingStarted: () => void;
   onRefreshStatus: () => void;
-  onFinished: () => void;
+  onPersistDismissed: () => void | Promise<void>;
   botCount: number;
 }
 
@@ -55,50 +57,55 @@ function pairingSubcopy(status: ThisMacStatusSnapshot | null): string | null {
 
 export function DesktopThisMacOnboarding({
   open,
+  pairingFlowActive,
   status,
+  onPairingStarted,
   onRefreshStatus,
-  onFinished,
+  onPersistDismissed,
   botCount,
 }: DesktopThisMacOnboardingProps) {
   const [busy, setBusy] = useState(false);
-  const [flowActive, setFlowActive] = useState(false);
 
   const showConnectActions =
-    !flowActive &&
+    !pairingFlowActive &&
     (!status || (status.phase === "disconnected" && !status.pairingInProgress));
 
-  const showContinue = status?.phase === "live";
+  const showContinue = pairingFlowActive && status?.phase === "live";
 
   const handleConnect = useCallback(async () => {
     setBusy(true);
-    setFlowActive(true);
+    onPairingStarted();
     try {
       await desktopCompanion.startThisMacPairing();
       onRefreshStatus();
     } finally {
       setBusy(false);
     }
-  }, [onRefreshStatus]);
+  }, [onPairingStarted, onRefreshStatus]);
 
   const handleNotNow = useCallback(async () => {
     setBusy(true);
     try {
-      await desktopCompanion.setThisMacOnboardingSkipped(true);
-      onFinished();
+      await onPersistDismissed();
     } finally {
       setBusy(false);
     }
-  }, [onFinished]);
+  }, [onPersistDismissed]);
 
-  const handleContinue = useCallback(() => {
-    onFinished();
-    if (botCount === 0) {
-      const params = new URLSearchParams(window.location.search);
-      params.set("create", "1");
-      const query = params.toString();
-      window.location.assign(query ? `/app?${query}` : "/app?create=1");
+  const handleContinue = useCallback(async () => {
+    setBusy(true);
+    try {
+      await onPersistDismissed();
+      if (botCount === 0) {
+        const params = new URLSearchParams(window.location.search);
+        params.set("create", "1");
+        const query = params.toString();
+        window.location.assign(query ? `/app?${query}` : "/app?create=1");
+      }
+    } finally {
+      setBusy(false);
     }
-  }, [botCount, onFinished]);
+  }, [botCount, onPersistDismissed]);
 
   if (!open) {
     return null;
@@ -193,7 +200,12 @@ export function DesktopThisMacOnboarding({
               </p>
             )}
             {showContinue ? (
-              <Button size="lg" className="mt-8" onClick={handleContinue}>
+              <Button
+                size="lg"
+                className="mt-8"
+                disabled={busy}
+                onClick={() => void handleContinue()}
+              >
                 Continue
               </Button>
             ) : null}

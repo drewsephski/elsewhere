@@ -5,7 +5,7 @@ commands.allow = [
   "get_this_mac_status",
   "set_this_mac_paused",
   "start_this_mac_pairing",
-  "set_this_mac_onboarding_skipped",
+  "set_this_mac_onboarding_dismissed",
 ]
 
 [[permission]]

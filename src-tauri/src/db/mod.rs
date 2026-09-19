@@ -633,14 +633,19 @@ When information might be outdated, say what you know and what you would verify.
         self.set_meta("this_mac_paused", if paused { "1" } else { "0" })
     }
 
-    pub fn this_mac_onboarding_skipped(&self) -> Result<bool, AppError> {
+    /// First-run onboarding auto-present suppressed (Not now or successful Continue).
+    pub fn this_mac_onboarding_dismissed(&self) -> Result<bool, AppError> {
+        if self.get_meta("this_mac_onboarding_dismissed")?.as_deref() == Some("1") {
+            return Ok(true);
+        }
+        // Legacy key from earlier alpha builds.
         Ok(self.get_meta("this_mac_onboarding_skipped")?.as_deref() == Some("1"))
     }
 
-    pub fn set_this_mac_onboarding_skipped(&self, skipped: bool) -> Result<(), AppError> {
+    pub fn set_this_mac_onboarding_dismissed(&self, dismissed: bool) -> Result<(), AppError> {
         self.set_meta(
-            "this_mac_onboarding_skipped",
-            if skipped { "1" } else { "0" },
+            "this_mac_onboarding_dismissed",
+            if dismissed { "1" } else { "0" },
         )
     }
 }

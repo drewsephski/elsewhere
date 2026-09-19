@@ -14,7 +14,8 @@ export interface ThisMacStatusSnapshot {
   paired: boolean;
   pairingInProgress: boolean;
   paused: boolean;
-  onboardingSkipped: boolean;
+  /** First-run overlay suppressed (Not now or successful Continue). */
+  onboardingDismissed: boolean;
   deviceName: string;
   nodeId: string | null;
   computerId: string | null;

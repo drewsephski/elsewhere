@@ -1,23 +1,31 @@
 //! Production desktop webview origin (hosted Elsewhere www). Must match remote capabilities.
 
-pub const DEFAULT_PRODUCTION_WEB_ORIGIN: &str = "https://elsewhere-alpha-web.fly.dev";
+/// Single source of truth — must match `tauri.conf.json` main window URL and `hosted-remote.json`.
+pub const PRODUCTION_WEB_ORIGIN: &str = "https://elsewhere-alpha-web.fly.dev";
 
-pub fn production_web_origin() -> String {
-    std::env::var("ELSEWHERE_DESKTOP_WEB_ORIGIN")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_PRODUCTION_WEB_ORIGIN.to_string())
-        .trim_end_matches('/')
-        .to_string()
+pub fn production_web_origin() -> &'static str {
+    PRODUCTION_WEB_ORIGIN
 }
 
 pub fn production_app_url() -> String {
-    format!("{}/app", production_web_origin())
+    format!("{}/app", PRODUCTION_WEB_ORIGIN)
 }
 
 pub fn remote_capability_pattern() -> String {
-    format!("{}/**", production_web_origin())
+    format!("{}/**", PRODUCTION_WEB_ORIGIN)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn production_app_url_matches_tauri_window_path() {
+        assert_eq!(
+            production_app_url(),
+            "https://elsewhere-alpha-web.fly.dev/app"
+        );
+    }
 }
 
 /// macOS computer name for This Mac display (never a secret).

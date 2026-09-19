@@ -1,7 +1,7 @@
 "use client";
 
 import { DesktopThisMacOnboarding } from "@/components/app/desktop-this-mac-onboarding";
-import { shouldShowThisMacOnboarding } from "@/lib/desktop-onboarding";
+import { shouldShowDesktopOnboardingOverlay } from "@/lib/desktop-onboarding";
 import { desktopCompanion } from "@/lib/desktop-companion";
 import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { useThisMacStatus } from "@/hooks/use-this-mac-status";
@@ -15,23 +15,14 @@ export function DesktopExperienceLayer() {
   const enabled = desktopCompanion.isAvailable();
   const { status, loading, refresh } = useThisMacStatus(enabled);
   const { data: workspace, phase: workspacePhase } = useWorkspaceOverview();
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const [pairingFlowActive, setPairingFlowActive] = useState(false);
 
   const workspaceReady =
     workspacePhase === "ready" || workspacePhase === "stale";
   const botCount = workspace?.bots.length ?? 0;
 
-  const showOnboarding = useMemo(() => {
-    if (!isTauriRuntime() || onboardingDismissed) {
-      return false;
-    }
-    if (status?.onboardingSkipped) {
-      return false;
-    }
-    if (status?.pairingInProgress || status?.phase === "live" || status?.phase === "connected") {
-      return true;
-    }
-    return shouldShowThisMacOnboarding({
+  const onboardingContext = useMemo(
+    () => ({
       isDesktopShell: true,
       hasSession: true,
       pathname: typeof window !== "undefined" ? window.location.pathname : "/app",
@@ -39,18 +30,27 @@ export function DesktopExperienceLayer() {
       workspaceReady,
       thisMacReady: !loading,
       thisMac: status,
-    });
-  }, [
-    botCount,
-    loading,
-    onboardingDismissed,
-    status,
-    workspaceReady,
-  ]);
+    }),
+    [botCount, loading, status, workspaceReady],
+  );
 
-  const handleFinished = useCallback(() => {
-    setOnboardingDismissed(true);
-    void refresh();
+  const showOnboarding = useMemo(() => {
+    if (!isTauriRuntime()) {
+      return false;
+    }
+    return shouldShowDesktopOnboardingOverlay(onboardingContext, {
+      pairingFlowActive,
+    });
+  }, [onboardingContext, pairingFlowActive]);
+
+  const handlePairingStarted = useCallback(() => {
+    setPairingFlowActive(true);
+  }, []);
+
+  const handlePersistDismissed = useCallback(async () => {
+    await desktopCompanion.setThisMacOnboardingDismissed(true);
+    setPairingFlowActive(false);
+    await refresh();
   }, [refresh]);
 
   if (!enabled) {
@@ -60,9 +60,11 @@ export function DesktopExperienceLayer() {
   return (
     <DesktopThisMacOnboarding
       open={showOnboarding}
+      pairingFlowActive={pairingFlowActive}
       status={status}
+      onPairingStarted={handlePairingStarted}
       onRefreshStatus={() => void refresh()}
-      onFinished={handleFinished}
+      onPersistDismissed={handlePersistDismissed}
       botCount={botCount}
     />
   );

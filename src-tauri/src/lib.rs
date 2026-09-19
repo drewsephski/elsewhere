@@ -3,7 +3,7 @@ pub mod agent;
 mod commands;
 mod db;
 mod desktop_lifecycle;
-mod desktop_origin;
+pub mod desktop_origin;
 mod error;
 #[cfg(target_os = "macos")]
 mod host_link;
@@ -93,7 +93,7 @@ pub fn run() {
             commands::get_this_mac_status,
             commands::set_this_mac_paused,
             commands::start_this_mac_pairing,
-            commands::set_this_mac_onboarding_skipped,
+            commands::set_this_mac_onboarding_dismissed,
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,

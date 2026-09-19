@@ -9,7 +9,7 @@ https://elsewhere-alpha-web.fly.dev/app
     ↓ same origin
 Better Auth (/api/auth) + cloud BFF (/api/cloud)
     ↓ narrow IPC (remote capability)
-get_this_mac_status · set_this_mac_paused · start_this_mac_pairing · set_this_mac_onboarding_skipped
+get_this_mac_status · set_this_mac_paused · start_this_mac_pairing · set_this_mac_onboarding_dismissed
 ```
 
 - **Production loads hosted Elsewhere first-party** — session cookies and Better Auth behave like the browser; no cross-origin cookie transport from a bundled Vite origin.
@@ -35,7 +35,7 @@ localhost:1420 (Vite CloudShell)
 
 - **Sign-in**: hosted auth UI with desktop-only hero when `isTauriRuntime()`.
 - **First-run This Mac**: full-screen overlay (“Use this Mac”), not the Computers admin grid.
-- **Not now**: persisted in local SQLite (`this_mac_onboarding_skipped`); no repeat nag; users with existing Bots are not interrupted.
+- **Not now / Continue**: persisted in local SQLite (`this_mac_onboarding_dismissed`); no repeat first-run overlay; users with existing Bots are not interrupted. Manual connect in Settings/Computers remains available.
 - **Quick start / New bot**: prefers This Mac only when companion phase is **live**; shows “Runs on · This Mac” when applicable.
 - **Cmd+,** Settings · **Cmd+N** New Bot (Tauri only).
 - **Tray**: Open · status line · Pause/Resume · Quit (labels reflect pause/live/connecting).

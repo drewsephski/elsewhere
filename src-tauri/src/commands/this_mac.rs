@@ -25,7 +25,7 @@ pub struct ThisMacStatus {
     pub paired: bool,
     pub pairing_in_progress: bool,
     pub paused: bool,
-    pub onboarding_skipped: bool,
+    pub onboarding_dismissed: bool,
     pub device_name: String,
     pub node_id: Option<String>,
     pub computer_id: Option<String>,
@@ -37,9 +37,9 @@ fn read_paused(state: &AppState) -> Result<bool, AppError> {
     Ok(db.this_mac_paused()?)
 }
 
-fn read_onboarding_skipped(state: &AppState) -> Result<bool, AppError> {
+fn read_onboarding_dismissed(state: &AppState) -> Result<bool, AppError> {
     let db = state.db.lock();
-    Ok(db.this_mac_onboarding_skipped()?)
+    Ok(db.this_mac_onboarding_dismissed()?)
 }
 
 fn base_status(
@@ -48,14 +48,14 @@ fn base_status(
     paired: bool,
     pairing_in_progress: bool,
     paused: bool,
-    onboarding_skipped: bool,
+    onboarding_dismissed: bool,
 ) -> ThisMacStatus {
     ThisMacStatus {
         phase,
         paired,
         pairing_in_progress,
         paused,
-        onboarding_skipped,
+        onboarding_dismissed,
         device_name: local_mac_device_name(),
         node_id: pairing.node_id.clone(),
         computer_id: pairing.computer_id.clone(),
@@ -67,7 +67,7 @@ pub fn status_from_parts(
     pairing: &ElsewherePairingStatus,
     paused: bool,
     reconnecting: bool,
-    onboarding_skipped: bool,
+    onboarding_dismissed: bool,
 ) -> ThisMacStatus {
     let paired = pairing.connected;
     if paused {
@@ -77,7 +77,7 @@ pub fn status_from_parts(
             paired,
             pairing.pairing,
             true,
-            onboarding_skipped,
+            onboarding_dismissed,
         );
     }
     if pairing.reauth_required {
@@ -87,7 +87,7 @@ pub fn status_from_parts(
             paired,
             pairing.pairing,
             false,
-            onboarding_skipped,
+            onboarding_dismissed,
         );
     }
     if pairing.pairing {
@@ -97,7 +97,7 @@ pub fn status_from_parts(
             paired,
             true,
             false,
-            onboarding_skipped,
+            onboarding_dismissed,
         );
     }
     if pairing.live_session {
@@ -107,7 +107,7 @@ pub fn status_from_parts(
             paired,
             false,
             false,
-            onboarding_skipped,
+            onboarding_dismissed,
         );
     }
     if pairing.connected {
@@ -116,7 +116,7 @@ pub fn status_from_parts(
         } else {
             ThisMacPhase::Connected
         };
-        return base_status(pairing, phase, true, false, false, onboarding_skipped);
+        return base_status(pairing, phase, true, false, false, onboarding_dismissed);
     }
     let phase = if reconnecting {
         ThisMacPhase::Reconnecting
@@ -125,15 +125,15 @@ pub fn status_from_parts(
     } else {
         ThisMacPhase::Disconnected
     };
-    base_status(pairing, phase, paired, false, false, onboarding_skipped)
+    base_status(pairing, phase, paired, false, false, onboarding_dismissed)
 }
 
 pub fn this_mac_status_snapshot(state: &AppState) -> Result<ThisMacStatus, AppError> {
     let pairing = crate::commands::elsewhere::pairing_status_snapshot(state)?;
     let paused = read_paused(state)?;
     let reconnecting = host_link_reconnecting(state);
-    let onboarding_skipped = read_onboarding_skipped(state)?;
-    Ok(status_from_parts(&pairing, paused, reconnecting, onboarding_skipped))
+    let onboarding_dismissed = read_onboarding_dismissed(state)?;
+    Ok(status_from_parts(&pairing, paused, reconnecting, onboarding_dismissed))
 }
 
 #[tauri::command]
@@ -169,19 +169,19 @@ pub async fn start_this_mac_pairing(
     state: State<'_, AppState>,
 ) -> Result<ThisMacStatus, AppError> {
     let paused = read_paused(&state)?;
-    let onboarding_skipped = read_onboarding_skipped(&state)?;
+    let onboarding_dismissed = read_onboarding_dismissed(&state)?;
     let pairing = start_elsewhere_pairing(app, state).await?;
-    Ok(status_from_parts(&pairing, paused, false, onboarding_skipped))
+    Ok(status_from_parts(&pairing, paused, false, onboarding_dismissed))
 }
 
 #[tauri::command]
-pub fn set_this_mac_onboarding_skipped(
+pub fn set_this_mac_onboarding_dismissed(
     state: State<AppState>,
-    skipped: bool,
+    dismissed: bool,
 ) -> Result<ThisMacStatus, AppError> {
     {
         let db = state.db.lock();
-        db.set_this_mac_onboarding_skipped(skipped)?;
+        db.set_this_mac_onboarding_dismissed(dismissed)?;
     }
     get_this_mac_status(state)
 }

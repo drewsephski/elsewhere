@@ -94,7 +94,7 @@ describe("selectUsableComputer", () => {
           paired: true,
           pairingInProgress: false,
           paused: false,
-          onboardingSkipped: false,
+          onboardingDismissed: false,
           deviceName: "Mac",
           nodeId: "n",
           computerId: "mac_1",

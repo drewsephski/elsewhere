@@ -16,7 +16,33 @@ export interface DesktopOnboardingContext {
   thisMac: ThisMacStatusSnapshot | null;
 }
 
-/** First-run This Mac overlay — not the generic Computers admin page. */
+export interface DesktopOnboardingOverlayOptions {
+  /** User tapped Connect this Mac in the current UI session. */
+  pairingFlowActive: boolean;
+}
+
+/**
+ * Whether the first-run This Mac overlay should be visible.
+ * Pairing flow stays open via `pairingFlowActive`, not via `phase === live`.
+ */
+export function shouldShowDesktopOnboardingOverlay(
+  ctx: DesktopOnboardingContext,
+  options: DesktopOnboardingOverlayOptions,
+): boolean {
+  if (!ctx.isDesktopShell || !ctx.hasSession || !ctx.thisMacReady) {
+    return false;
+  }
+  const mac = ctx.thisMac;
+  if (mac?.onboardingDismissed) {
+    return false;
+  }
+  if (options.pairingFlowActive) {
+    return true;
+  }
+  return shouldShowThisMacOnboarding(ctx);
+}
+
+/** Automatic first-run presentation only (not active pairing flow). */
 export function shouldShowThisMacOnboarding(
   ctx: DesktopOnboardingContext,
 ): boolean {
@@ -30,7 +56,7 @@ export function shouldShowThisMacOnboarding(
     return false;
   }
   const mac = ctx.thisMac;
-  if (!mac || mac.onboardingSkipped || mac.paired || mac.pairingInProgress) {
+  if (!mac || mac.onboardingDismissed || mac.paired || mac.pairingInProgress) {
     return false;
   }
   if (mac.phase === "reauth" || mac.phase === "reconnecting") {

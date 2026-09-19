@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   desktopOnboardingRedirect,
   resolveDesktopOnboardingStep,
+  shouldShowDesktopOnboardingOverlay,
   shouldShowThisMacOnboarding,
 } from "./desktop-onboarding";
 
@@ -10,24 +11,29 @@ const baseMac = {
   paired: false,
   pairingInProgress: false,
   paused: false,
-  onboardingSkipped: false,
+  onboardingDismissed: false,
   deviceName: "Drew's MacBook Air",
   nodeId: null,
   computerId: null,
   userCode: null,
 };
 
+const baseCtx = {
+  isDesktopShell: true,
+  hasSession: true,
+  pathname: "/app",
+  botCount: 0,
+  workspaceReady: true,
+  thisMacReady: true,
+  thisMac: baseMac,
+};
+
 describe("shouldShowThisMacOnboarding", () => {
   it("does not show for browser", () => {
     expect(
       shouldShowThisMacOnboarding({
+        ...baseCtx,
         isDesktopShell: false,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
-        thisMac: baseMac,
       }),
     ).toBe(false);
   });
@@ -35,42 +41,112 @@ describe("shouldShowThisMacOnboarding", () => {
   it("does not interrupt users who already have bots", () => {
     expect(
       shouldShowThisMacOnboarding({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
+        ...baseCtx,
         botCount: 2,
-        workspaceReady: true,
-        thisMacReady: true,
-        thisMac: baseMac,
       }),
     ).toBe(false);
   });
 
   it("shows for first-run unpaired desktop users", () => {
+    expect(shouldShowThisMacOnboarding(baseCtx)).toBe(true);
+  });
+
+  it("respects onboarding dismissed", () => {
     expect(
       shouldShowThisMacOnboarding({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
-        thisMac: baseMac,
+        ...baseCtx,
+        thisMac: { ...baseMac, onboardingDismissed: true },
       }),
+    ).toBe(false);
+  });
+
+  it("does not show for reconnecting previously paired mac", () => {
+    expect(
+      shouldShowThisMacOnboarding({
+        ...baseCtx,
+        thisMac: {
+          ...baseMac,
+          paired: true,
+          phase: "reconnecting",
+        },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldShowDesktopOnboardingOverlay", () => {
+  it("fresh first run: unpaired, no bots, not dismissed → overlay", () => {
+    expect(
+      shouldShowDesktopOnboardingOverlay(baseCtx, { pairingFlowActive: false }),
     ).toBe(true);
   });
 
-  it("respects onboarding skipped", () => {
+  it("active pairing: pairingFlowActive keeps overlay through live", () => {
+    const liveMac = {
+      ...baseMac,
+      phase: "live" as const,
+      paired: true,
+      computerId: "c1",
+    };
     expect(
-      shouldShowThisMacOnboarding({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
-        thisMac: { ...baseMac, onboardingSkipped: true },
-      }),
+      shouldShowDesktopOnboardingOverlay(
+        { ...baseCtx, thisMac: liveMac },
+        { pairingFlowActive: true },
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowDesktopOnboardingOverlay(
+        { ...baseCtx, thisMac: liveMac },
+        { pairingFlowActive: false },
+      ),
+    ).toBe(false);
+  });
+
+  it("app restart: paired/live + onboarding dismissed → overlay hidden", () => {
+    expect(
+      shouldShowDesktopOnboardingOverlay(
+        {
+          ...baseCtx,
+          thisMac: {
+            ...baseMac,
+            phase: "live",
+            paired: true,
+            computerId: "c1",
+            onboardingDismissed: true,
+          },
+        },
+        { pairingFlowActive: false },
+      ),
+    ).toBe(false);
+  });
+
+  it("existing user: live mac + bots > 0 → overlay hidden", () => {
+    expect(
+      shouldShowDesktopOnboardingOverlay(
+        {
+          ...baseCtx,
+          botCount: 3,
+          thisMac: {
+            ...baseMac,
+            phase: "live",
+            paired: true,
+            computerId: "c1",
+          },
+        },
+        { pairingFlowActive: false },
+      ),
+    ).toBe(false);
+  });
+
+  it("not now: dismissed suppresses automatic overlay", () => {
+    expect(
+      shouldShowDesktopOnboardingOverlay(
+        {
+          ...baseCtx,
+          thisMac: { ...baseMac, onboardingDismissed: true },
+        },
+        { pairingFlowActive: false },
+      ),
     ).toBe(false);
   });
 });
@@ -93,40 +169,21 @@ describe("resolveDesktopOnboardingStep", () => {
   it("steers signed-out users to sign-in", () => {
     expect(
       resolveDesktopOnboardingStep({
-        isDesktopShell: true,
+        ...baseCtx,
         hasSession: false,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
         thisMac: null,
       }),
     ).toBe("sign-in");
   });
 
   it("uses overlay step instead of computers redirect", () => {
-    expect(
-      resolveDesktopOnboardingStep({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
-        thisMac: baseMac,
-      }),
-    ).toBe("this-mac-overlay");
+    expect(resolveDesktopOnboardingStep(baseCtx)).toBe("this-mac-overlay");
   });
 
   it("opens quick start when there are no bots and mac is live", () => {
     expect(
       resolveDesktopOnboardingStep({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: true,
-        thisMacReady: true,
+        ...baseCtx,
         thisMac: {
           ...baseMac,
           phase: "live",
