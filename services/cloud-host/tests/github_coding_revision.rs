@@ -596,6 +596,27 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
         })))
         .mount(&server)
         .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/commits/someone_else_pushed"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "someone_else_pushed",
+            "tree": { "sha": "foreign_tree" },
+            "parents": [{ "sha": PR_HEAD_SHA }]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/trees/foreign_tree"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tree": [{
+                "path": "README.md",
+                "mode": "100644",
+                "type": "blob",
+                "sha": "foreign_blob"
+            }]
+        })))
+        .mount(&server)
+        .await;
 
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
     let secret = test_secret_box();
