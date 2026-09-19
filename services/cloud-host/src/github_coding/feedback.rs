@@ -186,5 +186,5 @@ fn truncate_str(value: &str, max_bytes: usize) -> String {
     while end > 0 && !value.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}…", value[..end])
+    format!("{}…", &value[..end])
 }

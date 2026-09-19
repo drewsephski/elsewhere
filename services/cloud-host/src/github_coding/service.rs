@@ -762,7 +762,8 @@ impl PostgresAgentGithubCoding {
         computer: &dyn AgentComputer,
         args: &Value,
     ) -> Result<Value, GithubCodingError> {
-        let (owner, repo, pr_number) = resolve_pr_target(owner_id, run_id, args, &self.sessions)?;
+        let (owner, repo, pr_number) =
+            resolve_pr_target(owner_id, run_id, args, &self.sessions).await?;
 
         self.connectors
             .assert_repo_authorized(owner_id, &owner, &repo)
@@ -904,7 +905,8 @@ impl PostgresAgentGithubCoding {
         run_id: &str,
         args: &Value,
     ) -> Result<Value, GithubCodingError> {
-        let (owner, repo, pr_number) = resolve_pr_target(owner_id, run_id, args, &self.sessions)?;
+        let (owner, repo, pr_number) =
+            resolve_pr_target(owner_id, run_id, args, &self.sessions).await?;
 
         self.connectors
             .assert_repo_authorized(owner_id, &owner, &repo)
@@ -1219,7 +1221,7 @@ impl PostgresAgentGithubCoding {
     }
 }
 
-fn resolve_pr_target(
+async fn resolve_pr_target(
     owner_id: &str,
     run_id: &str,
     args: &Value,
