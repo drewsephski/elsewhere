@@ -247,7 +247,7 @@ async fn mock_pr_update_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("PATCH"))
-        .and(path_regex(format!(
+        .and(path_regex(&format!(
             r"/repos/acme/demo/git/refs/heads/{}$",
             branch_encoded
         )))
