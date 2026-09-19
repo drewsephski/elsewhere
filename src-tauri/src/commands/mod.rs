@@ -6,6 +6,7 @@ mod conversations;
 mod elsewhere;
 mod messages;
 mod settings;
+mod this_mac;
 mod vm;
 
 #[cfg(target_os = "macos")]
@@ -16,4 +17,5 @@ pub use conversations::*;
 pub use elsewhere::*;
 pub use messages::*;
 pub use settings::*;
+pub use this_mac::*;
 pub use vm::*;

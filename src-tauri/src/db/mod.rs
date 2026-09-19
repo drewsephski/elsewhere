@@ -624,6 +624,14 @@ When information might be outdated, say what you know and what you would verify.
         self.set_meta("elsewhere_computer_id", computer_id)?;
         Ok(())
     }
+
+    pub fn this_mac_paused(&self) -> Result<bool, AppError> {
+        Ok(self.get_meta("this_mac_paused")?.as_deref() == Some("1"))
+    }
+
+    pub fn set_this_mac_paused(&self, paused: bool) -> Result<(), AppError> {
+        self.set_meta("this_mac_paused", if paused { "1" } else { "0" })
+    }
 }
 
 #[cfg(test)]
@@ -885,6 +893,14 @@ mod tests {
             .get_conversation_for_bot(&conv_a.id, &bot_b.id)
             .expect_err("foreign");
         assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn this_mac_pause_round_trips_in_meta() {
+        let db = Database::open_in_memory().expect("db");
+        assert!(!db.this_mac_paused().expect("read"));
+        db.set_this_mac_paused(true).expect("write");
+        assert!(db.this_mac_paused().expect("read"));
     }
 
     #[test]

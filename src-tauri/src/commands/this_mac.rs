@@ -1,0 +1,165 @@
+use crate::commands::elsewhere::{start_elsewhere_pairing, ElsewherePairingStatus};
+use crate::error::AppError;
+use crate::state::AppState;
+use serde::Serialize;
+use tauri::{AppHandle, State};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ThisMacPhase {
+    Disconnected,
+    Connecting,
+    Connected,
+    Live,
+    Offline,
+    Reconnecting,
+    Reauth,
+    Paused,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThisMacStatus {
+    pub phase: ThisMacPhase,
+    pub paired: bool,
+    pub pairing_in_progress: bool,
+    pub paused: bool,
+    pub node_id: Option<String>,
+    pub computer_id: Option<String>,
+    pub user_code: Option<String>,
+}
+
+fn read_paused(state: &AppState) -> Result<bool, AppError> {
+    let db = state.db.lock();
+    Ok(db.this_mac_paused()?)
+}
+
+pub fn status_from_parts(
+    pairing: &ElsewherePairingStatus,
+    paused: bool,
+    reconnecting: bool,
+) -> ThisMacStatus {
+    let paired = pairing.connected;
+    if paused {
+        return ThisMacStatus {
+            phase: ThisMacPhase::Paused,
+            paired,
+            pairing_in_progress: pairing.pairing,
+            paused: true,
+            node_id: pairing.node_id.clone(),
+            computer_id: pairing.computer_id.clone(),
+            user_code: pairing.user_code.clone(),
+        };
+    }
+    if pairing.reauth_required {
+        return ThisMacStatus {
+            phase: ThisMacPhase::Reauth,
+            paired,
+            pairing_in_progress: pairing.pairing,
+            paused: false,
+            node_id: pairing.node_id.clone(),
+            computer_id: pairing.computer_id.clone(),
+            user_code: pairing.user_code.clone(),
+        };
+    }
+    if pairing.pairing {
+        return ThisMacStatus {
+            phase: ThisMacPhase::Connecting,
+            paired,
+            pairing_in_progress: true,
+            paused: false,
+            node_id: pairing.node_id.clone(),
+            computer_id: pairing.computer_id.clone(),
+            user_code: pairing.user_code.clone(),
+        };
+    }
+    if pairing.live_session {
+        return ThisMacStatus {
+            phase: ThisMacPhase::Live,
+            paired,
+            pairing_in_progress: false,
+            paused: false,
+            node_id: pairing.node_id.clone(),
+            computer_id: pairing.computer_id.clone(),
+            user_code: pairing.user_code.clone(),
+        };
+    }
+    if pairing.connected {
+        let phase = if reconnecting {
+            ThisMacPhase::Reconnecting
+        } else {
+            ThisMacPhase::Connected
+        };
+        return ThisMacStatus {
+            phase,
+            paired: true,
+            pairing_in_progress: false,
+            paused: false,
+            node_id: pairing.node_id.clone(),
+            computer_id: pairing.computer_id.clone(),
+            user_code: pairing.user_code.clone(),
+        };
+    }
+    let phase = if reconnecting {
+        ThisMacPhase::Reconnecting
+    } else if paired {
+        ThisMacPhase::Offline
+    } else {
+        ThisMacPhase::Disconnected
+    };
+    ThisMacStatus {
+        phase,
+        paired,
+        pairing_in_progress: false,
+        paused: false,
+        node_id: pairing.node_id.clone(),
+        computer_id: pairing.computer_id.clone(),
+        user_code: pairing.user_code.clone(),
+    }
+}
+
+#[tauri::command]
+pub fn get_this_mac_status(state: State<AppState>) -> Result<ThisMacStatus, AppError> {
+    let pairing = crate::commands::elsewhere::pairing_status_snapshot(&state)?;
+    let paused = read_paused(&state)?;
+    let reconnecting = host_link_reconnecting(&state);
+    Ok(status_from_parts(&pairing, paused, reconnecting))
+}
+
+#[tauri::command]
+pub async fn set_this_mac_paused(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paused: bool,
+) -> Result<ThisMacStatus, AppError> {
+    {
+        let db = state.db.lock();
+        db.set_this_mac_paused(paused)?;
+    }
+    #[cfg(target_os = "macos")]
+    state.host_link.notify_credential_ready();
+    let _ = app;
+    get_this_mac_status(state)
+}
+
+#[tauri::command]
+pub async fn start_this_mac_pairing(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ThisMacStatus, AppError> {
+    let pairing = start_elsewhere_pairing(app, state.clone()).await?;
+    let paused = read_paused(&state)?;
+    Ok(status_from_parts(&pairing, paused, false))
+}
+
+fn host_link_reconnecting(state: &AppState) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        return state.host_link.reconnecting();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = state;
+        false
+    }
+}

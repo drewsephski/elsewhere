@@ -67,17 +67,14 @@ fn local_device_name() -> String {
         .unwrap_or_else(|| "This Mac".into())
 }
 
-#[tauri::command]
-pub fn get_elsewhere_pairing_status(
-    state: State<AppState>,
-) -> Result<ElsewherePairingStatus, AppError> {
+pub fn pairing_status_snapshot(state: &AppState) -> Result<ElsewherePairingStatus, AppError> {
     let identity = {
         let db = state.db.lock();
         db.elsewhere_pairing_identity()?
     };
     let credential = state.secrets.get_elsewhere_device_credential()?;
     let connected = identity.is_some() && credential.is_some();
-    let (live_session, reauth_required) = host_link_flags(&state);
+    let (live_session, reauth_required) = host_link_flags(state);
     Ok(ElsewherePairingStatus {
         connected,
         pairing: false,
@@ -89,6 +86,11 @@ pub fn get_elsewhere_pairing_status(
         live_session,
         reauth_required,
     })
+}
+
+#[tauri::command]
+pub fn get_elsewhere_pairing_status(state: State<AppState>) -> Result<ElsewherePairingStatus, AppError> {
+    pairing_status_snapshot(&state)
 }
 
 #[tauri::command]
@@ -200,6 +202,7 @@ fn host_link_flags(state: &AppState) -> (bool, bool) {
         match state.host_link.state() {
             crate::host_link::HostLinkState::Connected => (true, false),
             crate::host_link::HostLinkState::ReauthRequired => (false, true),
+            crate::host_link::HostLinkState::Paused => (false, false),
             _ => (false, false),
         }
     }

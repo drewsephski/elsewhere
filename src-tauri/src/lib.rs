@@ -2,6 +2,7 @@
 pub mod agent;
 mod commands;
 mod db;
+mod desktop_lifecycle;
 mod error;
 #[cfg(target_os = "macos")]
 mod host_link;
@@ -84,6 +85,8 @@ pub fn run() {
                 let _ = window.set_focus();
             }
 
+            desktop_lifecycle::attach(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -102,6 +105,9 @@ pub fn run() {
             commands::clear_openai_api_key,
             commands::get_elsewhere_pairing_status,
             commands::start_elsewhere_pairing,
+            commands::get_this_mac_status,
+            commands::set_this_mac_paused,
+            commands::start_this_mac_pairing,
             commands::list_openai_models,
             commands::start_chat,
             commands::cancel_chat,
@@ -124,6 +130,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             commands::vm_guest_request,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            desktop_lifecycle::handle_run_event(app, &event);
+        });
 }
