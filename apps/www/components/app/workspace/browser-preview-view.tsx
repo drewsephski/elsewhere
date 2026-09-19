@@ -101,6 +101,7 @@ function PreviewChrome({
   compact,
   className,
   toolbar,
+  addressBar,
   attached,
   viewportClassName,
   variant,
@@ -113,6 +114,7 @@ function PreviewChrome({
   compact?: boolean;
   className?: string;
   toolbar?: ReactNode;
+  addressBar?: ReactNode;
   attached?: boolean;
   viewportClassName?: string;
   variant?: BrowserPreviewVariant;
@@ -136,21 +138,28 @@ function PreviewChrome({
         ) : null}
         <div
           className={cn(
-            "relative w-full overflow-hidden bg-[#111111]",
+            "relative flex w-full flex-col overflow-hidden bg-[#111111]",
             compact ? "aspect-[16/11]" : "min-h-[10rem] aspect-[16/10]",
             humanActive && "ring-1 ring-inset ring-success/35",
             viewportClassName,
           )}
         >
-          {loading && showPlaceholder ? (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
-              <Spinner className="size-4 text-muted-foreground" />
+          {addressBar ? (
+            <div className="relative z-[3] shrink-0 border-b border-white/10 bg-black/45 px-2 py-1">
+              {addressBar}
             </div>
           ) : null}
-          {!frame?.imageDataUrl ? (
-            <BrowserIdleScene enabled={enabled} variant={variant} />
-          ) : null}
-          {children}
+          <div className="relative min-h-0 flex-1">
+            {loading && showPlaceholder ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
+                <Spinner className="size-4 text-muted-foreground" />
+              </div>
+            ) : null}
+            {!frame?.imageDataUrl ? (
+              <BrowserIdleScene enabled={enabled} variant={variant} />
+            ) : null}
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -517,28 +526,6 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
           onTakeControl={() => void humanControl.takeControl()}
           onReturnControl={() => void humanControl.returnControl()}
         />
-        {ctx && humanControl.humanActive ? (
-          <form
-            onSubmit={(event) => void handleNavigate(event)}
-            className="min-w-0 flex-1"
-          >
-            <input
-              value={urlDraft}
-              onChange={(event) => setUrlDraft(event.target.value)}
-              placeholder="Open a URL"
-              className="h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1 font-mono text-[10px] leading-none text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-              aria-label="Navigate browser to URL"
-              disabled={navigateBusy || humanControl.loading}
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-            />
-          </form>
-        ) : (
-          <p className="min-w-0 flex-1 truncate font-mono text-[10px] leading-none text-muted-foreground">
-            {addressLabel}
-          </p>
-        )}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         {isEmbedded && ctx ? (
@@ -566,6 +553,33 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
       </div>
     </>
   );
+
+  const addressBar =
+    ctx && humanControl.humanActive ? (
+      <form
+        onSubmit={(event) => void handleNavigate(event)}
+        className="min-w-0"
+      >
+        <input
+          value={urlDraft}
+          onChange={(event) => setUrlDraft(event.target.value)}
+          placeholder="Open a URL"
+          className="h-6 w-full min-w-0 rounded-md border-0 bg-white/10 px-2 font-mono text-[10px] leading-none text-white/90 outline-none placeholder:text-white/40 focus-visible:ring-2 focus-visible:ring-white/30"
+          aria-label="Navigate browser to URL"
+          disabled={navigateBusy || humanControl.loading}
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+        />
+      </form>
+    ) : (
+      <p
+        className="min-w-0 truncate px-1 font-mono text-[10px] leading-6 text-white/55"
+        title={frame?.url ?? addressLabel}
+      >
+        {addressLabel}
+      </p>
+    );
 
   const dialog = (
     <ComputerPreviewDialog
@@ -601,6 +615,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             variant="floating"
             humanActive={humanControl.humanActive}
             toolbar={sessionToolbar}
+            addressBar={addressBar}
           >
             {liveImage}
             {remoteSurface}
@@ -661,6 +676,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             humanActive={humanControl.humanActive}
             viewportClassName={isWork ? "aspect-[16/10] min-h-[12rem]" : undefined}
             toolbar={sessionToolbar}
+            addressBar={addressBar}
           >
             {liveImage}
             {remoteSurface}

@@ -154,6 +154,15 @@ describe("BrowserPreviewView remote control", () => {
     expect(screen.getByRole("button", { name: "Take control" })).toBeTruthy();
   });
 
+  it("places the current URL under the control row and above the live view", () => {
+    render(<BrowserPreviewView variant="embedded" />);
+    const takeControl = screen.getByRole("button", { name: "Take control" });
+    const url = screen.getByText("example.com");
+    const img = screen.getByRole("img", { name: "Browser: Example" });
+    expect(takeControl.compareDocumentPosition(url) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(url.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("lets the live view take control instead of expanding", () => {
     render(<BrowserPreviewView variant="embedded" />);
     fireEvent.pointerDown(screen.getByRole("application"), { button: 0, clientX: 10, clientY: 10 });
