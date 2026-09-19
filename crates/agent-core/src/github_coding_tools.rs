@@ -286,10 +286,10 @@ mod tests {
 
     #[tokio::test]
     async fn denied_terminal_policy_blocks_run_check() {
-        let inner = RecordingGithubCoding {
+        let recording = Arc::new(RecordingGithubCoding {
             dispatched: std::sync::Mutex::new(false),
-        };
-        let service: Arc<dyn AgentGithubCoding> = Arc::new(inner);
+        });
+        let service: Arc<dyn AgentGithubCoding> = recording.clone();
         let computer = crate::FakeAgentComputer::new();
         let cancel = AtomicBool::new(false);
         let run = ToolRunContext {
@@ -312,16 +312,15 @@ mod tests {
         .await
         .expect_err("denied");
         assert!(matches!(err, ToolError::Denied(_)));
-        let recording = Arc::downcast::<RecordingGithubCoding>(service).expect("recording");
         assert!(!*recording.dispatched.lock().unwrap());
     }
 
     #[tokio::test]
     async fn allowed_policy_executes_run_check() {
-        let inner = RecordingGithubCoding {
+        let recording = Arc::new(RecordingGithubCoding {
             dispatched: std::sync::Mutex::new(false),
-        };
-        let service: Arc<dyn AgentGithubCoding> = Arc::new(inner);
+        });
+        let service: Arc<dyn AgentGithubCoding> = recording.clone();
         let computer = crate::FakeAgentComputer::new();
         let cancel = AtomicBool::new(false);
         let run = ToolRunContext {
@@ -343,7 +342,6 @@ mod tests {
         )
         .await
         .expect("allowed");
-        let recording = Arc::downcast::<RecordingGithubCoding>(service).expect("recording");
         assert!(*recording.dispatched.lock().unwrap());
     }
 }
