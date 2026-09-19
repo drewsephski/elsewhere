@@ -45,6 +45,9 @@ pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
     "github_run_check",
     "github_review_publish",
     "github_publish_pull_request",
+    "github_resume_pull_request",
+    "github_get_pull_request_feedback",
+    "github_update_pull_request",
 ];
 
 pub const CONNECTOR_TOOL_NAMES: &[&str] = &[
@@ -161,6 +164,7 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "skill_attach",
     "skill_detach",
     "github_publish_pull_request",
+    "github_update_pull_request",
 ];
 
 /// Agent tools that must never be skipped by a user-configurable Allow policy.
@@ -235,7 +239,9 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "skill_save_recent_work" | "skill_attach" | "skill_detach" => {
             Some(PolicyActionGroup::Skills)
         }
-        "github_publish_pull_request" => Some(PolicyActionGroup::ConnectedApps),
+        "github_publish_pull_request" | "github_update_pull_request" => {
+            Some(PolicyActionGroup::ConnectedApps)
+        }
         name if is_github_connector_tool(name) || is_connected_apps_tool(name) => {
             Some(PolicyActionGroup::ConnectedApps)
         }
@@ -265,6 +271,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "skill_attach" => "Attach skills",
         "skill_detach" => "Remove skills",
         "github_publish_pull_request" => "Publish to GitHub",
+        "github_update_pull_request" => "Update pull request on GitHub",
         _ => "This action",
     }
 }
@@ -295,6 +302,9 @@ pub fn policy_denied_message(name: &str) -> String {
         "skill_detach" => "This Bot is not allowed to remove skills.".into(),
         "github_publish_pull_request" => {
             "This Bot is not allowed to publish pull requests to GitHub.".into()
+        }
+        "github_update_pull_request" => {
+            "This Bot is not allowed to update pull requests on GitHub.".into()
         }
         other => format!("This Bot is not allowed to use {other}."),
     }
@@ -330,6 +340,9 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_run_check",
     "github_review_publish",
     "github_publish_pull_request",
+    "github_resume_pull_request",
+    "github_get_pull_request_feedback",
+    "github_update_pull_request",
     "connected_apps_search_tools",
     "connected_apps_load_tool",
     "connected_apps_execute_tool",

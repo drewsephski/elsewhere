@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 pub const BRANCH_PREFIX: &str = "elsewhere/";
 
+pub fn is_elsewhere_managed_branch(branch: &str) -> bool {
+    branch.starts_with(BRANCH_PREFIX)
+}
+
 pub fn checkout_root(owner: &str, repo: &str, run_id: &str) -> String {
     let suffix = run_id
         .chars()

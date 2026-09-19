@@ -6,9 +6,10 @@ use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::computer::AgentComputer;
 use crate::approval::MAX_EXEC_COMMAND_CHARS;
 use crate::github_coding::{
-    AgentGithubCoding, GITHUB_OPEN_REPOSITORY_TOOL, GITHUB_PUBLISH_PULL_REQUEST_TOOL,
-    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GithubCodingError,
-    is_github_coding_mutation_tool, is_github_coding_terminal_tool,
+    AgentGithubCoding, GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL, GITHUB_OPEN_REPOSITORY_TOOL,
+    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL,
+    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL,
+    GithubCodingError, is_github_coding_mutation_tool, is_github_coding_terminal_tool,
     requires_github_coding_owner_approval,
 };
 use crate::tool_catalog::is_github_coding_tool;
@@ -81,6 +82,56 @@ pub fn github_coding_openai_tool_definitions() -> Vec<Value> {
                     }
                 },
                 "required": ["title", "body"],
+                "additionalProperties": false
+            },
+            "strict": true
+        }),
+        json!({
+            "type": "function",
+            "name": GITHUB_RESUME_PULL_REQUEST_TOOL,
+            "description": "Resume an open Elsewhere pull request (elsewhere/* branch) into this Bot's workspace at the current PR head commit for review fixes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "owner": { "type": "string" },
+                    "repo": { "type": "string" },
+                    "pullRequestNumber": { "type": "integer" }
+                },
+                "required": ["owner", "repo", "pullRequestNumber"],
+                "additionalProperties": false
+            },
+            "strict": true
+        }),
+        json!({
+            "type": "function",
+            "name": GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL,
+            "description": "Read reviewer comments, reviews, issue discussion, and CI/check status for a pull request (read-only).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "owner": { "type": "string" },
+                    "repo": { "type": "string" },
+                    "pullRequestNumber": { "type": "integer" }
+                },
+                "required": ["owner", "repo", "pullRequestNumber"],
+                "additionalProperties": false
+            },
+            "strict": true
+        }),
+        json!({
+            "type": "function",
+            "name": GITHUB_UPDATE_PULL_REQUEST_TOOL,
+            "description": "After owner approval, push a new commit to the existing PR branch (same pull request). Requires github_resume_pull_request and github_review_publish in this run.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "commitMessage": { "type": "string" },
+                    "publishAnyway": {
+                        "type": "boolean",
+                        "description": "Allow update when recorded checks failed (owner must still approve)."
+                    }
+                },
+                "required": ["commitMessage"],
                 "additionalProperties": false
             },
             "strict": true
@@ -216,7 +267,9 @@ mod tests {
     #[test]
     fn publish_is_only_github_coding_mutation() {
         assert!(is_github_coding_mutation_tool(GITHUB_PUBLISH_PULL_REQUEST_TOOL));
+        assert!(is_github_coding_mutation_tool(GITHUB_UPDATE_PULL_REQUEST_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_OPEN_REPOSITORY_TOOL));
+        assert!(!is_github_coding_mutation_tool(GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_REVIEW_PUBLISH_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_RUN_CHECK_TOOL));
     }

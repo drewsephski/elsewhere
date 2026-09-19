@@ -1,6 +1,7 @@
 pub mod archive;
 pub mod check_evidence;
 mod core;
+pub mod feedback;
 mod publish_snapshot;
 mod session_store;
 mod service;
