@@ -16,8 +16,18 @@ pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
     GITHUB_PUBLISH_PULL_REQUEST_TOOL,
 ];
 
+/// GitHub publish mutation (owner publish approval + fingerprint binding).
 pub fn is_github_coding_mutation_tool(name: &str) -> bool {
     name == GITHUB_PUBLISH_PULL_REQUEST_TOOL
+}
+
+/// Shell check in the repository checkout (Terminal policy, no publish fingerprint hook).
+pub fn is_github_coding_terminal_tool(name: &str) -> bool {
+    name == GITHUB_RUN_CHECK_TOOL
+}
+
+pub fn requires_github_coding_owner_approval(name: &str) -> bool {
+    is_github_coding_mutation_tool(name) || is_github_coding_terminal_tool(name)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

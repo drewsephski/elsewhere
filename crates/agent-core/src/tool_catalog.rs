@@ -144,6 +144,7 @@ pub fn is_connected_apps_execute_tool(name: &str) -> bool {
 pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "workspace_write",
     "workspace_exec",
+    "github_run_check",
     "browser_navigate",
     "browser_click",
     "browser_type",
@@ -246,6 +247,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
     match name {
         "workspace_write" => "Write files",
         "workspace_exec" => "Run commands",
+        "github_run_check" => "Run checks",
         "browser_navigate" => "Open pages",
         "browser_click" => "Click",
         "browser_type" => "Type",
@@ -270,7 +272,9 @@ pub fn policy_action_label(name: &str) -> &'static str {
 pub fn policy_denied_message(name: &str) -> String {
     match name {
         "workspace_write" => "This Bot is not allowed to write files.".into(),
-        "workspace_exec" => "This Bot is not allowed to run terminal commands.".into(),
+        "workspace_exec" | "github_run_check" => {
+            "This Bot is not allowed to run terminal commands.".into()
+        }
         "browser_navigate" => "This Bot is not allowed to open web pages.".into(),
         "browser_click" => "This Bot is not allowed to click in the browser.".into(),
         "browser_type" => "This Bot is not allowed to type in the browser.".into(),
@@ -323,6 +327,7 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "github_list_pull_requests",
     "github_get_pull_request",
     "github_open_repository",
+    "github_run_check",
     "github_review_publish",
     "github_publish_pull_request",
     "connected_apps_search_tools",

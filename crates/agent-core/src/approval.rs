@@ -148,7 +148,10 @@ pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
         name if is_user_question_tool(name) => ToolOperationKind::Read,
         name if is_attachment_tool(name) => ToolOperationKind::Read,
         name if is_github_connector_tool(name) => ToolOperationKind::Read,
-        name if is_github_coding_tool(name) && !is_github_coding_mutation_tool(name) => {
+        name if is_github_coding_tool(name)
+            && !is_github_coding_mutation_tool(name)
+            && !crate::github_coding::is_github_coding_terminal_tool(name) =>
+        {
             ToolOperationKind::Read
         }
         name if is_github_coding_mutation_tool(name) => ToolOperationKind::Mutation,
@@ -681,6 +684,14 @@ mod tests {
         assert_eq!(
             operation_kind_for_tool("forget_memory"),
             ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("github_run_check"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            operation_kind_for_tool("github_open_repository"),
+            ToolOperationKind::Read
         );
     }
 

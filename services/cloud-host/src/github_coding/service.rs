@@ -3,6 +3,7 @@ use std::sync::Arc;
 use agent_core::{
     AgentComputer, AgentGithubCoding, ComputerError, GithubCodingError, GITHUB_OPEN_REPOSITORY_TOOL,
     GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL,
+    MAX_EXEC_COMMAND_CHARS,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -15,7 +16,9 @@ use crate::github_coding::check_evidence::{
     reject_forged_check_fields, verify_check_commands_for_review, CertifiedCheck, VerifiedCheck,
 };
 use crate::github_coding::core::{checkout_root, path_within_checkout, sanitize_task_slug, working_branch};
-use crate::github_coding::publish_snapshot::PreparedPublish;
+use crate::github_coding::publish_snapshot::{
+    PreparedPublish, validate_prepared_publish_limits,
+};
 use crate::github_coding::session_store::{CodingSessionRow, SessionStore};
 use crate::github_coding::workspace_git::{
     assert_git_available, collect_publish_changes, init_baseline_repo, reset_checkout_dir,
@@ -28,6 +31,8 @@ const FILES_CHANGED_MSG: &str =
     "Files changed after review. Review the updated changes before publishing.";
 const BASE_DRIFT_MSG: &str =
     "The repository changed on GitHub while you were working. Refresh the repository and reapply/review the changes before publishing.";
+const BRANCH_COLLISION_MSG: &str =
+    "working branch already exists for another Elsewhere change";
 
 pub struct PostgresAgentGithubCoding {
     connectors: Arc<PostgresAgentConnectors>,
@@ -300,10 +305,20 @@ impl PostgresAgentGithubCoding {
         args: &Value,
     ) -> Result<Value, GithubCodingError> {
         let command = required_str(args, "command")?;
+        if command.len() > MAX_EXEC_COMMAND_CHARS {
+            return Err(GithubCodingError::Validation(format!(
+                "command exceeds {MAX_EXEC_COMMAND_CHARS} characters"
+            )));
+        }
         let session = self.require_session(owner_id, run_id).await?;
         let prepared_before = self.build_prepared_publish(&session, computer).await?;
+        let exec_command = format!(
+            "cd {} && {}",
+            shell_quote(&session.checkout_path),
+            command
+        );
         let result = computer
-            .exec(&command)
+            .exec(&exec_command)
             .await
             .map_err(map_computer_error)?;
         let prepared_after = self.build_prepared_publish(&session, computer).await?;
@@ -467,6 +482,8 @@ impl PostgresAgentGithubCoding {
             ));
         }
 
+        let tree_changes = to_github_tree_changes(&prepared.changes);
+
         if let Some(existing) = self
             .github
             .find_open_pull_for_head(
@@ -478,14 +495,24 @@ impl PostgresAgentGithubCoding {
             .await
             .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?
         {
-            let number = existing.get("number").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
-            let url = existing
-                .get("html_url")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
+            let adopted = self
+                .verify_and_adopt_existing_pull(
+                    &session,
+                    &prepared,
+                    &tree_changes,
+                    &token,
+                    &existing,
+                )
+                .await?;
             self.sessions
-                .update_publish_state(owner_id, run_id, "pull_request_opened", None, Some(number), Some(&url))
+                .update_publish_state(
+                    owner_id,
+                    run_id,
+                    "pull_request_opened",
+                    Some(&adopted.commit_sha),
+                    Some(adopted.number),
+                    Some(&adopted.url),
+                )
                 .await?;
             return Ok(json!({
                 "ok": true,
@@ -493,29 +520,28 @@ impl PostgresAgentGithubCoding {
                 "repository": session.full_name,
                 "branch": session.working_branch,
                 "baseBranch": session.base_branch,
-                "pullRequest": { "number": number, "url": url },
+                "commitSha": adopted.commit_sha,
+                "pullRequest": { "number": adopted.number, "url": adopted.url },
                 "phase": "pull_request_opened"
             }));
         }
 
         if let Some(url) = session.pr_url.as_ref() {
-            if session.pr_number.is_some() {
-                return Ok(json!({
-                    "ok": true,
-                    "alreadyExisted": true,
-                    "repository": session.full_name,
-                    "branch": session.working_branch,
-                    "baseBranch": session.base_branch,
-                    "pullRequest": {
-                        "number": session.pr_number,
-                        "url": url
-                    },
-                    "phase": "pull_request_opened"
-                }));
+            if let Some(number) = session.pr_number {
+                if let Some(commit_sha) = session.publish_commit_sha.as_deref() {
+                    return Ok(json!({
+                        "ok": true,
+                        "alreadyExisted": true,
+                        "repository": session.full_name,
+                        "branch": session.working_branch,
+                        "baseBranch": session.base_branch,
+                        "commitSha": commit_sha,
+                        "pullRequest": { "number": number, "url": url },
+                        "phase": "pull_request_opened"
+                    }));
+                }
             }
         }
-
-        let tree_changes = to_github_tree_changes(&prepared.changes);
         let commit_message = format!("{title}\n\n{body}");
         let expected_commit = session.publish_commit_sha.as_deref();
 
@@ -608,10 +634,65 @@ impl PostgresAgentGithubCoding {
             &session.local_baseline_commit_sha,
         )
         .await?;
-        Ok(PreparedPublish::from_changes(
+        let prepared = PreparedPublish::from_changes(
             &session.local_baseline_commit_sha,
             changes,
-        ))
+        );
+        validate_prepared_publish_limits(&prepared.changes)?;
+        Ok(prepared)
+    }
+
+    async fn verify_and_adopt_existing_pull(
+        &self,
+        session: &CodingSessionRow,
+        _prepared: &PreparedPublish,
+        tree_changes: &[GitHubTreeChange],
+        token: &str,
+        existing_pr: &Value,
+    ) -> Result<AdoptedPullRequest, GithubCodingError> {
+        let number = existing_pr
+            .get("number")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as i64;
+        let url = existing_pr
+            .get("html_url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let head_sha = self
+            .github
+            .ref_head_sha(
+                token,
+                &session.repo_owner,
+                &session.repo_name,
+                &session.working_branch,
+            )
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?
+            .ok_or_else(|| GithubCodingError::Provider(BRANCH_COLLISION_MSG.into()))?;
+        let verified = if session.publish_commit_sha.as_deref() == Some(head_sha.as_str()) {
+            true
+        } else {
+            self.github
+                .commit_matches_prepared_changes(
+                    token,
+                    &session.repo_owner,
+                    &session.repo_name,
+                    &head_sha,
+                    &session.opened_base_commit_sha,
+                    tree_changes,
+                )
+                .await
+                .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?
+        };
+        if !verified {
+            return Err(GithubCodingError::Provider(BRANCH_COLLISION_MSG.into()));
+        }
+        Ok(AdoptedPullRequest {
+            number,
+            url,
+            commit_sha: head_sha,
+        })
     }
 
     async fn require_session(
@@ -626,6 +707,12 @@ impl PostgresAgentGithubCoding {
                 "Open a repository with github_open_repository first.".into(),
             ))
     }
+}
+
+struct AdoptedPullRequest {
+    number: i64,
+    url: String,
+    commit_sha: String,
 }
 
 fn parse_check_commands(args: &Value) -> Result<Vec<String>, GithubCodingError> {

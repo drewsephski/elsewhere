@@ -1310,3 +1310,280 @@ async fn github_coding_adopts_existing_branch_when_db_lags(pool: PgPool) {
         "must not create a new tree when branch already matches"
     );
 }
+
+async fn mock_verified_remote_branch(
+    server: &MockServer,
+    working_branch: &str,
+    tree_blob_sha: &str,
+) {
+    let branch_encoded = urlencoding::encode(working_branch);
+    Mock::given(method("GET"))
+        .and(path_regex(format!(
+            r"/repos/acme/demo/git/ref/heads/{}$",
+            branch_encoded
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "object": { "sha": "commit_sha_1" }
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/commits/commit_sha_1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "commit_sha_1",
+            "parents": [{ "sha": "base_sha_abc123" }],
+            "tree": { "sha": "tree_on_branch" }
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": "tree_on_branch",
+            "tree": [{
+                "path": "README.md",
+                "mode": "100644",
+                "type": "blob",
+                "sha": tree_blob_sha
+            }]
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path_regex(r"/repos/acme/demo/git/blobs"))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "blob_sha_1" })))
+        .mount(server)
+        .await;
+}
+
+async fn mock_open_pull_for_branch(server: &MockServer, working_branch: &str, number: u64) {
+    Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/pulls(\?.*)?$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+            "number": number,
+            "html_url": format!("https://github.com/acme/demo/pull/{}", number),
+            "head": { "ref": working_branch }
+        }])))
+        .mount(server)
+        .await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_adopts_verified_open_pull(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-pr-adopt");
+    mock_open_pull_for_branch(&server, &working_branch, 77).await;
+    mock_verified_remote_branch(&server, &working_branch, "blob_sha_1").await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-pr-adopt".into(),
+        request_id: "req-pr-adopt".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(&demo_readme_path("run-pr-adopt"), b"Hello from Elsewhere")
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+    let published = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello from Elsewhere"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("adopt verified pr");
+    assert_eq!(
+        published
+            .get("pullRequest")
+            .and_then(|v| v.get("number"))
+            .and_then(|v| v.as_u64()),
+        Some(77)
+    );
+    assert_eq!(
+        published.get("alreadyExisted").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_rejects_unverified_open_pull(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-pr-bad");
+    mock_open_pull_for_branch(&server, &working_branch, 88).await;
+    mock_verified_remote_branch(&server, &working_branch, "blob_sha_wrong").await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-pr-bad".into(),
+        request_id: "req-pr-bad".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("open");
+    computer
+        .write_file(&demo_readme_path("run-pr-bad"), b"Hello from Elsewhere")
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Fix README","body":"Hello from Elsewhere"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("unverified pr");
+    assert!(
+        err.message().contains("another Elsewhere change"),
+        "unexpected: {}",
+        err.message()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_coding_run_check_requires_approval(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-check-deny".into(),
+        request_id: "req-check-deny".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot-1".into(),
+        computer_id: "comp-1".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &AllowAllApprovalGate,
+        &run,
+    )
+    .await
+    .expect("open");
+    struct DenyGate;
+    #[async_trait]
+    impl agent_core::ToolApprovalGate for DenyGate {
+        async fn authorize(
+            &self,
+            _context: &agent_core::ToolApprovalContext,
+        ) -> Result<agent_core::ApprovalDecision, agent_core::ApprovalError> {
+            Ok(agent_core::ApprovalDecision::Deny {
+                reason: "terminal denied".into(),
+            })
+        }
+    }
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_run_check",
+        r#"{"command":"true"}"#,
+        &cancel,
+        &DenyGate,
+        &run,
+    )
+    .await
+    .expect_err("denied check");
+    assert!(matches!(err, agent_core::ToolError::Denied(_)));
+}

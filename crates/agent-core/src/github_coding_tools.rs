@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use crate::approval::{ToolApprovalContext, ToolApprovalGate, ToolRunContext};
 use crate::computer::AgentComputer;
+use crate::approval::MAX_EXEC_COMMAND_CHARS;
 use crate::github_coding::{
     AgentGithubCoding, GITHUB_OPEN_REPOSITORY_TOOL, GITHUB_PUBLISH_PULL_REQUEST_TOOL,
     GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GithubCodingError,
-    is_github_coding_mutation_tool,
+    is_github_coding_mutation_tool, is_github_coding_terminal_tool,
+    requires_github_coding_owner_approval,
 };
 use crate::tool_catalog::is_github_coding_tool;
 use crate::tools::ToolError;
@@ -111,7 +113,9 @@ pub async fn dispatch_github_coding_tool(
     let args: Value = serde_json::from_str(arguments)
         .map_err(|e| ToolError::MalformedArguments(format!("invalid JSON arguments: {e}")))?;
 
-    if is_github_coding_mutation_tool(name) {
+    validate_github_coding_argument_limits(name, &args)?;
+
+    if requires_github_coding_owner_approval(name) {
         let approval_args = service
             .approval_arguments(&run.owner_id, &run.run_id, computer, name, &args)
             .await
@@ -121,12 +125,14 @@ pub async fn dispatch_github_coding_tool(
         if cancel.load(Ordering::Relaxed) {
             return Err(ToolError::Cancelled);
         }
-        service
-            .confirm_publish_approval(&run.owner_id, &run.run_id, computer)
-            .await
-            .map_err(map_github_coding_error)?;
-        if cancel.load(Ordering::Relaxed) {
-            return Err(ToolError::Cancelled);
+        if is_github_coding_mutation_tool(name) {
+            service
+                .confirm_publish_approval(&run.owner_id, &run.run_id, computer)
+                .await
+                .map_err(map_github_coding_error)?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(ToolError::Cancelled);
+            }
         }
     }
 
@@ -170,6 +176,18 @@ fn map_github_coding_error(err: GithubCodingError) -> ToolError {
     }
 }
 
+fn validate_github_coding_argument_limits(name: &str, args: &Value) -> Result<(), ToolError> {
+    if name == GITHUB_RUN_CHECK_TOOL {
+        let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("");
+        if command.len() > MAX_EXEC_COMMAND_CHARS {
+            return Err(ToolError::MalformedArguments(format!(
+                "command exceeds {MAX_EXEC_COMMAND_CHARS} characters"
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn with_tool_name(value: Value, name: &str) -> Value {
     match value {
         Value::Object(mut map) => {
@@ -183,13 +201,149 @@ fn with_tool_name(value: Value, name: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::github_coding::is_github_coding_mutation_tool;
+    use crate::approval::{
+        operation_kind_for_tool, AllowAllApprovalGate, ApprovalDecision, ToolApprovalContext,
+        ToolOperationKind,
+    };
+    use crate::github_coding::{
+        is_github_coding_mutation_tool, is_github_coding_terminal_tool,
+        requires_github_coding_owner_approval,
+    };
+    use crate::tool_catalog::{ALL_AGENT_TOOL_NAMES, policy_action_group, PolicyActionGroup};
+    use async_trait::async_trait;
+    use std::sync::Arc;
 
     #[test]
-    fn publish_is_only_mutation() {
+    fn publish_is_only_github_coding_mutation() {
         assert!(is_github_coding_mutation_tool(GITHUB_PUBLISH_PULL_REQUEST_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_OPEN_REPOSITORY_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_REVIEW_PUBLISH_TOOL));
         assert!(!is_github_coding_mutation_tool(GITHUB_RUN_CHECK_TOOL));
+    }
+
+    #[test]
+    fn run_check_is_terminal_tool_requiring_approval() {
+        assert!(is_github_coding_terminal_tool(GITHUB_RUN_CHECK_TOOL));
+        assert!(requires_github_coding_owner_approval(GITHUB_RUN_CHECK_TOOL));
+        assert!(!is_github_coding_mutation_tool(GITHUB_RUN_CHECK_TOOL));
+        assert_eq!(
+            operation_kind_for_tool(GITHUB_RUN_CHECK_TOOL),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            policy_action_group(GITHUB_RUN_CHECK_TOOL),
+            Some(PolicyActionGroup::Terminal)
+        );
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&GITHUB_RUN_CHECK_TOOL));
+    }
+
+    #[test]
+    fn overlong_run_check_command_rejected() {
+        let long = "a".repeat(MAX_EXEC_COMMAND_CHARS + 1);
+        let err = validate_github_coding_argument_limits(
+            GITHUB_RUN_CHECK_TOOL,
+            &json!({ "command": long }),
+        )
+        .expect_err("long");
+        assert!(err.message().contains("exceeds"));
+    }
+
+    struct RecordingGithubCoding {
+        dispatched: std::sync::Mutex<bool>,
+    }
+
+    #[async_trait]
+    impl AgentGithubCoding for RecordingGithubCoding {
+        async fn dispatch_tool(
+            &self,
+            _owner_id: &str,
+            _run_id: &str,
+            _request_id: &str,
+            _computer_id: &str,
+            _computer: &dyn AgentComputer,
+            tool_name: &str,
+            _arguments: &Value,
+        ) -> Result<Value, GithubCodingError> {
+            assert_eq!(tool_name, GITHUB_RUN_CHECK_TOOL);
+            *self.dispatched.lock().unwrap() = true;
+            Ok(json!({ "ok": true }))
+        }
+    }
+
+    struct DenyGate;
+
+    #[async_trait]
+    impl ToolApprovalGate for DenyGate {
+        async fn authorize(
+            &self,
+            _context: &ToolApprovalContext,
+        ) -> Result<ApprovalDecision, crate::approval::ApprovalError> {
+            Ok(ApprovalDecision::Deny {
+                reason: "terminal denied".into(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn denied_terminal_policy_blocks_run_check() {
+        let inner = RecordingGithubCoding {
+            dispatched: std::sync::Mutex::new(false),
+        };
+        let service: Arc<dyn AgentGithubCoding> = Arc::new(inner);
+        let computer = crate::FakeAgentComputer::new();
+        let cancel = AtomicBool::new(false);
+        let run = ToolRunContext {
+            run_id: "run".into(),
+            request_id: "req".into(),
+            owner_id: "owner".into(),
+            bot_id: "bot".into(),
+            computer_id: "comp".into(),
+            tool_invocation_id: None,
+        };
+        let err = dispatch_github_coding_tool(
+            Some(&service),
+            &computer,
+            GITHUB_RUN_CHECK_TOOL,
+            r#"{"command":"true"}"#,
+            &cancel,
+            &DenyGate,
+            &run,
+        )
+        .await
+        .expect_err("denied");
+        assert!(matches!(err, ToolError::Denied(_)));
+        let recording = Arc::downcast::<RecordingGithubCoding>(service).expect("recording");
+        assert!(!*recording.dispatched.lock().unwrap());
+    }
+
+    #[tokio::test]
+    async fn allowed_policy_executes_run_check() {
+        let inner = RecordingGithubCoding {
+            dispatched: std::sync::Mutex::new(false),
+        };
+        let service: Arc<dyn AgentGithubCoding> = Arc::new(inner);
+        let computer = crate::FakeAgentComputer::new();
+        let cancel = AtomicBool::new(false);
+        let run = ToolRunContext {
+            run_id: "run".into(),
+            request_id: "req".into(),
+            owner_id: "owner".into(),
+            bot_id: "bot".into(),
+            computer_id: "comp".into(),
+            tool_invocation_id: None,
+        };
+        dispatch_github_coding_tool(
+            Some(&service),
+            &computer,
+            GITHUB_RUN_CHECK_TOOL,
+            r#"{"command":"true"}"#,
+            &cancel,
+            &AllowAllApprovalGate,
+            &run,
+        )
+        .await
+        .expect("allowed");
+        let recording = Arc::downcast::<RecordingGithubCoding>(service).expect("recording");
+        assert!(*recording.dispatched.lock().unwrap());
     }
 }

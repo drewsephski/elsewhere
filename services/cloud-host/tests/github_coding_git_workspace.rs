@@ -20,6 +20,21 @@ async fn baseline_checkout(computer: &ShellWorkspaceComputer, suffix: &str) -> (
 }
 
 #[tokio::test]
+#[tokio::test]
+async fn run_check_executes_from_repository_checkout() {
+    let computer = ShellWorkspaceComputer::new();
+    let (checkout, _baseline) = baseline_checkout(&computer, "cwd").await;
+    let exec_command = format!(
+        "cd {} && test -f README.md",
+        checkout.replace('\'', "'\\''")
+    );
+    let result = computer.exec(&exec_command).await.unwrap();
+    assert!(result.ok, "README should exist in checkout: {}", result.stderr);
+    let root = computer.exec("test -f README.md").await.unwrap();
+    assert!(!root.ok, "README must not exist at generic workspace root");
+}
+
+#[tokio::test]
 async fn baseline_diff_modified_tracked_file() {
     let computer = ShellWorkspaceComputer::new();
     let (checkout, baseline) = baseline_checkout(&computer, "mod").await;

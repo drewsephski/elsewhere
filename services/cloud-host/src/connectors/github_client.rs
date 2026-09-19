@@ -532,7 +532,7 @@ impl GitHubClient {
         Ok(commit_sha.to_string())
     }
 
-    async fn commit_matches_prepared_changes(
+    pub async fn commit_matches_prepared_changes(
         &self,
         token: &str,
         owner: &str,
