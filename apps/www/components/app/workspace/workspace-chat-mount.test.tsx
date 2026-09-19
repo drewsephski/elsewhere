@@ -87,6 +87,20 @@ vi.mock("@/hooks/use-provider-status", () => ({
 
 vi.mock("@/lib/cloud-api", () => ({
   cloudHostFetch: vi.fn(async (path: string) => {
+    if (String(path).includes("/onboarding/dismiss")) {
+      return {
+        ok: true,
+        json: async () => ({
+          botId: "bot_1",
+          status: "dismissed",
+          questionsAsked: 0,
+          maxQuestions: 3,
+          revision: 1,
+          answers: [],
+          generationModel: "gpt-5.6-luna",
+        }),
+      };
+    }
     if (String(path).includes("/onboarding")) {
       return {
         ok: true,
@@ -180,6 +194,9 @@ describe("workspace chat mount", () => {
     expect(screen.getByRole("button", { name: "Collapse sidebar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Hide details" })).toBeNull();
     expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(await screen.findByText(/Scout is ready/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "What can you take on?" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
     const starter = await screen.findByRole("button", { name: "What can you take on?" });
     fireEvent.click(starter);
     expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toContain(
@@ -255,5 +272,7 @@ describe("workspace chat mount", () => {
     expect(await screen.findByText(/Scout is ready/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "What can you take on?" })).toBeNull();
+    expect(screen.queryByText("What should Scout work on?")).toBeNull();
   });
 });

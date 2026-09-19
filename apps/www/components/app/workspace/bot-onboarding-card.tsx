@@ -23,6 +23,7 @@ interface BotOnboardingCardProps {
   failedRunTakesPriority?: boolean;
   conversationEmpty?: boolean;
   onApplied?: () => void;
+  children?: ReactNode;
 }
 
 async function readOnboarding(response: Response, fallback: string): Promise<BotOnboardingState> {
@@ -45,6 +46,7 @@ export function BotOnboardingCard({
   failedRunTakesPriority = false,
   conversationEmpty = false,
   onApplied,
+  children,
 }: BotOnboardingCardProps) {
   const [state, setState] = useState<BotOnboardingState | null>(null);
   const [pending, setPending] = useState(false);
@@ -183,11 +185,17 @@ export function BotOnboardingCard({
   }
 
   if (!state) {
-    return error ? (
-      <p className="text-[12px] text-destructive" role="alert">
-        {error}
-      </p>
-    ) : null;
+    if (error) {
+      return (
+        <>
+          <p className="text-[12px] text-destructive" role="alert">
+            {error}
+          </p>
+          {children}
+        </>
+      );
+    }
+    return null;
   }
 
   const active =
@@ -218,20 +226,23 @@ export function BotOnboardingCard({
   }
 
   if (state.status === "completed" || (state.status === "dismissed" && !quietOffer)) {
-    return null;
+    return children ?? null;
   }
 
   if (quietOffer || collapsed) {
     return (
-      <div className="flex justify-center">
-        <button
-          type="button"
-          className="text-[12px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          onClick={() => void handleStart(state.status !== "in_progress")}
-        >
-          Finish setting up {botName}
-        </button>
-      </div>
+      <>
+        <div className="flex justify-center">
+          <button
+            type="button"
+            className="text-[12px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => void handleStart(state.status !== "in_progress")}
+          >
+            Finish setting up {botName}
+          </button>
+        </div>
+        {children}
+      </>
     );
   }
 
@@ -342,7 +353,7 @@ export function BotOnboardingCard({
   const customValue = customByQuestion[question.id] ?? "";
 
   return (
-    <div className="space-y-3">
+    <div className="w-full space-y-3 text-left">
       <SetupShell name={botName} avatarId={avatarId}>
         <p className="text-[14px] font-medium tracking-tight">
           {botName} is ready. Want to spend about a minute tuning how it works?
@@ -384,7 +395,7 @@ function SetupShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex w-full items-start gap-3 text-left">
       <BotCreatureAvatar
         name={name}
         avatarId={avatarId ?? DEFAULT_BOT_AVATAR_ID}

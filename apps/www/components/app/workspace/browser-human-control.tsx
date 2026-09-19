@@ -71,10 +71,10 @@ export function BrowserControlSwitcher({
   }
 
   return (
-    <div className={cn("flex min-w-0 items-center gap-1.5", className)}>
+    <div className={cn("flex min-w-0 items-center gap-1", className)}>
       <span
         className={cn(
-          "inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
+          "inline-flex min-w-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none",
           humanActive
             ? "bg-success/15 text-success"
             : "bg-muted text-muted-foreground",
@@ -94,7 +94,7 @@ export function BrowserControlSwitcher({
           type="button"
           size="xs"
           variant="outline"
-          className="h-6 shrink-0 px-2 text-[11px]"
+          className="h-6 shrink-0 px-1.5 text-[10px] leading-none"
           disabled={loading}
           onClick={onReturnControl}
         >
@@ -104,7 +104,7 @@ export function BrowserControlSwitcher({
         <Button
           type="button"
           size="xs"
-          className="h-6 shrink-0 px-2 text-[11px]"
+          className="h-6 shrink-0 px-1.5 text-[10px] leading-none"
           disabled={loading}
           onClick={onTakeControl}
         >

@@ -167,5 +167,8 @@ describe("BrowserPreviewView remote control", () => {
     expect(screen.getByText("You're in control")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Return to bot" })).toBeTruthy();
     expect(screen.getByLabelText("Navigate browser to URL")).toBeTruthy();
+    const returnControl = screen.getByRole("button", { name: "Return to bot" });
+    const float = screen.getByRole("button", { name: "Float preview over chat" });
+    expect(returnControl.compareDocumentPosition(float) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

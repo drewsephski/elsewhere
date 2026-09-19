@@ -133,6 +133,35 @@ describe("BotOnboardingCard", () => {
     expect(screen.queryByRole("button", { name: "Tune this Bot" })).toBeNull();
   });
 
+  it("hides empty-work prompts until the user skips setup", async () => {
+    fetchMock.mockImplementation(async (path: string, init?: RequestInit) => {
+      if (String(path).endsWith("/onboarding") && init?.method !== "POST") {
+        return jsonResponse(200, notStarted());
+      }
+      if (String(path).endsWith("/dismiss")) {
+        return jsonResponse(200, { ...notStarted(), status: "dismissed", revision: 1 });
+      }
+      throw new Error(`unexpected ${path}`);
+    });
+
+    render(
+      <BotOnboardingCard botId="bot_1" botName="Scout" conversationEmpty>
+        <p>What should Scout work on?</p>
+      </BotOnboardingCard>,
+    );
+
+    expect(await screen.findByText(/Scout is ready/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tune this Bot" })).toBeTruthy();
+    expect(screen.queryByText("What should Scout work on?")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip for now" }));
+    await waitFor(() => {
+      expect(screen.getByText("What should Scout work on?")).toBeTruthy();
+    });
+    expect(screen.queryByText(/Scout is ready/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tune this Bot" })).toBeNull();
+  });
+
   it("does not overlay setup when work is running", async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, questionState()));
     render(

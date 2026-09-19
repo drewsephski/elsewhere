@@ -53,34 +53,9 @@ function creaturePhaseDelay(seed: string): string {
 function CreatureWorkingAura({ intensity }: { intensity: CreatureWorkingIntensity }) {
   return (
     <span data-creature-aura data-intensity={intensity} className="pointer-events-none" aria-hidden>
-      <span className="creature-halo creature-halo-a" />
-      <span className="creature-halo creature-halo-b" />
-      <span className="creature-halo creature-halo-c" />
-      <span className="creature-working-static-ring" />
-      <svg className="creature-rings" viewBox="0 0 100 100">
-        <ellipse
-          className="creature-ring creature-ring-spin"
-          cx="50"
-          cy="56"
-          rx="36"
-          ry="20"
-          fill="none"
-        />
-        {intensity !== "compact" ? (
-          <ellipse
-            className="creature-ring creature-ring-reverse"
-            cx="50"
-            cy="50"
-            rx="22"
-            ry="32"
-            fill="none"
-          />
-        ) : null}
-      </svg>
-      <span className="creature-spark" />
-      {intensity !== "compact" ? <span className="creature-spark creature-spark-b" /> : null}
-      {intensity !== "compact" ? <span className="creature-tablet" /> : null}
-      {intensity === "hero" ? <span className="creature-sheen" /> : null}
+      <span className="creature-glow" />
+      {intensity === "hero" ? <span className="creature-glow creature-glow-core" /> : null}
+      {intensity !== "compact" ? <span className="creature-ground" /> : null}
     </span>
   );
 }
@@ -98,6 +73,7 @@ export function BotCreatureAvatar({
   const image = src ?? botAvatarImage(avatarId, name);
   const shell = showShell ? getBotCreatureShellClass(name) : "";
   const tile = variant === "tile";
+  const intensity = animated ? WORKING_INTENSITY[size] : null;
   const colors = animated ? getBotAvatarPreset(avatarId).colors : null;
   const workingStyle = colors
     ? ({
@@ -111,7 +87,7 @@ export function BotCreatureAvatar({
     <span
       className={cn(
         "relative inline-flex shrink-0 items-end justify-center",
-        animated && "isolate",
+        animated && "creature-stage isolate",
         showShell
           ? "overflow-hidden rounded-2xl ring-1 ring-inset"
           : tile
@@ -125,21 +101,35 @@ export function BotCreatureAvatar({
       role="img"
       aria-label={`${name.trim() || "Assistant"} avatar`}
       data-working={animated ? "on" : "off"}
+      data-intensity={intensity ?? undefined}
     >
-      {animated ? <CreatureWorkingAura intensity={WORKING_INTENSITY[size]} /> : null}
-      <img
-        src={image}
-        alt=""
-        width={280}
-        height={320}
-        decoding="async"
-        draggable={false}
+      {animated && intensity ? <CreatureWorkingAura intensity={intensity} /> : null}
+      <span
         className={cn(
-          "relative z-[1] max-h-full w-auto max-w-full object-contain object-bottom",
-          animated && "creature-breathe motion-reduce:animate-none",
+          "relative z-[1] flex h-full w-full items-end justify-center",
+          animated && "creature-volume motion-reduce:animate-none",
         )}
-        aria-hidden
-      />
+      >
+        <img
+          src={image}
+          alt=""
+          width={280}
+          height={320}
+          decoding="async"
+          draggable={false}
+          className="max-h-full w-auto max-w-full object-contain object-bottom"
+          aria-hidden
+        />
+        {animated && intensity !== "compact" ? (
+          <span
+            className="creature-spec"
+            style={{
+              WebkitMaskImage: `url(${image})`,
+              maskImage: `url(${image})`,
+            }}
+          />
+        ) : null}
+      </span>
     </span>
   );
 }

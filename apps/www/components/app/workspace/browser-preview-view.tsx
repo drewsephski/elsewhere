@@ -130,7 +130,7 @@ function PreviewChrome({
         )}
       >
         {toolbar ? (
-          <div className="flex items-center gap-1.5 border-b border-border bg-surface-hover px-2 py-1.5">
+          <div className="flex min-w-0 items-center gap-1 border-b border-border bg-surface-hover px-2 py-1">
             {toolbar}
           </div>
         ) : null}
@@ -508,36 +508,38 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
 
   const sessionToolbar = (
     <>
-      <BrowserControlSwitcher
-        enabled={enabled}
-        humanActive={humanControl.humanActive}
-        loading={humanControl.loading}
-        error={controlError}
-        onTakeControl={() => void humanControl.takeControl()}
-        onReturnControl={() => void humanControl.returnControl()}
-      />
-      {ctx && humanControl.humanActive ? (
-        <form
-          onSubmit={(event) => void handleNavigate(event)}
-          className="min-w-0 flex-1"
-        >
-          <input
-            value={urlDraft}
-            onChange={(event) => setUrlDraft(event.target.value)}
-            placeholder="Open a URL"
-            className="h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-            aria-label="Navigate browser to URL"
-            disabled={navigateBusy || humanControl.loading}
-            autoComplete="off"
-            data-1p-ignore
-            data-lpignore="true"
-          />
-        </form>
-      ) : (
-        <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-          {addressLabel}
-        </p>
-      )}
+      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        <BrowserControlSwitcher
+          enabled={enabled}
+          humanActive={humanControl.humanActive}
+          loading={humanControl.loading}
+          error={controlError}
+          onTakeControl={() => void humanControl.takeControl()}
+          onReturnControl={() => void humanControl.returnControl()}
+        />
+        {ctx && humanControl.humanActive ? (
+          <form
+            onSubmit={(event) => void handleNavigate(event)}
+            className="min-w-0 flex-1"
+          >
+            <input
+              value={urlDraft}
+              onChange={(event) => setUrlDraft(event.target.value)}
+              placeholder="Open a URL"
+              className="h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1 font-mono text-[10px] leading-none text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+              aria-label="Navigate browser to URL"
+              disabled={navigateBusy || humanControl.loading}
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+            />
+          </form>
+        ) : (
+          <p className="min-w-0 flex-1 truncate font-mono text-[10px] leading-none text-muted-foreground">
+            {addressLabel}
+          </p>
+        )}
+      </div>
       <div className="flex shrink-0 items-center gap-0.5">
         {isEmbedded && ctx ? (
           <button
@@ -545,7 +547,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             onClick={() => ctx.openPip()}
             aria-label="Float preview over chat"
             title="Float preview over chat"
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
             <PictureInPicture2 className="size-3.5" aria-hidden />
           </button>
@@ -556,7 +558,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             onClick={handleOpenDialog}
             aria-label="Open computer"
             title="Open computer"
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
             <Maximize2 className="size-3.5" aria-hidden />
           </button>

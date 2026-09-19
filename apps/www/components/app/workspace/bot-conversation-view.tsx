@@ -76,6 +76,40 @@ function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
 }
 
+function BotEmptyWorkPrompts({
+  name,
+  avatarId,
+  prompts,
+  showPrompts,
+  disabled,
+  onSelect,
+}: {
+  name?: string | null;
+  avatarId?: string | null;
+  prompts: readonly { label: string; prompt: string }[];
+  showPrompts: boolean;
+  disabled: boolean;
+  onSelect: (prompt: string) => void;
+}) {
+  return (
+    <>
+      <BotCreatureAvatar
+        name={name ?? "Bot"}
+        avatarId={avatarId ?? DEFAULT_BOT_AVATAR_ID}
+        size="2xl"
+      />
+      <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
+        {name ? `What should ${name} work on?` : "What should this Bot work on?"}
+      </p>
+      {showPrompts ? (
+        <div className="mt-5 w-full">
+          <BotPresetPrompts prompts={prompts} onSelect={onSelect} disabled={disabled} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function BotWaitingStatus({
   name,
   avatarId,
@@ -628,7 +662,6 @@ export function BotConversationView({
             name={bot?.name ?? "Bot"}
             avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
             size="sm"
-            animated={Boolean(streamRunId)}
           />
           {onRenameBot && bot ? (
             <InlineRenameLabel
@@ -898,48 +931,43 @@ export function BotConversationView({
           {!conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
             <div className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-6 text-center">
               {bot ? (
-                <div className="mb-5 w-full text-left">
-                  <BotOnboardingCard
-                    botId={bot.id}
-                    botName={bot.name}
+                <BotOnboardingCard
+                  botId={bot.id}
+                  botName={bot.name}
+                  avatarId={bot.avatarId}
+                  autoStart={setupRequested}
+                  workTakesPriority={workTakesPriority}
+                  failedRunTakesPriority={failedRunTakesPriority}
+                  conversationEmpty
+                  onApplied={() => {
+                    cloudHostFetch(`/v1/bots/${bot.id}`)
+                      .then(async (response) => {
+                        if (!response.ok) return;
+                        const loaded: BotSummary = await response.json();
+                        setBot(loaded);
+                        onBotLoaded?.(loaded);
+                      })
+                      .catch(() => undefined);
+                  }}
+                >
+                  <BotEmptyWorkPrompts
+                    name={bot.name}
                     avatarId={bot.avatarId}
-                    autoStart={setupRequested}
-                    workTakesPriority={workTakesPriority}
-                    failedRunTakesPriority={failedRunTakesPriority}
-                    conversationEmpty
-                    onApplied={() => {
-                      cloudHostFetch(`/v1/bots/${bot.id}`)
-                        .then(async (response) => {
-                          if (!response.ok) return;
-                          const loaded: BotSummary = await response.json();
-                          setBot(loaded);
-                          onBotLoaded?.(loaded);
-                        })
-                        .catch(() => undefined);
-                    }}
+                    prompts={presetPrompts}
+                    showPrompts={showPresetPrompts}
+                    disabled={pending}
+                    onSelect={handleSelectPreset}
                   />
-                </div>
-              ) : null}
-              {setupRequested ? null : (
-                <>
-                  <BotCreatureAvatar
-                    name={bot?.name ?? "Bot"}
-                    avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                    size="2xl"
-                  />
-                  <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
-                    {bot?.name ? `What should ${bot.name} work on?` : "What should this Bot work on?"}
-                  </p>
-                  {showPresetPrompts ? (
-                    <div className="mt-5 w-full">
-                      <BotPresetPrompts
-                        prompts={presetPrompts}
-                        onSelect={handleSelectPreset}
-                        disabled={pending}
-                      />
-                    </div>
-                  ) : null}
-                </>
+                </BotOnboardingCard>
+              ) : (
+                <BotEmptyWorkPrompts
+                  name={null}
+                  avatarId={null}
+                  prompts={presetPrompts}
+                  showPrompts={showPresetPrompts}
+                  disabled={pending}
+                  onSelect={handleSelectPreset}
+                />
               )}
             </div>
           ) : null}
