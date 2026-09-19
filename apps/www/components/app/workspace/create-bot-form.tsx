@@ -141,7 +141,7 @@ export function CreateBotForm({
           task: taskTrimmed || undefined,
           computerId: advancedOpen && computerId ? computerId : undefined,
           model: advancedOpen ? model : undefined,
-          avatarId: advancedOpen ? avatarId : undefined,
+          avatarId,
           thisMac: thisMacLive ? thisMac : null,
         },
         sessionRef.current,
@@ -182,6 +182,13 @@ export function CreateBotForm({
       ) : null}
       <form onSubmit={(event) => void handleSubmit(event)}>
         <FormFields className="gap-3">
+          <BotAvatarPicker
+            value={avatarId}
+            onChange={setAvatarId}
+            disabled={busy || disabled}
+            compact
+            className="min-w-0"
+          />
           <FormItem>
             <Label htmlFor="create-bot-name">Bot name</Label>
             <Input
@@ -213,21 +220,21 @@ export function CreateBotForm({
               Runs on · This Mac
             </p>
           ) : null}
-          <FormItem>
-            <Label htmlFor="create-bot-task">
-              {requireTask ? "What should this Bot work on?" : "First task (optional)"}
-            </Label>
-            <Textarea
-              id="create-bot-task"
-              required={requireTask}
-              maxLength={100000}
-              value={task}
-              onChange={(event) => setTask(event.target.value)}
-              placeholder="Research competitors and write a one-page brief"
-              disabled={busy || disabled}
-              className="min-h-28 text-base md:text-sm"
-            />
-          </FormItem>
+          {requireTask ? (
+            <FormItem>
+              <Label htmlFor="create-bot-task">What should this Bot work on?</Label>
+              <Textarea
+                id="create-bot-task"
+                required
+                maxLength={100000}
+                value={task}
+                onChange={(event) => setTask(event.target.value)}
+                placeholder="Research competitors and write a one-page brief"
+                disabled={busy || disabled}
+                className="min-h-28 text-base md:text-sm"
+              />
+            </FormItem>
+          ) : null}
 
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
             <CollapsibleTrigger
@@ -241,13 +248,20 @@ export function CreateBotForm({
               />
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-2 space-y-3 border-t border-border/60 pt-3">
-              <BotAvatarPicker
-                value={avatarId}
-                onChange={setAvatarId}
-                disabled={busy || disabled}
-                compact
-                className="min-w-0"
-              />
+              {!requireTask ? (
+                <FormItem>
+                  <Label htmlFor="create-bot-task">First task (optional)</Label>
+                  <Textarea
+                    id="create-bot-task"
+                    maxLength={100000}
+                    value={task}
+                    onChange={(event) => setTask(event.target.value)}
+                    placeholder="Research competitors and write a one-page brief"
+                    disabled={busy || disabled}
+                    className="min-h-28 text-base md:text-sm"
+                  />
+                </FormItem>
+              ) : null}
               <BotModelSelect
                 id="create-bot-model"
                 value={model}
@@ -288,8 +302,8 @@ export function CreateBotForm({
             </p>
           ) : (
             <p className="text-center text-xs text-muted-foreground">
-              Uses your Codex allowance. Model, computer, and avatar live in Advanced or
-              Bot settings.
+              Uses your Codex allowance. Model and computer live in Advanced or Bot
+              settings.
             </p>
           )}
           {footer}

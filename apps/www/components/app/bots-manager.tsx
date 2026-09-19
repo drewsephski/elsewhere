@@ -26,8 +26,8 @@ export function BotsManager() {
       <section className="surface-card p-6">
         <h2 className="text-lg font-semibold tracking-tight">Meet your next teammate</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Name them, describe what they own, and optionally hand off a first task. Elsewhere
-          picks a computer and model unless you open Advanced.
+          Pick an avatar, name them, and describe what they own. Elsewhere picks a computer
+          and model unless you open Advanced.
         </p>
         <CreateBotForm className="mt-5" onOutcome={handleOutcome} />
       </section>

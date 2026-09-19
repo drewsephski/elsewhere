@@ -47,7 +47,7 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
         <DialogHeader className="gap-1">
           <DialogTitle className="text-base">New bot</DialogTitle>
           <DialogDescription className="text-xs">
-            Name your teammate, say what they own, and optionally give them a first task.
+            Pick an avatar, name your teammate, and say what they own.
           </DialogDescription>
         </DialogHeader>
         {open ? (

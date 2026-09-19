@@ -46,17 +46,33 @@ afterEach(() => {
 });
 
 describe("CreateBotForm", () => {
-  it("hides model and computer until Advanced is opened", async () => {
+  it("shows avatars without opening Advanced", () => {
+    render(<CreateBotForm onOutcome={vi.fn()} showProviderCard={false} />);
+    expect(screen.getByRole("radiogroup", { name: "Choose bot avatar" })).toBeTruthy();
+  });
+
+  it("hides first task, model, and computer until Advanced is opened", async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, []));
     render(<CreateBotForm onOutcome={vi.fn()} showProviderCard={false} />);
+    expect(screen.queryByLabelText("First task (optional)")).toBeNull();
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Computer")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     await waitFor(() => {
       expect(screen.getByLabelText("Model")).toBeTruthy();
     });
+    expect(screen.getByLabelText("First task (optional)")).toBeTruthy();
     expect(screen.getByLabelText("Model")).toBeTruthy();
     expect(screen.getByLabelText("Computer")).toBeTruthy();
+  });
+
+  it("keeps a required first task visible without opening Advanced", () => {
+    render(
+      <CreateBotForm onOutcome={vi.fn()} showProviderCard={false} requireTask />,
+    );
+    expect(screen.getByLabelText("What should this Bot work on?")).toBeTruthy();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Computer")).toBeNull();
   });
 
   it("creates a bot without a run when no task is provided", async () => {
@@ -98,6 +114,11 @@ describe("CreateBotForm", () => {
         computerId: "comp_1",
       });
     });
+    const botPost = fetchMock.mock.calls.find(([path]) => path === "/v1/bots");
+    expect(botPost).toBeTruthy();
+    const body = JSON.parse(String((botPost?.[1] as RequestInit | undefined)?.body));
+    expect(typeof body.avatarId).toBe("string");
+    expect(body.avatarId.length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls.some(([path]) => path === "/v1/runs")).toBe(false);
   });
 });
