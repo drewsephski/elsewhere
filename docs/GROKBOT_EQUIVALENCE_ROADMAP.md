@@ -1,9 +1,19 @@
 # Elsewhere → Grokbot-equivalent hosted agent platform
 
-**Assessment date:** 2026-09-18 (UTC)  
-**Baseline commit:** `997526f1145e1106087ffc2c00a1f53b93f9bae6` (`origin/main`, 2026-09-18 07:52:50 -0500 — “Refactor Slack OAuth callback and streamline UI components”)  
-**Repository:** [drewsephski/elsewhere](https://github.com/drewsephski/elsewhere)  
-**Prior hypothesis:** Sep 17 analysis in agent upload — re-verified against current `main`; corrections noted inline.
+**This document is a dated assessment, not live product status.**
+
+**Original assessment date:** 2026-09-18 (UTC)  
+**Original baseline commit:** `997526f1145e1106087ffc2c00a1f53b93f9bae6`
+
+**Current-status overlay (September 2026, after `final/web-readiness`):**
+
+- Persistent team loop: `bot_list` → `bot_create` → `bot_delegate` with `onComplete: resume_source` → exactly one source continuation. Exposed on Responses and Computer MCP from one canonical collaboration schema.
+- GitHub coding now includes a first-class PR publish/update loop (`github_publish_pull_request`, `github_update_pull_request`, certified check + approval). The Sep 18 “read-only GitHub / no PR loop” row is historical.
+- Desktop CloudShell route parity has continued past the Sep 18 connectors/channels omission; verify `cloud-shell.tsx` / `app-routes.ts` rather than this table.
+- Artifact handoff writes through `ComputerRegistry::connect_agent_computer` (Sprite and local Mac). Claimed transfers become terminal or reclaimable; they must not stay `transferring`.
+- Hosted laptop-off / live ChatGPT pairing gates in `HOSTED_ALPHA_ACCEPTANCE.md` remain operator/manual proof, not automatically closed by this cleanup.
+
+---
 
 **Grokbot-equivalent bar (this roadmap):** Create a named Bot, assign a computer, give a meaningful job, leave (laptop closed), return to completed work with clear history and artifacts; reliable computer visibility and human takeover; approvals that are trustworthy and not bypassable; at least one solid repo-connected coding loop; routines/event triggers that fire work; web or desktop client usable for the core loop.
 
@@ -56,13 +66,13 @@ User (Next.js apps/www or Tauri CloudShell)
 | **1. Bot creation & configuration** | **WORKING** | `api/bots.rs`, `bot_context`, `skills/`, `permission_policies`, `memories`; UI `apps/www/app/app/bots`, settings; `durable_work.rs`, `skills.rs`, `permission_policies.rs`, `memories.rs` tests | Desktop shell omits some nav routes (see §7). No marketplace skills — intentional. |
 | **2. Run execution engine** | **PARTIAL** | `work.rs`, `worker.rs`, `run_lifecycle.rs`, `codex-provider`; `durable_work.rs`, `approval_lifecycle.rs`, `assistant_stream_replay.rs`; `docs/BACKGROUND_WORK.md` | Code + regressions strong; **hosted laptop-off completion not proven** (`HOSTED_ALPHA_ACCEPTANCE.md` gates Fail). Fail-closed without ChatGPT pairing (`codex_not_authenticated`). |
 | **3. Computer / environment** | **PARTIAL** | Sprite: `crates/sprite-computer`, `computer_registry_lifecycle.rs`; Mac: `migrations/038_local_mac.sql`, `local_mac_pairing.rs`, `local_mac_bot_run_routing.rs`; preview: `browser-preview-*`, `computer_control.rs`, `human_intervention.rs` | Provisioning/readiness fragile on alpha (docs + prior live notes). **Live preview + Take Control implemented in repo** but hosted E2E gates pending. No user-facing “reset/recover computer” UX. |
-| **4. Repo & workspace integration** | **PARTIAL** | Workspace tools via MCP/computer exec; attachments `attachments.rs`, `037_rich_inputs.sql`; GitHub **read** tools `connectors/service.rs` (`github_*` list/get only); `connectors.rs` tests | **No first-class clone → edit → open PR loop** (no `github_create_pull_request` or git workflow productization). Bot must use terminal/git on Sprite workspace. |
+| **4. Repo & workspace integration** | **PARTIAL (dated Sep 18)** | Workspace tools via MCP/computer exec; attachments `attachments.rs`; GitHub tools in `connectors/` and `github_coding/` | **Historical gap:** this assessment predates the certified GitHub PR publish/update loop. Check current `GITHUB_*_TOOL` catalog and `github_coding` tests. |
 | **5. Approval / tooling flow** | **WORKING** | `approval/gate.rs`, `human_control_gate.rs`, `permission_policies.rs`; `approval_lifecycle.rs`, `approvals.rs`, `ask_user.rs`; `AmbiguousOutcome` in `agent-core/computer.rs`, `local_mac/session.rs` (no auto-retry) | “Auto Review” style automation **MISSING** (human gate by design). MCP + connector tools behind same gate (`computer-mcp/tools.rs`). |
 | **6. Hosted web UI** | **WORKING** | Full App Router shell: work, approvals, results, routines, computers, connectors, channels, skills, groups (`app-routes.ts`) | Polish/gates ≠ Grokbot trust yet. |
-| **7. Desktop parity** | **PARTIAL** | Tauri `src/main.tsx` → `CloudShell` reuses `apps/www` via Vite aliases (`vite.config.ts`); Mac pairing `pair/mac`, `MacCompanionConnect` on desktop computers route | `cloud-shell.tsx` routes **omit** `/app/connectors` and `/app/channels` (web has them). Legacy local SQLite desktop (`src/surfaces/desktop/desktop-app.tsx`) **not** the default shell. |
+| **7. Desktop parity** | **PARTIAL (dated Sep 18)** | Tauri `src/main.tsx` → `CloudShell` reuses `apps/www` via Vite aliases | **Historical:** this assessment noted omitted connectors/channels routes. Re-check `cloud-shell.tsx` before treating that as current. |
 | **Routines (cron + webhook)** | **WORKING** | `routines.rs`, `routine_webhooks.rs`, `schedule.rs`; UI `apps/www/app/app/routines` | Hosted fire-while-away **unproven** (acceptance gate). |
 | **Channels (Slack)** | **PARTIAL** | `channels/slack/*`, `channels.rs` tests, `apps/www/app/app/channels`; delivery + admission in `worker.rs` | Live acceptance **manual only** (`slack_acceptance.rs` `#[ignore]`). OAuth refactor on tip commit — CI pending. |
-| **Multi-bot / delegation** | **PARTIAL** | `delegation.rs`, `bot_delegations`, `collaboration_lifecycle.rs`, `group_*` tests; UI handoff cards | **Source-bot resume exists** (`source_resume_run_id`, `collaboration_lifecycle.rs`) — **updates Sep 17 “no wake” claim**. No group-chat parity with Grokbot; bounded artifact handoff only. |
+| **Multi-bot / delegation** | **WORKING (dated overlay)** | `bot_create.rs`, `delegation.rs`, `collaboration_lifecycle.rs`, `artifact_handoff.rs`, group tests | `bot_create` + `resume_source` + MCP schema parity are current. Remaining gap is hosted manual proof of the team loop, not missing primitives. |
 | **Onboarding / pairing** | **PARTIAL** | Invite signup, ChatGPT device flow (`api/providers.rs`), Mac pairing (`api/local_mac.rs`, `pair-mac-view.tsx`) | Multi-step (ChatGPT + computer + optional Slack); failure UX when Codex unavailable is accurate but harsh for “just works”. |
 | **Recovery UX** | **MISSING** (product) | Operator runbooks: `infra/fly/README.md`, `HOSTED_ALPHA_ACCEPTANCE.md` (DB/volume restore gates) | No in-app “update / recover / reset computer” like Grokbot settings. |
 | **Observability** | **PARTIAL** | Structured phase logging target `elsewhere_run_phases` in `runner.rs`; run timeline in UI | No owner-facing SLO dashboard; latency gates **Fail** in acceptance doc. |
@@ -86,7 +96,7 @@ User (Next.js apps/www or Tauri CloudShell)
 2. **ChatGPT/Codex + computer readiness on the happy path** — Work stuck on `codex_not_authenticated` or “computer starting” blocks everything; pairing and Sprite bootstrap must be **boring** before connectors matter.
 3. **Deploy drift** — Acceptance checklist still pending redeploy for preview cache, browser profile dirs, bootstrap v3; production may lag `main`.
 4. **Live computer visibility E2E** — Code exists (`ComputerBrowserPreview`, human control hooks); hosted gates for preview-after-tools and Luna browser acceptance are **Fail/Pending**.
-5. **Repo-connected coding loop** — GitHub connector is read-only API; no opinionated “fix issue → PR” path — largest product gap vs “coding agent platform”.
+5. **Repo-connected coding loop** — **Historical as of this cleanup.** GitHub coding tools now include publish/update PR; remaining work is hosted/manual QA of the same-PR revision loop, not a missing tool.
 6. **Trust hardening** — Public runner ingress still enabled until BFF smoke passes (`HOSTED_ALPHA_ACCEPTANCE.md`); recovery drills (DB + volume + drain) incomplete.
 7. **Desktop parity gaps** — Missing connectors/channels routes in `cloud-shell.tsx` for a single-client story.
 

@@ -13,17 +13,40 @@ use crate::db::resources::{
 use crate::error::ApiError;
 
 fn validate_settings(name: Option<&str>, instructions: Option<&str>) -> Result<(), ApiError> {
-    if name.is_some_and(|value| value.trim().is_empty() || value.len() > 100) {
+    if let Some(name) = name {
+        validate_bot_name(name)?;
+    }
+    if let Some(instructions) = instructions {
+        validate_bot_instructions(instructions, false)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_bot_name(name: &str) -> Result<String, ApiError> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.len() > 100 {
         return Err(ApiError::Validation(
             "Bot names must contain 1 to 100 bytes".into(),
         ));
     }
-    if instructions.is_some_and(|value| value.len() > 16_000) {
+    Ok(trimmed.to_string())
+}
+
+pub(crate) fn validate_bot_instructions(
+    instructions: &str,
+    required: bool,
+) -> Result<String, ApiError> {
+    if required && instructions.is_empty() {
+        return Err(ApiError::Validation(
+            "Bot instructions must contain 1 to 16,000 bytes".into(),
+        ));
+    }
+    if instructions.len() > 16_000 {
         return Err(ApiError::Validation(
             "Bot instructions must be at most 16,000 bytes".into(),
         ));
     }
-    Ok(())
+    Ok(instructions.to_string())
 }
 
 #[derive(Debug, Serialize)]

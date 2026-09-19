@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use agent_core::{
-    AgentCollaboration, BotTeammateSummary, CollaborationContext, CollaborationError,
-    DelegationEnqueueResult,
+    AgentCollaboration, BotCreateResult, BotTeammateSummary, CollaborationContext,
+    CollaborationError, DelegationEnqueueResult,
 };
 use async_trait::async_trait;
 use sqlx::PgPool;
@@ -45,5 +45,15 @@ impl AgentCollaboration for PostgresAgentCollaboration {
             return_policy,
         )
         .await
+    }
+
+    async fn create_bot(
+        &self,
+        ctx: &CollaborationContext,
+        name: &str,
+        instructions: &str,
+        avatar_id: Option<&str>,
+    ) -> Result<BotCreateResult, CollaborationError> {
+        crate::bot_create::create_bot(&self.pool, ctx, name, instructions, avatar_id).await
     }
 }

@@ -26,12 +26,25 @@ struct CachedEntry {
 #[derive(Clone, Default)]
 pub struct ComputerRegistry {
     sprites: Arc<DashMap<(String, String), CachedEntry>>,
+    #[cfg(any(test, feature = "test-utils"))]
+    test_computers: Arc<DashMap<(String, String), Arc<dyn AgentComputer>>>,
 }
 
 impl ComputerRegistry {
     #[cfg(any(test, feature = "test-utils"))]
     pub fn cached_sprite_count(&self) -> usize {
         self.sprites.len()
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn register_test_computer(
+        &self,
+        owner_id: &str,
+        computer_id: &str,
+        computer: Arc<dyn AgentComputer>,
+    ) {
+        self.test_computers
+            .insert((owner_id.to_string(), computer_id.to_string()), computer);
     }
 
     pub fn evict(&self, owner_id: &str, computer_id: &str) {
@@ -207,6 +220,13 @@ impl ComputerRegistry {
         let Some((provider, resource_id)) = row else {
             return Err(ApiError::NotFound);
         };
+        #[cfg(any(test, feature = "test-utils"))]
+        if let Some(computer) = self
+            .test_computers
+            .get(&(owner_id.to_string(), computer_id.to_string()))
+        {
+            return Ok(computer.clone());
+        }
         match provider.as_str() {
             "fly_sprite" => {
                 self.connect_sprite_computer(config, pool, owner_id, computer_id, browser_enabled)

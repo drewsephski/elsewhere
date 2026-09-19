@@ -10,10 +10,10 @@ mod collaboration_tools;
 mod computer;
 mod connector_tools;
 mod connectors;
-mod github_coding;
-mod github_coding_tools;
 mod events;
 mod fake_computer;
+mod github_coding;
+mod github_coding_tools;
 mod human_intervention;
 mod human_intervention_tools;
 mod input;
@@ -21,18 +21,18 @@ mod local_mac_protocol;
 mod luna;
 mod memory;
 mod memory_tools;
-mod routine_tools;
-mod routines;
-mod skill_tools;
-mod skills;
 mod model;
 mod public_http_url;
 mod readiness_cache;
+mod routine_tools;
+mod routines;
 mod run_engine;
 mod run_store;
 mod run_user_input;
 mod runtime;
 mod runtime_identity;
+mod skill_tools;
+mod skills;
 mod subagent;
 mod tool_catalog;
 mod tools;
@@ -60,28 +60,21 @@ pub use browser_recovery::{
     RecoveryHint, MAX_RECOVERY_ATTEMPTS,
 };
 pub use collaboration::{
-    AgentCollaboration, BotTeammateSummary, CollaborationContext, CollaborationError,
-    DelegationEnqueueResult, MAX_CHILD_DELEGATIONS_PER_ROOT, MAX_DELEGATION_CONTEXT_CHARS,
-    MAX_DELEGATION_DEPTH, MAX_DELEGATION_INSTRUCTION_CHARS,
+    AgentCollaboration, BotCreateResult, BotTeammateSummary, CollaborationContext,
+    CollaborationError, DelegationEnqueueResult, MAX_AGENT_CREATED_BOTS_PER_ROOT,
+    MAX_CHILD_DELEGATIONS_PER_ROOT, MAX_DELEGATION_CONTEXT_CHARS, MAX_DELEGATION_DEPTH,
+    MAX_DELEGATION_INSTRUCTION_CHARS,
 };
 pub use collaboration_tools::{
-    all_openai_tool_definitions, collaboration_openai_tool_definitions,
+    all_openai_tool_definitions, collaboration_openai_tool_definitions, collaboration_tool_specs,
     dispatch_agent_tool_with_gate, dispatch_agent_tool_with_gate_and_recovery,
+    CollaborationToolSpec,
 };
 pub use computer::{
     workspace_tool_mutation, AgentComputer, ComputerError, ComputerInfo, ExecResult,
     WorkspaceEntry, WorkspaceRevisionCounter,
 };
 pub use connector_tools::connector_openai_tool_definitions;
-pub use github_coding::{
-    is_github_coding_mutation_tool, AgentGithubCoding, GithubCodingError, GITHUB_CODING_TOOL_NAMES,
-    GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL, GITHUB_OPEN_REPOSITORY_TOOL,
-    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL,
-    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL,
-};
-pub use github_coding_tools::{
-    dispatch_github_coding_tool, github_coding_openai_tool_definitions,
-};
 pub use connectors::{
     bound_connector_tool_result, truncate_connector_tool_result, AgentConnectors, ConnectorError,
     ConnectorToolDefinition, ConnectorToolRoute, CONNECTED_APPS_EXECUTE_TOOL,
@@ -90,6 +83,13 @@ pub use connectors::{
 };
 pub use events::{AgentEvent, EventSink, RuntimeError};
 pub use fake_computer::FakeAgentComputer;
+pub use github_coding::{
+    is_github_coding_mutation_tool, AgentGithubCoding, GithubCodingError, GITHUB_CODING_TOOL_NAMES,
+    GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL, GITHUB_OPEN_REPOSITORY_TOOL,
+    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL,
+    GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL,
+};
+pub use github_coding_tools::{dispatch_github_coding_tool, github_coding_openai_tool_definitions};
 pub use human_intervention::{
     is_human_intervention_tool, sanitize_human_intervention_message,
     validate_human_intervention_reason, AgentHumanIntervention, HumanInterventionContext,
@@ -118,22 +118,6 @@ pub use memory::{
     RECALL_MEMORY_TOOL_NAME, REMEMBER_DESCRIPTION, REMEMBER_TOOL_NAME,
 };
 pub use memory_tools::{dispatch_memory_tool, memory_openai_tool_definitions};
-pub use routine_tools::{dispatch_routine_tool, routine_openai_tool_definitions};
-pub use routines::{
-    is_routine_mutation_tool, AgentRoutines, BotRoutineSchedule, RoutineContext,
-    RoutineCreateDraft, RoutineError, RoutineMutationResult, RoutineSummary,
-    ROUTINE_CREATE_TOOL_NAME,
-    ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME, ROUTINE_RESUME_TOOL_NAME,
-};
-pub use skill_tools::{
-    dispatch_skill_tool, skill_openai_tool_definitions, truncate_skill_md_preview,
-};
-pub use skills::{
-    is_skill_mutation_tool, AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult,
-    SkillDraftFile, SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult,
-    SKILL_ATTACH_TOOL_NAME, SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME,
-    SKILL_SAVE_RECENT_WORK_TOOL_NAME,
-};
 pub use model::{
     extract_assistant_text, extract_function_calls, function_call_output_item,
     model_supports_responses_tools, CreateResponseRequest, CreateResponseResult, ModelError,
@@ -141,6 +125,13 @@ pub use model::{
 };
 pub use public_http_url::validate_public_http_url;
 pub use readiness_cache::ReadinessCachedComputer;
+pub use routine_tools::{dispatch_routine_tool, routine_openai_tool_definitions};
+pub use routines::{
+    is_routine_mutation_tool, AgentRoutines, BotRoutineSchedule, RoutineContext,
+    RoutineCreateDraft, RoutineError, RoutineMutationResult, RoutineSummary,
+    ROUTINE_CREATE_TOOL_NAME, ROUTINE_LIST_TOOL_NAME, ROUTINE_PAUSE_TOOL_NAME,
+    ROUTINE_RESUME_TOOL_NAME,
+};
 pub use run_engine::{
     legacy_local_loop_deps, responses_loop_deps, ResponsesRunEngine, RunEngine, RunEngineKind,
     SharedRunDeps,
@@ -158,6 +149,15 @@ pub use runtime::{run_agent_loop, AgentLoopContext, AgentLoopDeps};
 pub use runtime_identity::{
     compose_runtime_instruction_snapshot, RuntimeIdentityInput, RuntimeMemoryFact,
 };
+pub use skill_tools::{
+    dispatch_skill_tool, skill_openai_tool_definitions, truncate_skill_md_preview,
+};
+pub use skills::{
+    is_skill_mutation_tool, AgentSkills, SkillAttachResult, SkillContext, SkillDetachResult,
+    SkillDraftFile, SkillError, SkillListEntry, SkillSaveDraft, SkillSaveResult,
+    SKILL_ATTACH_TOOL_NAME, SKILL_DETACH_TOOL_NAME, SKILL_LIST_TOOL_NAME,
+    SKILL_SAVE_RECENT_WORK_TOOL_NAME,
+};
 pub use subagent::{
     bound_subagent_result, subagent_developer_instructions, subagent_task_summary,
     subagent_user_prompt, truncate_utf8_bytes, validate_subagent_request, AgentSubagents,
@@ -171,14 +171,12 @@ pub use tool_catalog::{
     is_attachment_tool, is_browser_mutation_tool, is_browser_tool, is_collaboration_tool,
     is_connected_apps_execute_tool, is_connected_apps_tool, is_connector_tool,
     is_github_coding_tool, is_github_connector_tool, is_known_agent_tool, is_memory_tool,
-    is_policy_non_overridable_tool,
-    is_policy_overridable_tool, is_routine_tool, is_skill_tool, is_subagent_tool,
-    is_user_question_tool,
-    policy_action_group,
-    policy_action_label, policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES,
-    ALL_COMPUTER_TOOL_NAMES, ATTACHMENT_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES,
-    CONNECTED_APPS_TOOL_NAMES, CONNECTOR_TOOL_NAMES, MEMORY_TOOL_NAMES, ROUTINE_TOOL_NAMES,
-    POLICY_NON_OVERRIDABLE_TOOL_NAMES, POLICY_OVERRIDABLE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
+    is_policy_non_overridable_tool, is_policy_overridable_tool, is_routine_tool, is_skill_tool,
+    is_subagent_tool, is_user_question_tool, policy_action_group, policy_action_label,
+    policy_denied_message, PolicyActionGroup, ALL_AGENT_TOOL_NAMES, ALL_COMPUTER_TOOL_NAMES,
+    ATTACHMENT_TOOL_NAMES, BROWSER_TOOL_NAMES, COLLABORATION_TOOL_NAMES, CONNECTED_APPS_TOOL_NAMES,
+    CONNECTOR_TOOL_NAMES, MEMORY_TOOL_NAMES, POLICY_NON_OVERRIDABLE_TOOL_NAMES,
+    POLICY_OVERRIDABLE_TOOL_NAMES, ROUTINE_TOOL_NAMES, SUBAGENT_TOOL_NAMES,
     USER_QUESTION_TOOL_NAMES, WORKSPACE_TOOL_NAMES,
 };
 pub use tools::MAX_AGENT_TOOL_STEPS;

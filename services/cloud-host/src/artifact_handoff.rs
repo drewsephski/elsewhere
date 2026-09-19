@@ -1,5 +1,7 @@
 //! Server-mediated artifact relay from target `work_results` to source Bot computers.
 
+use std::time::Duration;
+
 use agent_core::AgentComputer;
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -7,9 +9,11 @@ use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::error::ApiError;
 use crate::results::{self, safe_name, COUNT_LIMIT, FILE_LIMIT, TOTAL_LIMIT};
 
 pub const DELEGATION_ARTIFACT_ROOT: &str = "/workspace/shared/delegations";
+pub const ARTIFACT_TRANSFER_LEASE: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone)]
 pub struct ArtifactContextLine {
@@ -238,114 +242,135 @@ async fn execute_one_transfer(
         return Ok(());
     };
 
-    let delegation_id: String = row.get("delegation_id");
-    let source_result_id: String = row.get("source_result_id");
-    let destination_path: String = row.get("destination_path");
-    let expected_size: i64 = row.get("size");
+    let outcome = perform_claimed_transfer(
+        state,
+        owner_id,
+        destination_computer_id,
+        &row.get::<String, _>("delegation_id"),
+        row.get::<Uuid, _>("source_result_id"),
+        &row.get::<String, _>("destination_path"),
+        row.get::<i64, _>("size"),
+    )
+    .await;
+    match outcome {
+        Ok(sha256) => mark_transfer_completed(&state.pool, transfer_id, &sha256).await,
+        Err((code, message)) => {
+            mark_transfer_failed(&state.pool, transfer_id, code, &message).await
+        }
+    }
+}
 
-    if !verify_transfer_authorized(&state.pool, &delegation_id, &source_result_id)
+async fn perform_claimed_transfer(
+    state: &AppState,
+    owner_id: &str,
+    destination_computer_id: &str,
+    delegation_id: &str,
+    source_result_id: Uuid,
+    destination_path: &str,
+    expected_size: i64,
+) -> Result<String, (&'static str, String)> {
+    let authorized = verify_transfer_authorized(&state.pool, delegation_id, source_result_id)
         .await
-        .map_err(|e| e.to_string())?
-    {
-        mark_transfer_failed(
-            &state.pool,
-            transfer_id,
-            "unauthorized",
-            "Artifact transfer is not authorized",
-        )
-        .await?;
-        return Ok(());
+        .map_err(|e| ("unauthorized", e.to_string()))?;
+    if !authorized {
+        return Err(("unauthorized", "Artifact transfer is not authorized".into()));
     }
 
     let content: Option<Vec<u8>> =
         sqlx::query_scalar("SELECT content FROM work_results WHERE id = $1")
-            .bind(&source_result_id)
+            .bind(source_result_id)
             .fetch_optional(&state.pool)
             .await
-            .map_err(|e| e.to_string())?;
-
+            .map_err(|e| ("missing_result", e.to_string()))?;
     let Some(content) = content else {
-        mark_transfer_failed(
-            &state.pool,
-            transfer_id,
+        return Err((
             "missing_result",
-            "Source artifact is no longer available",
-        )
-        .await?;
-        return Ok(());
+            "Source artifact is no longer available".into(),
+        ));
     };
-
     if content.len() as i64 != expected_size {
-        mark_transfer_failed(
-            &state.pool,
-            transfer_id,
-            "size_mismatch",
-            "Artifact size changed",
-        )
-        .await?;
-        return Ok(());
+        return Err(("size_mismatch", "Artifact size changed".into()));
     }
 
     let sha256 = hex_sha256(&content);
+    write_artifact_bytes(
+        state,
+        owner_id,
+        destination_computer_id,
+        destination_path,
+        &content,
+        &sha256,
+    )
+    .await?;
+    Ok(sha256)
+}
 
+fn destination_connect_failure(err: ApiError) -> (&'static str, String) {
+    match err {
+        ApiError::NotFound => (
+            "destination_unavailable",
+            "The destination computer is no longer available".into(),
+        ),
+        ApiError::Validation(message) => ("destination_unavailable", message),
+        other => ("destination_unavailable", other.to_string()),
+    }
+}
+
+async fn write_artifact_bytes(
+    state: &AppState,
+    owner_id: &str,
+    destination_computer_id: &str,
+    destination_path: &str,
+    content: &[u8],
+    sha256: &str,
+) -> Result<(), (&'static str, String)> {
     let computer = state
         .computer_registry
-        .connect_sprite_computer(
+        .connect_agent_computer(
             &state.config,
             &state.pool,
             owner_id,
             destination_computer_id,
-            state.config.browser_enabled,
+            &state.local_mac_sessions,
+            false,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(destination_connect_failure)?;
 
-    if let Ok(existing) = computer.read_file(&destination_path).await {
+    if let Ok(existing) = computer.read_file(destination_path).await {
         if existing.len() == content.len() && hex_sha256(&existing) == sha256 {
             bump_workspace_revision(computer.as_ref());
-            mark_transfer_completed(&state.pool, transfer_id, &sha256).await?;
             return Ok(());
         }
-        mark_transfer_failed(
-            &state.pool,
-            transfer_id,
+        return Err((
             "destination_conflict",
-            "Destination file exists with different content",
-        )
-        .await?;
-        return Ok(());
+            "Destination file exists with different content".into(),
+        ));
     }
 
-    computer.ensure_ready().await.map_err(|e| e.to_string())?;
     computer
-        .write_file(&destination_path, &content)
+        .ensure_ready()
         .await
-        .map_err(|e| e.to_string())?;
-
+        .map_err(|err| (err.code(), err.to_string()))?;
+    computer
+        .write_file(destination_path, content)
+        .await
+        .map_err(|err| (err.code(), err.to_string()))?;
     let written = computer
-        .read_file(&destination_path)
+        .read_file(destination_path)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|err| (err.code(), err.to_string()))?;
     if written.len() != content.len() || hex_sha256(&written) != sha256 {
-        mark_transfer_failed(
-            &state.pool,
-            transfer_id,
-            "verify_failed",
-            "Could not verify written artifact",
-        )
-        .await?;
-        return Ok(());
+        return Err(("verify_failed", "Could not verify written artifact".into()));
     }
-
     bump_workspace_revision(computer.as_ref());
-    mark_transfer_completed(&state.pool, transfer_id, &sha256).await?;
     Ok(())
 }
 
 async fn verify_transfer_authorized(
     pool: &PgPool,
     delegation_id: &str,
-    source_result_id: &str,
+    source_result_id: Uuid,
 ) -> Result<bool, sqlx::Error> {
     let ok: bool = sqlx::query_scalar(
         r#"
@@ -475,7 +500,53 @@ where
         .collect())
 }
 
+pub async fn reclaim_abandoned_transfers(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    reclaim_abandoned_transfers_older_than(pool, ARTIFACT_TRANSFER_LEASE).await
+}
+
+pub async fn reclaim_abandoned_transfers_older_than(
+    pool: &PgPool,
+    age: Duration,
+) -> Result<u64, sqlx::Error> {
+    let age_secs = i64::try_from(age.as_secs()).unwrap_or(i64::MAX);
+    let exhausted = sqlx::query(
+        r#"
+        UPDATE delegation_artifact_transfers
+        SET status = 'failed',
+            error_code = 'transfer_interrupted',
+            error_message = 'Artifact transfer was interrupted',
+            finished_at = NOW()
+        WHERE status = 'transferring'
+          AND error_code = 'reclaimed'
+          AND started_at < NOW() - ($1 * INTERVAL '1 second')
+        "#,
+    )
+    .bind(age_secs)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    let retried = sqlx::query(
+        r#"
+        UPDATE delegation_artifact_transfers
+        SET status = 'pending',
+            error_code = 'reclaimed',
+            started_at = NULL
+        WHERE status = 'transferring'
+          AND COALESCE(error_code, '') <> 'reclaimed'
+          AND started_at < NOW() - ($1 * INTERVAL '1 second')
+        "#,
+    )
+    .bind(age_secs)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    Ok(exhausted + retried)
+}
+
 pub async fn reconcile_artifact_handoffs(state: &AppState) -> Result<(), sqlx::Error> {
+    reclaim_abandoned_transfers(&state.pool).await?;
     let delegation_ids: Vec<String> = sqlx::query_scalar(
         r#"
         SELECT DISTINCT d.id

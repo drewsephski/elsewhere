@@ -156,6 +156,12 @@ describe("quick start draft", () => {
     expect(consumeQuickStartDraft("bot_2")).toBeNull();
     expect(consumeQuickStartDraft("bot_1")).toBe("Write the brief");
   });
+
+  it("ignores malformed stored data", () => {
+    sessionStorage.setItem("elsewhere:quick-start-draft", "{not-json");
+    expect(consumeQuickStartDraft("bot_1")).toBeNull();
+    expect(sessionStorage.getItem("elsewhere:quick-start-draft")).toBeNull();
+  });
 });
 
 describe("createBotAndMaybeStartWork", () => {

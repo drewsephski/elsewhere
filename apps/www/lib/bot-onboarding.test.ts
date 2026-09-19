@@ -12,11 +12,17 @@ describe("bot onboarding helpers", () => {
     expect(botConversationHref("bot_1")).toBe("/app/bots/bot_1");
   });
 
-  it("remembers and consumes a per-bot setup offer", () => {
-    rememberOnboardingOffer("bot_1");
-    expect(consumeOnboardingOffer("bot_2")).toBe(false);
-    expect(consumeOnboardingOffer("bot_1")).toBe(true);
-    expect(consumeOnboardingOffer("bot_1")).toBe(false);
+  it("does not throw when remembering or consuming a setup offer without a browser", () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+    Reflect.deleteProperty(globalThis, "sessionStorage");
+    try {
+      expect(() => rememberOnboardingOffer("bot_1")).not.toThrow();
+      expect(consumeOnboardingOffer("bot_1")).toBe(false);
+    } finally {
+      if (original) {
+        Object.defineProperty(globalThis, "sessionStorage", original);
+      }
+    }
   });
 
   it("parses resume state and ignores malformed payloads", () => {

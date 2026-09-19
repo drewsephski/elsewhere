@@ -3,6 +3,7 @@
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { BOT_DELETE_COPY } from "@/lib/bot-delete-copy";
 import { formatMessageTime } from "@/lib/format";
 import {
   activityPreview,
@@ -575,7 +576,7 @@ export function BotListSidebar({
             <DialogDescription>
               {deleteItem?.kind === "group"
                 ? "This removes the group conversation and its transcript."
-                : "This removes the bot and its settings. Work history may remain in your account."}
+                : BOT_DELETE_COPY}
             </DialogDescription>
           </DialogHeader>
           {actionError ? (

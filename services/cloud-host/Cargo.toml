@@ -127,6 +127,10 @@ required-features = ["test-utils"]
 name = "bot_onboarding"
 required-features = ["test-utils"]
 
+[[test]]
+name = "bot_create"
+required-features = ["test-utils"]
+
 [dev-dependencies]
 rcgen = "0.14"
 tempfile = "3"
@@ -153,4 +157,8 @@ required-features = ["test-utils"]
 
 [[test]]
 name = "local_mac_bot_run_routing"
+required-features = ["test-utils"]
+
+[[test]]
+name = "artifact_handoff_execute"
 required-features = ["test-utils"]

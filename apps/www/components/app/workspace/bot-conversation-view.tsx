@@ -65,6 +65,7 @@ import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
 import {
   consumeOnboardingOffer,
 } from "@/lib/bot-onboarding";
+import { newChatButtonState } from "@/lib/new-chat-control";
 import { BotOnboardingCard } from "./bot-onboarding-card";
 import {
   buildConversationRunsListPath,
@@ -472,7 +473,7 @@ export function BotConversationView({
   }, [botId, conversationId]);
 
   async function handleStartNewChat() {
-    if (startingNewChat || pending) {
+    if (startingNewChat || pending || pendingTurn || streamRunId) {
       return;
     }
     setStartingNewChat(true);
@@ -629,6 +630,10 @@ export function BotConversationView({
     (run) => run.status === "failed" || Boolean(run.errorCode),
   );
   const workTakesPriority = Boolean(streamRunId || pendingTurn || pending);
+  const newChat = newChatButtonState({
+    starting: startingNewChat,
+    hasActiveWork: workTakesPriority,
+  });
 
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
@@ -684,9 +689,9 @@ export function BotConversationView({
         </div>
         <div className="flex items-center gap-0.5">
           <ComposerIconButton
-            label="New chat"
+            label={newChat.label}
             className="size-7"
-            disabled={startingNewChat || pending}
+            disabled={newChat.disabled}
             onClick={() => void handleStartNewChat()}
           >
             <MessageSquare className="size-4" aria-hidden />

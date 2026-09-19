@@ -10,14 +10,14 @@ use crate::human_intervention::is_human_intervention_tool;
 use crate::human_intervention_tools::dispatch_human_intervention_tool;
 use crate::memory::MemoryContext;
 use crate::memory_tools::dispatch_memory_tool;
-use crate::subagent::{
-    AgentSubagents, SubagentContext, SubagentError, SubagentRequest, RUN_SUBAGENT_DESCRIPTION,
-    RUN_SUBAGENT_TOOL_NAME,
-};
 use crate::routine_tools::dispatch_routine_tool;
 use crate::routines::RoutineContext;
 use crate::skill_tools::dispatch_skill_tool;
 use crate::skills::SkillContext;
+use crate::subagent::{
+    AgentSubagents, SubagentContext, SubagentError, SubagentRequest, RUN_SUBAGENT_DESCRIPTION,
+    RUN_SUBAGENT_TOOL_NAME,
+};
 use crate::tool_catalog::{
     is_attachment_tool, is_collaboration_tool, is_connector_tool, is_github_coding_tool,
     is_memory_tool, is_routine_tool, is_skill_tool, is_subagent_tool, is_user_question_tool,
@@ -29,24 +29,42 @@ use std::sync::Arc;
 
 use crate::browser_recovery::BrowserRecoverySession;
 
-pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
+#[derive(Debug, Clone)]
+pub struct CollaborationToolSpec {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub parameters: Value,
+}
+
+pub fn collaboration_tool_specs() -> Vec<CollaborationToolSpec> {
     vec![
-        json!({
-            "type": "function",
-            "name": "bot_list",
-            "description": "List other Bots owned by the same user that you may hand work to asynchronously. Does not wait for them to finish.",
-            "parameters": {
+        CollaborationToolSpec {
+            name: "bot_list",
+            description: "List other Bots owned by the same user that you may hand work to asynchronously. Does not wait for them to finish.",
+            parameters: json!({
                 "type": "object",
                 "properties": {},
                 "additionalProperties": false
-            },
-            "strict": true
-        }),
-        json!({
-            "type": "function",
-            "name": "bot_delegate",
-            "description": "Hand a piece of work to another Bot asynchronously. This only queues durable work for the recipient; it does NOT run their task or wait for completion. Tell the user what you delegated and to whom; do not claim the other Bot already finished.",
-            "parameters": {
+            }),
+        },
+        CollaborationToolSpec {
+            name: "bot_create",
+            description: "Create a new persistent Bot owned by the same user. Use only when a durable specialist is genuinely useful and bot_list shows no suitable teammate. Does not start work. Requires owner approval. Do not use this for trivial one-off reasoning; use run_subagent instead.",
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Display name for the new Bot" },
+                    "instructions": { "type": "string", "description": "Role / standing instructions for the new Bot" },
+                    "avatarId": { "type": "string", "description": "Optional avatar preset id" }
+                },
+                "required": ["name", "instructions"],
+                "additionalProperties": false
+            }),
+        },
+        CollaborationToolSpec {
+            name: "bot_delegate",
+            description: "Hand a piece of work to another Bot asynchronously. This only queues durable work for the recipient; it does NOT run their task or wait for completion. Tell the user what you delegated and to whom; do not claim the other Bot already finished.",
+            parameters: json!({
                 "type": "object",
                 "properties": {
                     "targetBotId": { "type": "string", "description": "Recipient Bot id from bot_list" },
@@ -60,14 +78,12 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
                 },
                 "required": ["targetBotId", "instruction"],
                 "additionalProperties": false
-            },
-            "strict": true
-        }),
-        json!({
-            "type": "function",
-            "name": RUN_SUBAGENT_TOOL_NAME,
-            "description": RUN_SUBAGENT_DESCRIPTION,
-            "parameters": {
+            }),
+        },
+        CollaborationToolSpec {
+            name: RUN_SUBAGENT_TOOL_NAME,
+            description: RUN_SUBAGENT_DESCRIPTION,
+            parameters: json!({
                 "type": "object",
                 "properties": {
                     "name": {
@@ -85,10 +101,24 @@ pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
                 },
                 "required": ["name", "task"],
                 "additionalProperties": false
-            },
-            "strict": true
-        }),
+            }),
+        },
     ]
+}
+
+pub fn collaboration_openai_tool_definitions() -> Vec<Value> {
+    collaboration_tool_specs()
+        .into_iter()
+        .map(|spec| {
+            json!({
+                "type": "function",
+                "name": spec.name,
+                "description": spec.description,
+                "parameters": spec.parameters,
+                "strict": true
+            })
+        })
+        .collect()
 }
 
 pub fn all_openai_tool_definitions() -> Vec<Value> {
@@ -358,6 +388,25 @@ async fn dispatch_collaboration_tool(
                 "detail": "Work queued for the recipient Bot. They have not finished yet."
             }))
         }
+        "bot_create" => {
+            let name = required_str(&args, "name")?;
+            let instructions = required_str(&args, "instructions")?;
+            let avatar_id = args
+                .get("avatarId")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            let created = service
+                .create_bot(ctx, name, instructions, avatar_id)
+                .await
+                .map_err(map_collaboration_error)?;
+            Ok(json!({
+                "ok": true,
+                "botId": created.bot_id,
+                "name": created.name,
+                "computerId": created.computer_id,
+                "detail": "Persistent Bot created. It has not started work yet. Use bot_delegate to hand it work."
+            }))
+        }
         other => Err(ToolError::MalformedArguments(format!(
             "unknown tool: {other}"
         ))),
@@ -623,5 +672,127 @@ mod tests {
             result["detail"],
             "This was a temporary helper for the current assignment, not another Bot."
         );
+    }
+
+    struct PanicCollaboration;
+
+    #[async_trait]
+    impl AgentCollaboration for PanicCollaboration {
+        async fn list_bots(
+            &self,
+            _ctx: &CollaborationContext,
+        ) -> Result<Vec<crate::collaboration::BotTeammateSummary>, CollaborationError> {
+            panic!("list_bots should not run");
+        }
+
+        async fn delegate(
+            &self,
+            _ctx: &CollaborationContext,
+            _target_bot_id: &str,
+            _instruction: &str,
+            _context: Option<&str>,
+            _return_policy: &str,
+        ) -> Result<crate::collaboration::DelegationEnqueueResult, CollaborationError> {
+            panic!("delegate should not run");
+        }
+
+        async fn create_bot(
+            &self,
+            _ctx: &CollaborationContext,
+            _name: &str,
+            _instructions: &str,
+            _avatar_id: Option<&str>,
+        ) -> Result<crate::collaboration::BotCreateResult, CollaborationError> {
+            panic!("create_bot should not run");
+        }
+    }
+
+    struct DenyCreateGate;
+
+    #[async_trait]
+    impl ToolApprovalGate for DenyCreateGate {
+        async fn authorize(
+            &self,
+            _context: &ToolApprovalContext,
+        ) -> Result<ApprovalDecision, ApprovalError> {
+            Ok(ApprovalDecision::Deny {
+                reason: "This Bot is not allowed to create another Bot.".into(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn bot_create_deny_does_not_call_create() {
+        let computer = FakeAgentComputer::new();
+        let collaboration: Arc<dyn AgentCollaboration> = Arc::new(PanicCollaboration);
+        let (run, collab, cancel) = run_ctx();
+        let err = dispatch_agent_tool_with_gate_and_recovery(
+            &computer,
+            Some(&collaboration),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "bot_create",
+            r#"{"name":"Researcher","instructions":"Find sources"}"#,
+            &cancel,
+            &DenyCreateGate,
+            &run,
+            Some(&collab),
+            None,
+        )
+        .await
+        .expect_err("deny is a tool error");
+        match err {
+            ToolError::Denied(reason) => {
+                assert_eq!(reason, "This Bot is not allowed to create another Bot.");
+            }
+            other => panic!("expected Denied, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn openai_defs_include_bot_create_without_owner_engine_or_computer() {
+        let defs = collaboration_openai_tool_definitions();
+        let create = defs
+            .iter()
+            .find(|def| def.get("name").and_then(|v| v.as_str()) == Some("bot_create"))
+            .expect("bot_create");
+        assert_eq!(
+            create.get("type").and_then(|v| v.as_str()),
+            Some("function")
+        );
+        assert_eq!(create.get("strict").and_then(|v| v.as_bool()), Some(true));
+        let required = create
+            .pointer("/parameters/required")
+            .and_then(|v| v.as_array())
+            .expect("required");
+        let required: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(required, vec!["name", "instructions"]);
+        let properties = create
+            .pointer("/parameters/properties")
+            .and_then(|v| v.as_object())
+            .expect("properties");
+        assert!(properties.contains_key("name"));
+        assert!(properties.contains_key("instructions"));
+        assert!(properties.contains_key("avatarId"));
+        assert!(!properties.contains_key("owner"));
+        assert!(!properties.contains_key("ownerId"));
+        assert!(!properties.contains_key("engine"));
+        assert!(!properties.contains_key("enginePreference"));
+        assert!(!properties.contains_key("computer"));
+        assert!(!properties.contains_key("computerId"));
+        let delegate = defs
+            .iter()
+            .find(|def| def.get("name").and_then(|v| v.as_str()) == Some("bot_delegate"))
+            .expect("bot_delegate");
+        assert!(delegate
+            .pointer("/parameters/properties/onComplete")
+            .is_some());
     }
 }

@@ -16,7 +16,7 @@ pub const BROWSER_TOOL_NAMES: &[&str] = &[
     "browser_download",
 ];
 
-pub const COLLABORATION_TOOL_NAMES: &[&str] = &["bot_list", "bot_delegate"];
+pub const COLLABORATION_TOOL_NAMES: &[&str] = &["bot_list", "bot_create", "bot_delegate"];
 
 pub const SUBAGENT_TOOL_NAMES: &[&str] = &["run_subagent"];
 
@@ -153,6 +153,7 @@ pub const POLICY_OVERRIDABLE_TOOL_NAMES: &[&str] = &[
     "browser_type",
     "browser_screenshot",
     "browser_download",
+    "bot_create",
     "bot_delegate",
     "run_subagent",
     "remember",
@@ -233,7 +234,7 @@ pub fn policy_action_group(name: &str) -> Option<PolicyActionGroup> {
         "workspace_exec" | "github_run_check" => Some(PolicyActionGroup::Terminal),
         "browser_navigate" | "browser_click" | "browser_type" | "browser_screenshot"
         | "browser_download" => Some(PolicyActionGroup::Browser),
-        "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
+        "bot_create" | "bot_delegate" | "run_subagent" => Some(PolicyActionGroup::Delegation),
         "remember" | "forget_memory" => Some(PolicyActionGroup::Memory),
         "routine_create" | "routine_pause" | "routine_resume" => Some(PolicyActionGroup::Routines),
         "skill_save_recent_work" | "skill_attach" | "skill_detach" => {
@@ -259,6 +260,7 @@ pub fn policy_action_label(name: &str) -> &'static str {
         "browser_type" => "Type",
         "browser_screenshot" => "Take screenshots",
         "browser_download" => "Download files",
+        "bot_create" => "Create a Bot",
         "bot_delegate" => "Hand off work",
         "run_subagent" => "Run subagents",
         "remember" => "Remember things",
@@ -287,6 +289,7 @@ pub fn policy_denied_message(name: &str) -> String {
         "browser_type" => "This Bot is not allowed to type in the browser.".into(),
         "browser_screenshot" => "This Bot is not allowed to take screenshots.".into(),
         "browser_download" => "This Bot is not allowed to download files.".into(),
+        "bot_create" => "This Bot is not allowed to create another Bot.".into(),
         "bot_delegate" => "This Bot is not allowed to hand work to another Bot.".into(),
         "run_subagent" => "This Bot is not allowed to run subagents.".into(),
         "remember" => "This Bot is not allowed to save memories.".into(),
@@ -326,6 +329,7 @@ pub const ALL_AGENT_TOOL_NAMES: &[&str] = &[
     "attachment_list",
     "attachment_read",
     "bot_list",
+    "bot_create",
     "bot_delegate",
     "run_subagent",
     "github_list_repositories",
@@ -415,5 +419,17 @@ mod tests {
         );
         assert!(is_subagent_tool("run_subagent"));
         assert!(!is_collaboration_tool("run_subagent"));
+        assert!(is_collaboration_tool("bot_create"));
+        assert!(ALL_AGENT_TOOL_NAMES.contains(&"bot_create"));
+        assert!(is_policy_overridable_tool("bot_create"));
+        assert_eq!(
+            policy_action_group("bot_create"),
+            Some(PolicyActionGroup::Delegation)
+        );
+        assert_eq!(policy_action_label("bot_create"), "Create a Bot");
+        assert_eq!(
+            policy_denied_message("bot_create"),
+            "This Bot is not allowed to create another Bot."
+        );
     }
 }

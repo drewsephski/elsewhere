@@ -151,6 +151,7 @@ export function ApprovalCard({
   const hasDetails =
     argumentSummary && Object.keys(argumentSummary).length > 0;
   const target = humanTarget(payload);
+  const summaryLine = target ? `${payload.summary} · ${target}` : payload.summary;
   const isRoutineApproval = payload.tool.startsWith("routine_");
   const isSkillApproval = payload.tool.startsWith("skill_");
   const pendingTitle = isRoutineApproval
@@ -166,9 +167,10 @@ export function ApprovalCard({
   if (resolved) {
     return (
       <NeedsYouCard
+        compact
         tone="resolved"
         title={resolvedTitle}
-        reason={target ? `Target: ${target}` : "Recorded in this conversation."}
+        reason={target ? target : "Recorded in this conversation."}
         actions={
           hasDetails ? (
             <div className="w-full pt-1">
@@ -194,57 +196,57 @@ export function ApprovalCard({
 
   return (
     <NeedsYouCard
+      compact
       tone="pending"
       title={pendingTitle}
-      reason={payload.summary}
-      detail={
-        target ? (
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground/80">Target:</span> {target}
-          </p>
-        ) : null
-      }
-      continuation={`${botName} waits until you choose. Nothing runs until you allow it.`}
+      reason={summaryLine}
+      continuation=""
       actions={
         <>
-          <Button
-            type="button"
-            size="sm"
-            disabled={busy}
-            onClick={() => void handleDecision("approve")}
-          >
-            Allow
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => void handleDecision("deny")}
-          >
-            Deny
-          </Button>
+          <div className="flex w-full flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-8 flex-1 sm:flex-none"
+              disabled={busy}
+              onClick={() => void handleDecision("approve")}
+            >
+              Allow
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="min-h-8 flex-1 sm:flex-none"
+              disabled={busy}
+              onClick={() => void handleDecision("deny")}
+            >
+              Deny
+            </Button>
+          </div>
           {showPersistent && !resolved ? (
-            <div className="flex w-full flex-col items-start gap-1 pt-1">
+            <div className="flex w-full flex-wrap gap-1.5">
               <Button
                 type="button"
                 size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-muted-foreground"
+                variant="secondary"
+                className="h-8 min-h-8 flex-1 text-xs font-medium"
                 disabled={busy}
                 onClick={() => void handlePersistent("allow")}
+                aria-label={`Always allow ${actionLabel} for ${botName}`}
               >
-                Always allow {actionLabel} for {botName}
+                Always allow
               </Button>
               <Button
                 type="button"
                 size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs text-muted-foreground"
+                variant="outline"
+                className="h-8 min-h-8 flex-1 border-border/80 text-xs font-medium"
                 disabled={busy}
                 onClick={() => void handlePersistent("deny")}
+                aria-label={`Always deny ${actionLabel} for ${botName}`}
               >
-                Always deny {actionLabel} for {botName}
+                Always deny
               </Button>
             </div>
           ) : null}
