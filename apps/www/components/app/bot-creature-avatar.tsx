@@ -1,8 +1,11 @@
-import { botAvatarImage } from "@/lib/bot-avatars";
+import { botAvatarImage, getBotAvatarPreset } from "@/lib/bot-avatars";
 import { getBotCreatureShellClass } from "@/lib/bot-visual";
 import { cn } from "cn";
+import type { CSSProperties } from "react";
 
 export type BotCreatureAvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
+
+type CreatureWorkingIntensity = "compact" | "focus" | "hero";
 
 const SIZE_CLASS: Record<BotCreatureAvatarSize, string> = {
   xs: "size-5",
@@ -13,6 +16,15 @@ const SIZE_CLASS: Record<BotCreatureAvatarSize, string> = {
   "2xl": "size-16",
 };
 
+const WORKING_INTENSITY: Record<BotCreatureAvatarSize, CreatureWorkingIntensity> = {
+  xs: "compact",
+  sm: "focus",
+  md: "hero",
+  lg: "hero",
+  xl: "hero",
+  "2xl": "hero",
+};
+
 interface BotCreatureAvatarProps {
   name: string;
   avatarId?: string | null;
@@ -20,7 +32,6 @@ interface BotCreatureAvatarProps {
   src?: string;
   size?: BotCreatureAvatarSize;
   className?: string;
-  /** Subtle bounce while the bot is responding */
   animated?: boolean;
   /** Colored tile behind the creature (legacy). Default: transparent. */
   showShell?: boolean;
@@ -28,6 +39,40 @@ interface BotCreatureAvatarProps {
    * `tile` clips the portrait into a compact round mark for nav stacks.
    */
   variant?: "plain" | "tile";
+}
+
+function CreatureWorkingAura({ intensity }: { intensity: CreatureWorkingIntensity }) {
+  return (
+    <span data-creature-aura data-intensity={intensity} className="pointer-events-none" aria-hidden>
+      <span className="creature-halo creature-halo-a" />
+      <span className="creature-halo creature-halo-b" />
+      <span className="creature-halo creature-halo-c" />
+      <span className="creature-working-static-ring" />
+      <svg className="creature-rings" viewBox="0 0 100 100">
+        <ellipse
+          className="creature-ring creature-ring-spin"
+          cx="50"
+          cy="56"
+          rx="36"
+          ry="20"
+          fill="none"
+        />
+        {intensity !== "compact" ? (
+          <ellipse
+            className="creature-ring creature-ring-reverse"
+            cx="50"
+            cy="50"
+            rx="22"
+            ry="32"
+            fill="none"
+          />
+        ) : null}
+      </svg>
+      <span className="creature-spark" />
+      {intensity !== "compact" ? <span className="creature-spark creature-spark-b" /> : null}
+      {intensity === "hero" ? <span className="creature-sheen" /> : null}
+    </span>
+  );
 }
 
 export function BotCreatureAvatar({
@@ -43,11 +88,19 @@ export function BotCreatureAvatar({
   const image = src ?? botAvatarImage(avatarId, name);
   const shell = showShell ? getBotCreatureShellClass(name) : "";
   const tile = variant === "tile";
+  const colors = animated ? getBotAvatarPreset(avatarId).colors : null;
+  const workingStyle = colors
+    ? ({
+        "--creature-accent": colors.accent,
+        "--creature-body": colors.body,
+      } as CSSProperties)
+    : undefined;
 
   return (
     <span
       className={cn(
         "relative inline-flex shrink-0 items-end justify-center",
+        animated && "isolate",
         showShell
           ? "overflow-hidden rounded-2xl ring-1 ring-inset"
           : tile
@@ -57,9 +110,12 @@ export function BotCreatureAvatar({
         shell,
         className,
       )}
+      style={workingStyle}
       role="img"
       aria-label={`${name.trim() || "Assistant"} avatar`}
+      data-working={animated ? "on" : "off"}
     >
+      {animated ? <CreatureWorkingAura intensity={WORKING_INTENSITY[size]} /> : null}
       <img
         src={image}
         alt=""
@@ -68,8 +124,8 @@ export function BotCreatureAvatar({
         decoding="async"
         draggable={false}
         className={cn(
-          "max-h-full w-auto max-w-full object-contain object-bottom",
-          animated && "animate-[bot-bob_2.4s_ease-in-out_infinite] motion-reduce:animate-none",
+          "relative z-[1] max-h-full w-auto max-w-full object-contain object-bottom",
+          animated && "creature-breathe motion-reduce:animate-none",
         )}
         aria-hidden
       />

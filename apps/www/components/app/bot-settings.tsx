@@ -14,6 +14,7 @@ import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { botConversationHref } from "@/lib/bot-onboarding";
 import { useRouter } from "next/navigation";
 
 export function BotGeneralSettings({
@@ -103,6 +104,7 @@ export function BotGeneralSettings({
             maxLength={16000}
           />
         </FormItem>
+        <BotSetupAgain botId={bot.id} botName={bot.name} />
       </FormFields>
       <div className="sticky bottom-0 mt-6 flex items-center justify-end gap-3 border-t border-border bg-card pt-3">
         {notice ? (
@@ -120,6 +122,47 @@ export function BotGeneralSettings({
         </Button>
       </div>
     </form>
+  );
+}
+
+function BotSetupAgain({ botId, botName }: { botId: string; botName: string }) {
+  const router = useRouter();
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    cloudHostFetch(`/v1/bots/${botId}/onboarding`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const body = (await response.json()) as { status?: string };
+        setStatus(body.status ?? "not_started");
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [botId]);
+
+  const label =
+    status === "completed" || status === "in_progress" || status === "ready_to_apply"
+      ? "Run setup again"
+      : "Finish Bot setup";
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
+      <p className="text-[13px] font-medium">Tune how {botName} works</p>
+      <p className="mt-1 text-[12px] leading-5 text-muted-foreground">
+        A short Luna-guided setup that updates instructions and pinned context. It does not
+        change approvals, tools, or connectors.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2"
+        onClick={() => router.push(botConversationHref(botId, { setup: true }))}
+      >
+        {label}
+      </Button>
+    </div>
   );
 }
 

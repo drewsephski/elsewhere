@@ -39,6 +39,7 @@ pub mod schedule;
 
 pub mod bot_avatar;
 pub mod bot_context;
+pub mod bot_onboarding;
 pub mod bounded_text;
 pub mod codex_ops;
 pub mod computer_registry;

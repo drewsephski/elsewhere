@@ -33,6 +33,7 @@ import {
 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { useHistoricalRunTimelines } from "@/hooks/use-historical-run-timelines";
 import { MarkdownContent } from "@/components/app/markdown-content";
@@ -62,6 +63,10 @@ import {
 } from "@/lib/conversation-load-scope";
 import { consumeQuickStartDraft } from "@/lib/bot-quick-start";
 import {
+  consumeOnboardingOffer,
+} from "@/lib/bot-onboarding";
+import { BotOnboardingCard } from "./bot-onboarding-card";
+import {
   buildConversationRunsListPath,
   retryPrefillText,
 } from "@/lib/conversation-runs";
@@ -82,7 +87,7 @@ function BotWaitingStatus({
 }) {
   return (
     <div className="flex items-end gap-3" role="status" aria-live="polite">
-      <BotCreatureAvatar name={name} avatarId={avatarId} size="xl" animated />
+      <BotCreatureAvatar name={name} avatarId={avatarId} size="md" animated />
       <p className="pb-1 text-[13px] text-muted-foreground">{label}</p>
     </div>
   );
@@ -139,6 +144,9 @@ export function BotConversationView({
   const stickToBottomRef = useRef(true);
   const loadScopeRef = useRef(createLoadScopeRef());
   const [conversationLoading, setConversationLoading] = useState(true);
+  const [setupRequested, setSetupRequested] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { reset: resetComposerAttachments, ...composerFiles } = useComposerAttachments(
     botId ? { botId } : null,
   );
@@ -164,8 +172,17 @@ export function BotConversationView({
     const draft = consumeQuickStartDraft(botId);
     if (draft) {
       setMessage(draft);
+      setSetupRequested(false);
+      return;
     }
-  }, [botId]);
+    const setup = searchParams.get("setup") === "1";
+    if (consumeOnboardingOffer(botId) || setup) {
+      setSetupRequested(true);
+      if (setup) {
+        router.replace(`/app/bots/${botId}`);
+      }
+    }
+  }, [botId, router, searchParams]);
 
   const activeRun = useMemo(() => {
     if (liveRunId) {
@@ -574,6 +591,10 @@ export function BotConversationView({
     !conversationLoading &&
     chronologicalRuns.length === 0 &&
     !pendingTurn;
+  const failedRunTakesPriority = chronologicalRuns.some(
+    (run) => run.status === "failed" || Boolean(run.errorCode),
+  );
+  const workTakesPriority = Boolean(streamRunId || pendingTurn || pending);
 
   function handleSelectPreset(prompt: string) {
     setMessage(prompt);
@@ -876,23 +897,73 @@ export function BotConversationView({
 
           {!conversationLoading && !chronologicalRuns.length && !pendingTurn ? (
             <div className="mx-auto flex w-full max-w-lg flex-col items-center px-4 py-6 text-center">
-              <BotCreatureAvatar
-                name={bot?.name ?? "Bot"}
-                avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
-                size="2xl"
-              />
-              <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
-                {bot?.name ? `What should ${bot.name} work on?` : "What should this Bot work on?"}
-              </p>
-              {showPresetPrompts ? (
-                <div className="mt-5 w-full">
-                  <BotPresetPrompts
-                    prompts={presetPrompts}
-                    onSelect={handleSelectPreset}
-                    disabled={pending}
+              {bot ? (
+                <div className="mb-5 w-full text-left">
+                  <BotOnboardingCard
+                    botId={bot.id}
+                    botName={bot.name}
+                    avatarId={bot.avatarId}
+                    autoStart={setupRequested}
+                    workTakesPriority={workTakesPriority}
+                    failedRunTakesPriority={failedRunTakesPriority}
+                    conversationEmpty
+                    onApplied={() => {
+                      cloudHostFetch(`/v1/bots/${bot.id}`)
+                        .then(async (response) => {
+                          if (!response.ok) return;
+                          const loaded: BotSummary = await response.json();
+                          setBot(loaded);
+                          onBotLoaded?.(loaded);
+                        })
+                        .catch(() => undefined);
+                    }}
                   />
                 </div>
               ) : null}
+              {setupRequested ? null : (
+                <>
+                  <BotCreatureAvatar
+                    name={bot?.name ?? "Bot"}
+                    avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
+                    size="2xl"
+                  />
+                  <p className="mt-4 text-[15px] font-medium tracking-tight text-foreground">
+                    {bot?.name ? `What should ${bot.name} work on?` : "What should this Bot work on?"}
+                  </p>
+                  {showPresetPrompts ? (
+                    <div className="mt-5 w-full">
+                      <BotPresetPrompts
+                        prompts={presetPrompts}
+                        onSelect={handleSelectPreset}
+                        disabled={pending}
+                      />
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
+          {!conversationLoading && chronologicalRuns.length > 0 && bot && !workTakesPriority ? (
+            <div className="mx-auto w-full max-w-lg">
+              <BotOnboardingCard
+                botId={bot.id}
+                botName={bot.name}
+                avatarId={bot.avatarId}
+                autoStart={false}
+                workTakesPriority={workTakesPriority}
+                failedRunTakesPriority={failedRunTakesPriority}
+                conversationEmpty={false}
+                onApplied={() => {
+                  cloudHostFetch(`/v1/bots/${bot.id}`)
+                    .then(async (response) => {
+                      if (!response.ok) return;
+                      const loaded: BotSummary = await response.json();
+                      setBot(loaded);
+                      onBotLoaded?.(loaded);
+                    })
+                    .catch(() => undefined);
+                }}
+              />
             </div>
           ) : null}
         </div>

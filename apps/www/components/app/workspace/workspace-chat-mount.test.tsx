@@ -9,6 +9,10 @@ import { WorkspaceAuthenticatedFrame } from "./workspace-authenticated-frame";
 import BotWorkspacePage from "@/app/app/bots/[id]/page";
 import AppHomePage from "@/app/app/page";
 
+vi.mock("@/hooks/use-desktop-native-notifications", () => ({
+  useDesktopNativeNotifications: vi.fn(),
+}));
+
 vi.mock("@/components/app/product-theme-scope", () => ({
   ProductThemeScope: () => null,
 }));
@@ -83,6 +87,20 @@ vi.mock("@/hooks/use-provider-status", () => ({
 
 vi.mock("@/lib/cloud-api", () => ({
   cloudHostFetch: vi.fn(async (path: string) => {
+    if (String(path).includes("/onboarding")) {
+      return {
+        ok: true,
+        json: async () => ({
+          botId: "bot_1",
+          status: "not_started",
+          questionsAsked: 0,
+          maxQuestions: 3,
+          revision: 0,
+          answers: [],
+          generationModel: "gpt-5.6-luna",
+        }),
+      };
+    }
     if (path.startsWith("/v1/bots/")) {
       return {
         ok: true,
@@ -216,5 +234,26 @@ describe("workspace chat mount", () => {
     expect(screen.getByRole("button", { name: "Start working" })).toBeTruthy();
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Computer")).toBeNull();
+  });
+
+  it("surfaces optional setup from the post-create signal without trapping chat", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/bots/bot_1?setup=1"]}>
+        <Routes>
+          <Route
+            path="/app/bots/:id"
+            element={
+              <WorkspaceAuthenticatedFrame userEmail="user@example.com">
+                <BotWorkspacePage />
+              </WorkspaceAuthenticatedFrame>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Scout is ready/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skip for now" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeTruthy();
   });
 });

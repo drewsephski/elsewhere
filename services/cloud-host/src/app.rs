@@ -60,6 +60,26 @@ pub fn build_router(state: AppState) -> Router {
                 .delete(api::bots::delete),
         )
         .route(
+            "/v1/bots/{id}/onboarding",
+            get(crate::bot_onboarding::get),
+        )
+        .route(
+            "/v1/bots/{id}/onboarding/start",
+            post(crate::bot_onboarding::start),
+        )
+        .route(
+            "/v1/bots/{id}/onboarding/answer",
+            post(crate::bot_onboarding::answer),
+        )
+        .route(
+            "/v1/bots/{id}/onboarding/apply",
+            post(crate::bot_onboarding::apply),
+        )
+        .route(
+            "/v1/bots/{id}/onboarding/dismiss",
+            post(crate::bot_onboarding::dismiss),
+        )
+        .route(
             "/v1/bots/{id}/memories",
             get(api::memories::list).post(api::memories::create),
         )

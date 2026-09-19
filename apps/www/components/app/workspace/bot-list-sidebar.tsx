@@ -317,6 +317,7 @@ export function BotListSidebar({
                   name={bot.name}
                   avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                   size="lg"
+                  animated={presenceIsActive(bot.presence)}
                 />
                 <span className="w-full truncate text-center text-[10px] font-medium" title={bot.name}>
                   {bot.name}
@@ -428,7 +429,7 @@ export function BotListSidebar({
                         name={bot.name}
                         avatarId={bot.avatarId ?? DEFAULT_BOT_AVATAR_ID}
                         size="sm"
-                        animated={selected && presenceIsActive(bot.presence)}
+                        animated={presenceIsActive(bot.presence)}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">

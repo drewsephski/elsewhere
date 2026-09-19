@@ -123,6 +123,10 @@ required-features = ["test-utils"]
 name = "ask_user"
 required-features = ["test-utils"]
 
+[[test]]
+name = "bot_onboarding"
+required-features = ["test-utils"]
+
 [dev-dependencies]
 rcgen = "0.14"
 tempfile = "3"

@@ -98,6 +98,21 @@ pub struct AppState {
             >,
         >,
     >,
+    #[cfg(any(test, feature = "test-utils"))]
+    pub test_onboarding_generator: Arc<
+        std::sync::Mutex<
+            Option<
+                Arc<
+                    dyn Fn(
+                            &crate::bot_onboarding::OnboardingGenerateInput,
+                        )
+                            -> Result<crate::bot_onboarding::OnboardingModelResponse, String>
+                        + Send
+                        + Sync,
+                >,
+            >,
+        >,
+    >,
 }
 
 #[cfg(any(test, feature = "test-utils"))]
@@ -226,6 +241,8 @@ impl AppState {
             test_run_overrides: TestRunOverrideRegistry::default(),
             #[cfg(any(test, feature = "test-utils"))]
             test_memory_extractor: Arc::new(std::sync::Mutex::new(None)),
+            #[cfg(any(test, feature = "test-utils"))]
+            test_onboarding_generator: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 
@@ -277,5 +294,25 @@ impl AppState {
             .test_memory_extractor
             .lock()
             .expect("test memory extractor lock") = extractor;
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn set_test_onboarding_generator(
+        &self,
+        generator: Option<
+            Arc<
+                dyn Fn(
+                        &crate::bot_onboarding::OnboardingGenerateInput,
+                    )
+                        -> Result<crate::bot_onboarding::OnboardingModelResponse, String>
+                    + Send
+                    + Sync,
+            >,
+        >,
+    ) {
+        *self
+            .test_onboarding_generator
+            .lock()
+            .expect("test onboarding generator lock") = generator;
     }
 }

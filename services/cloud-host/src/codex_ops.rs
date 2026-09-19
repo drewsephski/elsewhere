@@ -19,6 +19,7 @@ pub enum CodexOperationKind {
     Archive,
     GroupRoute,
     MemoryExtraction,
+    BotOnboarding,
 }
 
 impl CodexOperationKind {
@@ -30,6 +31,7 @@ impl CodexOperationKind {
             Self::Archive => "archive",
             Self::GroupRoute => "group_route",
             Self::MemoryExtraction => "memory_extraction",
+            Self::BotOnboarding => "bot_onboarding",
         }
     }
 }
@@ -298,5 +300,14 @@ mod tests {
         assert!(gate.try_acquire(CodexOperationKind::Run).is_err());
         drop(archive);
         assert!(gate.try_acquire(CodexOperationKind::Run).is_ok());
+    }
+
+    #[test]
+    fn bot_onboarding_shares_slot_with_run() {
+        let gate = single_slot_gate();
+        let run = gate.try_acquire(CodexOperationKind::Run).expect("run");
+        assert!(gate.try_acquire(CodexOperationKind::BotOnboarding).is_err());
+        drop(run);
+        assert!(gate.try_acquire(CodexOperationKind::BotOnboarding).is_ok());
     }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { CreateBotOutcome } from "@/lib/bot-quick-start";
+import { botConversationHref, rememberOnboardingOffer } from "@/lib/bot-onboarding";
 import { useRouter } from "next/navigation";
 import { CreateBotForm } from "@/components/app/workspace/create-bot-form";
 import { WorkspaceOverview } from "./workspace-overview";
@@ -9,12 +10,13 @@ export function BotsManager() {
   const router = useRouter();
 
   function handleOutcome(outcome: CreateBotOutcome) {
-    if (
-      outcome.status === "created" ||
-      outcome.status === "started" ||
-      outcome.status === "bot_ready_run_failed"
-    ) {
-      router.push(`/app/bots/${outcome.botId}`);
+    if (outcome.status === "created") {
+      rememberOnboardingOffer(outcome.botId);
+      router.push(botConversationHref(outcome.botId, { setup: true }));
+      return;
+    }
+    if (outcome.status === "started" || outcome.status === "bot_ready_run_failed") {
+      router.push(botConversationHref(outcome.botId));
     }
   }
 

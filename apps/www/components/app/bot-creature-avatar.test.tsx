@@ -9,12 +9,22 @@ afterEach(() => {
 });
 
 describe("BotCreatureAvatar", () => {
-  it("bobs the job-bot portrait when animated", () => {
+  it("shows working chrome when animated", () => {
     render(<BotCreatureAvatar name="Engineer" avatarId="teal-wisp" animated />);
 
-    expect(screen.getByRole("img", { name: "Engineer avatar" })).toBeTruthy();
-    const img = document.querySelector("img");
-    expect(img?.className).toContain("bot-bob");
+    const root = screen.getByRole("img", { name: "Engineer avatar" });
+    expect(root.getAttribute("data-working")).toBe("on");
+    expect(root.querySelector("[data-creature-aura]")).toBeTruthy();
+    const img = root.querySelector("img");
+    expect(img?.className).not.toContain("bot-bob");
     expect(img?.getAttribute("src")).toContain("engineer");
+  });
+
+  it("hides working chrome when idle", () => {
+    render(<BotCreatureAvatar name="Engineer" avatarId="teal-wisp" />);
+
+    const root = screen.getByRole("img", { name: "Engineer avatar" });
+    expect(root.getAttribute("data-working")).toBe("off");
+    expect(root.querySelector("[data-creature-aura]")).toBeNull();
   });
 });

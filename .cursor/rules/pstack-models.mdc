@@ -5,21 +5,21 @@ alwaysApply: true
 # pstack model configuration. One line per role. Delete a line to fall back to the skill default.
 # `inherit-parent` or `auto` as a value: the role runs on the parent chat model (omit Task `model`). Alias entries in a panel list still count toward its fan-out.
 # budget: medium (high)
-# Prefer inherit-parent in Grok Bot; in Cursor IDE, edit slugs to entitled models as needed.
-feature, refactoring: inherit-parent
-bug-fix: inherit-parent
-perf-issue: inherit-parent
-hillclimb: inherit-parent
-judgment and prose: inherit-parent
-hardest tasks: inherit-parent
-how explorer: inherit-parent
-how explainer: inherit-parent
-why investigators: inherit-parent
-why synthesizer: inherit-parent
-reflect tooling: inherit-parent
-reflect judgment, divergent, synthesizer: inherit-parent
-arena runners: inherit-parent, inherit-parent, inherit-parent
-arena cross-judge pool: inherit-parent
-swarm workers: inherit-parent
-architect runners: inherit-parent, inherit-parent, inherit-parent
-interrogate reviewers: inherit-parent, inherit-parent, inherit-parent
+# Cursor IDE entitled slugs for this checkout. Code stays on Grok high. Judgment and panels mix in Composer so fan-out is not one model three times. Grok Bot chats should use inherit-parent instead of these slugs.
+feature, refactoring: cursor-grok-4.6-high
+bug-fix: cursor-grok-4.6-high
+perf-issue: cursor-grok-4.6-high
+hillclimb: cursor-grok-4.6-high
+judgment and prose: composer-2.5
+hardest tasks: composer-2.5
+how explorer: cursor-grok-4.6-high
+how explainer: composer-2.5
+why investigators: cursor-grok-4.6-high
+why synthesizer: composer-2.5
+reflect tooling: composer-2.5
+reflect judgment, divergent, synthesizer: composer-2.5
+arena runners: cursor-grok-4.6-high, composer-2.5, composer-2.5-fast
+arena cross-judge pool: cursor-grok-4.6-high, composer-2.5, composer-2.5-fast
+swarm workers: cursor-grok-4.6-high
+architect runners: cursor-grok-4.6-high, composer-2.5, composer-2.5-fast
+interrogate reviewers: cursor-grok-4.6-high, composer-2.5, composer-2.5-fast

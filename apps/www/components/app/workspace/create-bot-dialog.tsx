@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { CreateBotOutcome } from "@/lib/bot-quick-start";
+import { botConversationHref, rememberOnboardingOffer } from "@/lib/bot-onboarding";
 import { useRouter } from "next/navigation";
 import { CreateBotForm } from "./create-bot-form";
 
@@ -20,15 +21,22 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
   const router = useRouter();
 
   function handleOutcome(outcome: CreateBotOutcome) {
-    if (outcome.status === "created" || outcome.status === "started") {
+    if (outcome.status === "created") {
+      rememberOnboardingOffer(outcome.botId);
       onClose();
-      router.push(`/app/bots/${outcome.botId}`);
+      router.push(botConversationHref(outcome.botId, { setup: true }));
+      router.refresh();
+      return;
+    }
+    if (outcome.status === "started") {
+      onClose();
+      router.push(botConversationHref(outcome.botId));
       router.refresh();
       return;
     }
     if (outcome.status === "bot_ready_run_failed") {
       onClose();
-      router.push(`/app/bots/${outcome.botId}`);
+      router.push(botConversationHref(outcome.botId));
       router.refresh();
     }
   }

@@ -1,8 +1,8 @@
 "use client";
 
+import { MultipleChoiceQuestionCard } from "@/components/app/multiple-choice-question-card";
 import { NeedsYouCard } from "@/components/app/needs-you-card";
 import { cloudHostFetch } from "@/lib/cloud-api";
-import { cn } from "cn";
 import { useState } from "react";
 
 export interface UserQuestionPayload {
@@ -109,41 +109,19 @@ export function UserQuestionCard({
   }
 
   return (
-    <NeedsYouCard
-      tone="pending"
+    <MultipleChoiceQuestionCard
       title={botName ? `${botName} needs your choice` : "Your bot needs your choice"}
-      reason={question.question}
+      prompt={question.question}
+      options={question.options.map((option, index) => ({
+        id: String(index),
+        label: option,
+      }))}
+      selectedId={chosenIndex !== null ? String(chosenIndex) : null}
+      pending={pending}
+      disabled={answered}
+      error={error}
       continuation="Pick one option to continue this assignment."
-      actions={
-        <>
-          <div className="flex w-full flex-wrap gap-2">
-            {question.options.map((option, index) => {
-              const isSelected = selected === index;
-              return (
-                <button
-                  key={`${option}-${index}`}
-                  type="button"
-                  disabled={answered || pending}
-                  onClick={() => void handleSelect(index)}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-[12px] transition-colors",
-                    isSelected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-surface-raised text-foreground hover:bg-surface-hover",
-                    (answered || pending) && !isSelected ? "opacity-50" : null,
-                  )}
-                  aria-pressed={isSelected}
-                >
-                  {option}
-                </button>
-              );
-            })}
-          </div>
-          {error ? (
-            <p className="w-full text-[11px] text-destructive" role="alert">{error}</p>
-          ) : null}
-        </>
-      }
+      onSelect={(optionId) => void handleSelect(Number(optionId))}
     />
   );
 }

@@ -140,12 +140,16 @@ fn collapse_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn reject_secret_solicitation(value: &str) -> Result<(), UserQuestionError> {
+/// True when text asks for passwords, API keys, auth codes, or similar secrets.
+pub fn text_solicits_secrets(value: &str) -> bool {
     let lowered = value.to_ascii_lowercase();
-    if SECRET_SOLICITATION_MARKERS
+    SECRET_SOLICITATION_MARKERS
         .iter()
         .any(|marker| lowered.contains(marker))
-    {
+}
+
+fn reject_secret_solicitation(value: &str) -> Result<(), UserQuestionError> {
+    if text_solicits_secrets(value) {
         return Err(UserQuestionError::Validation(
             "ask_user cannot request passwords, API keys, codes, or other secrets".into(),
         ));

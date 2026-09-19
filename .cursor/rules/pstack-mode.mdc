@@ -1,0 +1,19 @@
+---
+description: Route Elsewhere work through pstack poteto-mode
+alwaysApply: true
+---
+# pstack default mode
+
+This repo uses **pstack**. Non-trivial work runs in **poteto-mode**, not Plan mode and not a bare Agent turn.
+
+**On every new task** that matches a playbook or needs rigor:
+
+1. Read the `poteto-mode` skill in full, including its Principles index.
+2. Match a playbook, copy its steps into the todo list verbatim, then follow it.
+3. Spawn code-writing delegates as `subagent_type: "poteto-agent"`. Do not substitute `generalPurpose`.
+4. Take model slugs from `.cursor/rules/pstack-models.mdc`. `inherit-parent` / `auto` means omit Task `model`.
+5. Prove UI against `.cursor/skills/verify-elsewhere/`. Tests and curl are not UI proof.
+
+Casual one-line questions skip this. User opt-out wins. Stay in Agent mode; poteto-mode is the planning-and-execution path.
+
+To pin the Custom Mode badge in a chat, pick `/poteto-mode` and press Option+Enter.

@@ -184,9 +184,9 @@ pub use tool_catalog::{
 pub use tools::MAX_AGENT_TOOL_STEPS;
 pub use tools::{dispatch_tool, dispatch_tool_with_gate, openai_tool_definitions, ToolError};
 pub use user_question::{
-    validate_user_question, AgentUserQuestion, UserQuestionContext, UserQuestionError,
-    UserQuestionOutcome, UserQuestionRequest, ASK_USER_DESCRIPTION, ASK_USER_TOOL_NAME,
-    MAX_ASK_USER_OPTIONS, MAX_ASK_USER_OPTION_CHARS, MAX_ASK_USER_PER_RUN,
+    text_solicits_secrets, validate_user_question, AgentUserQuestion, UserQuestionContext,
+    UserQuestionError, UserQuestionOutcome, UserQuestionRequest, ASK_USER_DESCRIPTION,
+    ASK_USER_TOOL_NAME, MAX_ASK_USER_OPTIONS, MAX_ASK_USER_OPTION_CHARS, MAX_ASK_USER_PER_RUN,
     MAX_ASK_USER_QUESTION_CHARS, MIN_ASK_USER_OPTIONS,
 };
 pub use user_question_tools::{dispatch_user_question_tool, user_question_openai_tool_definitions};

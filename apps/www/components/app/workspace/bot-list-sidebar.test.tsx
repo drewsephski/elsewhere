@@ -112,4 +112,38 @@ describe("BotListSidebar", () => {
       screen.getByRole("link", { name: /Launch crew/ }).querySelector("[data-sidebar-selection]"),
     ).toBeNull();
   });
+
+  it("animates a working bot that is not selected", () => {
+    const idle: WorkspaceBotPresence = { ...bot, id: "bot_idle", name: "Idle" };
+    const working: WorkspaceBotPresence = {
+      ...bot,
+      id: "bot_working",
+      name: "Worker",
+      presence: "working",
+    };
+
+    render(
+      <MemoryRouter>
+        <BotListSidebar
+          bots={[idle, working]}
+          groups={[]}
+          selectedBotId={idle.id}
+          selectedGroupId={null}
+          runActivityAt={{}}
+          onCreateBot={vi.fn()}
+          footer={null}
+        />
+      </MemoryRouter>,
+    );
+
+    const workingAvatars = screen.getAllByRole("img", { name: "Worker avatar" });
+    expect(workingAvatars.length).toBeGreaterThan(0);
+    for (const avatar of workingAvatars) {
+      expect(avatar.getAttribute("data-working")).toBe("on");
+    }
+
+    for (const avatar of screen.getAllByRole("img", { name: "Idle avatar" })) {
+      expect(avatar.getAttribute("data-working")).toBe("off");
+    }
+  });
 });
