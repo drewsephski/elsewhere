@@ -137,7 +137,12 @@ pub async fn set_this_mac_paused(
         db.set_this_mac_paused(paused)?;
     }
     #[cfg(target_os = "macos")]
-    state.host_link.notify_credential_ready();
+    {
+        if paused {
+            state.host_link.break_active_session();
+        }
+        state.host_link.notify_credential_ready();
+    }
     let _ = app;
     get_this_mac_status(state)
 }
@@ -147,8 +152,8 @@ pub async fn start_this_mac_pairing(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ThisMacStatus, AppError> {
-    let pairing = start_elsewhere_pairing(app, state.clone()).await?;
     let paused = read_paused(&state)?;
+    let pairing = start_elsewhere_pairing(app, state).await?;
     Ok(status_from_parts(&pairing, paused, false))
 }
 

@@ -37,10 +37,17 @@ pub fn attach(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                             let db = state.db.lock();
                             !db.this_mac_paused().unwrap_or(false)
                         };
-                        let db = state.db.lock();
-                        let _ = db.set_this_mac_paused(paused);
+                        {
+                            let db = state.db.lock();
+                            let _ = db.set_this_mac_paused(paused);
+                        }
                         #[cfg(target_os = "macos")]
-                        state.host_link.notify_credential_ready();
+                        {
+                            if paused {
+                                state.host_link.break_active_session();
+                            }
+                            state.host_link.notify_credential_ready();
+                        }
                     }
                 }
                 "quit" => {

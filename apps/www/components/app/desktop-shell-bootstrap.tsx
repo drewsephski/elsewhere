@@ -22,18 +22,24 @@ interface DesktopShellBootstrapProps {
 export function DesktopShellBootstrap({ hasSession }: DesktopShellBootstrapProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { status: thisMac } = useThisMacStatus(desktopCompanion.isAvailable());
-  const { data: workspace } = useWorkspaceOverview();
+  const { status: thisMac, loading: thisMacLoading } = useThisMacStatus(
+    desktopCompanion.isAvailable(),
+  );
+  const { data: workspace, phase: workspacePhase } = useWorkspaceOverview();
 
   useEffect(() => {
     if (!isTauriRuntime()) {
       return;
     }
+    const workspaceReady =
+      workspacePhase === "ready" || workspacePhase === "stale";
     const step = resolveDesktopOnboardingStep({
       isDesktopShell: true,
       hasSession,
       pathname: location.pathname,
       botCount: workspace?.bots.length ?? 0,
+      workspaceReady,
+      thisMacReady: !thisMacLoading,
       thisMac,
     });
     if (!step || step === "workspace") {
@@ -48,7 +54,16 @@ export function DesktopShellBootstrap({ hasSession }: DesktopShellBootstrapProps
       return;
     }
     navigate(target, { replace: true });
-  }, [hasSession, location.pathname, location.search, navigate, thisMac, workspace?.bots.length]);
+  }, [
+    hasSession,
+    location.pathname,
+    location.search,
+    navigate,
+    thisMac,
+    thisMacLoading,
+    workspace?.bots.length,
+    workspacePhase,
+  ]);
 
   return null;
 }

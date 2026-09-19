@@ -1,73 +1,69 @@
 "use client";
 
+import { desktopNotificationsEnabled } from "@/lib/desktop-notifications-pref";
 import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { useWorkspaceOverview } from "@/hooks/use-workspace-overview";
+import { appRoutes } from "@/lib/app-routes";
 import { useEffect, useRef } from "react";
 
 function mayNotify(): boolean {
   return (
     isTauriRuntime() &&
+    desktopNotificationsEnabled() &&
     typeof Notification !== "undefined" &&
-    Notification.permission !== "denied"
+    Notification.permission === "granted"
   );
 }
 
-async function ensurePermission(): Promise<boolean> {
-  if (!mayNotify()) {
-    return false;
+function focusApprovals(): void {
+  if (typeof window === "undefined") {
+    return;
   }
-  if (Notification.permission === "granted") {
-    return true;
+  window.focus();
+  const path = appRoutes.approvals;
+  if (window.location.pathname !== path) {
+    window.location.assign(path);
   }
-  const result = await Notification.requestPermission();
-  return result === "granted";
 }
 
 /**
- * Lightweight native notifications for approval backlog and failed work (desktop only).
+ * Desktop-only notifications for approval backlog increases (no permission prompts here).
  */
 export function useDesktopNativeNotifications(enabled = isTauriRuntime()) {
-  const { data: workspace } = useWorkspaceOverview();
+  const { data: workspace, phase } = useWorkspaceOverview();
   const lastApprovalCount = useRef<number | null>(null);
-  const lastAttentionBot = useRef<string | null>(null);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (!enabled || !workspace) {
+    if (!enabled || !workspace || phase !== "ready") {
       return;
     }
-    let cancelled = false;
-    const snapshot = workspace;
-    async function run() {
-      const ok = await ensurePermission();
-      if (!ok || cancelled || !snapshot) {
-        return;
-      }
-      const approvals = snapshot.counts.approvals;
-      if (
-        lastApprovalCount.current !== null &&
-        approvals > lastApprovalCount.current
-      ) {
-        new Notification("Approval needed", {
-          body: "A bot is waiting for your decision in Elsewhere.",
-          tag: "elsewhere-approval",
-        });
-      }
-      lastApprovalCount.current = approvals;
-
-      const needsYou = snapshot.bots.find(
-        (bot) => bot.presence === "waiting_approval" || bot.presence === "needs_attention",
-      );
-      if (needsYou && needsYou.id !== lastAttentionBot.current) {
-        lastAttentionBot.current = needsYou.id;
-        new Notification("Your bot needs you", {
-          body: needsYou.task?.slice(0, 120) || `${needsYou.name} needs attention.`,
-          tag: `elsewhere-attention-${needsYou.id}`,
-        });
-      }
+    if (!mayNotify()) {
+      lastApprovalCount.current = workspace.counts.approvals;
+      initialized.current = true;
+      return;
     }
-    void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, workspace]);
+
+    const approvals = workspace.counts.approvals;
+    if (!initialized.current) {
+      lastApprovalCount.current = approvals;
+      initialized.current = true;
+      return;
+    }
+
+    if (
+      lastApprovalCount.current !== null &&
+      approvals > lastApprovalCount.current
+    ) {
+      const notification = new Notification("Approval needed", {
+        body: "A bot is waiting for your decision in Elsewhere.",
+        tag: "elsewhere-approval",
+      });
+      notification.onclick = () => {
+        notification.close();
+        focusApprovals();
+      };
+    }
+    lastApprovalCount.current = approvals;
+  }, [enabled, phase, workspace]);
 }

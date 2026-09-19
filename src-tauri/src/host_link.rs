@@ -43,6 +43,8 @@ pub struct HostLinkHandle {
     wakeup: Arc<Notify>,
     state: Arc<ParkingMutex<HostLinkState>>,
     reconnecting: Arc<ParkingMutex<bool>>,
+    /// Wakes an active WebSocket session so pause / credential rotation can drop the link.
+    session_break: Arc<Notify>,
 }
 
 impl HostLinkHandle {
@@ -57,6 +59,11 @@ impl HostLinkHandle {
 
     pub fn reconnecting(&self) -> bool {
         *self.reconnecting.lock()
+    }
+
+    pub fn break_active_session(&self) {
+        self.session_break.notify_waiters();
+        self.session_break.notify_one();
     }
 }
 
@@ -85,6 +92,7 @@ pub fn start_host_link(
         wakeup: Arc::new(Notify::new()),
         state: Arc::new(ParkingMutex::new(HostLinkState::Disconnected)),
         reconnecting: Arc::new(ParkingMutex::new(false)),
+        session_break: Arc::new(Notify::new()),
     };
     let supervisor = handle.clone();
     tauri::async_runtime::spawn(async move {
@@ -244,6 +252,11 @@ async fn connect_and_serve(
 
     loop {
         tokio::select! {
+            _ = handle.session_break.notified() => {
+                let _ = sink.send(Message::Close(None)).await;
+                set_state(handle, HostLinkState::Disconnected);
+                return Ok(());
+            }
             incoming = stream.next() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {

@@ -11,6 +11,10 @@ export interface DesktopOnboardingContext {
   hasSession: boolean;
   pathname: string;
   botCount: number;
+  /** Avoid quick-start redirect while workspace overview is still loading. */
+  workspaceReady: boolean;
+  /** Avoid connect redirect while companion status is still loading. */
+  thisMacReady: boolean;
   thisMac: ThisMacStatusSnapshot | null;
 }
 
@@ -34,6 +38,9 @@ export function resolveDesktopOnboardingStep(
     }
     return "sign-in";
   }
+  if (!ctx.thisMacReady) {
+    return "workspace";
+  }
   const mac = ctx.thisMac;
   if (mac && !mac.paired && !mac.pairingInProgress) {
     if (ctx.pathname === "/app/computers") {
@@ -41,7 +48,11 @@ export function resolveDesktopOnboardingStep(
     }
     return "connect-this-mac";
   }
-  if (ctx.botCount === 0 && ctx.pathname === "/app") {
+  if (
+    ctx.workspaceReady &&
+    ctx.botCount === 0 &&
+    ctx.pathname === "/app"
+  ) {
     return "quick-start";
   }
   return "workspace";

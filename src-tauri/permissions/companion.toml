@@ -1,0 +1,10 @@
+[[permission]]
+identifier = "companion-commands"
+description = "Narrow desktop companion IPC (This Mac status, pairing, pause)."
+commands.allow = [
+  "get_this_mac_status",
+  "set_this_mac_paused",
+  "start_this_mac_pairing",
+  "get_elsewhere_pairing_status",
+  "start_elsewhere_pairing",
+]

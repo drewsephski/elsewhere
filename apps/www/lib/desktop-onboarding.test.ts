@@ -12,6 +12,8 @@ describe("resolveDesktopOnboardingStep", () => {
         hasSession: false,
         pathname: "/app",
         botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
         thisMac: null,
       }),
     ).toBeNull();
@@ -24,6 +26,8 @@ describe("resolveDesktopOnboardingStep", () => {
         hasSession: false,
         pathname: "/app",
         botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
         thisMac: null,
       }),
     ).toBe("sign-in");
@@ -36,6 +40,8 @@ describe("resolveDesktopOnboardingStep", () => {
         hasSession: true,
         pathname: "/app",
         botCount: 2,
+        workspaceReady: true,
+        thisMacReady: true,
         thisMac: {
           phase: "disconnected",
           paired: false,
@@ -56,6 +62,8 @@ describe("resolveDesktopOnboardingStep", () => {
         hasSession: true,
         pathname: "/app",
         botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
         thisMac: {
           phase: "live",
           paired: true,
@@ -67,6 +75,28 @@ describe("resolveDesktopOnboardingStep", () => {
         },
       }),
     ).toBe("quick-start");
+  });
+
+  it("does not quick-start while workspace is still loading", () => {
+    expect(
+      resolveDesktopOnboardingStep({
+        isDesktopShell: true,
+        hasSession: true,
+        pathname: "/app",
+        botCount: 0,
+        workspaceReady: false,
+        thisMacReady: true,
+        thisMac: {
+          phase: "live",
+          paired: true,
+          pairingInProgress: false,
+          paused: false,
+          nodeId: "n",
+          computerId: "c",
+          userCode: null,
+        },
+      }),
+    ).toBe("workspace");
   });
 });
 

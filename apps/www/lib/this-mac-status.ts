@@ -26,7 +26,7 @@ export function thisMacPhaseLabel(phase: ThisMacPhase): string {
     case "connecting":
       return "Connecting…";
     case "connected":
-      return "Connected";
+      return "Paired — connecting";
     case "live":
       return "Live";
     case "offline":

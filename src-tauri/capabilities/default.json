@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "core:event:default",
-    "opener:default"
+    "core:window:default",
+    "opener:default",
+    "companion-commands"
   ]
 }
