@@ -10,7 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
+import { JOB_BOT_IMAGES } from "@/lib/bot-avatars";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { useState } from "react";
 
 export function SignInView() {
@@ -79,23 +82,61 @@ export function SignInView() {
       ? process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "1"
       : false;
 
+  const desktopShell = isTauriRuntime();
+
   return (
     <main className="app-shell-bg flex min-h-screen flex-col">
       <DesktopTitlebar />
       <div className="flex flex-1 flex-col items-center justify-center px-6">
       <div className="surface-panel w-full max-w-md p-8">
-        <div className="flex items-center gap-2.5">
-          <ProductLogo size="md" />
-          <span className="text-sm font-semibold tracking-tight text-foreground">
-            {siteConfig.productName}
-          </span>
-        </div>
+        {desktopShell ? (
+          <div className="mb-6 flex items-end justify-center gap-2">
+            <BotCreatureAvatar
+              name="Researcher"
+              src={JOB_BOT_IMAGES.researcher}
+              size="lg"
+              animated
+              className="-rotate-6 opacity-90"
+            />
+            <BotCreatureAvatar
+              name="Engineer"
+              src={JOB_BOT_IMAGES.engineer}
+              size="xl"
+              animated
+            />
+            <BotCreatureAvatar
+              name="Chief of Staff"
+              src={JOB_BOT_IMAGES.chiefOfStaff}
+              size="lg"
+              animated
+              className="rotate-6 opacity-90"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <ProductLogo size="md" />
+            <span className="text-sm font-semibold tracking-tight text-foreground">
+              {siteConfig.productName}
+            </span>
+          </div>
+        )}
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
-          {mode === "sign-in" ? "Sign in" : "Create account"}
+          {desktopShell
+            ? "Your Bots, right on your Mac."
+            : mode === "sign-in"
+              ? "Sign in"
+              : "Create account"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Sign in to your workspace. You can connect your ChatGPT plan from the overview.
+          {desktopShell
+            ? "Give them work, let them use this Mac or the cloud, and step in only when they need you."
+            : "Sign in to your workspace. You can connect your ChatGPT plan from the overview."}
         </p>
+        {desktopShell ? (
+          <p className="mt-1 text-xs font-medium text-muted-foreground">
+            {mode === "sign-in" ? "Sign in" : "Create account"}
+          </p>
+        ) : null}
 
         <form className="mt-8" onSubmit={handleEmailSubmit}>
           <FormFields>

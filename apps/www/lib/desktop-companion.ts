@@ -9,6 +9,8 @@ type RawThisMacStatus = {
   paired: boolean;
   pairingInProgress: boolean;
   paused: boolean;
+  onboardingSkipped: boolean;
+  deviceName: string;
   nodeId: string | null;
   computerId: string | null;
   userCode: string | null;
@@ -36,6 +38,8 @@ function normalizeStatus(raw: RawThisMacStatus): ThisMacStatusSnapshot {
     paired: raw.paired,
     pairingInProgress: raw.pairingInProgress,
     paused: raw.paused,
+    onboardingSkipped: raw.onboardingSkipped,
+    deviceName: raw.deviceName?.trim() || "This Mac",
     nodeId: raw.nodeId,
     computerId: raw.computerId,
     userCode: raw.userCode,
@@ -64,6 +68,13 @@ export const desktopCompanion = {
 
   async startThisMacPairing(): Promise<ThisMacStatusSnapshot> {
     const raw = await invokeDesktop<RawThisMacStatus>("start_this_mac_pairing");
+    return normalizeStatus(raw);
+  },
+
+  async setThisMacOnboardingSkipped(skipped: boolean): Promise<ThisMacStatusSnapshot> {
+    const raw = await invokeDesktop<RawThisMacStatus>("set_this_mac_onboarding_skipped", {
+      skipped,
+    });
     return normalizeStatus(raw);
   },
 };

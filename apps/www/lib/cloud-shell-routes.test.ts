@@ -18,11 +18,10 @@ const APP_ROUTE_TO_SEGMENT: Record<string, string> = {
 
 describe("cloudShellAuthenticatedRoutes", () => {
   it("covers primary management routes from appRoutes", () => {
-    const segments = new Set(
+    const segments = new Set<string>(
       cloudShellAuthenticatedRoutes.map((route) => route.path),
     );
-    for (const href of Object.keys(APP_ROUTE_TO_SEGMENT)) {
-      const segment = APP_ROUTE_TO_SEGMENT[href];
+    for (const segment of Object.values(APP_ROUTE_TO_SEGMENT)) {
       expect(segments.has(segment)).toBe(true);
     }
   });

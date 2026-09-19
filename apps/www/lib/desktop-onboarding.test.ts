@@ -2,7 +2,78 @@ import { describe, expect, it } from "vitest";
 import {
   desktopOnboardingRedirect,
   resolveDesktopOnboardingStep,
+  shouldShowThisMacOnboarding,
 } from "./desktop-onboarding";
+
+const baseMac = {
+  phase: "disconnected" as const,
+  paired: false,
+  pairingInProgress: false,
+  paused: false,
+  onboardingSkipped: false,
+  deviceName: "Drew's MacBook Air",
+  nodeId: null,
+  computerId: null,
+  userCode: null,
+};
+
+describe("shouldShowThisMacOnboarding", () => {
+  it("does not show for browser", () => {
+    expect(
+      shouldShowThisMacOnboarding({
+        isDesktopShell: false,
+        hasSession: true,
+        pathname: "/app",
+        botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
+        thisMac: baseMac,
+      }),
+    ).toBe(false);
+  });
+
+  it("does not interrupt users who already have bots", () => {
+    expect(
+      shouldShowThisMacOnboarding({
+        isDesktopShell: true,
+        hasSession: true,
+        pathname: "/app",
+        botCount: 2,
+        workspaceReady: true,
+        thisMacReady: true,
+        thisMac: baseMac,
+      }),
+    ).toBe(false);
+  });
+
+  it("shows for first-run unpaired desktop users", () => {
+    expect(
+      shouldShowThisMacOnboarding({
+        isDesktopShell: true,
+        hasSession: true,
+        pathname: "/app",
+        botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
+        thisMac: baseMac,
+      }),
+    ).toBe(true);
+  });
+
+  it("respects onboarding skipped", () => {
+    expect(
+      shouldShowThisMacOnboarding({
+        isDesktopShell: true,
+        hasSession: true,
+        pathname: "/app",
+        botCount: 0,
+        workspaceReady: true,
+        thisMacReady: true,
+        thisMac: { ...baseMac, onboardingSkipped: true },
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("resolveDesktopOnboardingStep", () => {
   it("ignores non-desktop shells", () => {
@@ -33,29 +104,21 @@ describe("resolveDesktopOnboardingStep", () => {
     ).toBe("sign-in");
   });
 
-  it("steers signed-in users without a paired Mac to computers", () => {
+  it("uses overlay step instead of computers redirect", () => {
     expect(
       resolveDesktopOnboardingStep({
         isDesktopShell: true,
         hasSession: true,
         pathname: "/app",
-        botCount: 2,
+        botCount: 0,
         workspaceReady: true,
         thisMacReady: true,
-        thisMac: {
-          phase: "disconnected",
-          paired: false,
-          pairingInProgress: false,
-          paused: false,
-          nodeId: null,
-          computerId: null,
-          userCode: null,
-        },
+        thisMac: baseMac,
       }),
-    ).toBe("connect-this-mac");
+    ).toBe("this-mac-overlay");
   });
 
-  it("opens quick start when there are no bots", () => {
+  it("opens quick start when there are no bots and mac is live", () => {
     expect(
       resolveDesktopOnboardingStep({
         isDesktopShell: true,
@@ -65,45 +128,20 @@ describe("resolveDesktopOnboardingStep", () => {
         workspaceReady: true,
         thisMacReady: true,
         thisMac: {
+          ...baseMac,
           phase: "live",
           paired: true,
-          pairingInProgress: false,
-          paused: false,
-          nodeId: "n",
           computerId: "c",
-          userCode: null,
         },
       }),
     ).toBe("quick-start");
-  });
-
-  it("does not quick-start while workspace is still loading", () => {
-    expect(
-      resolveDesktopOnboardingStep({
-        isDesktopShell: true,
-        hasSession: true,
-        pathname: "/app",
-        botCount: 0,
-        workspaceReady: false,
-        thisMacReady: true,
-        thisMac: {
-          phase: "live",
-          paired: true,
-          pairingInProgress: false,
-          paused: false,
-          nodeId: "n",
-          computerId: "c",
-          userCode: null,
-        },
-      }),
-    ).toBe("workspace");
   });
 });
 
 describe("desktopOnboardingRedirect", () => {
   it("maps steps to routes", () => {
     expect(desktopOnboardingRedirect("sign-in")).toBe("/sign-in");
-    expect(desktopOnboardingRedirect("connect-this-mac")).toBe("/app/computers");
+    expect(desktopOnboardingRedirect("this-mac-overlay")).toBeNull();
     expect(desktopOnboardingRedirect("quick-start")).toBe("/app?create=1");
   });
 });

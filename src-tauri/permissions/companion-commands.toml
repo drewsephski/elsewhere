@@ -1,0 +1,42 @@
+[[permission]]
+identifier = "companion-commands"
+description = "Narrow This Mac companion IPC for trusted Elsewhere web origins."
+commands.allow = [
+  "get_this_mac_status",
+  "set_this_mac_paused",
+  "start_this_mac_pairing",
+  "set_this_mac_onboarding_skipped",
+]
+
+[[permission]]
+identifier = "deny-legacy-desktop-commands"
+description = "Explicit deny for legacy local SQLite/OpenAI/VM commands on remote pages."
+commands.deny = [
+  "bootstrap_bots",
+  "list_bots",
+  "get_bot",
+  "create_bot",
+  "update_bot",
+  "archive_bot",
+  "delete_bot",
+  "list_conversations",
+  "get_or_create_conversation",
+  "list_messages",
+  "get_api_key_status",
+  "set_openai_api_key",
+  "clear_openai_api_key",
+  "get_elsewhere_pairing_status",
+  "start_elsewhere_pairing",
+  "list_openai_models",
+  "start_chat",
+  "cancel_chat",
+  "start_agent_chat",
+  "vm_info",
+  "vm_provision",
+  "vm_start",
+  "vm_wait_guest",
+  "vm_stop",
+  "vm_restart",
+  "vm_guest_health",
+  "vm_guest_request",
+]

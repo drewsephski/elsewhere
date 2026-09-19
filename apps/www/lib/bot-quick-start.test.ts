@@ -76,12 +76,10 @@ describe("selectUsableComputer", () => {
       lastUsedAt: "2026-09-01T00:00:00.000Z",
       providerMetadata: { provisioned: true, connected: true },
     });
-    expect(selectUsableComputer([mac, cloud], { preferThisMac: false })?.id).toBe(
-      "cloud_1",
-    );
+    expect(selectUsableComputer([mac, cloud])?.id).toBe("cloud_1");
   });
 
-  it("prefers This Mac when preferThisMac is set", () => {
+  it("prefers This Mac when companion status is live", () => {
     const cloud = computer({ id: "cloud_1", lastUsedAt: "2026-09-01T00:00:00.000Z" });
     const mac = computer({
       id: "mac_1",
@@ -89,9 +87,21 @@ describe("selectUsableComputer", () => {
       lastUsedAt: "2026-01-01T00:00:00.000Z",
       providerMetadata: { provisioned: true, connected: true },
     });
-    expect(selectUsableComputer([cloud, mac], { preferThisMac: true })?.id).toBe(
-      "mac_1",
-    );
+    expect(
+      selectUsableComputer([cloud, mac], {
+        thisMac: {
+          phase: "live",
+          paired: true,
+          pairingInProgress: false,
+          paused: false,
+          onboardingSkipped: false,
+          deviceName: "Mac",
+          nodeId: "n",
+          computerId: "mac_1",
+          userCode: null,
+        },
+      })?.id,
+    ).toBe("mac_1");
   });
 
   it("reuses the most recently used cloud computer, including pending ones", () => {

@@ -16,8 +16,8 @@ interface DesktopShellBootstrapProps {
 }
 
 /**
- * State-driven desktop onboarding (returning users, auth, This Mac, quick start).
- * No-op in the browser.
+ * Bundled Vite dev shell: sign-in + quick-start redirects only.
+ * This Mac onboarding is an overlay via {@link DesktopExperienceLayer}.
  */
 export function DesktopShellBootstrap({ hasSession }: DesktopShellBootstrapProps) {
   const navigate = useNavigate();
@@ -42,7 +42,7 @@ export function DesktopShellBootstrap({ hasSession }: DesktopShellBootstrapProps
       thisMacReady: !thisMacLoading,
       thisMac,
     });
-    if (!step || step === "workspace") {
+    if (!step || step === "workspace" || step === "this-mac-overlay") {
       return;
     }
     const target = desktopOnboardingRedirect(step);

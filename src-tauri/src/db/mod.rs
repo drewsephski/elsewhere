@@ -632,6 +632,17 @@ When information might be outdated, say what you know and what you would verify.
     pub fn set_this_mac_paused(&self, paused: bool) -> Result<(), AppError> {
         self.set_meta("this_mac_paused", if paused { "1" } else { "0" })
     }
+
+    pub fn this_mac_onboarding_skipped(&self) -> Result<bool, AppError> {
+        Ok(self.get_meta("this_mac_onboarding_skipped")?.as_deref() == Some("1"))
+    }
+
+    pub fn set_this_mac_onboarding_skipped(&self, skipped: bool) -> Result<(), AppError> {
+        self.set_meta(
+            "this_mac_onboarding_skipped",
+            if skipped { "1" } else { "0" },
+        )
+    }
 }
 
 #[cfg(test)]

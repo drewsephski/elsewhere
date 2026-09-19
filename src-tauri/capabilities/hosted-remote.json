@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "hosted-remote",
+  "description": "Production: hosted Elsewhere origin only — narrow native bridge",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://elsewhere-alpha-web.fly.dev/**"]
+  },
+  "permissions": [
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:event:default",
+    "opener:default",
+    "companion-commands",
+    "deny-legacy-desktop-commands",
+    "notification:default"
+  ]
+}

@@ -1,44 +1,51 @@
-# Elsewhere desktop (full experience draft)
+# Elsewhere desktop (full experience)
 
-## Architecture
+## Production architecture
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│  Tauri .app (Rust host)                                      │
-│  · Keychain device credential                                │
-│  · host_link outbound WS → cloud-host (This Mac RPC)         │
-│  · Narrow IPC: get/set This Mac status + pairing only        │
-│  · Tray + hide-on-close lifecycle                          │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ WebView
-┌───────────────────────────▼─────────────────────────────────┐
-│  Vite bundle (`src/main.tsx` → `CloudShell`)                  │
-│  Same React tree as `apps/www` via `@` aliases                │
-│  `workspace-http-origin` → hosted `/api/auth` + `/api/cloud`  │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ HTTPS (session cookies)
-┌───────────────────────────▼─────────────────────────────────┐
-│  Hosted Elsewhere www (Next.js BFF) — not bundled in .app     │
-└─────────────────────────────────────────────────────────────┘
+Elsewhere.app (Tauri host)
+    ↓ main webview URL
+https://elsewhere-alpha-web.fly.dev/app
+    ↓ same origin
+Better Auth (/api/auth) + cloud BFF (/api/cloud)
+    ↓ narrow IPC (remote capability)
+get_this_mac_status · set_this_mac_paused · start_this_mac_pairing · set_this_mac_onboarding_skipped
 ```
 
-- **No Next.js inside the .app** — production ships `vite build` static assets only.
-- **Browser unchanged** — relative `/api/cloud` BFF on the web; desktop uses the same client modules with an absolute hosted origin when `isTauriRuntime()`.
-- **Compromised webview** cannot reach legacy bot/chat SQLite commands from product UI; companion IPC is limited to pairing/pause/status.
+- **Production loads hosted Elsewhere first-party** — session cookies and Better Auth behave like the browser; no cross-origin cookie transport from a bundled Vite origin.
+- **Tauri supplies** Keychain credential, host link, tray/lifecycle, and the narrow companion bridge only.
+- **Bundled `CloudShell` (localhost:1420)** remains for local development: shared `apps/www` UI via aliases, with `workspace-http-origin` pointing API calls at local Next or configured hosted origin when the webview is not already on Elsewhere www.
 
-## Manual Mac .app checklist (when CI cannot build Tauri)
+### Trust boundary
 
-1. `pnpm build` with `NEXT_PUBLIC_BETTER_AUTH_URL` / `NEXT_PUBLIC_ELSEWHERE_WEB_ORIGIN` set to hosted www.
-2. `pnpm tauri build` on macOS with signing entitlements.
-3. Launch .app → sign in → lands in `/app` workspace (not legacy OpenAI settings).
-4. **Use this Mac** on Computers → pairing completes → titlebar shows Live.
-5. **Pause This Mac** → host link disconnects; resume reconnects.
-6. Cmd+W hides window; Dock icon reopens; tray Quit exits.
-7. Approval / attention notifications (after granting permission).
-8. Navigate connectors, channels, routine detail — same as web.
+- Remote capability URL pattern: `https://elsewhere-alpha-web.fly.dev/**` only (no `https://*`).
+- `ELSEWHERE_DESKTOP_WEBVIEW_URL` is removed; production origin is compile-time config (`desktop_origin.rs` / `tauri.conf.json` window `url`).
+- Legacy bot/chat/VM invoke handlers may remain in the binary but are **denied** for remote pages via `deny-legacy-desktop-commands`.
+- Secrets, pairing material, and filesystem access stay in Rust; hosted React never receives tokens from Keychain.
 
-## Limitations (draft PR)
+## Development
 
-- Tray “Pause” toggles without reflecting live label until next status poll.
-- Native notifications use the Web Notification API (not macOS notification center extensions).
-- Linux CI does not produce a signed `.app`; Rust unit tests cover host_link pause only.
+```text
+localhost:1420 (Vite CloudShell)
+  → shared apps/www components
+  → NEXT_PUBLIC_ELSEWHERE_WEB_ORIGIN or local Next proxy for /api/*
+```
+
+## Desktop UX
+
+- **Sign-in**: hosted auth UI with desktop-only hero when `isTauriRuntime()`.
+- **First-run This Mac**: full-screen overlay (“Use this Mac”), not the Computers admin grid.
+- **Not now**: persisted in local SQLite (`this_mac_onboarding_skipped`); no repeat nag; users with existing Bots are not interrupted.
+- **Quick start / New bot**: prefers This Mac only when companion phase is **live**; shows “Runs on · This Mac” when applicable.
+- **Cmd+,** Settings · **Cmd+N** New Bot (Tauri only).
+- **Tray**: Open · status line · Pause/Resume · Quit (labels reflect pause/live/connecting).
+- **Notifications**: Tauri notification plugin for approval backlog (permission requested when needed).
+
+## Manual Mac .app checklist
+
+See PR description / product brief for the full 22-step acceptance list (build without local Next, hosted sign-in, onboarding, pairing, hidden-window host link, pause/resume, native approval notification, quit).
+
+## CI notes
+
+- `src-tauri/tests/companion_acl.rs` asserts capability shape and permission allow/deny lists.
+- Linux agents do not produce a signed `.app`; run `pnpm tauri build` on macOS for packaging smoke.

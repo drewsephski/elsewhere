@@ -3,31 +3,28 @@
 import { desktopNotificationsEnabled } from "@/lib/desktop-notifications-pref";
 import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { useWorkspaceOverview } from "@/hooks/use-workspace-overview";
-import { appRoutes } from "@/lib/app-routes";
 import { useEffect, useRef } from "react";
 
-function mayNotify(): boolean {
-  return (
-    isTauriRuntime() &&
-    desktopNotificationsEnabled() &&
-    typeof Notification !== "undefined" &&
-    Notification.permission === "granted"
+async function sendNativeApprovalNotification(): Promise<void> {
+  const { isPermissionGranted, requestPermission, sendNotification } = await import(
+    "@tauri-apps/plugin-notification"
   );
-}
-
-function focusApprovals(): void {
-  if (typeof window === "undefined") {
+  let granted = await isPermissionGranted();
+  if (!granted) {
+    const result = await requestPermission();
+    granted = result === "granted";
+  }
+  if (!granted) {
     return;
   }
-  window.focus();
-  const path = appRoutes.approvals;
-  if (window.location.pathname !== path) {
-    window.location.assign(path);
-  }
+  sendNotification({
+    title: "Approval needed",
+    body: "A bot is waiting for your decision in Elsewhere.",
+  });
 }
 
 /**
- * Desktop-only notifications for approval backlog increases (no permission prompts here).
+ * Desktop-only native notifications for approval backlog increases.
  */
 export function useDesktopNativeNotifications(enabled = isTauriRuntime()) {
   const { data: workspace, phase } = useWorkspaceOverview();
@@ -38,7 +35,7 @@ export function useDesktopNativeNotifications(enabled = isTauriRuntime()) {
     if (!enabled || !workspace || phase !== "ready") {
       return;
     }
-    if (!mayNotify()) {
+    if (!desktopNotificationsEnabled()) {
       lastApprovalCount.current = workspace.counts.approvals;
       initialized.current = true;
       return;
@@ -55,14 +52,9 @@ export function useDesktopNativeNotifications(enabled = isTauriRuntime()) {
       lastApprovalCount.current !== null &&
       approvals > lastApprovalCount.current
     ) {
-      const notification = new Notification("Approval needed", {
-        body: "A bot is waiting for your decision in Elsewhere.",
-        tag: "elsewhere-approval",
+      void sendNativeApprovalNotification().catch(() => {
+        /* permission denied or plugin unavailable */
       });
-      notification.onclick = () => {
-        notification.close();
-        focusApprovals();
-      };
     }
     lastApprovalCount.current = approvals;
   }, [enabled, phase, workspace]);

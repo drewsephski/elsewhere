@@ -70,7 +70,7 @@ export function ThisMacControls({ layout = "inline", className }: ThisMacControl
           tone === "destructive" && "bg-destructive/90 text-destructive-foreground",
         )}
       >
-        This Mac · {thisMacPhaseLabel(phase)}
+        {status?.deviceName ?? "This Mac"} · {thisMacPhaseLabel(phase)}
       </Badge>
       {needsConnect ? (
         <Button type="button" size="sm" disabled={busy} onClick={() => void handlePair()}>

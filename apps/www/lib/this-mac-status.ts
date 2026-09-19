@@ -14,6 +14,8 @@ export interface ThisMacStatusSnapshot {
   paired: boolean;
   pairingInProgress: boolean;
   paused: boolean;
+  onboardingSkipped: boolean;
+  deviceName: string;
   nodeId: string | null;
   computerId: string | null;
   userCode: string | null;
@@ -60,4 +62,15 @@ export function thisMacPhaseTone(
     default:
       return "default";
   }
+}
+
+export function isThisMacLiveForQuickStart(
+  status: ThisMacStatusSnapshot | null | undefined,
+): boolean {
+  return Boolean(
+    status &&
+      status.phase === "live" &&
+      !status.paused &&
+      status.computerId,
+  );
 }

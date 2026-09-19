@@ -1,5 +1,6 @@
 "use client";
 
+import { DesktopExperienceLayer } from "@/components/app/desktop-experience-layer";
 import { ProductThemeScope } from "@/components/app/product-theme-scope";
 import { Toaster } from "@/components/ui/sonner";
 import { useDesktopNativeNotifications } from "@/hooks/use-desktop-native-notifications";
@@ -24,6 +25,7 @@ export function WorkspaceAuthenticatedFrame({
   return (
     <>
       <ProductThemeScope />
+      <DesktopExperienceLayer />
       <WorkspaceAppLayout userEmail={userEmail}>{children}</WorkspaceAppLayout>
       <Toaster position="bottom-right" />
     </>
