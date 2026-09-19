@@ -369,7 +369,7 @@ async fn mock_publish_apis(server: &MockServer, working_branch: &str) {
         .await;
     Mock::given(method("GET"))
         .and(path_regex(format!(
-            r"/repos/acme/demo/git/refs/heads/{}$",
+            r"/repos/acme/demo/git/ref/heads/{}$",
             branch_encoded
         )))
         .respond_with(ResponseTemplate::new(404).set_body_json(json!({ "message": "Not Found" })))
@@ -1179,7 +1179,7 @@ async fn mock_publish_with_existing_branch(server: &MockServer, working_branch: 
     mock_github_open_pulls_empty(server).await;
     Mock::given(method("GET"))
         .and(path_regex(format!(
-            r"/repos/acme/demo/git/refs/heads/{}$",
+            r"/repos/acme/demo/git/ref/heads/{}$",
             branch_encoded
         )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
