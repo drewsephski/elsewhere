@@ -1,5 +1,6 @@
 "use client";
 
+import { ChatThinkingLine } from "@/components/app/chat-thinking-line";
 import { NeedsYouCard, type NeedsYouTone } from "@/components/app/needs-you-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ export interface MultipleChoiceQuestionCardProps {
   continuation?: string;
   tone?: NeedsYouTone;
   className?: string;
+  loadingLabel?: string;
 }
 
 function isCustomOption(option: MultipleChoiceOption, customOptionId?: string) {
@@ -70,6 +72,7 @@ export function MultipleChoiceQuestionCard({
   continuation,
   tone = "pending",
   className,
+  loadingLabel = "Preparing the next question…",
 }: MultipleChoiceQuestionCardProps) {
   const labelId = useId();
   const resolvedOptions = useMemo(() => {
@@ -87,8 +90,13 @@ export function MultipleChoiceQuestionCard({
   const locked = disabled || pending;
   const customSelected =
     allowCustom &&
+    !pending &&
     selectedId != null &&
     resolvedOptions.some((option) => option.id === selectedId && isCustomOption(option, customOptionId));
+  const selectedOption =
+    selectedId != null
+      ? resolvedOptions.find((option) => option.id === selectedId) ?? null
+      : null;
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (locked || (event.key !== "ArrowRight" && event.key !== "ArrowDown" && event.key !== "ArrowLeft" && event.key !== "ArrowUp" && event.key !== "Enter" && event.key !== " ")) {
@@ -112,7 +120,7 @@ export function MultipleChoiceQuestionCard({
       tone={tone}
       title={title}
       reason={prompt}
-      continuation={continuation}
+      continuation={pending ? "" : continuation}
       className={className}
       detail={
         <div className="space-y-2">
@@ -123,89 +131,109 @@ export function MultipleChoiceQuestionCard({
         </div>
       }
       actions={
-        <>
-          <div
-            role="radiogroup"
-            aria-labelledby={labelId}
-            className="flex w-full flex-col gap-2"
-            onKeyDown={handleKeyDown}
-          >
-            <span id={labelId} className="sr-only">
-              {prompt}
-            </span>
-            {resolvedOptions.map((option, index) => {
-              const selected = selectedId === option.id;
-              return (
-                <button
-                  key={option.id}
+        pending ? (
+          <>
+            {selectedOption ? (
+              <div className="w-full rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-left text-[13px]">
+                <span className="font-medium">{selectedOption.label}</span>
+                {selectedOption.description ? (
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                    {selectedOption.description}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+            <ChatThinkingLine label={loadingLabel} />
+            {error ? (
+              <p className="w-full text-[11px] text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <div
+              role="radiogroup"
+              aria-labelledby={labelId}
+              className="flex w-full flex-col gap-2"
+              onKeyDown={handleKeyDown}
+            >
+              <span id={labelId} className="sr-only">
+                {prompt}
+              </span>
+              {resolvedOptions.map((option, index) => {
+                const selected = selectedId === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={disabled}
+                    tabIndex={disabled ? -1 : index === focusIndex ? 0 : -1}
+                    onFocus={() => setFocusIndex(index)}
+                    onClick={() => onSelect(option.id)}
+                    className={cn(
+                      "rounded-xl border px-3 py-2.5 text-left text-[13px] transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      selected
+                        ? "border-primary/50 bg-primary/10 text-foreground"
+                        : "border-border bg-surface-raised text-foreground hover:bg-surface-hover",
+                    )}
+                  >
+                    <span className="font-medium">{option.label}</span>
+                    {option.description ? (
+                      <span className="mt-0.5 block text-[12px] text-muted-foreground">
+                        {option.description}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {customSelected ? (
+              <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  value={customValue}
+                  onChange={(event) => onCustomChange?.(event.target.value)}
+                  placeholder={customPlaceholder}
+                  disabled={disabled}
+                  maxLength={280}
+                  aria-label="Custom answer"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      onSubmitCustom?.();
+                    }
+                  }}
+                />
+                <Button
                   type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  disabled={locked}
-                  tabIndex={locked ? -1 : index === focusIndex ? 0 : -1}
-                  onFocus={() => setFocusIndex(index)}
-                  onClick={() => onSelect(option.id)}
-                  className={cn(
-                    "rounded-lg border px-3 py-2 text-left text-[13px] transition-colors",
-                    selected
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border bg-surface-raised text-foreground hover:bg-surface-hover",
-                    locked && !selected ? "opacity-50" : null,
-                  )}
+                  size="sm"
+                  disabled={disabled || !customValue.trim()}
+                  onClick={() => onSubmitCustom?.()}
                 >
-                  <span className="font-medium">{option.label}</span>
-                  {option.description ? (
-                    <span className="mt-0.5 block text-[12px] text-muted-foreground">
-                      {option.description}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-          {customSelected ? (
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
-              <Input
-                value={customValue}
-                onChange={(event) => onCustomChange?.(event.target.value)}
-                placeholder={customPlaceholder}
-                disabled={locked}
-                maxLength={280}
-                aria-label="Custom answer"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    onSubmitCustom?.();
-                  }
-                }}
-              />
+                  Continue
+                </Button>
+              </div>
+            ) : null}
+            {error ? (
+              <p className="w-full text-[11px] text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {onSkip ? (
               <Button
                 type="button"
+                variant="ghost"
                 size="sm"
-                disabled={locked || !customValue.trim()}
-                onClick={() => onSubmitCustom?.()}
+                onClick={onSkip}
               >
-                Continue
+                {skipLabel}
               </Button>
-            </div>
-          ) : null}
-          {error ? (
-            <p className="w-full text-[11px] text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
-          {onSkip ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={pending}
-              onClick={onSkip}
-            >
-              {skipLabel}
-            </Button>
-          ) : null}
-        </>
+            ) : null}
+          </>
+        )
       }
     />
   );

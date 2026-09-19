@@ -2,6 +2,13 @@
 
 import type { MessageAttachment } from "@/lib/api-types";
 import { formatFileSize, isImageMime } from "./composer-attachments";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  Attachments,
+  toFileAttachment,
+} from "@/components/ai-elements/attachments";
 import { cn } from "cn";
 
 export function MessageAttachmentList({
@@ -14,38 +21,39 @@ export function MessageAttachmentList({
   if (!attachments.length) {
     return null;
   }
+  const hasImage = attachments.some((attachment) => isImageMime(attachment.mimeType));
   return (
-    <ul className={cn("mt-2 flex flex-wrap gap-2", align === "end" ? "justify-end" : "justify-start")}>
+    <Attachments
+      variant={hasImage ? "grid" : "inline"}
+      className={cn("mt-2", align === "end" ? "justify-end" : "justify-start")}
+      aria-label="Attachments"
+    >
       {attachments.map((attachment) => {
         const href = `/api/cloud/v1/attachments/${encodeURIComponent(attachment.id)}/content`;
-        if (isImageMime(attachment.mimeType)) {
-          return (
-            <li key={attachment.id}>
-              <a href={href} target="_blank" rel="noreferrer" aria-label={attachment.originalName}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={href}
-                  alt={attachment.originalName}
-                  className="max-h-40 max-w-48 rounded-lg border border-border object-cover"
-                />
-              </a>
-            </li>
-          );
-        }
+        const data = toFileAttachment({
+          id: attachment.id,
+          name: attachment.originalName,
+          mimeType: attachment.mimeType,
+          url: href,
+        });
         return (
-          <li key={attachment.id}>
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="flex max-w-56 items-center gap-2 rounded-lg border border-border bg-card px-2 py-1.5 text-[12px] text-foreground hover:bg-surface-hover"
-            >
-              <span className="truncate font-medium">{attachment.originalName}</span>
-              <span className="text-muted-foreground">{formatFileSize(attachment.sizeBytes)}</span>
-            </a>
-          </li>
+          <a
+            key={attachment.id}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={attachment.originalName}
+            className="min-w-0"
+          >
+            <Attachment data={data}>
+              <AttachmentPreview />
+              {hasImage ? null : (
+                <AttachmentInfo description={formatFileSize(attachment.sizeBytes)} />
+              )}
+            </Attachment>
+          </a>
         );
       })}
-    </ul>
+    </Attachments>
   );
 }

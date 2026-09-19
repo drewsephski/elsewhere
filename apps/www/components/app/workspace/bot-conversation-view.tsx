@@ -37,6 +37,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useConversationIdentityLayout } from "@/hooks/use-conversation-identity-layout";
 import { useHistoricalRunTimelines } from "@/hooks/use-historical-run-timelines";
 import { MarkdownContent } from "@/components/app/markdown-content";
+import { MessageSources } from "@/components/app/message-sources";
+import { ChatThinkingLine } from "@/components/app/chat-thinking-line";
 import { botPresetPrompts } from "@/lib/bot-preset-prompts";
 import { BotPresetPrompts } from "./bot-preset-prompts";
 import { ChatComposerFrame, ChatComposerTextarea, ComposerIconButton } from "./chat-composer";
@@ -55,7 +57,6 @@ import { WorkStatusCard } from "./work-status-card";
 import { SaveAsSkillDialog } from "./save-as-skill-dialog";
 import { useOptionalBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { FloatingBrowserPreview } from "./floating-browser-preview";
-import { Spinner } from "@/components/ui/spinner";
 import {
   bumpLoadScope,
   createLoadScopeRef,
@@ -121,9 +122,9 @@ function BotWaitingStatus({
   label: string;
 }) {
   return (
-    <div className="flex items-end gap-3" role="status" aria-live="polite">
+    <div className="flex items-end gap-3">
       <BotCreatureAvatar name={name} avatarId={avatarId} size="md" animated />
-      <p className="pb-1 text-[13px] text-muted-foreground">{label}</p>
+      <ChatThinkingLine className="pb-1" label={label} />
     </div>
   );
 }
@@ -877,10 +878,12 @@ export function BotConversationView({
                                 className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-foreground/80 align-middle"
                                 aria-hidden
                               />
-                            ) : null}
+                            ) : (
+                              <MessageSources className="mt-3" text={assistantText} />
+                            )}
                           </div>
                         ) : (
-                          <p className="text-muted-foreground">Composing a reply…</p>
+                          <ChatThinkingLine label="Composing a reply…" />
                         )}
                       </AssistantMessageBubble>
                     ) : (
@@ -928,8 +931,8 @@ export function BotConversationView({
           ) : null}
 
           {conversationLoading && !pendingTurn ? (
-            <div className="flex justify-center py-16" role="status" aria-label="Loading conversation">
-              <Spinner className="size-5 text-muted-foreground" />
+            <div className="flex justify-center py-16">
+              <ChatThinkingLine label="Loading conversation…" />
             </div>
           ) : null}
 

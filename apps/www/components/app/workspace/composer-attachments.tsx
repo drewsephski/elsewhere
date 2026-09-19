@@ -2,7 +2,14 @@
 
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { MessageAttachment } from "@/lib/api-types";
-import { X } from "@/components/icons/lucide";
+import {
+  Attachment,
+  AttachmentInfo,
+  AttachmentPreview,
+  AttachmentRemove,
+  Attachments,
+  toFileAttachment,
+} from "@/components/ai-elements/attachments";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 export const COMPOSER_FILE_ACCEPT =
@@ -77,41 +84,32 @@ export function ComposerAttachmentStrip({
     return null;
   }
   return (
-    <ul className="mb-2 flex flex-wrap gap-2" aria-label="Attachments">
+    <Attachments variant="inline" aria-label="Attachments">
       {files.map((item) => (
-        <li
+        <Attachment
           key={item.localId}
-          className="flex max-w-56 items-center gap-2 rounded-lg border border-border bg-card px-2 py-1.5 text-[12px]"
+          data={toFileAttachment({
+            id: item.localId,
+            name: item.file.name,
+            mimeType: item.file.type,
+            url: item.previewUrl ?? "",
+          })}
+          onRemove={() => onRemove(item.localId)}
         >
-          {item.previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.previewUrl} alt="" className="size-8 rounded object-cover" />
-          ) : (
-            <span className="flex size-8 items-center justify-center rounded bg-surface-active text-[10px] uppercase text-muted-foreground">
-              {item.file.name.split(".").pop()?.slice(0, 4) ?? "file"}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{item.file.name}</p>
-            <p className="text-muted-foreground">
-              {item.status === "uploading"
+          <AttachmentPreview />
+          <AttachmentInfo
+            description={
+              item.status === "uploading"
                 ? "Uploading…"
                 : item.status === "error"
                   ? item.error
-                  : formatFileSize(item.file.size)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rounded-full p-1 text-muted-foreground hover:bg-surface-hover hover:text-foreground"
-            aria-label={`Remove ${item.file.name}`}
-            onClick={() => onRemove(item.localId)}
-          >
-            <X className="size-3.5" aria-hidden />
-          </button>
-        </li>
+                  : formatFileSize(item.file.size)
+            }
+          />
+          <AttachmentRemove />
+        </Attachment>
       ))}
-    </ul>
+    </Attachments>
   );
 }
 

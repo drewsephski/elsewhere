@@ -1,7 +1,7 @@
 "use client";
 
 import type { BotPresetPrompt } from "@/lib/bot-preset-prompts";
-import { Button } from "@/components/ui/button";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 
 interface BotPresetPromptsProps {
   prompts: readonly BotPresetPrompt[];
@@ -19,24 +19,18 @@ export function BotPresetPrompts({
   }
 
   return (
-    <ul
-      className="flex flex-wrap justify-center gap-1.5"
-      aria-label="Suggested prompts"
-    >
+    <Suggestions className="justify-center" aria-label="Suggested prompts" role="list">
       {prompts.map((item) => (
-        <li key={item.label}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
+        <div key={item.label} role="listitem">
+          <Suggestion
+            suggestion={item.prompt}
             disabled={disabled}
-            onClick={() => onSelect(item.prompt)}
-            className="h-7 max-w-full rounded-full border-border bg-card px-3 text-[12px] font-normal text-muted-foreground hover:bg-surface-hover hover:text-foreground"
+            onClick={onSelect}
           >
             {item.label}
-          </Button>
-        </li>
+          </Suggestion>
+        </div>
       ))}
-    </ul>
+    </Suggestions>
   );
 }

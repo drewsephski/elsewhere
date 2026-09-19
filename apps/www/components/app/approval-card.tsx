@@ -1,6 +1,7 @@
 "use client";
 
 import { NeedsYouCard } from "@/components/app/needs-you-card";
+import { ChatThinkingLine } from "@/components/app/chat-thinking-line";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -272,6 +273,7 @@ export function ApprovalCard({
               {error}
             </p>
           ) : null}
+          {busy ? <ChatThinkingLine label="Saving your choice…" /> : null}
         </>
       }
     />

@@ -72,4 +72,26 @@ describe("MultipleChoiceQuestionCard", () => {
     );
     expect(screen.getByRole("radio", { name: "Something else…" })).toBeTruthy();
   });
+
+  it("shows a thinking loader for the chosen option instead of dimming the list", () => {
+    render(
+      <MultipleChoiceQuestionCard
+        title="Scout setup"
+        prompt="What should Scout own?"
+        options={[
+          { id: "research", label: "Research briefs", description: "Sourced one-pagers" },
+          { id: "ops", label: "Launch ops" },
+        ]}
+        selectedId="research"
+        pending
+        loadingLabel="Preparing the next question…"
+        onSelect={vi.fn()}
+        onSkip={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Preparing the next question…");
+    expect(screen.getByText("Research briefs")).toBeTruthy();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Skip for now" })).toBeNull();
+  });
 });

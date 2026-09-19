@@ -48,13 +48,16 @@ export function UserQuestionCard({
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const answered = selected !== null || question.status === "answered";
+  const [saved, setSaved] = useState(
+    question.status === "answered" || typeof question.selectedIndex === "number",
+  );
   const cancelled = question.status === "cancelled";
 
   async function handleSelect(index: number) {
-    if (answered || pending || cancelled) {
+    if (saved || pending || cancelled) {
       return;
     }
+    setSelected(index);
     setPending(true);
     setError(null);
     try {
@@ -69,8 +72,9 @@ export function UserQuestionCard({
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? "Could not save that choice");
       }
-      setSelected(index);
+      setSaved(true);
     } catch (err) {
+      setSelected(null);
       setError(err instanceof Error ? err.message : "Could not save that choice");
     } finally {
       setPending(false);
@@ -98,7 +102,7 @@ export function UserQuestionCard({
     );
   }
 
-  if (answered && chosenLabel) {
+  if (saved && chosenLabel) {
     return (
       <NeedsYouCard
         tone="resolved"
@@ -118,8 +122,9 @@ export function UserQuestionCard({
       }))}
       selectedId={chosenIndex !== null ? String(chosenIndex) : null}
       pending={pending}
-      disabled={answered}
+      disabled={saved}
       error={error}
+      loadingLabel="Saving your choice…"
       continuation="Pick one option to continue this assignment."
       onSelect={(optionId) => void handleSelect(Number(optionId))}
     />

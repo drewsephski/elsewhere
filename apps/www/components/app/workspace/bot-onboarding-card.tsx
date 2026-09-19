@@ -1,6 +1,7 @@
 "use client";
 
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
+import { ChatThinkingLine } from "@/components/app/chat-thinking-line";
 import { MultipleChoiceQuestionCard } from "@/components/app/multiple-choice-question-card";
 import { Button } from "@/components/ui/button";
 import { cloudHostFetch } from "@/lib/cloud-api";
@@ -124,6 +125,7 @@ export function BotOnboardingCard({
       setSelectedByQuestion((current) => ({ ...current, [question.id]: optionId }));
       return;
     }
+    setSelectedByQuestion((current) => ({ ...current, [question.id]: optionId }));
     setPending(true);
     setError(null);
     try {
@@ -254,12 +256,13 @@ export function BotOnboardingCard({
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" disabled={pending} onClick={() => void handleStart(false)}>
-            {pending ? "Starting…" : "Tune this Bot"}
+            Tune this Bot
           </Button>
           <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void handleDismiss()}>
             Skip for now
           </Button>
         </div>
+        {pending ? <ChatThinkingLine className="mt-3" label="Starting setup…" /> : null}
         {error ? (
           <p className="mt-2 text-[11px] text-destructive" role="alert">
             {error}
@@ -303,7 +306,7 @@ export function BotOnboardingCard({
         ) : null}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" size="sm" disabled={pending} onClick={() => void handleApply()}>
-            {pending ? "Applying…" : "Apply setup"}
+            Apply setup
           </Button>
           <Button
             type="button"
@@ -318,6 +321,7 @@ export function BotOnboardingCard({
             Skip for now
           </Button>
         </div>
+        {pending ? <ChatThinkingLine className="mt-3" label="Applying this setup…" /> : null}
         {error ? (
           <p className="mt-2 text-[11px] text-destructive" role="alert">
             {error}
@@ -334,12 +338,16 @@ export function BotOnboardingCard({
         <p className="text-[14px] font-medium tracking-tight">
           {botName} is ready. Want to spend about a minute tuning how it works?
         </p>
-        <p className="mt-1 text-[12px] text-muted-foreground">
-          {pending ? "Luna is preparing a few questions…" : state.lastError ?? error ?? "Setup can continue when you are ready."}
-        </p>
+        {pending ? (
+          <ChatThinkingLine className="mt-2" label={`${botName} is preparing a few questions…`} />
+        ) : (
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            {state.lastError ?? error ?? "Setup can continue when you are ready."}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button type="button" size="sm" disabled={pending} onClick={() => void handleStart(false)}>
-            {pending ? "Working…" : "Retry"}
+            Retry
           </Button>
           <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void handleDismiss()}>
             Skip for now
@@ -354,7 +362,7 @@ export function BotOnboardingCard({
 
   return (
     <div className="w-full space-y-3 text-left">
-      <SetupShell name={botName} avatarId={avatarId}>
+      <SetupShell name={botName} avatarId={avatarId} thinking={pending}>
         <p className="text-[14px] font-medium tracking-tight">
           {botName} is ready. Want to spend about a minute tuning how it works?
         </p>
@@ -371,6 +379,11 @@ export function BotOnboardingCard({
           setCustomByQuestion((current) => ({ ...current, [question.id]: value }))
         }
         pending={pending}
+        loadingLabel={
+          selectedId
+            ? `${botName} is preparing the next question…`
+            : "Skipping setup…"
+        }
         error={error ?? state.lastError ?? null}
         progress={`${question.index} of up to ${question.maxQuestions}`}
         tone="neutral"
@@ -402,7 +415,7 @@ function SetupShell({
         size="lg"
         animated={thinking}
       />
-      <div className="min-w-0 flex-1 rounded-xl border border-border/70 bg-muted/20 p-3">
+      <div className="min-w-0 flex-1 rounded-2xl border border-border/60 bg-muted/15 p-3.5">
         {children}
       </div>
     </div>

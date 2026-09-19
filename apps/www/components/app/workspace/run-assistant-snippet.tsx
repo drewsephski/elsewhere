@@ -2,6 +2,7 @@
 
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
+import { MessageSources } from "@/components/app/message-sources";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -49,6 +50,7 @@ export function RunAssistantSnippet({
   return (
     <AssistantMessageBubble className={className} leading={leading}>
       <MarkdownContent text={text} />
+      <MessageSources className="mt-3" text={text} />
     </AssistantMessageBubble>
   );
 }

@@ -7,6 +7,8 @@ import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
 import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { MarkdownContent } from "@/components/app/markdown-content";
+import { MessageSources } from "@/components/app/message-sources";
+import { ChatThinkingLine } from "@/components/app/chat-thinking-line";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +43,6 @@ import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { StatusPill, type StatusTone } from "@/components/app/status-pill";
 import { workStatus } from "@/lib/work-events";
-import { Spinner } from "@/components/ui/spinner";
 import {
   bumpLoadScope,
   createLoadScopeRef,
@@ -431,8 +432,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       >
         <div className="mx-auto flex max-w-3xl flex-col gap-5">
           {transcriptLoading ? (
-            <div className="flex justify-center py-16" role="status" aria-label="Loading group chat">
-              <Spinner className="size-5 text-muted-foreground" />
+            <div className="flex justify-center py-16">
+              <ChatThinkingLine label="Loading group chat…" />
             </div>
           ) : null}
 
@@ -536,9 +537,14 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                 <p className="mb-1 text-[11px] font-medium text-muted-foreground">
                   {item.authorBotName ?? "Bot"}
                 </p>
-                <MarkdownContent
-                  text={item.body || (item.status === "pending" ? "Working…" : "")}
-                />
+                {item.status === "pending" && !item.body ? (
+                  <ChatThinkingLine label="Working…" />
+                ) : (
+                  <>
+                    <MarkdownContent text={item.body || ""} />
+                    <MessageSources className="mt-3" text={item.body || ""} />
+                  </>
+                )}
               </AssistantMessageBubble>
             ),
           )
