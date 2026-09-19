@@ -151,28 +151,16 @@ export function FloatingBrowserPreview() {
   const addressBar = (
     <form
       onSubmit={(event) => void handleNavigate(event)}
-      className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/50 bg-background px-1.5 py-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+      className="flex min-w-0 flex-1 items-center"
     >
-      <span className="shrink-0 text-[9px] text-muted-foreground/80" aria-hidden>
-        🔒
-      </span>
       <Input
         value={urlDraft}
         onChange={(event) => setUrlDraft(event.target.value)}
-        placeholder="Enter URL"
-        className="h-6 min-w-0 flex-1 border-0 bg-transparent px-0 text-[10px] shadow-none focus-visible:ring-0"
+        placeholder="Open URL"
+        className="h-6 min-w-0 flex-1 border-0 bg-transparent px-1 text-[11px] shadow-none focus-visible:ring-0"
         aria-label="Navigate browser to URL"
         disabled={controlBusy}
       />
-      <Button
-        type="submit"
-        variant="ghost"
-        size="sm"
-        className="h-6 shrink-0 px-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground"
-        disabled={controlBusy}
-      >
-        Go
-      </Button>
     </form>
   );
 
@@ -203,14 +191,14 @@ export function FloatingBrowserPreview() {
         )}
       >
         <div
-          className="flex cursor-grab items-center gap-1 border-b border-border/50 px-2 py-1.5 active:cursor-grabbing"
+          className="flex cursor-grab items-center gap-1 border-b border-border/50 px-1.5 py-1 active:cursor-grabbing"
           onPointerDown={handlePointerDown}
         >
           <GripVertical className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <p className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
-            Live computer
-          </p>
-          <div className="flex shrink-0 items-center gap-0.5" data-no-drag>
+          <div className="min-w-0 flex-1" data-no-drag>
+            {addressBar}
+          </div>
+          <div className="flex shrink-0 items-center" data-no-drag>
             <Button
               type="button"
               variant="ghost"
@@ -266,7 +254,6 @@ export function FloatingBrowserPreview() {
             ref={previewRef}
             variant="floating"
             chromeAttached
-            addressBar={addressBar}
           />
           {controlError ? (
             <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-destructive" role="alert">

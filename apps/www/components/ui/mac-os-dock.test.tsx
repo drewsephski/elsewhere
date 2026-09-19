@@ -42,4 +42,12 @@ describe("MacOSDock", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: "Mail" }), { key: "Enter" });
     expect(onAppClick).toHaveBeenCalledWith("mail");
   });
+
+  it("sizes the rest tray to the icons instead of magnified hover height", () => {
+    render(<MacOSDock apps={apps} onAppClick={() => undefined} size="mini" />);
+    const dock = screen.getByRole("toolbar", { name: "Application dock" });
+    const height = Number.parseFloat(dock.style.height);
+    expect(height).toBeGreaterThan(24);
+    expect(height).toBeLessThan(40);
+  });
 });

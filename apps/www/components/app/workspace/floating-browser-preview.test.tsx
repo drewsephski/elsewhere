@@ -69,7 +69,7 @@ describe("FloatingBrowserPreview", () => {
       </div>,
     );
     expect(screen.getByRole("region", { name: "Floating live computer preview" })).toBeTruthy();
-    expect(screen.getByText("Live computer")).toBeTruthy();
+    expect(screen.getByLabelText("Navigate browser to URL")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Dock preview in sidebar" }));
     expect(dockPip).toHaveBeenCalledTimes(1);
   });

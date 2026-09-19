@@ -51,8 +51,6 @@ interface BrowserPreviewViewProps {
   loading?: boolean;
   error?: string | null;
   enabled?: boolean;
-  /** Replaces the read-only address label in compact chrome (e.g. floating URL bar). */
-  addressBar?: ReactNode;
   /** Flush chrome with parent card — no extra border or outer rounding. */
   chromeAttached?: boolean;
   viewportClassName?: string;
@@ -133,16 +131,10 @@ function PreviewChrome({
         {bare ? null : (
           <div
             className={cn(
-              "flex items-center gap-1.5 border-b border-border bg-surface-hover px-2",
-              compact ? "py-1" : "py-1.5",
-              addressBar && "gap-2",
+              "flex items-center border-b border-border bg-surface-hover px-2 py-1",
+              addressBar && "gap-1.5",
             )}
           >
-            <div className="flex shrink-0 items-center gap-1" aria-hidden>
-              <span className="size-1.5 rounded-full bg-white/20" />
-              <span className="size-1.5 rounded-full bg-white/20" />
-              <span className="size-1.5 rounded-full bg-white/20" />
-            </div>
             {addressBar ? (
               <div className="min-w-0 flex-1">{addressBar}</div>
             ) : (
@@ -262,7 +254,6 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   loading: loadingProp,
   error: errorProp,
   enabled: enabledProp,
-  addressBar,
   chromeAttached,
   caption,
 }: BrowserPreviewViewProps, ref) {
@@ -323,6 +314,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogOrigin, setDialogOrigin] = useState<string | undefined>();
   const previewShellRef = useRef<HTMLDivElement>(null);
+  const typeInputRef = useRef<HTMLInputElement>(null);
 
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const addressLabel = host ?? statusLabel;
@@ -376,6 +368,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     try {
       await clickComputerBrowserPoint(computerId, xRatio, yRatio);
       await ctx?.refresh();
+      typeInputRef.current?.focus();
     } catch (err) {
       setHumanClickError(err instanceof Error ? err.message : "Click failed");
     } finally {
@@ -417,31 +410,34 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     }
   }
 
+  const humanControlHud = (
+    <BrowserHumanControlBar
+      enabled={enabled}
+      humanActive={humanControl.humanActive}
+      loading={humanControl.loading}
+      inputBusy={humanInputBusy || humanClickBusy}
+      error={humanControl.error}
+      inputError={humanInputError ?? humanClickError}
+      typeInputRef={typeInputRef}
+      onTakeControl={() => void humanControl.takeControl()}
+      onReturnControl={() => void humanControl.returnControl()}
+      onTypeText={(text) => void handleHumanTypeText(text)}
+      onPressKey={(key) => void handleHumanPressKey(key)}
+    />
+  );
+
   if (variant === "floating") {
     return (
       <div className={className}>
-        <BrowserHumanControlBar
-          enabled={enabled}
-          humanActive={humanControl.humanActive}
-          loading={humanControl.loading}
-          inputBusy={humanInputBusy || humanClickBusy}
-          error={humanControl.error}
-          inputError={humanInputError ?? humanClickError}
-          onTakeControl={() => void humanControl.takeControl()}
-          onReturnControl={() => void humanControl.returnControl()}
-          onTypeText={(text) => void handleHumanTypeText(text)}
-          onPressKey={(key) => void handleHumanPressKey(key)}
-          className="mb-1.5 px-2 pt-1"
-        />
         <div ref={previewShellRef} className="relative">
           <PreviewChrome
             frame={frame}
             loading={loading}
             enabled={enabled}
             addressLabel={addressLabel}
-            addressBar={addressBar}
             attached={chromeAttached}
             compact
+            bare
             variant="floating"
           >
             {frame?.imageDataUrl ? (
@@ -458,6 +454,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
             />
           </PreviewChrome>
+          {humanControlHud}
           {appDock}
         </div>
         <ComputerPreviewDialog
@@ -556,30 +553,12 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
               </span>
             ) : null}
           </div>
+          {humanControlHud}
           {appDock}
         </div>
 
         {caption}
 
-        <BrowserHumanControlBar
-          enabled={enabled}
-          humanActive={humanControl.humanActive}
-          loading={humanControl.loading}
-          inputBusy={humanInputBusy || humanClickBusy}
-          error={humanControl.error}
-          inputError={humanInputError}
-          onTakeControl={() => void humanControl.takeControl()}
-          onReturnControl={() => void humanControl.returnControl()}
-          onTypeText={(text) => void handleHumanTypeText(text)}
-          onPressKey={(key) => void handleHumanPressKey(key)}
-          className="mt-1.5"
-        />
-
-        {humanClickError ? (
-          <p className="mt-1.5 px-1 text-[11px] text-destructive" role="alert">
-            {humanClickError}
-          </p>
-        ) : null}
         {browserToolError ? (
           <div className="mt-1.5 space-y-1.5 px-1" role="alert">
             <p className="text-[11px] text-destructive">{browserToolError}</p>

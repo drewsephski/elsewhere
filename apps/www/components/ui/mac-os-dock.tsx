@@ -57,9 +57,9 @@ function densityForWidth(size: MacOSDockSize, appCount: number, availableWidth: 
   const preset = SIZE_PRESETS[size];
   let baseIconSize = preset.baseIconSize;
   let maxScale = preset.maxScale;
-  let spacing = Math.max(3, baseIconSize * 0.18);
-  let padX = Math.max(8, baseIconSize * 0.38);
-  const padY = Math.max(5, baseIconSize * 0.18);
+  let spacing = Math.max(3, baseIconSize * 0.16);
+  let padX = Math.max(7, baseIconSize * 0.28);
+  const padY = Math.max(4, Math.round(baseIconSize * 0.12));
 
   if (availableWidth && availableWidth > 0 && appCount > 0) {
     const restWidth = appCount * baseIconSize + (appCount - 1) * spacing + padX * 2;
@@ -297,7 +297,7 @@ export function MacOSDock({
       : apps.length * (density.baseIconSize + density.spacing) - density.spacing;
 
   const trayWidth = contentWidth + density.padX * 2;
-  const trayHeight = density.baseIconSize * density.maxScale + density.padY * 2 + 10;
+  const trayHeight = density.baseIconSize + density.padY * 2;
 
   return (
     <div ref={measureRef} className={cn("flex w-full justify-center", className)}>
@@ -311,7 +311,8 @@ export function MacOSDock({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
         className={cn(
-          "relative flex items-end overflow-visible rounded-[18px] border border-white/12 bg-[#1b1b1d]/78 shadow-[0_8px_24px_rgba(0,0,0,0.38)] backdrop-blur-xl",
+          "relative flex items-end overflow-visible border border-white/14 bg-[#1b1b1d]/82 shadow-[0_6px_18px_rgba(0,0,0,0.32)] backdrop-blur-xl",
+          size === "default" ? "rounded-[18px]" : "rounded-[12px]",
           disabled && "opacity-55",
         )}
         style={{
@@ -370,7 +371,7 @@ export function MacOSDock({
               />
               <span
                 className={cn(
-                  "absolute -bottom-[5px] size-[3px] rounded-full bg-white/90",
+                  "absolute -bottom-[3px] size-[3px] rounded-full bg-white/90",
                   isOpen ? "opacity-100" : "opacity-0",
                 )}
                 aria-hidden

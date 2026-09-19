@@ -1,9 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "cn";
-import { useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 
 interface BrowserHumanControlBarProps {
   enabled: boolean;
@@ -14,17 +19,11 @@ interface BrowserHumanControlBarProps {
   inputError?: string | null;
   onTakeControl: () => void;
   onReturnControl: () => void;
-  onTypeText?: (text: string) => void;
-  onPressKey?: (key: string) => void;
+  onTypeText?: (text: string) => void | Promise<void>;
+  onPressKey?: (key: string) => void | Promise<void>;
+  typeInputRef?: RefObject<HTMLInputElement | null>;
   className?: string;
 }
-
-const HUMAN_KEYS = [
-  { label: "Enter", key: "Enter" },
-  { label: "Tab", key: "Tab" },
-  { label: "Esc", key: "Escape" },
-  { label: "⌫", key: "Backspace" },
-] as const;
 
 export function BrowserHumanControlBar({
   enabled,
@@ -37,49 +36,106 @@ export function BrowserHumanControlBar({
   onReturnControl,
   onTypeText,
   onPressKey,
+  typeInputRef,
   className,
 }: BrowserHumanControlBarProps) {
-  const [draft, setDraft] = useState("");
+  const internalInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = typeInputRef ?? internalInputRef;
+  const draftRef = useRef("");
+
+  useEffect(() => {
+    if (!humanActive) {
+      draftRef.current = "";
+      if (inputRef.current) {
+        inputRef.current.value = "";
+      }
+      return;
+    }
+    inputRef.current?.focus();
+  }, [humanActive, inputRef]);
 
   if (!enabled) {
     return null;
   }
 
-  function handleSubmitType(event: FormEvent) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text || !onTypeText) {
-      return;
+  function flushDraft(): string {
+    const text = draftRef.current;
+    draftRef.current = "";
+    if (inputRef.current) {
+      inputRef.current.value = "";
     }
-    onTypeText(text);
-    setDraft("");
+    return text;
   }
 
+  function handleSubmitType(event: FormEvent) {
+    event.preventDefault();
+    const text = flushDraft();
+    void (async () => {
+      if (text && onTypeText) {
+        await onTypeText(text);
+      }
+      await onPressKey?.("Enter");
+    })();
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const text = flushDraft();
+      void (async () => {
+        if (text && onTypeText) {
+          await onTypeText(text);
+        }
+        await onPressKey?.("Tab");
+      })();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      flushDraft();
+      void onPressKey?.("Escape");
+      return;
+    }
+    if (event.key === "Backspace" && !draftRef.current) {
+      event.preventDefault();
+      void onPressKey?.("Backspace");
+    }
+  }
+
+  function handleInput() {
+    draftRef.current = inputRef.current?.value ?? "";
+  }
+
+  const busy = inputBusy || loading;
+  const status = error ?? inputError;
+
   return (
-    <div className={cn("space-y-1 px-0.5", className)}>
-      <div className="flex flex-wrap items-center gap-2">
+    <div
+      className={cn("pointer-events-none absolute inset-0 z-[6]", className)}
+      data-browser-human-hud=""
+    >
+      <div className="flex items-start justify-between gap-2 p-2">
         {humanActive ? (
-          <>
-            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
-              You have control
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-6 rounded-md px-2 text-[11px]"
-              disabled={loading}
-              onClick={onReturnControl}
-            >
-              Return to bot
-            </Button>
-          </>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            className="pointer-events-auto h-6 rounded-full bg-black/60 px-2.5 text-[11px] text-white hover:bg-black/75 hover:text-white"
+            disabled={loading}
+            onClick={onReturnControl}
+            aria-label="Return to bot"
+          >
+            Return
+          </Button>
         ) : (
           <Button
             type="button"
-            size="sm"
+            size="xs"
             variant="ghost"
-            className="h-6 rounded-md px-2 text-[11px] text-muted-foreground hover:text-foreground"
+            className="pointer-events-auto h-6 rounded-full bg-black/45 px-2.5 text-[11px] text-white/90 hover:bg-black/65 hover:text-white"
             disabled={loading}
             onClick={onTakeControl}
           >
@@ -87,68 +143,32 @@ export function BrowserHumanControlBar({
           </Button>
         )}
       </div>
-      {error ? (
-        <p className="text-[10px] text-destructive" role="alert">
-          {error}
-        </p>
+      {humanActive && onTypeText ? (
+        <form
+          onSubmit={handleSubmitType}
+          className="pointer-events-none absolute inset-x-0 bottom-[2.75rem] flex justify-center px-3"
+        >
+          <input
+            ref={inputRef}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            placeholder="Type"
+            className="pointer-events-auto h-7 w-full max-w-[13.5rem] rounded-full border border-white/10 bg-black/70 px-3 text-[11px] text-white shadow-[0_4px_14px_rgba(0,0,0,0.28)] outline-none placeholder:text-white/40 focus-visible:ring-2 focus-visible:ring-white/50"
+            aria-label="Type into the focused browser field"
+            disabled={busy}
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+          />
+        </form>
       ) : null}
-      {humanActive ? (
-        <div className="space-y-1.5">
-          <p className="text-[10px] text-muted-foreground">
-            Click the preview to focus fields, then type below. Bot browser actions stay paused until
-            you return control.
-          </p>
-          {onTypeText ? (
-            <form
-              onSubmit={handleSubmitType}
-              className="flex items-center gap-1 rounded-md border border-border/50 bg-background/80 px-1.5 py-0.5"
-            >
-              <Input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                placeholder="Type into focused field"
-                className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 text-[11px] shadow-none focus-visible:ring-0"
-                aria-label="Type into the focused browser field"
-                disabled={inputBusy || loading}
-                autoComplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                variant="ghost"
-                className="h-7 shrink-0 px-2 text-[10px]"
-                disabled={inputBusy || loading || !draft.trim()}
-              >
-                Send
-              </Button>
-            </form>
-          ) : null}
-          {onPressKey ? (
-            <div className="flex flex-wrap gap-1">
-              {HUMAN_KEYS.map(({ label, key }) => (
-                <Button
-                  key={key}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[10px]"
-                  disabled={inputBusy || loading}
-                  onClick={() => onPressKey(key)}
-                  aria-label={`Send ${label} to browser`}
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-          {inputError ? (
-            <p className="text-[10px] text-destructive" role="alert">
-              {inputError}
-            </p>
-          ) : null}
-        </div>
+      {status ? (
+        <p
+          className="absolute inset-x-0 top-9 px-2 text-center text-[10px] text-red-300"
+          role="alert"
+        >
+          {status}
+        </p>
       ) : null}
     </div>
   );

@@ -65,11 +65,11 @@ export function BrowserAppDock({
 
   return (
     <div
-      className={cn("pointer-events-none absolute inset-x-0 bottom-2 z-[5] flex justify-center px-2", className)}
+      className={cn("pointer-events-none absolute inset-x-0 bottom-1.5 z-[5] flex justify-center px-3", className)}
       data-browser-app-dock=""
     >
       <div
-        className="pointer-events-auto w-full max-w-[280px]"
+        className="pointer-events-auto w-full max-w-[220px]"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >

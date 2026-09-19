@@ -366,8 +366,8 @@ export function DemoBrowser({ computer, controlHref }: DemoBrowserProps) {
         ) : (
           <BrowserPage page={activeComputer.page} path={path} goTo={goTo} />
         )}
-        <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-2">
-          <div className="pointer-events-auto w-full max-w-[280px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-1.5 z-20 flex justify-center px-3">
+          <div className="pointer-events-auto w-full max-w-[220px]">
             <MacOSDock
               apps={BROWSER_DOCK_ICON_APPS}
               onAppClick={handleDockAppClick}
