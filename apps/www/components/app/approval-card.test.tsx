@@ -29,7 +29,7 @@ describe("ApprovalCard", () => {
     expect(screen.getByText("Allow this action?")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
-    expect(screen.getByText(/Target:/)).toBeTruthy();
+    expect(screen.getByText(/Write report\.md.*Workspace/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show details" })).toBeTruthy();
     expect(document.querySelector("pre")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
