@@ -23,11 +23,13 @@ import { MessageDeleteButton } from "@/components/app/message-delete-button";
 import { StatusPill } from "@/components/app/status-pill";
 import { useActiveRun } from "@/contexts/active-run-context";
 import {
+  CalendarClock,
   ChevronLeft,
   MessageSquare,
   PanelRight,
   Plus,
   Settings2,
+  Sparkles,
 } from "@/components/icons/lucide";
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -76,6 +78,7 @@ import {
   retryPrefillText,
 } from "@/lib/conversation-runs";
 import type { SettingsSection } from "@/lib/settings-sections";
+import type { LibraryKind } from "@/lib/workspace-chrome";
 
 function runIsActive(status: string): boolean {
   return status === "queued" || status === "running";
@@ -144,6 +147,8 @@ interface BotConversationViewProps {
   railCollapsed?: boolean;
   onExpandRail?: () => void;
   onOpenSettings?: (section?: SettingsSection) => void;
+  onToggleLibrary?: (library: LibraryKind, conversationId?: string) => void;
+  openLibrary?: LibraryKind | null;
 }
 
 export function BotConversationView({
@@ -156,6 +161,8 @@ export function BotConversationView({
   railCollapsed = false,
   onExpandRail,
   onOpenSettings,
+  onToggleLibrary,
+  openLibrary = null,
 }: BotConversationViewProps) {
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -426,6 +433,12 @@ export function BotConversationView({
       }
     })();
   }, [botId, loadRuns, resolveConversationId]);
+
+  useEffect(() => {
+    if (openLibrary) {
+      setSaveSkillRun(null);
+    }
+  }, [openLibrary]);
 
   useEffect(() => {
     if (!conversationId) {
@@ -709,6 +722,32 @@ export function BotConversationView({
           >
             <MessageSquare className="size-4" aria-hidden />
           </ComposerIconButton>
+          {onToggleLibrary ? (
+            <>
+              <ComposerIconButton
+                label="Routines"
+                className="size-7"
+                aria-pressed={openLibrary === "routines"}
+                onClick={() => {
+                  setSaveSkillRun(null);
+                  onToggleLibrary("routines", conversationId ?? undefined);
+                }}
+              >
+                <CalendarClock className="size-4" aria-hidden />
+              </ComposerIconButton>
+              <ComposerIconButton
+                label="Skills"
+                className="size-7"
+                aria-pressed={openLibrary === "skills"}
+                onClick={() => {
+                  setSaveSkillRun(null);
+                  onToggleLibrary("skills", conversationId ?? undefined);
+                }}
+              >
+                <Sparkles className="size-4" aria-hidden />
+              </ComposerIconButton>
+            </>
+          ) : null}
           {onOpenSettings && railCollapsed ? (
             <ComposerIconButton
               label="Bot settings"

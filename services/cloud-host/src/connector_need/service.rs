@@ -109,7 +109,8 @@ impl ConnectorNeedService {
 
             connectors.invalidate_github_catalog(&request.owner_id);
             match classify_github_access(
-                connectors,
+                Some(connectors),
+                true,
                 &request.owner_id,
                 &request.tool_name,
                 &request.arguments,
@@ -280,6 +281,20 @@ impl ConnectorNeedService {
         .fetch_one(&self.pool)
         .await?;
         Ok((joined.id, joined.created_at, false))
+    }
+
+    pub async fn announce(
+        &self,
+        request: ConnectorNeedRequest,
+        events: &Arc<CloudEventSink>,
+        store: &Arc<dyn RunStore>,
+    ) -> Result<(), ConnectorNeedError> {
+        let (need_id, created_at, inserted) = self.insert_or_join(&request).await?;
+        if inserted {
+            self.emit_needed(&request, &need_id, created_at, store, events)
+                .await?;
+        }
+        Ok(())
     }
 
     async fn emit_needed(

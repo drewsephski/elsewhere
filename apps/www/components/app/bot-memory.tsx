@@ -68,8 +68,8 @@ export function BotMemoryPanel({
       if (query.trim()) params.set("query", query.trim());
       const response = await cloudHostFetch(`/v1/bots/${botId}/memories?${params.toString()}`);
       if (!response.ok) throw new Error("Could not load memories");
-      const body: BotMemoryItem[] = await response.json();
-      setMemories(body);
+      const body: unknown = await response.json();
+      setMemories(Array.isArray(body) ? (body as BotMemoryItem[]) : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load memories");
     } finally {

@@ -168,7 +168,7 @@ export const ComposerIconButton = forwardRef<HTMLButtonElement, ComposerIconButt
         title={label}
         className={cn(
           "flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 aria-expanded:bg-surface-active aria-expanded:text-foreground",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 aria-expanded:bg-surface-active aria-expanded:text-foreground aria-pressed:bg-surface-active aria-pressed:text-foreground",
           className,
         )}
         {...props}

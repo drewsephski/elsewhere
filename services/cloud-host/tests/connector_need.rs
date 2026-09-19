@@ -26,6 +26,10 @@ use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[path = "support/mod.rs"]
+mod support;
+use support::test_config;
+
 fn test_secret_box() -> ConnectorSecretBox {
     let key = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
     ConnectorSecretBox::from_base64_key(&key).expect("test key")
@@ -145,13 +149,45 @@ fn parse_bot_chat_return_to_rejects_non_bot_paths() {
     );
 }
 
+#[test]
+fn github_oauth_ready_requires_secret_and_app_fields() {
+    let mut config = test_config();
+    let secret = test_secret_box();
+    assert!(!config.github_oauth_ready(None));
+    assert!(!config.github_oauth_ready(Some(&secret)));
+    config.github_app_slug = Some("elsewhere".into());
+    config.github_client_id = Some("Iv23client".into());
+    config.github_client_secret = Some("client-secret".into());
+    config.github_oauth_redirect_uri = Some("https://example.invalid/callback".into());
+    assert!(!config.github_oauth_ready(None));
+    assert!(config.github_oauth_ready(Some(&secret)));
+}
+
+#[tokio::test]
+async fn classify_host_unconfigured_when_oauth_is_not_ready() {
+    let access = classify_github_access(
+        None,
+        false,
+        "alice",
+        "github_get_repository",
+        &json!({ "owner": "acme", "repo": "elsewhere" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        access,
+        GithubAccess::Need(ConnectorNeedReason::HostUnconfigured)
+    );
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn classify_disconnected_when_github_is_missing(pool: PgPool) {
     let mock = MockServer::start().await;
     let connectors =
         PostgresAgentConnectors::new(pool, test_secret_box().into(), github_client(&mock));
     let access = classify_github_access(
-        connectors.as_ref(),
+        Some(connectors.as_ref()),
+        true,
         "alice",
         "github_list_repositories",
         &json!({}),
@@ -182,7 +218,8 @@ async fn classify_reconnect_required(pool: PgPool) {
         .unwrap();
     let connectors = PostgresAgentConnectors::new(pool, secret.into(), github_client(&mock));
     let access = classify_github_access(
-        connectors.as_ref(),
+        Some(connectors.as_ref()),
+        true,
         "alice",
         "github_list_repositories",
         &json!({}),
@@ -211,7 +248,8 @@ async fn classify_empty_authorization_for_list_tools(pool: PgPool) {
     .unwrap();
     let connectors = PostgresAgentConnectors::new(pool, secret.into(), github_client(&mock));
     let access = classify_github_access(
-        connectors.as_ref(),
+        Some(connectors.as_ref()),
+        true,
         "alice",
         "github_list_repositories",
         &json!({}),
@@ -240,7 +278,8 @@ async fn classify_unauthorized_repo_when_catalog_omits_target(pool: PgPool) {
     .unwrap();
     let connectors = PostgresAgentConnectors::new(pool, secret.into(), github_client(&mock));
     let access = classify_github_access(
-        connectors.as_ref(),
+        Some(connectors.as_ref()),
+        true,
         "alice",
         "github_get_file_contents",
         &json!({ "owner": "acme", "repo": "elsewhere" }),

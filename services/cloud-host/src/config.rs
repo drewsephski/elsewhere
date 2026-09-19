@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use agent_core::DEFAULT_MODEL;
 
+use crate::connectors::secret::ConnectorSecretBox;
 use crate::run_engine_select::RunEngineMode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,9 +163,16 @@ impl Config {
         let bind_addr = resolve_bind_addr(auth_mode)?;
         validate_bind_addr(auth_mode, &bind_addr)?;
 
-        let connector_secret_key = env::var("ELSEWHERE_CONNECTOR_SECRET_KEY")
+        let connector_secret_key = match env::var("ELSEWHERE_CONNECTOR_SECRET_KEY")
             .ok()
-            .filter(|v| !v.is_empty());
+            .filter(|v| !v.is_empty())
+        {
+            Some(key) => {
+                ConnectorSecretBox::from_base64_key(&key)?;
+                Some(key)
+            }
+            None => None,
+        };
         let github_client_id = env::var("GITHUB_CLIENT_ID").ok().filter(|v| !v.is_empty());
         let github_client_secret = env::var("GITHUB_CLIENT_SECRET")
             .ok()
@@ -260,10 +268,28 @@ impl Config {
             max_concurrent_runs = self.max_concurrent_runs,
             run_timeout_secs = self.run_timeout_secs,
             browser_enabled = self.browser_enabled,
+            connector_secret_configured = self.connector_secret_key.is_some(),
+            github_oauth_ready = self.github_app_oauth_env_ready()
+                && self.connector_secret_key.is_some(),
             default_model = DEFAULT_MODEL,
             "cloud-host configuration loaded"
         );
     }
+
+    pub fn github_oauth_ready(&self, secret_box: Option<&ConnectorSecretBox>) -> bool {
+        secret_box.is_some() && self.github_app_oauth_env_ready()
+    }
+
+    fn github_app_oauth_env_ready(&self) -> bool {
+        option_non_empty(&self.github_app_slug)
+            && option_non_empty(&self.github_client_id)
+            && option_non_empty(&self.github_client_secret)
+            && option_non_empty(&self.github_oauth_redirect_uri)
+    }
+}
+
+fn option_non_empty(value: &Option<String>) -> bool {
+    value.as_deref().is_some_and(|s| !s.is_empty())
 }
 
 fn which_codex_on_path() -> Option<PathBuf> {

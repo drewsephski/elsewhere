@@ -15,8 +15,15 @@ import { MobileSheet } from "./mobile-sheet";
 import { ProfileFooter } from "./profile-footer";
 import { SettingsDialog } from "@/components/app/settings-dialog";
 import { WorkspaceQuickStart } from "./workspace-quick-start";
+import { BotLibraryDialog } from "./bot-library-dialog";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { parseSettingsSection, type SettingsSection } from "@/lib/settings-sections";
+import {
+  libraryOverlayFromChrome,
+  reduceChrome,
+  type ChromeEvent,
+  type TransientChromeOverlay,
+} from "@/lib/workspace-chrome";
 import { ActiveRunProvider, useActiveRun } from "@/contexts/active-run-context";
 import { BrowserPreviewProvider } from "@/contexts/browser-preview-context";
 import { DesktopTitlebar } from "@/components/app/desktop-titlebar";
@@ -74,12 +81,11 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [quickStartBusy, setQuickStartBusy] = useState(false);
-  const [contextSheetOpen, setContextSheetOpen] = useState(false);
-  // Sidebar collapse is independent of preview dock/float. A docked preview
-  // hides with the rail; a floating preview stays over the chat pane.
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [chrome, setChrome] = useState<TransientChromeOverlay>({ kind: "none" });
+  const dispatch = useCallback((event: ChromeEvent) => {
+    setChrome((current) => reduceChrome(current, event));
+  }, []);
   const [bot, setBot] = useState<BotSummary | null>(null);
   const [runActivityAt, setRunActivityAt] = useState<Record<string, string>>({});
   const [streamRunId, setStreamRunId] = useState<string | null>(null);
@@ -144,8 +150,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       }
       if (event.key === ",") {
         event.preventDefault();
-        setSettingsSection("general");
-        setSettingsOpen(true);
+        dispatch({ type: "open-settings", section: "general" });
         return;
       }
       if (
@@ -160,7 +165,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (searchParams.get("create") !== "1") {
@@ -178,13 +183,12 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     if (!section) {
       return;
     }
-    setSettingsSection(section);
-    setSettingsOpen(true);
+    dispatch({ type: "open-settings", section });
     const params = new URLSearchParams(searchParams.toString());
     params.delete("settings");
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
-  }, [pathname, router, searchParams]);
+  }, [dispatch, pathname, router, searchParams]);
 
   useEffect(() => {
     if (selectedBotId || quickStartBusy) {
@@ -259,10 +263,16 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
     setBot(loaded);
   }, []);
 
-  const handleOpenSettings = useCallback((section: SettingsSection = "general") => {
-    setSettingsSection(section);
-    setSettingsOpen(true);
-  }, []);
+  useEffect(() => {
+    dispatch({ type: "bot-changed", botId: selectedBotId });
+  }, [dispatch, selectedBotId]);
+
+  const handleOpenSettings = useCallback(
+    (section: SettingsSection = "general") => {
+      dispatch({ type: "open-settings", section });
+    },
+    [dispatch],
+  );
 
   const handleBotSaved = useCallback(
     (updated: BotSummary) => {
@@ -379,7 +389,7 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       ) : selectedBotId ? (
         <BotConversationView
           botId={selectedBotId}
-          onOpenContext={() => setContextSheetOpen(true)}
+          onOpenContext={() => dispatch({ type: "open-bot-details" })}
           onBotLoaded={handleBotLoaded}
           syncedBot={bot}
           onRenameBot={handleRenameBot}
@@ -387,6 +397,15 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
           railCollapsed={railCollapsed}
           onExpandRail={() => setRailCollapsed(false)}
           onOpenSettings={(section) => handleOpenSettings(section ?? "general")}
+          onToggleLibrary={(library, conversationId) => {
+            dispatch({
+              type: "toggle-library",
+              library,
+              botId: selectedBotId,
+              conversationId,
+            });
+          }}
+          openLibrary={chrome.kind === "library" ? chrome.library : null}
         />
       ) : workspaceLoading ? (
         <div className="flex flex-1 items-center justify-center px-6 py-8">
@@ -445,8 +464,14 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
             runActivityAt={runActivityAt}
             workspacePhase={workspacePhase}
             workspaceError={workspaceError}
-            onCreateBot={() => setCreateOpen(true)}
-            onCreateGroup={() => setCreateGroupOpen(true)}
+            onCreateBot={() => {
+              dispatch({ type: "close" });
+              setCreateOpen(true);
+            }}
+            onCreateGroup={() => {
+              dispatch({ type: "close" });
+              setCreateGroupOpen(true);
+            }}
             onRenameBot={handleRenameBot}
             onDeleteBot={handleDeleteBot}
             onRenameGroup={handleRenameGroup}
@@ -477,9 +502,9 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
       />
 
       <MobileSheet
-        open={contextSheetOpen}
+        open={chrome.kind === "bot-details"}
         title={bot?.name ? `${bot.name} details` : "Bot details"}
-        onClose={() => setContextSheetOpen(false)}
+        onClose={() => dispatch({ type: "close" })}
       >
         {selectedBotId ? (
           <BotContextRail
@@ -491,14 +516,25 @@ export function WorkspaceShell({ userEmail, children }: WorkspaceShellProps) {
         ) : null}
       </MobileSheet>
 
+      <BotLibraryDialog
+        overlay={libraryOverlayFromChrome(chrome)}
+        onClose={() => dispatch({ type: "close" })}
+      />
+
       <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        section={settingsSection}
-        onSectionChange={setSettingsSection}
+        open={chrome.kind === "settings"}
+        onOpenChange={(open) => {
+          if (!open) {
+            dispatch({ type: "close" });
+          }
+        }}
+        section={chrome.kind === "settings" ? chrome.section : "general"}
+        onSectionChange={(section) =>
+          dispatch({ type: "set-settings-section", section })
+        }
         bot={bot}
         onBotSaved={handleBotSaved}
-        onBotDeleted={() => setSettingsOpen(false)}
+        onBotDeleted={() => dispatch({ type: "close" })}
       />
     </>
   );

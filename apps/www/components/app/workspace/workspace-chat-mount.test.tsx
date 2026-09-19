@@ -115,6 +115,9 @@ vi.mock("@/lib/cloud-api", () => ({
         }),
       };
     }
+    if (String(path).includes("/memories")) {
+      return { ok: true, json: async () => [] };
+    }
     if (path.startsWith("/v1/bots/")) {
       return {
         ok: true,

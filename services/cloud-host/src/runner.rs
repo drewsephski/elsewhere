@@ -470,33 +470,39 @@ Browser recovery:\n\
         }
     }
 
-    let github_runtime = host_state.connector_secret_box().map(|secret_box| {
-        let inner = crate::connectors::PostgresAgentConnectors::new(
+    let secret_box = host_state.connector_secret_box();
+    let oauth_ready = host_state.config.github_oauth_ready(secret_box.as_deref());
+    let inner_connectors = secret_box.map(|secret_box| {
+        crate::connectors::PostgresAgentConnectors::new(
             pool.clone(),
             secret_box,
             host_state.github_client.clone(),
-        );
-        let coding = crate::github_coding::PostgresAgentGithubCoding::new(
+        )
+    });
+    let inner_coding = inner_connectors.as_ref().map(|inner| {
+        crate::github_coding::PostgresAgentGithubCoding::new(
             inner.clone(),
             host_state.github_client.clone(),
             pool.clone(),
-        );
-        let gate = crate::connector_need::GithubNeedGate::new(
-            inner.clone(),
-            host_state.connector_needs.clone(),
-            events.clone(),
-            store.clone(),
-            input.records.run_id.clone(),
-            input.bot_id.clone(),
-            owner_id.clone(),
-            cancel.clone(),
-        );
-        (
-            crate::connector_need::GatedAgentConnectors::new(inner, gate.clone())
-                as Arc<dyn agent_core::AgentConnectors>,
-            crate::connector_need::GatedAgentGithubCoding::new(coding, gate)
-                as Arc<dyn agent_core::AgentGithubCoding>,
         )
+    });
+    let gate = crate::connector_need::GithubNeedGate::new(
+        inner_connectors.clone(),
+        oauth_ready,
+        host_state.connector_needs.clone(),
+        events.clone(),
+        store.clone(),
+        input.records.run_id.clone(),
+        input.bot_id.clone(),
+        owner_id.clone(),
+        cancel.clone(),
+    );
+    let connectors =
+        crate::connector_need::GatedAgentConnectors::new(inner_connectors, gate.clone())
+            as Arc<dyn agent_core::AgentConnectors>;
+    let github_coding = inner_coding.map(|coding| {
+        crate::connector_need::GatedAgentGithubCoding::new(coding, gate)
+            as Arc<dyn agent_core::AgentGithubCoding>
     });
 
     let shared = SharedRunDeps {
@@ -511,10 +517,8 @@ Browser recovery:\n\
         collaboration: Some(crate::collaboration::PostgresAgentCollaboration::new(
             pool.clone(),
         )),
-        connectors: github_runtime
-            .as_ref()
-            .map(|(connectors, _)| connectors.clone()),
-        github_coding: github_runtime.map(|(_, coding)| coding),
+        connectors: Some(connectors),
+        github_coding,
         human_intervention: Some(RunScopedHumanIntervention::new(
             host_state.human_interventions.clone(),
             store.clone(),

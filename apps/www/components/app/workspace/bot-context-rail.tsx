@@ -2,8 +2,6 @@
 
 import type { BotSummary, RunSummary } from "@/lib/api-types";
 import { BotMemoryPanel } from "@/components/app/bot-memory";
-import { BotRoutinesSidebar } from "./bot-routines-sidebar";
-import { BotSkillsSidebar } from "./bot-skills-sidebar";
 import { ComposerIconButton } from "./chat-composer";
 import { ComputerStatePanel } from "./computer-state-panel";
 import { ComputerWorkspaceTree } from "./computer-workspace-tree";
@@ -79,34 +77,31 @@ export function BotContextRail({
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-3">
-        <ComputerStatePanel bot={bot} activeRun={activeRun} variant="minimal" />
-
+        <section aria-labelledby="computer-heading">
+          <h2
+            id="computer-heading"
+            className="py-2 text-[12px] font-medium text-foreground"
+          >
+            Computer
+          </h2>
+          <ComputerStatePanel bot={bot} activeRun={activeRun} variant="minimal" />
+          {bot?.computerId ? (
+            <RailSection title="Files" defaultOpen>
+              <ComputerWorkspaceTree computerId={bot.computerId} />
+            </RailSection>
+          ) : null}
+        </section>
         {bot ? (
-          <div className="mt-2">
-            {bot.computerId ? (
-              <RailSection title="Files" defaultOpen>
-                <ComputerWorkspaceTree computerId={bot.computerId} />
-              </RailSection>
-            ) : null}
-            <RailSection title="Routines">
-              <BotRoutinesSidebar
-                botId={bot.id}
-                conversationId={activeRun?.conversationId}
-                variant="minimal"
-              />
-            </RailSection>
-            <RailSection title="Skills">
-              <BotSkillsSidebar botId={bot.id} variant="minimal" />
-            </RailSection>
-            <RailSection title="Memory">
-              <BotMemoryPanel
-                botId={bot.id}
-                learnFromConversations={Boolean(bot.learnFromConversations)}
-                onLearnChanged={(enabled) => onBotSaved({ ...bot, learnFromConversations: enabled })}
-                embedded
-              />
-            </RailSection>
-          </div>
+          <RailSection title="Memory" defaultOpen>
+            <BotMemoryPanel
+              botId={bot.id}
+              learnFromConversations={Boolean(bot.learnFromConversations)}
+              onLearnChanged={(enabled) =>
+                onBotSaved({ ...bot, learnFromConversations: enabled })
+              }
+              embedded
+            />
+          </RailSection>
         ) : null}
       </div>
     </div>

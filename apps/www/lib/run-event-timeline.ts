@@ -81,6 +81,26 @@ function upsertToolItem(items: RunActivityItem[], id: string, tool: ToolActivity
   return [...items.slice(-199), { id, kind: "tool", tool }];
 }
 
+function isConnectorAccessErrorCode(code: unknown): boolean {
+  return code === "not_connected" || code === "reconnect_required";
+}
+
+function isConnectorAccessMiss(
+  items: RunActivityItem[],
+  payload: Record<string, unknown>,
+  toolName: string,
+): boolean {
+  if (isConnectorAccessErrorCode(payload.errorCode)) {
+    return true;
+  }
+  return (
+    toolName.startsWith("github_") &&
+    items.some(
+      (item) => item.kind === "connector" && item.need.status.phase === "pending",
+    )
+  );
+}
+
 function toolItemId(
   items: RunActivityItem[],
   payload: Record<string, unknown>,
@@ -282,6 +302,20 @@ export function applyRunStreamEvent(
       streamEvent.event === "tool_result" ||
       streamEvent.event.startsWith("tool_"))
   ) {
+    if (
+      streamEvent.event === "tool_result" &&
+      payload.ok === false &&
+      isConnectorAccessMiss(items, payload, toolName)
+    ) {
+      const toolId = toolItemId(items, payload, toolName);
+      return {
+        items: items.filter(
+          (item) =>
+            !(item.kind === "tool" && item.id === toolId && item.tool.state === "running"),
+        ),
+        pendingHumanIntervention,
+      };
+    }
     const line = activityLineFromEvent(streamEvent.event, payload);
     const toolState: ToolActivity["state"] =
       streamEvent.event === "tool_result" ? (payload.ok === false ? "error" : "complete") : "running";

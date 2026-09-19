@@ -1,6 +1,18 @@
 import { cloudHostFetch } from "@/lib/cloud-api";
 import type { BotChatReturnTo, GithubOAuthStartResponse } from "@/lib/connector-need";
 
+export function githubConnectorUnavailableMessage(raw: string): string | null {
+  const text = raw.toLowerCase();
+  if (
+    text.includes("connectors are not configured") ||
+    text.includes("github app is not configured") ||
+    text.includes("github isn't available")
+  ) {
+    return "GitHub isn't available on this host yet.";
+  }
+  return null;
+}
+
 export async function startGithubConnectorOAuth(options?: {
   returnTo?: BotChatReturnTo;
 }): Promise<GithubOAuthStartResponse> {
@@ -10,7 +22,8 @@ export async function startGithubConnectorOAuth(options?: {
   });
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? "GitHub App is not available. Check host configuration.");
+    const raw = body?.error ?? "GitHub App is not available. Check host configuration.";
+    throw new Error(githubConnectorUnavailableMessage(raw) ?? raw);
   }
   return (await response.json()) as GithubOAuthStartResponse;
 }

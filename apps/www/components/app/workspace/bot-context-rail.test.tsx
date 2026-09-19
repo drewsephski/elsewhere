@@ -42,9 +42,11 @@ describe("BotContextRail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bot settings" }));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Collapse sidebar" })).toBeNull();
-    expect(screen.getByText("Routines")).toBeTruthy();
-    expect(screen.getByText("Files")).toBeTruthy();
-    expect(screen.getByText("Memory")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Computer" }).textContent).toBe("Computer");
+    expect(screen.getByRole("button", { name: "Files" }).textContent).toContain("Files");
+    expect(screen.getByRole("button", { name: "Memory" }).textContent).toContain("Memory");
+    expect(screen.queryByRole("button", { name: "Routines" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Skills" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete bot" })).toBeNull();
     expect(screen.queryByLabelText("Name")).toBeNull();

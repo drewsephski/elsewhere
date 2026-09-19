@@ -4,7 +4,8 @@ export type ConnectorNeedReason =
   | { kind: "disconnected" }
   | { kind: "reconnect_required" }
   | { kind: "unauthorized_repo"; owner: string; repo: string }
-  | { kind: "empty_authorization" };
+  | { kind: "empty_authorization" }
+  | { kind: "host_unconfigured" };
 
 export type ConnectorNeedResolutionKind =
   | "connected"
@@ -72,6 +73,9 @@ export function parseConnectorNeedReason(value: unknown): ConnectorNeedReason | 
   }
   if (kind === "empty_authorization") {
     return { kind: "empty_authorization" };
+  }
+  if (kind === "host_unconfigured") {
+    return { kind: "host_unconfigured" };
   }
   if (kind === "unauthorized_repo") {
     const owner = asNonEmptyString(reason.owner);
@@ -218,6 +222,13 @@ export function presentationForConnectorNeed(need: ConnectorNeed): {
         reason: "GitHub is connected, but no repositories are authorized yet.",
         actionLabel: "Add repositories",
         continuation,
+      };
+    case "host_unconfigured":
+      return {
+        title: "GitHub isn't available",
+        reason: "This host hasn't been set up to connect GitHub yet.",
+        actionLabel: "Connect GitHub",
+        continuation: "The bot cannot use GitHub until an operator enables it.",
       };
   }
 }

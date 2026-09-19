@@ -51,6 +51,17 @@ describe("ConnectorNeedCard", () => {
     expect(screen.queryByRole("button", { name: /Connect GitHub/ })).toBeNull();
   });
 
+  it("hides Connect when the host cannot offer GitHub", () => {
+    render(
+      <ConnectorNeedCard
+        need={need({ reason: { kind: "host_unconfigured" } })}
+        returnTo={returnTo}
+      />,
+    );
+    expect(screen.getByText("GitHub isn't available")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Connect GitHub/ })).toBeNull();
+  });
+
   it("uses distinct copy for reconnect versus unauthorized repo", () => {
     const { rerender } = render(
       <ConnectorNeedCard

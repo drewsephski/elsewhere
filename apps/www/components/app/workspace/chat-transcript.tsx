@@ -89,12 +89,12 @@ export function RunToolActivity(props: { tool: ToolActivity }) {
         ? "output-error"
         : "output-available";
   return (
-    <div className="flex justify-center px-2 py-0.5">
+    <div className="px-2 py-0.5">
       <Tool
         className={cn(
-          "mb-0 w-full max-w-lg bg-muted/20",
+          "mb-0 w-fit max-w-full bg-muted/10",
           props.tool.state === "error" && "border-destructive/30",
-          props.tool.state === "running" && "border-border/80",
+          props.tool.state === "running" && "border-border/60",
         )}
         defaultOpen={props.tool.state === "error"}
       >
@@ -105,7 +105,7 @@ export function RunToolActivity(props: { tool: ToolActivity }) {
           toolName={props.tool.toolName}
         />
         {props.tool.technical ? (
-          <ToolContent className="p-3">
+          <ToolContent className="space-y-2 px-2 py-1.5">
             <p className="font-mono text-xs text-muted-foreground">{props.tool.technical}</p>
           </ToolContent>
         ) : null}

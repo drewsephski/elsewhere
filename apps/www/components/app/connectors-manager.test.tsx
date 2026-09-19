@@ -16,6 +16,7 @@ const bot: BotSummary = {
 
 const githubState = vi.hoisted(() => ({
   status: "disconnected",
+  connectable: undefined as boolean | undefined,
   metadata: {} as Record<string, unknown>,
 }));
 
@@ -28,6 +29,7 @@ vi.mock("@/lib/cloud-api", () => ({
         json: async () => ({
           provider: "github",
           status: githubState.status,
+          connectable: githubState.connectable,
           metadata: githubState.metadata,
           updatedAt: "2026-01-01T00:00:00.000Z",
         }),
@@ -64,6 +66,7 @@ vi.mock("@/lib/cloud-api", () => ({
 
 afterEach(() => {
   githubState.status = "disconnected";
+  githubState.connectable = undefined;
   githubState.metadata = {};
   cleanup();
 });
@@ -111,5 +114,16 @@ describe("ConnectorsManager", () => {
     expect(screen.getByText("@octocat")).toBeTruthy();
     expect(screen.getByText(/Installed on:/)).toBeTruthy();
     expect(screen.getByText(/2 authorized/)).toBeTruthy();
+  });
+
+  it("hides Connect GitHub when the host is not connectable", async () => {
+    githubState.connectable = false;
+    render(<ConnectorsManager />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Unavailable")).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: "Connect GitHub" })).toBeNull();
+    expect(screen.getByText("GitHub isn't set up on this host yet.")).toBeTruthy();
   });
 });

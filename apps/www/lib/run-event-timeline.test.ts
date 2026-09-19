@@ -122,4 +122,50 @@ describe("replayRunStreamEvents", () => {
     expect(state.items.some((item) => item.kind === "connector")).toBe(false);
     expect(state.items.some((item) => item.kind === "tool")).toBe(true);
   });
+
+  test("connector miss does not become an error tool card after connector_needed", () => {
+    const state = replayRunStreamEvents("run_1", [
+      {
+        id: "t0",
+        event: "tool_started",
+        data: JSON.stringify({
+          tool: "github_get_repository",
+          toolInvocationId: "inv_1",
+        }),
+      },
+      {
+        id: "c1",
+        event: "connector_needed",
+        data: JSON.stringify({
+          needId: "cneed_1",
+          provider: "github",
+          reason: { kind: "host_unconfigured" },
+          runId: "run_1",
+          botId: "bot_1",
+          toolName: "github_get_repository",
+          requestedAt: "2026-09-19T17:00:00.000Z",
+        }),
+      },
+      {
+        id: "t1",
+        event: "tool_result",
+        data: JSON.stringify({
+          tool: "github_get_repository",
+          toolInvocationId: "inv_1",
+          ok: false,
+          errorCode: "tool_denied",
+          error: "Connector is not connected for this account",
+        }),
+      },
+    ]);
+    const connectors = state.items.filter((item) => item.kind === "connector");
+    expect(connectors.length).toBe(1);
+    if (connectors[0]?.kind === "connector") {
+      expect(connectors[0].need.reason).toEqual({ kind: "host_unconfigured" });
+    }
+    expect(state.items.some((item) => item.kind === "tool" && item.tool.state === "error")).toBe(
+      false,
+    );
+    expect(state.items.some((item) => item.kind === "tool")).toBe(false);
+  });
 });

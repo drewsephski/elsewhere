@@ -14,6 +14,8 @@ export function ConnectorNeedCard(props: {
 }) {
   const copy = presentationForConnectorNeed(props.need);
   const resolved = props.need.status.phase === "resolved";
+  const hostUnconfigured = props.need.reason.kind === "host_unconfigured";
+  const showConnect = !resolved && !hostUnconfigured;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +36,7 @@ export function ConnectorNeedCard(props: {
 
   return (
     <NeedsYouCard
-      className="mx-auto w-full max-w-lg"
+      className="w-full max-w-lg"
       tone={resolved ? "resolved" : "pending"}
       leading={<GitHubLogo className="size-5" />}
       title={copy.title}
@@ -48,7 +50,7 @@ export function ConnectorNeedCard(props: {
         ) : undefined
       }
       actions={
-        resolved ? undefined : (
+        showConnect ? (
           <Button
             type="button"
             size="sm"
@@ -60,7 +62,7 @@ export function ConnectorNeedCard(props: {
             <GitHubLogo className="size-4" />
             {busy ? "Opening GitHub…" : copy.actionLabel}
           </Button>
-        )
+        ) : undefined
       }
     />
   );

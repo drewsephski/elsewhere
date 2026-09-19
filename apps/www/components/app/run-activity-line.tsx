@@ -16,9 +16,9 @@ export function RunActivityLine({ line }: { line: ActivityLine }) {
   const { lead, tail } = splitActivityHeadline(line.headline);
 
   return (
-    <div className="flex justify-center px-2 py-0.5">
-      <div className="max-w-lg text-center">
-        <div className="inline-flex max-w-full flex-wrap items-baseline justify-center gap-x-1.5 gap-y-0.5">
+    <div className="px-2 py-0.5">
+      <div className="max-w-lg text-left">
+        <div className="inline-flex max-w-full flex-wrap items-baseline justify-start gap-x-1.5 gap-y-0.5">
           <span className="text-sm font-medium leading-snug text-foreground/85">{lead}</span>
           {tail ? (
             <span className="text-sm leading-snug text-muted-foreground">{tail}</span>

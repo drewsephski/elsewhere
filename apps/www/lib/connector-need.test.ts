@@ -48,8 +48,12 @@ describe("parseConnectorNeed", () => {
       })?.reason,
     ).toEqual({ kind: "unauthorized_repo", owner: "acme", repo: "elsewhere" });
     expect(
+      parseConnectorNeed("run_1", { ...base, reason: { kind: "host_unconfigured" } })?.reason,
+    ).toEqual({ kind: "host_unconfigured" });
+    expect(
       parseConnectorNeed("run_1", { ...base, reason: { kind: "unauthorized_repo", owner: "acme" } }),
     ).toBeNull();
+    expect(parseConnectorNeed("run_1", { ...base, reason: { kind: "not_a_reason" } })).toBeNull();
   });
 });
 
@@ -89,6 +93,12 @@ describe("presentationForConnectorNeed", () => {
     ).toMatchObject({
       title: "Grant repository access?",
       actionLabel: "Add repositories",
+    });
+    expect(
+      presentationForConnectorNeed({ ...need, reason: { kind: "host_unconfigured" } }),
+    ).toMatchObject({
+      title: "GitHub isn't available",
+      reason: "This host hasn't been set up to connect GitHub yet.",
     });
   });
 });

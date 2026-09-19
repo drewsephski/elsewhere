@@ -15,6 +15,7 @@ pub enum ConnectorNeedReason {
     ReconnectRequired,
     UnauthorizedRepo { owner: String, repo: String },
     EmptyAuthorization,
+    HostUnconfigured,
 }
 
 impl ConnectorNeedReason {
@@ -24,6 +25,7 @@ impl ConnectorNeedReason {
             ConnectorNeedReason::ReconnectRequired => "reconnect_required",
             ConnectorNeedReason::UnauthorizedRepo { .. } => "unauthorized_repo",
             ConnectorNeedReason::EmptyAuthorization => "empty_authorization",
+            ConnectorNeedReason::HostUnconfigured => "host_unconfigured",
         }
     }
 
@@ -43,6 +45,7 @@ impl ConnectorNeedReason {
             "disconnected" => Ok(ConnectorNeedReason::Disconnected),
             "reconnect_required" => Ok(ConnectorNeedReason::ReconnectRequired),
             "empty_authorization" => Ok(ConnectorNeedReason::EmptyAuthorization),
+            "host_unconfigured" => Ok(ConnectorNeedReason::HostUnconfigured),
             "unauthorized_repo" => match (repo_owner, repo_name) {
                 (Some(owner), Some(repo)) if !owner.is_empty() && !repo.is_empty() => {
                     Ok(ConnectorNeedReason::UnauthorizedRepo { owner, repo })
@@ -174,11 +177,18 @@ pub fn parse_bot_chat_return_to(raw: &str) -> Option<String> {
 }
 
 pub async fn classify_github_access(
-    connectors: &PostgresAgentConnectors,
+    connectors: Option<&PostgresAgentConnectors>,
+    oauth_ready: bool,
     owner_id: &str,
     tool_name: &str,
     arguments: &Value,
 ) -> Result<GithubAccess, ConnectorError> {
+    if !oauth_ready {
+        return Ok(GithubAccess::Need(ConnectorNeedReason::HostUnconfigured));
+    }
+    let Some(connectors) = connectors else {
+        return Ok(GithubAccess::Need(ConnectorNeedReason::HostUnconfigured));
+    };
     let catalog = match connectors.load_authorized_catalog(owner_id).await {
         Ok(catalog) => catalog,
         Err(ConnectorError::NotConnected) => {
@@ -236,6 +246,7 @@ pub fn resolution_for_reason(reason: &ConnectorNeedReason) -> ConnectorNeedResol
         ConnectorNeedReason::UnauthorizedRepo { .. } | ConnectorNeedReason::EmptyAuthorization => {
             ConnectorNeedResolution::RepoAuthorized
         }
+        ConnectorNeedReason::HostUnconfigured => ConnectorNeedResolution::Cancelled,
     }
 }
 
@@ -248,5 +259,6 @@ pub fn connector_error_for_unsatisfied(reason: &ConnectorNeedReason) -> Connecto
         ConnectorNeedReason::UnauthorizedRepo { .. } => {
             ConnectorError::Provider(UNAUTHORIZED_REPO_MESSAGE.into())
         }
+        ConnectorNeedReason::HostUnconfigured => ConnectorError::NotConnected,
     }
 }

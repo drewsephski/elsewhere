@@ -32,6 +32,8 @@ pub struct ConnectorSummary {
     pub metadata: serde_json::Value,
     pub connected_at: Option<chrono::DateTime<chrono::Utc>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connectable: Option<bool>,
 }
 
 impl From<ConnectorRow> for ConnectorSummary {
@@ -42,6 +44,7 @@ impl From<ConnectorRow> for ConnectorSummary {
             metadata: row.metadata,
             connected_at: row.connected_at,
             updated_at: row.updated_at,
+            connectable: None,
         }
     }
 }
@@ -50,6 +53,12 @@ fn secret_box(state: &AppState) -> Result<Arc<ConnectorSecretBox>, ApiError> {
     state
         .connector_secret_box()
         .ok_or_else(|| ApiError::Validation("connectors are not configured on this host".into()))
+}
+
+fn github_connectable(state: &AppState) -> bool {
+    state
+        .config
+        .github_oauth_ready(state.connector_secret_box().as_deref())
 }
 
 pub async fn list(
@@ -87,6 +96,7 @@ pub async fn github_status(
             metadata: json!({}),
             connected_at: None,
             updated_at: Utc::now(),
+            connectable: Some(github_connectable(&state)),
         },
     }))
 }
@@ -101,6 +111,7 @@ async fn github_aware_summary(
         return Ok(ConnectorSummary::from(row));
     }
     let mut summary = ConnectorSummary::from(row);
+    summary.connectable = Some(github_connectable(state));
     if summary.status != "connected" {
         return Ok(summary);
     }
@@ -152,6 +163,14 @@ pub async fn github_oauth_start(
     Extension(owner): Extension<Principal>,
     Json(body): Json<GitHubOAuthStartRequest>,
 ) -> Result<Json<GitHubOAuthStartResponse>, ApiError> {
+    if !state
+        .config
+        .github_oauth_ready(state.connector_secret_box().as_deref())
+    {
+        return Err(ApiError::Validation(
+            "GitHub isn't available on this host".into(),
+        ));
+    }
     let _secret = secret_box(&state)?;
     let app_slug = state
         .config

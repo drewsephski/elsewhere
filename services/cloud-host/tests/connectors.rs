@@ -1239,3 +1239,26 @@ async fn github_oauth_complete_notifies_pending_github_waiters(pool: PgPool) {
         .expect("waiter notified")
         .expect("notify task");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_status_reports_not_connectable_without_github_app(pool: PgPool) {
+    let state = AppState::new(pool, test_config());
+    let app = build_router(state);
+    let (status, body) = json_auth(app, "GET", "/v1/connectors/github", json!({})).await;
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(body["status"], "disconnected");
+    assert_eq!(body["connectable"], false);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_oauth_start_rejects_unconfigured_host(pool: PgPool) {
+    let state = AppState::new(pool, test_config());
+    let app = build_router(state);
+    let (status, body) =
+        json_auth(app, "POST", "/v1/connectors/github/oauth/start", json!({})).await;
+    assert_eq!(status, http::StatusCode::BAD_REQUEST);
+    assert!(body["error"]
+        .as_str()
+        .unwrap_or("")
+        .contains("GitHub isn't available on this host"));
+}

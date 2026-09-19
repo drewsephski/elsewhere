@@ -4,7 +4,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { cloudHostErrorMessage, cloudHostFetch } from "@/lib/cloud-api";
 import { appRoutes } from "@/lib/app-routes";
 import { rememberSlackOAuthReturn } from "@/lib/slack-oauth-return";
-import { startGithubConnectorOAuth } from "@/lib/github-oauth";
+import {
+  githubConnectorUnavailableMessage,
+  startGithubConnectorOAuth,
+} from "@/lib/github-oauth";
 import type { BotSummary } from "@/lib/api-types";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { IntegrationCard } from "@/components/app/integration-card";
@@ -49,6 +52,7 @@ interface GithubInstallationSummary {
 interface GithubSummary {
   provider: string;
   status: string;
+  connectable?: boolean;
   metadata: {
     login?: string;
     name?: string;
@@ -101,6 +105,9 @@ function connectionStatus(connected: boolean): { label: string; tone: StatusTone
 }
 
 function githubCardStatus(github: GithubSummary | null): { label: string; tone: StatusTone } {
+  if (github?.connectable === false) {
+    return { label: "Unavailable", tone: "neutral" };
+  }
   if (github?.status === "connected") {
     return { label: "Connected", tone: "success" };
   }
@@ -150,6 +157,7 @@ export function ConnectorsManager() {
   const [bots, setBots] = useState<BotSummary[]>([]);
   const [botId, setBotId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [errorTitle, setErrorTitle] = useState("Could not update integrations");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -205,11 +213,14 @@ export function ConnectorsManager() {
   async function handleConnectGithub() {
     setBusy(true);
     setError(null);
+    setErrorTitle("Could not connect GitHub");
     try {
       const body = await startGithubConnectorOAuth();
       window.location.href = body.authorizeUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "GitHub App is not available. Check host configuration.");
+      const raw =
+        err instanceof Error ? err.message : "GitHub App is not available. Check host configuration.";
+      setError(githubConnectorUnavailableMessage(raw) ?? raw);
     } finally {
       setBusy(false);
     }
@@ -371,6 +382,7 @@ export function ConnectorsManager() {
 
   const githubConnected = github?.status === "connected";
   const githubNeedsReconnect = github?.status === "reconnect_required";
+  const githubUnavailable = github?.connectable === false;
   const githubLogin = githubUserLogin(github);
   const githubInstalled = githubInstalledOn(github?.metadata?.installations);
   const slackConnected = slack?.status === "connected";
@@ -392,7 +404,7 @@ export function ConnectorsManager() {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not update integrations</AlertTitle>
+          <AlertTitle>{errorTitle}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
@@ -428,7 +440,11 @@ export function ConnectorsManager() {
                   statusLabel={githubStatus.label}
                   statusTone={githubStatus.tone}
                   meta={
-                    githubLogin || githubInstalled || github?.metadata?.authorizedRepositoryCount != null ? (
+                    githubUnavailable ? (
+                      <p>GitHub isn't set up on this host yet.</p>
+                    ) : githubLogin ||
+                      githubInstalled ||
+                      github?.metadata?.authorizedRepositoryCount != null ? (
                       <div className="space-y-1">
                         {githubLogin ? (
                           <p>
@@ -446,7 +462,7 @@ export function ConnectorsManager() {
                     ) : null
                   }
                   actions={
-                    githubNeedsReconnect ? (
+                    githubUnavailable ? undefined : githubNeedsReconnect ? (
                       <>
                         <Button
                           type="button"

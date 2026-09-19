@@ -201,11 +201,12 @@ impl AppState {
             registry: Arc::new(crate::connector_need::ConnectorNeedWaitRegistry::default()),
             timeout: Duration::from_secs(config.tool_approval_timeout_secs),
         };
-        let connector_secret_box = config
-            .connector_secret_key
-            .as_deref()
-            .and_then(|key| ConnectorSecretBox::from_base64_key(key).ok())
-            .map(Arc::new);
+        let connector_secret_box = config.connector_secret_key.as_deref().map(|key| {
+            Arc::new(
+                ConnectorSecretBox::from_base64_key(key)
+                    .expect("connector secret key was validated when config loaded"),
+            )
+        });
         let mut github_client = GitHubClient::production();
         if let (Some(client_id), Some(client_secret)) = (
             config.github_client_id.clone(),

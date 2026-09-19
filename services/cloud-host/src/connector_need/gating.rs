@@ -10,7 +10,8 @@ use serde_json::Value;
 
 use crate::connector_need::service::ConnectorNeedService;
 use crate::connectors::github_access::{
-    classify_github_access, connector_error_for_unsatisfied, ConnectorNeedRequest, GithubAccess,
+    classify_github_access, connector_error_for_unsatisfied, ConnectorNeedReason,
+    ConnectorNeedRequest, GithubAccess,
 };
 use crate::connectors::service::PostgresAgentConnectors;
 use crate::events::cloud_event_sink::CloudEventSink;
@@ -19,7 +20,8 @@ use crate::redact::redact_secrets;
 
 #[derive(Clone)]
 pub struct GithubNeedGate {
-    connectors: Arc<PostgresAgentConnectors>,
+    connectors: Option<Arc<PostgresAgentConnectors>>,
+    oauth_ready: bool,
     needs: ConnectorNeedService,
     events: Arc<CloudEventSink>,
     store: Arc<dyn RunStore>,
@@ -31,7 +33,8 @@ pub struct GithubNeedGate {
 
 impl GithubNeedGate {
     pub fn new(
-        connectors: Arc<PostgresAgentConnectors>,
+        connectors: Option<Arc<PostgresAgentConnectors>>,
+        oauth_ready: bool,
         needs: ConnectorNeedService,
         events: Arc<CloudEventSink>,
         store: Arc<dyn RunStore>,
@@ -42,6 +45,7 @@ impl GithubNeedGate {
     ) -> Arc<Self> {
         Arc::new(Self {
             connectors,
+            oauth_ready,
             needs,
             events,
             store,
@@ -52,6 +56,22 @@ impl GithubNeedGate {
         })
     }
 
+    fn need_request(
+        &self,
+        tool_name: &str,
+        arguments: &Value,
+        reason: ConnectorNeedReason,
+    ) -> ConnectorNeedRequest {
+        ConnectorNeedRequest {
+            owner_id: self.owner_id.clone(),
+            run_id: self.run_id.clone(),
+            bot_id: self.bot_id.clone(),
+            tool_name: tool_name.to_string(),
+            reason,
+            arguments: arguments.clone(),
+        }
+    }
+
     async fn ensure_github_access(
         &self,
         tool_name: &str,
@@ -59,7 +79,8 @@ impl GithubNeedGate {
     ) -> Result<(), ConnectorError> {
         loop {
             match classify_github_access(
-                self.connectors.as_ref(),
+                self.connectors.as_deref(),
+                self.oauth_ready,
                 &self.owner_id,
                 tool_name,
                 arguments,
@@ -67,27 +88,36 @@ impl GithubNeedGate {
             .await?
             {
                 GithubAccess::Ready => return Ok(()),
+                GithubAccess::Need(ConnectorNeedReason::HostUnconfigured) => {
+                    let reason = ConnectorNeedReason::HostUnconfigured;
+                    self.needs
+                        .announce(
+                            self.need_request(tool_name, arguments, reason.clone()),
+                            &self.events,
+                            &self.store,
+                        )
+                        .await
+                        .map_err(|e| ConnectorError::Internal(e.to_string()))?;
+                    return Err(connector_error_for_unsatisfied(&reason));
+                }
                 GithubAccess::Need(reason) => {
+                    let connectors = self
+                        .connectors
+                        .as_ref()
+                        .ok_or(ConnectorError::NotConnected)?;
                     let resolution = self
                         .needs
                         .request_and_wait(
-                            ConnectorNeedRequest {
-                                owner_id: self.owner_id.clone(),
-                                run_id: self.run_id.clone(),
-                                bot_id: self.bot_id.clone(),
-                                tool_name: tool_name.to_string(),
-                                reason: reason.clone(),
-                                arguments: arguments.clone(),
-                            },
+                            self.need_request(tool_name, arguments, reason.clone()),
                             &self.cancel,
                             &self.events,
                             &self.store,
-                            self.connectors.as_ref(),
+                            connectors.as_ref(),
                         )
                         .await
                         .map_err(|e| ConnectorError::Internal(e.to_string()))?;
                     if resolution.satisfied() {
-                        self.connectors.invalidate_github_catalog(&self.owner_id);
+                        connectors.invalidate_github_catalog(&self.owner_id);
                         continue;
                     }
                     return Err(connector_error_for_unsatisfied(&reason));
@@ -98,12 +128,15 @@ impl GithubNeedGate {
 }
 
 pub struct GatedAgentConnectors {
-    inner: Arc<PostgresAgentConnectors>,
+    inner: Option<Arc<PostgresAgentConnectors>>,
     gate: Arc<GithubNeedGate>,
 }
 
 impl GatedAgentConnectors {
-    pub fn new(inner: Arc<PostgresAgentConnectors>, gate: Arc<GithubNeedGate>) -> Arc<Self> {
+    pub fn new(
+        inner: Option<Arc<PostgresAgentConnectors>>,
+        gate: Arc<GithubNeedGate>,
+    ) -> Arc<Self> {
         Arc::new(Self { inner, gate })
     }
 }
@@ -119,7 +152,8 @@ impl AgentConnectors for GatedAgentConnectors {
         if tool_name.starts_with("github_") {
             self.gate.ensure_github_access(tool_name, arguments).await?;
         }
-        self.inner
+        let inner = self.inner.as_ref().ok_or(ConnectorError::NotConnected)?;
+        inner
             .dispatch_connector_tool(owner_id, tool_name, arguments)
             .await
     }
@@ -131,7 +165,8 @@ impl AgentConnectors for GatedAgentConnectors {
         source: Option<&str>,
         limit: Option<u32>,
     ) -> Result<Value, ConnectorError> {
-        self.inner
+        let inner = self.inner.as_ref().ok_or(ConnectorError::NotConnected)?;
+        inner
             .search_connected_app_tools(owner_id, query, source, limit)
             .await
     }
@@ -141,7 +176,8 @@ impl AgentConnectors for GatedAgentConnectors {
         owner_id: &str,
         tool_id: &str,
     ) -> Result<ConnectorToolDefinition, ConnectorError> {
-        self.inner.load_connected_app_tool(owner_id, tool_id).await
+        let inner = self.inner.as_ref().ok_or(ConnectorError::NotConnected)?;
+        inner.load_connected_app_tool(owner_id, tool_id).await
     }
 
     async fn execute_connected_app_tool(
@@ -150,7 +186,8 @@ impl AgentConnectors for GatedAgentConnectors {
         tool_id: &str,
         arguments: &Value,
     ) -> Result<Value, ConnectorError> {
-        self.inner
+        let inner = self.inner.as_ref().ok_or(ConnectorError::NotConnected)?;
+        inner
             .execute_connected_app_tool(owner_id, tool_id, arguments)
             .await
     }

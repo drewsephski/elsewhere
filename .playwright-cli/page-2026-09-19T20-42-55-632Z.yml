@@ -1,0 +1,22 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]: Elsewhere
+      - heading "Create account" [level=1] [ref=e8]
+      - paragraph [ref=e9]: Sign in to your workspace. You can connect your ChatGPT plan from the overview.
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - generic [ref=e13]: Name
+          - textbox "Name" [ref=e14]
+        - generic [ref=e15]:
+          - generic [ref=e16]: Email
+          - textbox "Email" [ref=e17]
+        - generic [ref=e18]:
+          - generic [ref=e19]: Password
+          - textbox "Password" [ref=e21]
+        - button "Sign up" [ref=e22]
+      - link "Already have an account? Sign in" [ref=e23] [cursor=pointer]:
+        - /url: /sign-in
+      - link "Back to home" [ref=e24] [cursor=pointer]:
+        - /url: /
+  - button "Open Next.js Dev Tools" [ref=e30] [cursor=pointer]
