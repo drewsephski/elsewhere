@@ -7,6 +7,11 @@ import type { ThisMacStatusSnapshot } from "@/lib/this-mac-status";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { formatUserFacingError } from "@/lib/format-api-error";
+import {
+  readSessionStorage,
+  removeSessionStorage,
+  writeSessionStorage,
+} from "@/lib/session-storage";
 
 /** Generic first-Bot instructions used when the user does not pick a role. */
 export const DEFAULT_BOT_INSTRUCTIONS =
@@ -137,14 +142,14 @@ export function isCodexAuthRequired(error: unknown): boolean {
 }
 
 export function rememberQuickStartDraft(botId: string, message: string) {
-  sessionStorage.setItem(
+  writeSessionStorage(
     QUICK_START_DRAFT_KEY,
     JSON.stringify({ botId, message }),
   );
 }
 
 export function consumeQuickStartDraft(botId: string): string | null {
-  const stored = sessionStorage.getItem(QUICK_START_DRAFT_KEY);
+  const stored = readSessionStorage(QUICK_START_DRAFT_KEY);
   if (!stored) {
     return null;
   }
@@ -153,10 +158,10 @@ export function consumeQuickStartDraft(botId: string): string | null {
     if (parsed.botId !== botId || typeof parsed.message !== "string") {
       return null;
     }
-    sessionStorage.removeItem(QUICK_START_DRAFT_KEY);
+    removeSessionStorage(QUICK_START_DRAFT_KEY);
     return parsed.message;
   } catch {
-    sessionStorage.removeItem(QUICK_START_DRAFT_KEY);
+    removeSessionStorage(QUICK_START_DRAFT_KEY);
     return null;
   }
 }

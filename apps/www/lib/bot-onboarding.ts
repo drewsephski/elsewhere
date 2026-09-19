@@ -1,3 +1,9 @@
+import {
+  readSessionStorage,
+  removeSessionStorage,
+  writeSessionStorage,
+} from "./session-storage";
+
 export const BOT_ONBOARDING_OFFER_KEY = "elsewhere:bot-onboarding-offer";
 
 export type BotOnboardingStatus =
@@ -51,11 +57,11 @@ export function botConversationHref(botId: string, options?: { setup?: boolean }
 }
 
 export function rememberOnboardingOffer(botId: string) {
-  sessionStorage.setItem(BOT_ONBOARDING_OFFER_KEY, JSON.stringify({ botId }));
+  writeSessionStorage(BOT_ONBOARDING_OFFER_KEY, JSON.stringify({ botId }));
 }
 
 export function consumeOnboardingOffer(botId: string): boolean {
-  const stored = sessionStorage.getItem(BOT_ONBOARDING_OFFER_KEY);
+  const stored = readSessionStorage(BOT_ONBOARDING_OFFER_KEY);
   if (!stored) {
     return false;
   }
@@ -64,10 +70,10 @@ export function consumeOnboardingOffer(botId: string): boolean {
     if (parsed.botId !== botId) {
       return false;
     }
-    sessionStorage.removeItem(BOT_ONBOARDING_OFFER_KEY);
+    removeSessionStorage(BOT_ONBOARDING_OFFER_KEY);
     return true;
   } catch {
-    sessionStorage.removeItem(BOT_ONBOARDING_OFFER_KEY);
+    removeSessionStorage(BOT_ONBOARDING_OFFER_KEY);
     return false;
   }
 }
