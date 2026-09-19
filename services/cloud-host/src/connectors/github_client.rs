@@ -638,23 +638,23 @@ impl GitHubClient {
             .await?
             .ok_or_else(|| "pull request branch not found on GitHub".to_string())?;
         if head != expected_parent_commit {
+            if self
+                .commit_matches_prepared_changes(
+                    token,
+                    owner,
+                    repo,
+                    &head,
+                    expected_parent_commit,
+                    changes,
+                )
+                .await?
+            {
+                return Ok(head);
+            }
             return Err(
                 "The pull request changed on GitHub while you were working. Refresh the PR before updating it."
                     .into(),
             );
-        }
-        if self
-            .commit_matches_prepared_changes(
-                token,
-                owner,
-                repo,
-                &head,
-                parent_commit_sha,
-                changes,
-            )
-            .await?
-        {
-            return Ok(head);
         }
 
         let mut tree_items = Vec::new();
