@@ -1,6 +1,5 @@
 //! GitHub coding workflow: authorized checkout, review, publish approval, PR idempotency.
 
-mod github_coding_revision;
 mod github_coding_shell;
 
 use agent_core::{

@@ -1,7 +1,8 @@
 //! PR revision slice: resume, feedback, certified update on same branch.
 
 use agent_core::{
-    dispatch_github_coding_tool, AgentGithubCoding, AllowAllApprovalGate, ToolRunContext,
+    dispatch_github_coding_tool, AgentComputer, AgentGithubCoding, AllowAllApprovalGate,
+    ToolRunContext,
 };
 use async_trait::async_trait;
 use base64::Engine;
@@ -18,8 +19,61 @@ use std::sync::Arc;
 use wiremock::matchers::{body_string_contains, method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-use super::github_coding_shell::ShellWorkspaceComputer;
-use super::{app_credential, coding_service, demo_readme_path, minimal_tarball_with_readme};
+mod github_coding_shell;
+
+use github_coding_shell::ShellWorkspaceComputer;
+
+fn demo_readme_path(run_id: &str) -> String {
+    format!(
+        "{}/README.md",
+        cloud_host::github_coding::checkout_root("acme", "demo", run_id)
+    )
+}
+
+fn app_credential(access: &str) -> cloud_host::connectors::github_client::GitHubCredential {
+    cloud_host::connectors::github_client::GitHubCredential {
+        kind: "github_app_user".into(),
+        access_token: access.into(),
+        refresh_token: "refresh".into(),
+        access_expires_at: Utc::now() + Duration::hours(1),
+        refresh_expires_at: Utc::now() + Duration::days(30),
+        token_type: "bearer".into(),
+    }
+}
+
+fn minimal_tarball_with_readme() -> Vec<u8> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+    use tar::EntryType;
+
+    let mut tar_buf = Vec::new();
+    {
+        let mut builder = tar::Builder::new(&mut tar_buf);
+        let data = b"Hello";
+        let mut header = tar::Header::new_gnu();
+        header.set_size(data.len() as u64);
+        header.set_mode(0o100644);
+        header.set_entry_type(EntryType::Regular);
+        header.set_path("repo-main/README.md").unwrap();
+        header.set_cksum();
+        builder.append(&header, &data[..]).unwrap();
+        builder.finish().unwrap();
+    }
+    let mut gz = Vec::new();
+    let mut enc = GzEncoder::new(&mut gz, Compression::default());
+    enc.write_all(&tar_buf).unwrap();
+    enc.finish().unwrap();
+    gz
+}
+
+fn coding_service(
+    pool: PgPool,
+    connectors: Arc<PostgresAgentConnectors>,
+    github: GitHubClient,
+) -> Arc<dyn AgentGithubCoding> {
+    PostgresAgentGithubCoding::new(connectors, github, pool)
+}
 
 const PR_HEAD_SHA: &str = "pr_head_sha_111";
 const PR_HEAD_TREE: &str = "pr_head_tree_222";
@@ -69,12 +123,12 @@ async fn mock_pr_resume_apis(server: &MockServer, tarball: Vec<u8>) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(r"/repos/acme/demo/tarball/{}$", PR_HEAD_SHA)))
+        .and(path_regex(&format!(r"/repos/acme/demo/tarball/{}$", PR_HEAD_SHA)))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(tarball))
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
+        .and(path_regex(&format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": PR_HEAD_SHA,
             "tree": { "sha": PR_HEAD_TREE }
@@ -113,7 +167,7 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(r"/repos/acme/demo/commits/{}/status", PR_HEAD_SHA)))
+        .and(path_regex(&format!(r"/repos/acme/demo/commits/{}/status", PR_HEAD_SHA)))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "state": "failure",
             "statuses": [{
@@ -126,7 +180,7 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(r"/repos/acme/demo/commits/{}/check-runs", PR_HEAD_SHA)))
+        .and(path_regex(&format!(r"/repos/acme/demo/commits/{}/check-runs", PR_HEAD_SHA)))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "check_runs": [{
                 "id": 99,
@@ -143,7 +197,7 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
 async fn mock_pr_update_apis(server: &MockServer) {
     let branch_encoded = urlencoding::encode(WORKING_BRANCH);
     Mock::given(method("GET"))
-        .and(path_regex(format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
+        .and(path_regex(&format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": PR_HEAD_SHA,
             "tree": { "sha": PR_HEAD_TREE },
@@ -152,7 +206,7 @@ async fn mock_pr_update_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(
+        .and(path_regex(&format!(
             r"/repos/acme/demo/git/trees/{}",
             PR_HEAD_TREE
         )))
@@ -167,7 +221,7 @@ async fn mock_pr_update_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(format!(
+        .and(path_regex(&format!(
             r"/repos/acme/demo/git/ref/heads/{}$",
             branch_encoded
         )))
@@ -533,7 +587,7 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
     mock_pr_resume_apis(&server, minimal_tarball_with_readme()).await;
     let branch_encoded = urlencoding::encode(WORKING_BRANCH);
     Mock::given(method("GET"))
-        .and(path_regex(format!(
+        .and(path_regex(&format!(
             r"/repos/acme/demo/git/ref/heads/{}$",
             branch_encoded
         )))
