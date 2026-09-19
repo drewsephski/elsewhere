@@ -33,6 +33,10 @@ pub struct CodingSessionRow {
     pub publish_commit_sha: Option<String>,
     pub pr_number: Option<i64>,
     pub pr_url: Option<String>,
+    pub session_mode: String,
+    pub source_pr_number: Option<i64>,
+    pub revision_baseline_commit_sha: Option<String>,
+    pub revision_baseline_tree_sha: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -64,9 +68,11 @@ impl SessionStore {
                 local_baseline_commit_sha, reviewed_fingerprint, approved_fingerprint,
                 review_completed, validations_json, certified_checks_json, prepared_publish_json,
                 checks_passed, explicit_no_checks,
-                publish_phase, publish_commit_sha, pr_number, pr_url, updated_at
+                publish_phase, publish_commit_sha, pr_number, pr_url,
+                session_mode, source_pr_number, revision_baseline_commit_sha, revision_baseline_tree_sha,
+                updated_at
             ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,NOW()
             )
             ON CONFLICT (owner_id, run_id) DO UPDATE SET
                 request_id = EXCLUDED.request_id,
@@ -91,6 +97,10 @@ impl SessionStore {
                 publish_commit_sha = NULL,
                 pr_number = NULL,
                 pr_url = NULL,
+                session_mode = 'initial',
+                source_pr_number = NULL,
+                revision_baseline_commit_sha = NULL,
+                revision_baseline_tree_sha = NULL,
                 updated_at = NOW()
             "#,
         )
@@ -118,6 +128,99 @@ impl SessionStore {
         .bind(&session.publish_commit_sha)
         .bind(session.pr_number)
         .bind(&session.pr_url)
+        .bind(&session.session_mode)
+        .bind(session.source_pr_number)
+        .bind(&session.revision_baseline_commit_sha)
+        .bind(&session.revision_baseline_tree_sha)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sql)?;
+        Ok(())
+    }
+
+    pub async fn upsert_resume(&self, session: &CodingSessionRow) -> Result<(), GithubCodingError> {
+        let validations = serde_json::to_value(&session.validations)
+            .map_err(|e| GithubCodingError::Internal(e.to_string()))?;
+        let certified_checks = serde_json::to_value(&session.certified_checks)
+            .map_err(|e| GithubCodingError::Internal(e.to_string()))?;
+        let prepared_publish = session
+            .prepared_publish
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|e| GithubCodingError::Internal(e.to_string()))?;
+        sqlx::query(
+            r#"
+            INSERT INTO github_coding_sessions (
+                owner_id, run_id, request_id, repo_owner, repo_name, full_name, checkout_path,
+                base_branch, opened_base_commit_sha, opened_base_tree_sha, working_branch,
+                local_baseline_commit_sha, reviewed_fingerprint, approved_fingerprint,
+                review_completed, validations_json, certified_checks_json, prepared_publish_json,
+                checks_passed, explicit_no_checks,
+                publish_phase, publish_commit_sha, pr_number, pr_url,
+                session_mode, source_pr_number, revision_baseline_commit_sha, revision_baseline_tree_sha,
+                updated_at
+            ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,NOW()
+            )
+            ON CONFLICT (owner_id, run_id) DO UPDATE SET
+                request_id = EXCLUDED.request_id,
+                repo_owner = EXCLUDED.repo_owner,
+                repo_name = EXCLUDED.repo_name,
+                full_name = EXCLUDED.full_name,
+                checkout_path = EXCLUDED.checkout_path,
+                base_branch = EXCLUDED.base_branch,
+                opened_base_commit_sha = EXCLUDED.opened_base_commit_sha,
+                opened_base_tree_sha = EXCLUDED.opened_base_tree_sha,
+                working_branch = EXCLUDED.working_branch,
+                local_baseline_commit_sha = EXCLUDED.local_baseline_commit_sha,
+                reviewed_fingerprint = NULL,
+                approved_fingerprint = NULL,
+                review_completed = FALSE,
+                validations_json = '[]'::jsonb,
+                certified_checks_json = '[]'::jsonb,
+                prepared_publish_json = NULL,
+                checks_passed = NULL,
+                explicit_no_checks = FALSE,
+                publish_phase = NULL,
+                publish_commit_sha = NULL,
+                pr_number = EXCLUDED.pr_number,
+                pr_url = EXCLUDED.pr_url,
+                session_mode = EXCLUDED.session_mode,
+                source_pr_number = EXCLUDED.source_pr_number,
+                revision_baseline_commit_sha = EXCLUDED.revision_baseline_commit_sha,
+                revision_baseline_tree_sha = EXCLUDED.revision_baseline_tree_sha,
+                updated_at = NOW()
+            "#,
+        )
+        .bind(&session.owner_id)
+        .bind(&session.run_id)
+        .bind(&session.request_id)
+        .bind(&session.repo_owner)
+        .bind(&session.repo_name)
+        .bind(&session.full_name)
+        .bind(&session.checkout_path)
+        .bind(&session.base_branch)
+        .bind(&session.opened_base_commit_sha)
+        .bind(&session.opened_base_tree_sha)
+        .bind(&session.working_branch)
+        .bind(&session.local_baseline_commit_sha)
+        .bind(&session.reviewed_fingerprint)
+        .bind(&session.approved_fingerprint)
+        .bind(session.review_completed)
+        .bind(validations)
+        .bind(certified_checks)
+        .bind(prepared_publish)
+        .bind(session.checks_passed)
+        .bind(session.explicit_no_checks)
+        .bind(&session.publish_phase)
+        .bind(&session.publish_commit_sha)
+        .bind(session.pr_number)
+        .bind(&session.pr_url)
+        .bind(&session.session_mode)
+        .bind(session.source_pr_number)
+        .bind(&session.revision_baseline_commit_sha)
+        .bind(&session.revision_baseline_tree_sha)
         .execute(&self.pool)
         .await
         .map_err(map_sql)?;
@@ -161,7 +264,9 @@ impl SessionStore {
                    local_baseline_commit_sha, reviewed_fingerprint, approved_fingerprint,
                    review_completed, validations_json, certified_checks_json, prepared_publish_json,
                    checks_passed, explicit_no_checks,
-                   publish_phase, publish_commit_sha, pr_number, pr_url, updated_at
+                   publish_phase, publish_commit_sha, pr_number, pr_url,
+                   session_mode, source_pr_number, revision_baseline_commit_sha, revision_baseline_tree_sha,
+                   updated_at
             FROM github_coding_sessions
             WHERE owner_id = $1 AND run_id = $2
             "#,
@@ -334,6 +439,12 @@ fn map_session_row(row: sqlx::postgres::PgRow) -> CodingSessionRow {
         publish_commit_sha: row.get("publish_commit_sha"),
         pr_number: row.get("pr_number"),
         pr_url: row.get("pr_url"),
+        session_mode: row
+            .try_get::<String, _>("session_mode")
+            .unwrap_or_else(|_| "initial".into()),
+        source_pr_number: row.get("source_pr_number"),
+        revision_baseline_commit_sha: row.get("revision_baseline_commit_sha"),
+        revision_baseline_tree_sha: row.get("revision_baseline_tree_sha"),
         updated_at: row.get("updated_at"),
     }
 }

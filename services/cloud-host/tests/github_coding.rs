@@ -13,6 +13,7 @@ use cloud_host::connectors::{
     db::upsert_github_app_credential, secret::ConnectorSecretBox, service::PostgresAgentConnectors,
     GitHubClient,
 };
+use cloud_host::github_coding::git_tree_reconcile::git_blob_object_sha;
 use cloud_host::github_coding::PostgresAgentGithubCoding;
 use serde_json::json;
 use sqlx::PgPool;
@@ -25,6 +26,33 @@ use github_coding_shell::ShellWorkspaceComputer;
 
 fn demo_checkout_path(run_id: &str) -> String {
     cloud_host::github_coding::checkout_root("acme", "demo", run_id)
+}
+
+fn tarball_readme_blob_sha() -> String {
+    git_blob_object_sha(b"Hello")
+}
+
+fn published_readme_blob_sha() -> String {
+    git_blob_object_sha(b"Hello from Elsewhere")
+}
+
+async fn mock_base_tree_listing(server: &MockServer, tree_sha: &str, readme_blob_sha: &str) {
+    Mock::given(method("GET"))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/git/trees/{}",
+            tree_sha
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "sha": tree_sha,
+            "tree": [{
+                "path": "README.md",
+                "mode": "100644",
+                "type": "blob",
+                "sha": readme_blob_sha
+            }]
+        })))
+        .mount(server)
+        .await;
 }
 
 fn demo_readme_path(run_id: &str) -> String {
@@ -125,6 +153,7 @@ async fn mock_github_api_without_branch_head(server: &MockServer, tarball_bytes:
         })))
         .mount(server)
         .await;
+    mock_base_tree_listing(server, "base_tree_sha_xyz", &tarball_readme_blob_sha()).await;
 }
 
 async fn mock_github_default_branch_head(server: &MockServer, head_sha: &str) {
@@ -1196,6 +1225,7 @@ async fn mock_publish_with_existing_branch(server: &MockServer, working_branch: 
         })))
         .mount(server)
         .await;
+    mock_base_tree_listing(server, "base_tree_sha_xyz", &tarball_readme_blob_sha()).await;
     Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -1204,14 +1234,9 @@ async fn mock_publish_with_existing_branch(server: &MockServer, working_branch: 
                 "path": "README.md",
                 "mode": "100644",
                 "type": "blob",
-                "sha": "blob_sha_1"
+                "sha": published_readme_blob_sha()
             }]
         })))
-        .mount(server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path_regex(r"/repos/acme/demo/git/blobs"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "blob_sha_1" })))
         .mount(server)
         .await;
     Mock::given(method("POST"))
@@ -1336,6 +1361,7 @@ async fn mock_verified_remote_branch(
         })))
         .mount(server)
         .await;
+    mock_base_tree_listing(server, "base_tree_sha_xyz", &tarball_readme_blob_sha()).await;
     Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/git/trees/tree_on_branch"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
@@ -1347,11 +1373,6 @@ async fn mock_verified_remote_branch(
                 "sha": tree_blob_sha
             }]
         })))
-        .mount(server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path_regex(r"/repos/acme/demo/git/blobs"))
-        .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "sha": "blob_sha_1" })))
         .mount(server)
         .await;
 }
@@ -1374,7 +1395,7 @@ async fn github_coding_adopts_verified_open_pull(pool: PgPool) {
     mock_github_api(&server, minimal_tarball_with_readme()).await;
     let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-pr-adopt");
     mock_open_pull_for_branch(&server, &working_branch, 77).await;
-    mock_verified_remote_branch(&server, &working_branch, "blob_sha_1").await;
+    mock_verified_remote_branch(&server, &working_branch, &published_readme_blob_sha()).await;
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
     let secret = test_secret_box();
     upsert_github_app_credential(
@@ -1586,4 +1607,56 @@ async fn github_coding_run_check_requires_approval(pool: PgPool) {
     .await
     .expect_err("denied check");
     assert!(matches!(err, agent_core::ToolError::Denied(_)));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_update_rejected_for_initial_session(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_github_api(&server, minimal_tarball_with_readme()).await;
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool.clone(), connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-initial-update".into(),
+        request_id: "req-initial-update".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot".into(),
+        computer_id: "comp".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_open_repository",
+        r#"{"owner":"acme","repo":"demo","taskSlug":"readme-fix"}"#,
+        &cancel,
+        &AllowAllApprovalGate,
+        &run,
+    )
+    .await
+    .expect("open");
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_update_pull_request",
+        r#"{"commitMessage":"nope"}"#,
+        &cancel,
+        &AllowAllApprovalGate,
+        &run,
+    )
+    .await
+    .expect_err("wrong lifecycle");
+    assert!(err.message().contains("github_publish_pull_request"));
 }

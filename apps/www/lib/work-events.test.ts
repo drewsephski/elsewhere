@@ -36,6 +36,9 @@ describe("permission policy activity", () => {
     expect(activityText("tool_call", { tool: "github_publish_pull_request" })).toBe(
       "Opening pull request",
     );
+    expect(activityText("tool_call", { tool: "github_update_pull_request" })).toBe(
+      "Updating pull request",
+    );
   });
 
   it("labels skill tools in the activity timeline", () => {

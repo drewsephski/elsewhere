@@ -8,17 +8,23 @@ pub const GITHUB_OPEN_REPOSITORY_TOOL: &str = "github_open_repository";
 pub const GITHUB_RUN_CHECK_TOOL: &str = "github_run_check";
 pub const GITHUB_REVIEW_PUBLISH_TOOL: &str = "github_review_publish";
 pub const GITHUB_PUBLISH_PULL_REQUEST_TOOL: &str = "github_publish_pull_request";
+pub const GITHUB_RESUME_PULL_REQUEST_TOOL: &str = "github_resume_pull_request";
+pub const GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL: &str = "github_get_pull_request_feedback";
+pub const GITHUB_UPDATE_PULL_REQUEST_TOOL: &str = "github_update_pull_request";
 
 pub const GITHUB_CODING_TOOL_NAMES: &[&str] = &[
     GITHUB_OPEN_REPOSITORY_TOOL,
     GITHUB_RUN_CHECK_TOOL,
     GITHUB_REVIEW_PUBLISH_TOOL,
     GITHUB_PUBLISH_PULL_REQUEST_TOOL,
+    GITHUB_RESUME_PULL_REQUEST_TOOL,
+    GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL,
+    GITHUB_UPDATE_PULL_REQUEST_TOOL,
 ];
 
-/// GitHub publish mutation (owner publish approval + fingerprint binding).
+/// GitHub remote mutations (owner approval + fingerprint binding).
 pub fn is_github_coding_mutation_tool(name: &str) -> bool {
-    name == GITHUB_PUBLISH_PULL_REQUEST_TOOL
+    name == GITHUB_PUBLISH_PULL_REQUEST_TOOL || name == GITHUB_UPDATE_PULL_REQUEST_TOOL
 }
 
 /// Shell check in the repository checkout (Terminal policy, no publish fingerprint hook).

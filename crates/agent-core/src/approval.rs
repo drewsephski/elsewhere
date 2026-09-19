@@ -269,6 +269,17 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             })
         }
         "github_publish_pull_request" => sanitize_github_publish_arguments(args),
+        "github_resume_pull_request" => json!({
+            "owner": args.get("owner").and_then(|v| v.as_str()).unwrap_or(""),
+            "repo": args.get("repo").and_then(|v| v.as_str()).unwrap_or(""),
+            "pullRequestNumber": args.get("pullRequestNumber").and_then(|v| v.as_u64())
+        }),
+        "github_get_pull_request_feedback" => json!({
+            "owner": args.get("owner").and_then(|v| v.as_str()).unwrap_or(""),
+            "repo": args.get("repo").and_then(|v| v.as_str()).unwrap_or(""),
+            "pullRequestNumber": args.get("pullRequestNumber").and_then(|v| v.as_u64())
+        }),
+        "github_update_pull_request" => sanitize_github_update_arguments(args),
         "connected_apps_execute_tool" => {
             let info = ConnectedAppApprovalInfo {
                 install_id: args
@@ -297,6 +308,24 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
         _ if is_collaboration_tool(tool_name) => json!({}),
         _ => json!({}),
     }
+}
+
+fn sanitize_github_update_arguments(args: &Value) -> Value {
+    json!({
+        "commitMessage": truncate_str(
+            args.get("commitMessage").and_then(|v| v.as_str()).unwrap_or(""),
+            200,
+        ),
+        "publishAnyway": args.get("publishAnyway").and_then(|v| v.as_bool()).unwrap_or(false),
+        "repository": args.get("repository").and_then(|v| v.as_str()).unwrap_or(""),
+        "branch": args.get("branch").and_then(|v| v.as_str()).unwrap_or(""),
+        "pullRequestNumber": args.get("pullRequestNumber"),
+        "pullRequestUrl": args.get("pullRequestUrl").and_then(|v| v.as_str()).unwrap_or(""),
+        "changedPaths": args.get("changedPaths").cloned().unwrap_or_else(|| json!([])),
+        "checksPassed": args.get("checksPassed").and_then(|v| v.as_bool()),
+        "verifiedChecks": args.get("verifiedChecks").cloned().unwrap_or_else(|| json!([])),
+        "workspaceFingerprint": args.get("workspaceFingerprint").and_then(|v| v.as_str()).unwrap_or(""),
+    })
 }
 
 fn sanitize_github_publish_arguments(args: &Value) -> Value {
@@ -591,6 +620,19 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .filter(|s| !s.is_empty())
                 .unwrap_or("branch");
             format!("Publish {repo} ({branch}) to GitHub")
+        }
+        "github_update_pull_request" => {
+            let repo = sanitized
+                .get("repository")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("repository");
+            let number = sanitized
+                .get("pullRequestNumber")
+                .and_then(|v| v.as_u64())
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| "?".into());
+            format!("Update pull request {repo}#{number}")
         }
         "connected_apps_execute_tool" => {
             let app = sanitized

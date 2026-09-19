@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use agent_core::{
-    AgentComputer, AgentGithubCoding, ComputerError, GithubCodingError, GITHUB_OPEN_REPOSITORY_TOOL,
-    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL,
+    AgentComputer, AgentGithubCoding, ComputerError, GithubCodingError,
+    GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL, GITHUB_OPEN_REPOSITORY_TOOL,
+    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL,
+    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL,
     MAX_EXEC_COMMAND_CHARS,
 };
 use async_trait::async_trait;
@@ -11,11 +13,17 @@ use sqlx::PgPool;
 
 use crate::connectors::github_client::{GitHubClient, GitHubTreeChange};
 use crate::connectors::service::PostgresAgentConnectors;
-use crate::github_coding::archive::{extract_tarball_files, MAX_COMPRESSED_TARBALL_BYTES};
+use crate::github_coding::archive::{
+    extract_tarball_files, ArchiveFile, MAX_COMPRESSED_TARBALL_BYTES,
+};
 use crate::github_coding::check_evidence::{
     reject_forged_check_fields, verify_check_commands_for_review, CertifiedCheck, VerifiedCheck,
 };
-use crate::github_coding::core::{checkout_root, path_within_checkout, sanitize_task_slug, working_branch};
+use crate::github_coding::core::{
+    checkout_root, is_elsewhere_managed_branch, path_within_checkout, sanitize_task_slug,
+    working_branch,
+};
+use crate::github_coding::feedback::collect_pull_request_feedback;
 use crate::github_coding::publish_snapshot::{
     PreparedPublish, validate_prepared_publish_limits,
 };
@@ -33,6 +41,11 @@ const BASE_DRIFT_MSG: &str =
     "The repository changed on GitHub while you were working. Refresh the repository and reapply/review the changes before publishing.";
 const BRANCH_COLLISION_MSG: &str =
     "working branch already exists for another Elsewhere change";
+const PR_HEAD_DRIFT_MSG: &str =
+    "The pull request changed on GitHub while you were working. Refresh the PR before updating it.";
+const PR_NOT_ELSEWHERE_MSG: &str =
+    "This pull request is not on an Elsewhere-managed branch (elsewhere/*).";
+const PR_NOT_OPEN_MSG: &str = "Pull request is not open.";
 
 pub struct PostgresAgentGithubCoding {
     connectors: Arc<PostgresAgentConnectors>,
@@ -93,6 +106,18 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                 self.publish_pull_request(owner_id, run_id, computer, arguments)
                     .await
             }
+            GITHUB_RESUME_PULL_REQUEST_TOOL => {
+                self.resume_pull_request(owner_id, run_id, request_id, computer, arguments)
+                    .await
+            }
+            GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL => {
+                self.get_pull_request_feedback(owner_id, run_id, arguments)
+                    .await
+            }
+            GITHUB_UPDATE_PULL_REQUEST_TOOL => {
+                self.update_pull_request(owner_id, run_id, computer, arguments)
+                    .await
+            }
             other => Err(GithubCodingError::Validation(format!("unknown tool: {other}"))),
         }
     }
@@ -105,14 +130,29 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
         tool_name: &str,
         arguments: &Value,
     ) -> Result<Value, GithubCodingError> {
-        if tool_name != GITHUB_PUBLISH_PULL_REQUEST_TOOL {
+        if tool_name != GITHUB_PUBLISH_PULL_REQUEST_TOOL
+            && tool_name != GITHUB_UPDATE_PULL_REQUEST_TOOL
+        {
             return Ok(arguments.clone());
         }
         let session = self.require_session(owner_id, run_id).await?;
-        if !session.review_completed {
+        if tool_name == GITHUB_PUBLISH_PULL_REQUEST_TOOL && session.session_mode == "revision" {
             return Err(GithubCodingError::Validation(
-                "Run github_review_publish before publishing.".into(),
+                crate::github_coding::core::RESUMED_PR_USE_UPDATE_MSG.into(),
             ));
+        }
+        if tool_name == GITHUB_UPDATE_PULL_REQUEST_TOOL && session.session_mode != "revision" {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::INITIAL_SESSION_USE_PUBLISH_MSG.into(),
+            ));
+        }
+        if !session.review_completed {
+            let hint = if session.session_mode == "revision" {
+                "Run github_review_publish before updating the pull request."
+            } else {
+                "Run github_review_publish before publishing."
+            };
+            return Err(GithubCodingError::Validation(hint.into()));
         }
         let prepared = self.build_prepared_publish(&session, computer).await?;
         if session.reviewed_fingerprint.as_deref() != Some(prepared.fingerprint.as_str()) {
@@ -144,6 +184,14 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false)),
             );
+            if tool_name == GITHUB_UPDATE_PULL_REQUEST_TOOL {
+                obj.insert(
+                    "pullRequestNumber".into(),
+                    json!(session.source_pr_number.or(session.pr_number)),
+                );
+                obj.insert("pullRequestUrl".into(), json!(session.pr_url));
+                obj.insert("sessionMode".into(), json!(session.session_mode));
+            }
         }
         Ok(merged)
     }
@@ -282,6 +330,10 @@ impl PostgresAgentGithubCoding {
             publish_commit_sha: None,
             pr_number: None,
             pr_url: None,
+            session_mode: "initial".into(),
+            source_pr_number: None,
+            revision_baseline_commit_sha: None,
+            revision_baseline_tree_sha: None,
             updated_at: chrono::Utc::now(),
         };
         self.sessions.upsert_open(&row).await?;
@@ -360,6 +412,13 @@ impl PostgresAgentGithubCoding {
     ) -> Result<Value, GithubCodingError> {
         reject_forged_check_fields(args)?;
         let session = self.require_session(owner_id, run_id).await?;
+        if session.session_mode == "revision"
+            && session.publish_phase.as_deref() == Some("pull_request_updated")
+        {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::REVISION_ALREADY_PUSHED_MSG.into(),
+            ));
+        }
         let check_commands = parse_check_commands(args)?;
         let prepared = self.build_prepared_publish(&session, computer).await?;
         let verified = verify_check_commands_for_review(
@@ -390,7 +449,13 @@ impl PostgresAgentGithubCoding {
             .iter()
             .map(|c| c.path.clone())
             .collect::<Vec<_>>();
-        Ok(json!({
+        let revision = session.session_mode == "revision";
+        let phase = if revision {
+            "reviewing_revision"
+        } else {
+            "reviewing_changes"
+        };
+        let mut body = json!({
             "ok": true,
             "repository": session.full_name,
             "checkoutPath": session.checkout_path,
@@ -402,9 +467,20 @@ impl PostgresAgentGithubCoding {
             "checksPassed": checks_passed,
             "explicitNoChecks": explicit_no_checks,
             "workspaceFingerprint": prepared.fingerprint,
-            "readyToPublish": !prepared.changes.is_empty(),
-            "phase": "reviewing_changes"
-        }))
+            "phase": phase,
+        });
+        if let Some(obj) = body.as_object_mut() {
+            if revision {
+                obj.insert(
+                    "readyToUpdatePullRequest".into(),
+                    json!(!prepared.changes.is_empty()),
+                );
+                obj.insert("pullRequestNumber".into(), json!(session.source_pr_number));
+            } else {
+                obj.insert("readyToPublish".into(), json!(!prepared.changes.is_empty()));
+            }
+        }
+        Ok(body)
     }
 
     async fn publish_pull_request(
@@ -422,6 +498,11 @@ impl PostgresAgentGithubCoding {
             .unwrap_or(false);
 
         let session = self.require_session(owner_id, run_id).await?;
+        if session.session_mode == "revision" {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::RESUMED_PR_USE_UPDATE_MSG.into(),
+            ));
+        }
         if !session.review_completed {
             return Err(GithubCodingError::Validation(
                 "Run github_review_publish before publishing.".into(),
@@ -680,6 +761,7 @@ impl PostgresAgentGithubCoding {
                     &session.repo_name,
                     &head_sha,
                     &session.opened_base_commit_sha,
+                    &session.opened_base_tree_sha,
                     tree_changes,
                 )
                 .await
@@ -695,6 +777,432 @@ impl PostgresAgentGithubCoding {
         })
     }
 
+    async fn resume_pull_request(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        request_id: &str,
+        computer: &dyn AgentComputer,
+        args: &Value,
+    ) -> Result<Value, GithubCodingError> {
+        let (owner, repo, pr_number) =
+            resolve_pr_target(owner_id, run_id, args, &self.sessions).await?;
+
+        self.connectors
+            .assert_repo_authorized(owner_id, &owner, &repo)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let token = self
+            .connectors
+            .github_access_token_for_owner(owner_id)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let pull = self
+            .github
+            .get_pull_request(&token, &owner, &repo, pr_number)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+
+        if pull.get("state").and_then(|s| s.as_str()) != Some("open") {
+            return Err(GithubCodingError::Validation(PR_NOT_OPEN_MSG.into()));
+        }
+
+        let head_ref = pull
+            .get("head")
+            .and_then(|h| h.get("ref"))
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| GithubCodingError::Provider("pull request missing head ref".into()))?;
+        if !is_elsewhere_managed_branch(head_ref) {
+            return Err(GithubCodingError::Validation(PR_NOT_ELSEWHERE_MSG.into()));
+        }
+
+        let head_repo = pull
+            .get("head")
+            .and_then(|h| h.get("repo"))
+            .and_then(|r| r.get("full_name"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("");
+        let expected_full = format!("{}/{}", owner, repo);
+        if head_repo != expected_full {
+            return Err(GithubCodingError::Validation(
+                "Pull request head must be in the authorized repository.".into(),
+            ));
+        }
+
+        let head_sha = pull
+            .get("head")
+            .and_then(|h| h.get("sha"))
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| GithubCodingError::Provider("pull request missing head sha".into()))?;
+        let head_tree_sha = self
+            .github
+            .get_commit_tree_sha(&token, &owner, &repo, head_sha)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+
+        let base_branch = pull
+            .get("base")
+            .and_then(|b| b.get("ref"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("main")
+            .to_string();
+
+        let archive_bytes = self
+            .github
+            .download_tarball(&token, &owner, &repo, head_sha)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+        if archive_bytes.len() > MAX_COMPRESSED_TARBALL_BYTES {
+            return Err(GithubCodingError::Validation(
+                "repository archive exceeds maximum download size".into(),
+            ));
+        }
+
+        let files = extract_tarball_files(&archive_bytes)?;
+        let file_count = files.len();
+        let checkout_path = checkout_root(&owner, &repo, run_id);
+        let pr_url = pull
+            .get("html_url")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        computer.ensure_ready().await.map_err(map_computer_error)?;
+        assert_git_available(computer).await?;
+        reset_checkout_dir(computer, &checkout_path).await?;
+        self.materialize_tarball_files(computer, &checkout_path, &files).await?;
+
+        let baseline_commit = init_baseline_repo(computer, &checkout_path).await?;
+        let full_name = format!("{}/{}", owner, repo);
+        let row = CodingSessionRow {
+            owner_id: owner_id.to_string(),
+            run_id: run_id.to_string(),
+            request_id: request_id.to_string(),
+            repo_owner: owner,
+            repo_name: repo,
+            full_name,
+            checkout_path,
+            base_branch,
+            opened_base_commit_sha: head_sha.to_string(),
+            opened_base_tree_sha: head_tree_sha.clone(),
+            working_branch: head_ref.to_string(),
+            local_baseline_commit_sha: baseline_commit,
+            reviewed_fingerprint: None,
+            approved_fingerprint: None,
+            review_completed: false,
+            validations: Vec::new(),
+            certified_checks: Vec::new(),
+            prepared_publish: None,
+            checks_passed: None,
+            explicit_no_checks: false,
+            publish_phase: None,
+            publish_commit_sha: None,
+            pr_number: Some(pr_number as i64),
+            pr_url: Some(pr_url),
+            session_mode: "revision".into(),
+            source_pr_number: Some(pr_number as i64),
+            revision_baseline_commit_sha: Some(head_sha.to_string()),
+            revision_baseline_tree_sha: Some(head_tree_sha),
+            updated_at: chrono::Utc::now(),
+        };
+        self.sessions.upsert_resume(&row).await?;
+
+        Ok(json!({
+            "ok": true,
+            "repository": row.full_name,
+            "checkoutPath": row.checkout_path,
+            "baseBranch": row.base_branch,
+            "workingBranch": row.working_branch,
+            "pullRequest": { "number": pr_number, "url": row.pr_url },
+            "revisionBaselineCommitSha": head_sha,
+            "fileCount": file_count,
+            "phase": "resuming_pull_request"
+        }))
+    }
+
+    async fn get_pull_request_feedback(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        args: &Value,
+    ) -> Result<Value, GithubCodingError> {
+        let (owner, repo, pr_number) =
+            resolve_pr_target(owner_id, run_id, args, &self.sessions).await?;
+
+        self.connectors
+            .assert_repo_authorized(owner_id, &owner, &repo)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let token = self
+            .connectors
+            .github_access_token_for_owner(owner_id)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let pull = self
+            .github
+            .get_pull_request(&token, &owner, &repo, pr_number)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+
+        let head_sha = pull
+            .get("head")
+            .and_then(|h| h.get("sha"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("");
+
+        let reviews = self
+            .github
+            .list_pull_request_reviews(&token, &owner, &repo, pr_number, 50)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+        let review_comments = self
+            .github
+            .list_pull_request_review_comments(&token, &owner, &repo, pr_number, 50)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+        let issue_comments = self
+            .github
+            .list_issue_comments(&token, &owner, &repo, pr_number, 50)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+        let combined_status = if head_sha.is_empty() {
+            json!({})
+        } else {
+            self.github
+                .get_commit_combined_status(&token, &owner, &repo, head_sha)
+                .await
+                .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?
+        };
+        let check_runs = if head_sha.is_empty() {
+            json!({})
+        } else {
+            self.github
+                .list_commit_check_runs(&token, &owner, &repo, head_sha, 50)
+                .await
+                .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?
+        };
+
+        let feedback = collect_pull_request_feedback(
+            &pull,
+            &reviews,
+            &review_comments,
+            &issue_comments,
+            &combined_status,
+            &check_runs,
+        );
+        Ok(feedback)
+    }
+
+    async fn update_pull_request(
+        &self,
+        owner_id: &str,
+        run_id: &str,
+        computer: &dyn AgentComputer,
+        args: &Value,
+    ) -> Result<Value, GithubCodingError> {
+        let commit_message = required_str(args, "commitMessage")?;
+        let publish_anyway = args
+            .get("publishAnyway")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let session = self.require_session(owner_id, run_id).await?;
+        if session.session_mode != "revision" {
+            return Err(GithubCodingError::Validation(
+                "Resume an open Elsewhere pull request before updating it.".into(),
+            ));
+        }
+        if !session.review_completed {
+            return Err(GithubCodingError::Validation(
+                "Run github_review_publish before updating the pull request.".into(),
+            ));
+        }
+
+        let fresh = self.build_prepared_publish(&session, computer).await?;
+        if session.reviewed_fingerprint.as_deref() != Some(fresh.fingerprint.as_str()) {
+            return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
+        }
+        if session.approved_fingerprint.as_deref() != Some(fresh.fingerprint.as_str()) {
+            return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
+        }
+        let prepared = session.prepared_publish.clone().ok_or_else(|| {
+            GithubCodingError::Validation(
+                "Missing approved revision snapshot. Re-run review and approval.".into(),
+            )
+        })?;
+        if prepared.fingerprint != fresh.fingerprint {
+            return Err(GithubCodingError::Validation(FILES_CHANGED_MSG.into()));
+        }
+
+        if session.checks_passed == Some(false) && !publish_anyway {
+            return Err(GithubCodingError::Validation(
+                "Verified checks did not all pass. Re-run tests or set publishAnyway after owner review."
+                    .into(),
+            ));
+        }
+
+        if prepared.changes.is_empty() {
+            return Err(GithubCodingError::Validation(
+                "No file changes to push to the pull request.".into(),
+            ));
+        }
+
+        let baseline_sha = session
+            .revision_baseline_commit_sha
+            .as_deref()
+            .or(Some(session.opened_base_commit_sha.as_str()))
+            .ok_or_else(|| GithubCodingError::Validation(PR_HEAD_DRIFT_MSG.into()))?;
+        let baseline_tree = session
+            .revision_baseline_tree_sha
+            .as_deref()
+            .or(Some(session.opened_base_tree_sha.as_str()))
+            .ok_or_else(|| GithubCodingError::Validation(PR_HEAD_DRIFT_MSG.into()))?;
+
+        self.connectors
+            .assert_repo_authorized_fresh(owner_id, &session.repo_owner, &session.repo_name)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let token = self
+            .connectors
+            .github_access_token_for_owner(owner_id)
+            .await
+            .map_err(Self::map_connector_error)?;
+
+        let pr_number = session
+            .source_pr_number
+            .or(session.pr_number)
+            .ok_or_else(|| GithubCodingError::Validation("Missing pull request number.".into()))?;
+
+        let pull = self
+            .github
+            .get_pull_request(&token, &session.repo_owner, &session.repo_name, pr_number as u64)
+            .await
+            .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+        if pull.get("state").and_then(|s| s.as_str()) != Some("open") {
+            return Err(GithubCodingError::Validation(PR_NOT_OPEN_MSG.into()));
+        }
+
+        let tree_changes = to_github_tree_changes(&prepared.changes);
+        let expected_parent = baseline_sha;
+
+        self.sessions
+            .update_publish_state(owner_id, run_id, "updating_pull_request", None, None, None)
+            .await?;
+
+        let commit_sha = if let Some(sha) = session.publish_commit_sha.as_ref() {
+            let head = self
+                .github
+                .ref_head_sha(
+                    &token,
+                    &session.repo_owner,
+                    &session.repo_name,
+                    &session.working_branch,
+                )
+                .await
+                .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
+            if head.as_deref() == Some(sha.as_str()) {
+                sha.clone()
+            } else {
+                self.github
+                    .update_branch_file_changes(
+                        &token,
+                        &session.repo_owner,
+                        &session.repo_name,
+                        &session.working_branch,
+                        baseline_sha,
+                        baseline_tree,
+                        &commit_message,
+                        &tree_changes,
+                        expected_parent,
+                    )
+                    .await
+                    .map_err(|e| {
+                        if e.contains("Refresh the PR") {
+                            GithubCodingError::Validation(PR_HEAD_DRIFT_MSG.into())
+                        } else {
+                            GithubCodingError::Provider(redact_secrets(&e))
+                        }
+                    })?
+            }
+        } else {
+            self.github
+                .update_branch_file_changes(
+                    &token,
+                    &session.repo_owner,
+                    &session.repo_name,
+                    &session.working_branch,
+                    baseline_sha,
+                    baseline_tree,
+                    &commit_message,
+                    &tree_changes,
+                    expected_parent,
+                )
+                .await
+                .map_err(|e| {
+                    if e.contains("Refresh the PR") {
+                        GithubCodingError::Validation(PR_HEAD_DRIFT_MSG.into())
+                    } else {
+                        GithubCodingError::Provider(redact_secrets(&e))
+                    }
+                })?
+        };
+
+        self.sessions
+            .update_publish_state(
+                owner_id,
+                run_id,
+                "pull_request_updated",
+                Some(&commit_sha),
+                Some(pr_number),
+                session.pr_url.as_deref(),
+            )
+            .await?;
+
+        Ok(json!({
+            "ok": true,
+            "repository": session.full_name,
+            "branch": session.working_branch,
+            "commitSha": commit_sha,
+            "pullRequest": {
+                "number": pr_number,
+                "url": session.pr_url
+            },
+            "changedPaths": prepared.changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>(),
+            "verifiedChecks": validations_to_json(&session.validations),
+            "checksPassed": session.checks_passed,
+            "phase": "pull_request_updated"
+        }))
+    }
+
+    async fn materialize_tarball_files(
+        &self,
+        computer: &dyn AgentComputer,
+        checkout_path: &str,
+        files: &[ArchiveFile],
+    ) -> Result<(), GithubCodingError> {
+        for file in files {
+            let path = path_within_checkout(checkout_path, &file.relative_path)
+                .map_err(GithubCodingError::Validation)?;
+            let parent = path.rsplit_once('/').map(|(p, _)| p).unwrap_or(checkout_path);
+            let mkdir = format!("mkdir -p {}", shell_quote(parent));
+            exec_ok(computer, &mkdir).await?;
+            computer
+                .write_file(&path, &file.bytes)
+                .await
+                .map_err(map_computer_error)?;
+            if file.mode & 0o111 != 0 {
+                let chmod = format!("chmod +x {}", shell_quote(&path));
+                exec_ok(computer, &chmod).await?;
+            }
+        }
+        Ok(())
+    }
+
     async fn require_session(
         &self,
         owner_id: &str,
@@ -704,9 +1212,63 @@ impl PostgresAgentGithubCoding {
             .get(owner_id, run_id)
             .await?
             .ok_or(GithubCodingError::Validation(
-                "Open a repository with github_open_repository first.".into(),
+                "Open a repository with github_open_repository or resume a pull request first."
+                    .into(),
             ))
     }
+}
+
+async fn resolve_pr_target(
+    owner_id: &str,
+    run_id: &str,
+    args: &Value,
+    sessions: &SessionStore,
+) -> Result<(String, String, u64), GithubCodingError> {
+    let owner_arg = args.get("owner").and_then(|v| v.as_str());
+    let repo_arg = args.get("repo").and_then(|v| v.as_str());
+    let number_arg = args
+        .get("pullRequestNumber")
+        .or_else(|| args.get("prNumber"))
+        .and_then(|v| v.as_u64().or_else(|| v.as_i64().map(|n| n as u64)));
+
+    if let (Some(owner), Some(repo), Some(number)) = (owner_arg, repo_arg, number_arg) {
+        if owner.is_empty() || repo.is_empty() || number == 0 {
+            return Err(GithubCodingError::Validation(
+                "owner, repo, and pullRequestNumber are required.".into(),
+            ));
+        }
+        return Ok((owner.to_string(), repo.to_string(), number));
+    }
+
+    if number_arg.is_some() && (owner_arg.is_none() || repo_arg.is_none()) {
+        return Err(GithubCodingError::Validation(
+            "Provide owner and repo with pullRequestNumber.".into(),
+        ));
+    }
+
+    let session = sessions
+        .get(owner_id, run_id)
+        .await?
+        .ok_or_else(|| {
+            GithubCodingError::Validation(
+                "Provide owner, repo, and pullRequestNumber, or resume the pull request first."
+                    .into(),
+            )
+        })?;
+    let number = session
+        .source_pr_number
+        .or(session.pr_number)
+        .ok_or_else(|| {
+            GithubCodingError::Validation(
+                "No pull request in this session. Provide pullRequestNumber.".into(),
+            )
+        })?;
+    if number <= 0 {
+        return Err(GithubCodingError::Validation(
+            "Invalid pull request number.".into(),
+        ));
+    }
+    Ok((session.repo_owner, session.repo_name, number as u64))
 }
 
 struct AdoptedPullRequest {
