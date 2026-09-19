@@ -21,21 +21,21 @@ pub fn collect_pull_request_feedback(
     let title = pull.get("title").and_then(|s| s.as_str()).unwrap_or("");
     let body = truncate_optional(pull.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
 
-    let reviews_may_be_truncated = reviews.len() > MAX_REVIEW_ITEMS;
+    let reviews_may_be_truncated = reviews.len() >= MAX_REVIEW_ITEMS;
     let review_summaries = reviews
         .iter()
         .take(MAX_REVIEW_ITEMS)
         .filter_map(summarize_review)
         .collect::<Vec<_>>();
 
-    let review_comments_may_be_truncated = review_comments.len() > MAX_REVIEW_ITEMS;
+    let review_comments_may_be_truncated = review_comments.len() >= MAX_REVIEW_ITEMS;
     let inline_comments = review_comments
         .iter()
         .take(MAX_REVIEW_ITEMS)
         .filter_map(summarize_review_comment)
         .collect::<Vec<_>>();
 
-    let issue_comments_may_be_truncated = issue_comments.len() > MAX_REVIEW_ITEMS;
+    let issue_comments_may_be_truncated = issue_comments.len() >= MAX_REVIEW_ITEMS;
     let general_comments = issue_comments
         .iter()
         .take(MAX_REVIEW_ITEMS)
