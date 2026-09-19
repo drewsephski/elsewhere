@@ -151,6 +151,10 @@ pub fn build_router(state: AppState) -> Router {
             post(api::computers::browser_click),
         )
         .route(
+            "/v1/computers/{id}/browser/scroll",
+            post(api::computers::browser_scroll),
+        )
+        .route(
             "/v1/computers/{id}/browser/type",
             post(api::computers::browser_type),
         )

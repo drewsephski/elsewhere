@@ -7,15 +7,15 @@ import { previewHostname } from "@/lib/browser-preview-utils";
 import {
   clickComputerBrowserPoint,
   pressComputerBrowserKey,
+  scrollComputerBrowser,
   typeComputerBrowserFocused,
 } from "@/lib/browser-control";
 import {
-  BrowserHumanControlBar,
-  BrowserHumanPreviewClickOverlay,
+  BrowserControlSwitcher,
+  BrowserRemoteSurface,
 } from "./browser-human-control";
 import { useBrowserHumanControl } from "@/hooks/use-browser-human-control";
 import { Button } from "@/components/ui/button";
-import { BrowserAppDock } from "./browser-app-dock";
 import {
   Dialog,
   DialogContent,
@@ -28,11 +28,13 @@ import { cn } from "cn";
 import { Maximize2, Monitor, PictureInPicture2 } from "@/components/icons/lucide";
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type FormEvent,
   type ReactNode,
 } from "react";
 
@@ -58,6 +60,8 @@ interface BrowserPreviewViewProps {
   caption?: ReactNode;
 }
 
+const HUMAN_POLL_MS = 800;
+
 /** Dark "idle desktop" scene shown until the first frame arrives. */
 function BrowserIdleScene({
   enabled,
@@ -68,10 +72,10 @@ function BrowserIdleScene({
 }) {
   const idleCopy =
     variant === "work"
-      ? "Your bot's computer. Live view appears when it opens a page."
+      ? "Waiting for a page to open on this computer."
       : enabled
-        ? "Your bot's computer. Live view appears when it opens a page."
-        : "Your bot's computer. Send a message to watch it here.";
+        ? "Waiting for a page to open on this computer."
+        : "Send a message to watch this computer.";
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#111111]" aria-hidden>
@@ -82,7 +86,7 @@ function BrowserIdleScene({
         <div className="flex size-9 items-center justify-center rounded-xl bg-white/[0.06] ring-1 ring-white/[0.08]">
           <Monitor className="size-4 text-muted-foreground" aria-hidden />
         </div>
-        <p className="max-w-[13rem] text-[11px] leading-snug text-muted-foreground">
+        <p className="max-w-[14rem] text-[11px] leading-snug text-muted-foreground">
           {idleCopy}
         </p>
       </div>
@@ -94,28 +98,25 @@ function PreviewChrome({
   frame,
   loading,
   enabled,
-  addressLabel,
   compact,
-  bare,
   className,
-  addressBar,
+  toolbar,
   attached,
   viewportClassName,
   variant,
+  humanActive,
   children,
 }: {
   frame: BrowserPreviewFrame | null;
   loading: boolean;
   enabled: boolean;
-  addressLabel: string;
   compact?: boolean;
-  /** No title bar — just the rounded screen (rail card). */
-  bare?: boolean;
   className?: string;
-  addressBar?: ReactNode;
+  toolbar?: ReactNode;
   attached?: boolean;
   viewportClassName?: string;
   variant?: BrowserPreviewVariant;
+  humanActive?: boolean;
   children: ReactNode;
 }) {
   const showPlaceholder = !frame?.available || !frame?.imageDataUrl;
@@ -128,26 +129,16 @@ function PreviewChrome({
           attached ? "rounded-none border-0" : "rounded-lg border border-border",
         )}
       >
-        {bare ? null : (
-          <div
-            className={cn(
-              "flex items-center border-b border-border bg-surface-hover px-2 py-1",
-              addressBar && "gap-1.5",
-            )}
-          >
-            {addressBar ? (
-              <div className="min-w-0 flex-1">{addressBar}</div>
-            ) : (
-              <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
-                {addressLabel}
-              </span>
-            )}
+        {toolbar ? (
+          <div className="flex items-center gap-1.5 border-b border-border bg-surface-hover px-2 py-1.5">
+            {toolbar}
           </div>
-        )}
+        ) : null}
         <div
           className={cn(
             "relative w-full overflow-hidden bg-[#111111]",
             compact ? "aspect-[16/11]" : "min-h-[10rem] aspect-[16/10]",
+            humanActive && "ring-1 ring-inset ring-success/35",
             viewportClassName,
           )}
         >
@@ -188,14 +179,37 @@ function ComputerPreviewDialog({
   frame,
   host,
   origin,
+  enabled,
+  humanActive,
+  busy,
+  controlLoading,
+  controlError,
+  onTakeControl,
+  onReturnControl,
+  onPreviewClick,
+  onTypeText,
+  onPressKey,
+  onScroll,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   frame: BrowserPreviewFrame | null;
   host: string | null;
   origin?: string;
+  enabled: boolean;
+  humanActive: boolean;
+  busy: boolean;
+  controlLoading: boolean;
+  controlError: string | null;
+  onTakeControl: () => void;
+  onReturnControl: () => void;
+  onPreviewClick: (xRatio: number, yRatio: number) => void | Promise<void>;
+  onTypeText: (text: string) => void | Promise<void>;
+  onPressKey: (key: string) => void | Promise<void>;
+  onScroll: (xRatio: number, yRatio: number, deltaX: number, deltaY: number) => void | Promise<void>;
 }) {
   const originStyle = origin ? ({ transformOrigin: origin } satisfies CSSProperties) : undefined;
+  const dialogImageRef = useRef<HTMLImageElement>(null);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -205,17 +219,37 @@ function ComputerPreviewDialog({
         style={originStyle}
       >
         <DialogHeader className="border-b border-border px-4 py-3 pr-12 text-left">
-          <DialogTitle className="truncate text-base">
-            {frame?.title || host || "Computer"}
-          </DialogTitle>
-          <DialogDescription className="truncate text-xs">
-            {frame?.url ?? "Fullscreen view of your bot's computer."}
-          </DialogDescription>
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-base">
+                {frame?.title || host || "Computer"}
+              </DialogTitle>
+              <DialogDescription className="truncate text-xs">
+                {humanActive
+                  ? "You're using this computer. Click, type, and scroll in the live view."
+                  : frame?.url ?? "Watch the live view, or take control to use it yourself."}
+              </DialogDescription>
+            </div>
+            <BrowserControlSwitcher
+              enabled={enabled}
+              humanActive={humanActive}
+              loading={controlLoading}
+              error={controlError}
+              onTakeControl={onTakeControl}
+              onReturnControl={onReturnControl}
+            />
+          </div>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2 sm:p-4">
+        <div
+          className={cn(
+            "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black p-2 sm:p-4",
+            humanActive && "ring-1 ring-inset ring-success/35",
+          )}
+        >
           {frame?.imageDataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
+              ref={dialogImageRef}
               src={frame.imageDataUrl}
               alt={frame.title ? `Computer: ${frame.title}` : "Computer fullscreen"}
               className="max-h-full max-w-full object-contain"
@@ -225,24 +259,20 @@ function ComputerPreviewDialog({
               No page to show yet.
             </div>
           )}
+          <BrowserRemoteSurface
+            enabled={enabled}
+            humanActive={humanActive}
+            busy={busy}
+            imageRef={dialogImageRef}
+            onTakeControl={onTakeControl}
+            onPreviewClick={onPreviewClick}
+            onTypeText={onTypeText}
+            onPressKey={onPressKey}
+            onScroll={onScroll}
+          />
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function PreviewOpenButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Open computer"
-      title="Open computer"
-      className="flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[11px] font-medium text-zinc-950 shadow-[0_4px_16px_rgba(0,0,0,0.35)] ring-1 ring-black/5 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-    >
-      <Maximize2 className="size-3.5" aria-hidden />
-      Open computer
-    </button>
   );
 }
 
@@ -264,11 +294,12 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const error = errorProp ?? ctx?.error ?? null;
   const enabled = enabledProp ?? ctx?.enabled ?? false;
   const humanControl = useBrowserHumanControl(ctx?.computerId ?? null, enabled);
-  const [humanClickBusy, setHumanClickBusy] = useState(false);
-  const [humanClickError, setHumanClickError] = useState<string | null>(null);
-  const [humanInputBusy, setHumanInputBusy] = useState(false);
+  const [humanBusy, setHumanBusy] = useState(false);
   const [humanInputError, setHumanInputError] = useState<string | null>(null);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [navigateBusy, setNavigateBusy] = useState(false);
   const browserToolError = activeRun?.lastBrowserToolError ?? null;
+  const imageRef = useRef<HTMLImageElement>(null);
 
   const browserState = useMemo(() => {
     if (!enabled) {
@@ -295,7 +326,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const statusLabel = useMemo(() => {
     switch (browserState) {
       case "idle":
-        return enabled ? "Watch when your bot opens a page" : "Watch";
+        return enabled ? "Waiting for a page" : "Watch";
       case "preparing computer":
         return "Workspace starting…";
       case "preparing browser":
@@ -314,7 +345,6 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogOrigin, setDialogOrigin] = useState<string | undefined>();
   const previewShellRef = useRef<HTMLDivElement>(null);
-  const typeInputRef = useRef<HTMLInputElement>(null);
 
   const host = useMemo(() => previewHostname(frame?.url ?? null), [frame?.url]);
   const addressLabel = host ?? statusLabel;
@@ -323,19 +353,23 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
   const isWork = variant === "work";
   const isEmbedded = variant === "embedded";
   const chromeCompact = variant === "floating" || isWork;
-  const canOpenComputer = hasImage && !humanControl.humanActive;
-  const appDock = ctx ? (
-    <BrowserAppDock
-      url={frame?.url}
-      enabled={enabled}
-      humanActive={humanControl.humanActive}
-      controlLoading={humanControl.loading || humanClickBusy || humanInputBusy}
-      size={isWork ? "compact" : "mini"}
-      onTakeControl={() => humanControl.takeControl()}
-      onNavigate={(url) => ctx.navigateBrowser(url)}
-      onClose={() => ctx.closeBrowser()}
-    />
-  ) : null;
+  const controlError = humanControl.error ?? humanInputError;
+
+  useEffect(() => {
+    if (frame?.url) {
+      setUrlDraft(frame.url);
+    }
+  }, [frame?.url]);
+
+  useEffect(() => {
+    if (!humanControl.humanActive || !ctx?.refresh) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void ctx.refresh();
+    }, HUMAN_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [humanControl.humanActive, ctx]);
 
   function handleOpenDialog() {
     if (!hasImage) {
@@ -358,21 +392,36 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     [hasImage],
   );
 
+  async function handleNavigate(event: FormEvent) {
+    event.preventDefault();
+    if (!ctx || !humanControl.humanActive) {
+      return;
+    }
+    setHumanInputError(null);
+    setNavigateBusy(true);
+    try {
+      await ctx.navigateBrowser(urlDraft);
+    } catch (err) {
+      setHumanInputError(err instanceof Error ? err.message : "Navigation failed");
+    } finally {
+      setNavigateBusy(false);
+    }
+  }
+
   async function handleHumanPreviewClick(xRatio: number, yRatio: number) {
     const computerId = ctx?.computerId;
     if (!computerId || !humanControl.humanActive) {
       return;
     }
-    setHumanClickBusy(true);
-    setHumanClickError(null);
+    setHumanBusy(true);
+    setHumanInputError(null);
     try {
       await clickComputerBrowserPoint(computerId, xRatio, yRatio);
       await ctx?.refresh();
-      typeInputRef.current?.focus();
     } catch (err) {
-      setHumanClickError(err instanceof Error ? err.message : "Click failed");
+      setHumanInputError(err instanceof Error ? err.message : "Click failed");
     } finally {
-      setHumanClickBusy(false);
+      setHumanBusy(false);
     }
   }
 
@@ -381,7 +430,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     if (!computerId || !humanControl.humanActive || !text) {
       return;
     }
-    setHumanInputBusy(true);
+    setHumanBusy(true);
     setHumanInputError(null);
     try {
       await typeComputerBrowserFocused(computerId, text);
@@ -389,7 +438,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     } catch (err) {
       setHumanInputError(err instanceof Error ? err.message : "Could not type in browser");
     } finally {
-      setHumanInputBusy(false);
+      setHumanBusy(false);
     }
   }
 
@@ -398,7 +447,7 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     if (!computerId || !humanControl.humanActive) {
       return;
     }
-    setHumanInputBusy(true);
+    setHumanBusy(true);
     setHumanInputError(null);
     try {
       await pressComputerBrowserKey(computerId, key);
@@ -406,23 +455,134 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
     } catch (err) {
       setHumanInputError(err instanceof Error ? err.message : "Key press failed");
     } finally {
-      setHumanInputBusy(false);
+      setHumanBusy(false);
     }
   }
 
-  const humanControlHud = (
-    <BrowserHumanControlBar
+  async function handleHumanScroll(
+    xRatio: number,
+    yRatio: number,
+    deltaX: number,
+    deltaY: number,
+  ) {
+    const computerId = ctx?.computerId;
+    if (!computerId || !humanControl.humanActive) {
+      return;
+    }
+    setHumanBusy(true);
+    setHumanInputError(null);
+    try {
+      await scrollComputerBrowser(computerId, xRatio, yRatio, deltaX, deltaY);
+      await ctx?.refresh();
+    } catch (err) {
+      setHumanInputError(err instanceof Error ? err.message : "Scroll failed");
+    } finally {
+      setHumanBusy(false);
+    }
+  }
+
+  const remoteSurface = (
+    <BrowserRemoteSurface
       enabled={enabled}
       humanActive={humanControl.humanActive}
-      loading={humanControl.loading}
-      inputBusy={humanInputBusy || humanClickBusy}
-      error={humanControl.error}
-      inputError={humanInputError ?? humanClickError}
-      typeInputRef={typeInputRef}
+      busy={humanBusy || navigateBusy}
+      inactive={dialogOpen}
+      imageRef={imageRef}
       onTakeControl={() => void humanControl.takeControl()}
-      onReturnControl={() => void humanControl.returnControl()}
+      onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
       onTypeText={(text) => void handleHumanTypeText(text)}
       onPressKey={(key) => void handleHumanPressKey(key)}
+      onScroll={(x, y, dx, dy) => void handleHumanScroll(x, y, dx, dy)}
+    />
+  );
+
+  const liveImage = frame?.imageDataUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={imageRef}
+      src={frame.imageDataUrl}
+      alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
+      className="absolute inset-0 z-[1] h-full w-full object-contain object-center"
+    />
+  ) : null;
+
+  const sessionToolbar = (
+    <>
+      <BrowserControlSwitcher
+        enabled={enabled}
+        humanActive={humanControl.humanActive}
+        loading={humanControl.loading}
+        error={controlError}
+        onTakeControl={() => void humanControl.takeControl()}
+        onReturnControl={() => void humanControl.returnControl()}
+      />
+      {ctx && humanControl.humanActive ? (
+        <form
+          onSubmit={(event) => void handleNavigate(event)}
+          className="min-w-0 flex-1"
+        >
+          <input
+            value={urlDraft}
+            onChange={(event) => setUrlDraft(event.target.value)}
+            placeholder="Open a URL"
+            className="h-6 w-full min-w-0 rounded-md border-0 bg-transparent px-1 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+            aria-label="Navigate browser to URL"
+            disabled={navigateBusy || humanControl.loading}
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+          />
+        </form>
+      ) : (
+        <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
+          {addressLabel}
+        </p>
+      )}
+      <div className="flex shrink-0 items-center gap-0.5">
+        {isEmbedded && ctx ? (
+          <button
+            type="button"
+            onClick={() => ctx.openPip()}
+            aria-label="Float preview over chat"
+            title="Float preview over chat"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <PictureInPicture2 className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+        {hasImage ? (
+          <button
+            type="button"
+            onClick={handleOpenDialog}
+            aria-label="Open computer"
+            title="Open computer"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+          >
+            <Maximize2 className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+    </>
+  );
+
+  const dialog = (
+    <ComputerPreviewDialog
+      open={dialogOpen}
+      onOpenChange={handleDialogChange}
+      frame={frame}
+      host={host}
+      origin={dialogOrigin}
+      enabled={enabled}
+      humanActive={humanControl.humanActive}
+      busy={humanBusy || navigateBusy}
+      controlLoading={humanControl.loading}
+      controlError={controlError}
+      onTakeControl={() => void humanControl.takeControl()}
+      onReturnControl={() => void humanControl.returnControl()}
+      onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
+      onTypeText={(text) => void handleHumanTypeText(text)}
+      onPressKey={(key) => void handleHumanPressKey(key)}
+      onScroll={(x, y, dx, dy) => void handleHumanScroll(x, y, dx, dy)}
     />
   );
 
@@ -434,36 +594,22 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             frame={frame}
             loading={loading}
             enabled={enabled}
-            addressLabel={addressLabel}
             attached={chromeAttached}
             compact
-            bare
             variant="floating"
+            humanActive={humanControl.humanActive}
+            toolbar={sessionToolbar}
           >
-            {frame?.imageDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={frame.imageDataUrl}
-                alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
-                className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
-              />
-            ) : null}
-            <BrowserHumanPreviewClickOverlay
-              humanActive={humanControl.humanActive}
-              busy={humanClickBusy || humanInputBusy}
-              onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
-            />
+            {liveImage}
+            {remoteSurface}
           </PreviewChrome>
-          {humanControlHud}
-          {appDock}
+          {controlError ? (
+            <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-destructive" role="alert">
+              {controlError}
+            </p>
+          ) : null}
         </div>
-        <ComputerPreviewDialog
-          open={dialogOpen}
-          onOpenChange={handleDialogChange}
-          frame={frame}
-          host={host}
-          origin={dialogOrigin}
-        />
+        {dialog}
       </div>
     );
   }
@@ -508,53 +654,15 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             frame={frame}
             loading={loading}
             enabled={enabled}
-            addressLabel={addressLabel}
-            bare={isEmbedded}
             compact={chromeCompact}
             variant={variant}
+            humanActive={humanControl.humanActive}
             viewportClassName={isWork ? "aspect-[16/10] min-h-[12rem]" : undefined}
+            toolbar={sessionToolbar}
           >
-            {frame?.imageDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={frame.imageDataUrl}
-                alt={frame.title ? `Browser: ${frame.title}` : "Live browser preview"}
-                className="absolute inset-0 z-[1] h-full w-full object-cover object-top"
-              />
-            ) : null}
-            <BrowserHumanPreviewClickOverlay
-              humanActive={humanControl.humanActive}
-              busy={humanClickBusy}
-              onPreviewClick={(x, y) => void handleHumanPreviewClick(x, y)}
-            />
+            {liveImage}
+            {remoteSurface}
           </PreviewChrome>
-          {canOpenComputer ? (
-            <div
-              className="absolute inset-0 z-[3] cursor-zoom-in rounded-lg"
-              onClick={handleOpenDialog}
-              aria-hidden
-            />
-          ) : null}
-          <div className="pointer-events-none absolute inset-0 z-[4] flex items-start justify-end gap-1 p-2">
-            {isEmbedded && ctx ? (
-              <button
-                type="button"
-                onClick={() => ctx.openPip()}
-                aria-label="Float preview over chat"
-                title="Float preview over chat"
-                className="pointer-events-auto flex size-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/70 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              >
-                <PictureInPicture2 className="size-3.5" aria-hidden />
-              </button>
-            ) : null}
-            {canOpenComputer ? (
-              <span className="pointer-events-auto">
-                <PreviewOpenButton onClick={handleOpenDialog} />
-              </span>
-            ) : null}
-          </div>
-          {humanControlHud}
-          {appDock}
         </div>
 
         {caption}
@@ -580,15 +688,14 @@ export const BrowserPreviewView = forwardRef<BrowserPreviewHandle, BrowserPrevie
             {error}
           </p>
         ) : null}
+        {controlError && !browserToolError ? (
+          <p className="mt-1.5 px-1 text-[11px] text-destructive" role="alert">
+            {controlError}
+          </p>
+        ) : null}
       </div>
 
-      <ComputerPreviewDialog
-        open={dialogOpen}
-        onOpenChange={handleDialogChange}
-        frame={frame}
-        host={host}
-        origin={dialogOrigin}
-      />
+      {dialog}
     </>
   );
 });

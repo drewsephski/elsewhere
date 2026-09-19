@@ -174,6 +174,32 @@ async function handleRequest(req) {
         title: await page.title(),
       };
     }
+    case "scroll": {
+      const xRatio = Number(req.xRatio);
+      const yRatio = Number(req.yRatio);
+      const deltaX = Number(req.deltaX ?? 0);
+      const deltaY = Number(req.deltaY ?? 0);
+      if (!Number.isFinite(xRatio) || !Number.isFinite(yRatio)) {
+        throw new Error("xRatio and yRatio must be numbers");
+      }
+      if (xRatio < 0 || xRatio > 1 || yRatio < 0 || yRatio > 1) {
+        throw new Error("xRatio and yRatio must be between 0 and 1");
+      }
+      if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) {
+        throw new Error("deltaX and deltaY must be numbers");
+      }
+      const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+      const wheelX = Math.max(-2400, Math.min(2400, deltaX));
+      const wheelY = Math.max(-2400, Math.min(2400, deltaY));
+      await page.mouse.move(xRatio * viewport.width, yRatio * viewport.height);
+      await page.mouse.wheel(wheelX, wheelY);
+      await refreshPreviewCache(page);
+      return {
+        ok: true,
+        url: page.url(),
+        title: await page.title(),
+      };
+    }
     case "press": {
       const key = String(req.key ?? "").trim();
       if (!key) {

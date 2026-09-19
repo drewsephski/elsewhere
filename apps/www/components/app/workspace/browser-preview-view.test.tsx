@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import type { BrowserPreviewFrame } from "@/hooks/use-browser-preview";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserPreviewView } from "./browser-preview-view";
 
@@ -20,13 +20,14 @@ const openPip = vi.fn();
 const navigateBrowser = vi.fn();
 const closeBrowser = vi.fn();
 const takeControl = vi.fn();
+const returnControl = vi.fn();
 
 const humanControlState = {
   humanActive: false,
   loading: false,
   error: null,
   takeControl,
-  returnControl: vi.fn(),
+  returnControl,
 };
 
 vi.mock("@/contexts/active-run-context", () => ({
@@ -56,10 +57,6 @@ vi.mock("@/contexts/browser-preview-context", () => ({
   useBrowserPreviewContext: () => previewState,
 }));
 
-function appDock() {
-  return screen.getByRole("toolbar", { name: "Application dock" });
-}
-
 describe("BrowserPreviewView dock/float", () => {
   afterEach(() => {
     cleanup();
@@ -71,6 +68,7 @@ describe("BrowserPreviewView dock/float", () => {
     navigateBrowser.mockClear();
     closeBrowser.mockClear();
     takeControl.mockClear();
+    returnControl.mockClear();
     previewState.pipOpen = false;
     previewState.enabled = true;
     frame.url = "https://example.com";
@@ -112,7 +110,7 @@ describe("BrowserPreviewView dock/float", () => {
     expect(dialog.className).toContain("data-open:zoom-in-75");
   });
 
-  it("places open-computer on the live screen, separate from the float control", () => {
+  it("places open-computer in chrome, separate from the float control", () => {
     previewState.pipOpen = false;
     render(<BrowserPreviewView variant="embedded" />);
     const expand = screen.getByRole("button", { name: "Open computer" });
@@ -120,7 +118,6 @@ describe("BrowserPreviewView dock/float", () => {
     expect(expand).toBeTruthy();
     expect(float).toBeTruthy();
     expect(expand).not.toBe(float);
-    expect(expand.textContent).toContain("Open computer");
   });
 
   it("fills the work pane instead of a centered thumbnail", () => {
@@ -133,55 +130,42 @@ describe("BrowserPreviewView dock/float", () => {
   });
 });
 
-describe("BrowserPreviewView app dock", () => {
+describe("BrowserPreviewView remote control", () => {
   afterEach(() => {
     cleanup();
   });
 
   beforeEach(() => {
-    navigateBrowser.mockClear();
-    closeBrowser.mockClear();
     takeControl.mockClear();
+    returnControl.mockClear();
+    navigateBrowser.mockClear();
     previewState.pipOpen = false;
     previewState.enabled = true;
     frame.url = "https://example.com";
-    humanControlState.humanActive = true;
+    humanControlState.humanActive = false;
     humanControlState.loading = false;
   });
 
-  it("marks the dock icon that matches the live frame host", () => {
-    frame.url = "https://mail.google.com/mail/u/0/#inbox";
+  it("does not render the app dock or type bar", () => {
     render(<BrowserPreviewView variant="embedded" />);
-    const mail = within(appDock()).getByRole("button", { name: "Mail" });
-    expect(mail.getAttribute("aria-pressed")).toBe("true");
-    expect(within(appDock()).getByRole("button", { name: "GitHub" }).getAttribute("aria-pressed")).toBe(
-      "false",
-    );
+    expect(screen.queryByRole("toolbar", { name: "Application dock" })).toBeNull();
+    expect(screen.queryByLabelText("Type into the focused browser field")).toBeNull();
+    expect(screen.getByText("Bot is driving")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Take control" })).toBeTruthy();
   });
 
-  it("navigates the existing browser when an inactive dock app is clicked", () => {
+  it("lets the live view take control instead of expanding", () => {
     render(<BrowserPreviewView variant="embedded" />);
-    fireEvent.click(within(appDock()).getByRole("button", { name: "GitHub" }));
-    expect(navigateBrowser).toHaveBeenCalledWith("https://github.com");
-    expect(closeBrowser).not.toHaveBeenCalled();
-  });
-
-  it("does not treat a dock click as an open-computer or preview click", async () => {
-    humanControlState.humanActive = false;
-    render(<BrowserPreviewView variant="embedded" />);
-    fireEvent.click(within(appDock()).getByRole("button", { name: "Mail" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.pointerDown(screen.getByRole("application"), { button: 0, clientX: 10, clientY: 10 });
     expect(takeControl).toHaveBeenCalledTimes(1);
-    await waitFor(() => {
-      expect(navigateBrowser).toHaveBeenCalledWith("https://mail.google.com");
-    });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("closes the current page when the active dock app is clicked again", () => {
-    frame.url = "https://calendar.google.com/calendar/u/0/r";
-    render(<BrowserPreviewView variant="work" />);
-    fireEvent.click(within(appDock()).getByRole("button", { name: "Calendar" }));
-    expect(closeBrowser).toHaveBeenCalledTimes(1);
-    expect(navigateBrowser).not.toHaveBeenCalled();
+  it("shows an address field and return action once the user has control", () => {
+    humanControlState.humanActive = true;
+    render(<BrowserPreviewView variant="embedded" />);
+    expect(screen.getByText("You're in control")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Return to bot" })).toBeTruthy();
+    expect(screen.getByLabelText("Navigate browser to URL")).toBeTruthy();
   });
 });

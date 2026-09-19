@@ -104,6 +104,26 @@ export async function clickComputerBrowserPoint(
   }
 }
 
+export async function scrollComputerBrowser(
+  computerId: string,
+  xRatio: number,
+  yRatio: number,
+  deltaX: number,
+  deltaY: number,
+): Promise<void> {
+  const response = await cloudHostFetch(
+    `/v1/computers/${encodeURIComponent(computerId)}/browser/scroll`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ xRatio, yRatio, deltaX, deltaY }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await readJsonError(response, "Could not scroll in browser"));
+  }
+}
+
 export async function typeComputerBrowser(
   computerId: string,
   refId: string,

@@ -322,6 +322,7 @@ pub async fn browser_control_heartbeat(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserClickRequest {
     #[serde(default)]
     pub r#ref: Option<String>,
@@ -377,6 +378,58 @@ pub async fn browser_click(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserScrollRequest {
+    pub x_ratio: f64,
+    pub y_ratio: f64,
+    #[serde(default)]
+    pub delta_x: f64,
+    #[serde(default)]
+    pub delta_y: f64,
+}
+
+pub async fn browser_scroll(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Principal>,
+    Path(computer_id): Path<String>,
+    Json(body): Json<BrowserScrollRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    require_human_control(&state, principal.owner_id(), &computer_id).await?;
+    if !(0.0..=1.0).contains(&body.x_ratio) || !(0.0..=1.0).contains(&body.y_ratio) {
+        return Err(ApiError::Validation(
+            "xRatio and yRatio must be between 0 and 1".into(),
+        ));
+    }
+    if !body.delta_x.is_finite() || !body.delta_y.is_finite() {
+        return Err(ApiError::Validation("deltaX and deltaY must be finite".into()));
+    }
+    let computer = state
+        .computer_registry
+        .connect_sprite_computer(
+            &state.config,
+            &state.pool,
+            principal.owner_id(),
+            &computer_id,
+            state.config.browser_enabled,
+        )
+        .await?;
+    let result = computer
+        .browser_invoke(
+            "scroll",
+            &json!({
+                "xRatio": body.x_ratio,
+                "yRatio": body.y_ratio,
+                "deltaX": body.delta_x,
+                "deltaY": body.delta_y
+            }),
+        )
+        .await
+        .map_err(map_computer_error)?;
+    Ok(Json(result))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserTypeRequest {
     #[serde(default)]
     pub r#ref: Option<String>,
@@ -434,6 +487,7 @@ pub async fn browser_type(
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserPressKeyRequest {
     pub key: String,
 }

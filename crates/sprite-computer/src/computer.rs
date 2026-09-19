@@ -365,7 +365,10 @@ impl AgentComputer for SpriteComputer {
 
 /// Browser actions that may trigger navigation, subresource loads, or form submits.
 pub fn browser_action_requires_network_egress(action: &str) -> bool {
-    matches!(action, "navigate" | "download" | "click" | "type")
+    matches!(
+        action,
+        "navigate" | "download" | "click" | "type" | "click_point" | "type_focused" | "scroll"
+    )
 }
 
 fn map_sprite_error(err: SpriteError) -> ComputerError {
@@ -389,7 +392,15 @@ mod tests {
 
     #[test]
     fn interactive_browser_actions_require_temporary_egress() {
-        for action in ["navigate", "download", "click", "type"] {
+        for action in [
+            "navigate",
+            "download",
+            "click",
+            "type",
+            "click_point",
+            "type_focused",
+            "scroll",
+        ] {
             assert!(browser_action_requires_network_egress(action));
         }
         for action in ["snapshot", "screenshot", "preview", "health", "close", "press"] {

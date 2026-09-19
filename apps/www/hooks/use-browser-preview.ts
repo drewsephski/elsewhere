@@ -25,7 +25,7 @@ interface BrowserPreviewJson {
   version?: number | null;
 }
 
-const RECOVERY_POLL_MS = 30_000;
+const LIVE_POLL_MS = 2_000;
 const INITIAL_POLL_MS = 8_000;
 const FETCH_TIMEOUT_MS = 90_000;
 const TOOL_RESULT_RETRY_MS = 450;
@@ -225,7 +225,7 @@ export function useBrowserPreview(
     if (!computerId || !enabled) {
       return;
     }
-    const pollMs = frame?.imageDataUrl ? RECOVERY_POLL_MS : INITIAL_POLL_MS;
+    const pollMs = frame?.imageDataUrl ? LIVE_POLL_MS : INITIAL_POLL_MS;
     const timer = window.setInterval(() => {
       requestRefresh();
     }, pollMs);

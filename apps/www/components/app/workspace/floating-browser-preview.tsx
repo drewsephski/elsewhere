@@ -1,9 +1,8 @@
 "use client";
 
-import { BrowserPreviewView, type BrowserPreviewHandle } from "./browser-preview-view";
+import { BrowserPreviewView } from "./browser-preview-view";
 import { useBrowserPreviewContext } from "@/contexts/browser-preview-context";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   clampPipPosition,
   PIP_MARGIN,
@@ -13,7 +12,6 @@ import {
 import { cn } from "cn";
 import {
   GripVertical,
-  Maximize2,
   PanelRight,
   RefreshCw,
   X,
@@ -23,12 +21,8 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 export function FloatingBrowserPreview() {
   const ctx = useBrowserPreviewContext();
   const panelRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<BrowserPreviewHandle>(null);
   const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
-  const [urlDraft, setUrlDraft] = useState("");
-  const [controlBusy, setControlBusy] = useState(false);
-  const [controlError, setControlError] = useState<string | null>(null);
 
   const parentBounds = useCallback(() => {
     const parent = panelRef.current?.offsetParent;
@@ -47,12 +41,6 @@ export function FloatingBrowserPreview() {
   }, []);
 
   const position = ctx.pipPosition;
-
-  useEffect(() => {
-    if (ctx.frame?.url) {
-      setUrlDraft(ctx.frame.url);
-    }
-  }, [ctx.frame?.url]);
 
   useEffect(() => {
     if (!ctx.pipOpen || !ctx.pipPosition) {
@@ -135,40 +123,10 @@ export function FloatingBrowserPreview() {
     };
   }, [ctx, dragging, panelSize]);
 
-  async function handleNavigate(event: React.FormEvent) {
-    event.preventDefault();
-    setControlError(null);
-    setControlBusy(true);
-    try {
-      await ctx.navigateBrowser(urlDraft);
-    } catch (err) {
-      setControlError(err instanceof Error ? err.message : "Navigation failed");
-    } finally {
-      setControlBusy(false);
-    }
-  }
-
-  const addressBar = (
-    <form
-      onSubmit={(event) => void handleNavigate(event)}
-      className="flex min-w-0 flex-1 items-center"
-    >
-      <Input
-        value={urlDraft}
-        onChange={(event) => setUrlDraft(event.target.value)}
-        placeholder="Open URL"
-        className="h-6 min-w-0 flex-1 border-0 bg-transparent px-1 text-[11px] shadow-none focus-visible:ring-0"
-        aria-label="Navigate browser to URL"
-        disabled={controlBusy}
-      />
-    </form>
-  );
-
   if (!ctx.pipOpen) {
     return null;
   }
 
-  const canExpand = Boolean(previewRef.current?.canExpand || ctx.frame?.imageDataUrl);
   const style = position
     ? { left: position.x, top: position.y, right: "auto" as const }
     : { right: PIP_MARGIN, top: PIP_MARGIN };
@@ -195,9 +153,9 @@ export function FloatingBrowserPreview() {
           onPointerDown={handlePointerDown}
         >
           <GripVertical className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <div className="min-w-0 flex-1" data-no-drag>
-            {addressBar}
-          </div>
+          <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+            Live computer
+          </p>
           <div className="flex shrink-0 items-center" data-no-drag>
             <Button
               type="button"
@@ -207,7 +165,6 @@ export function FloatingBrowserPreview() {
               onClick={() => void ctx.refresh()}
               aria-label="Refresh preview"
               title="Refresh preview"
-              disabled={controlBusy}
             >
               <RefreshCw className="size-3.5" aria-hidden />
             </Button>
@@ -222,19 +179,6 @@ export function FloatingBrowserPreview() {
             >
               <PanelRight className="size-3.5" aria-hidden />
             </Button>
-            {canExpand ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="size-7 px-0"
-                onClick={() => previewRef.current?.expand()}
-                aria-label="Open computer"
-                title="Open computer"
-              >
-                <Maximize2 className="size-3.5" aria-hidden />
-              </Button>
-            ) : null}
             <Button
               type="button"
               variant="ghost"
@@ -251,15 +195,9 @@ export function FloatingBrowserPreview() {
 
         <div data-no-drag>
           <BrowserPreviewView
-            ref={previewRef}
             variant="floating"
             chromeAttached
           />
-          {controlError ? (
-            <p className="border-t border-border/40 bg-muted/20 px-2 py-1 text-[10px] text-destructive" role="alert">
-              {controlError}
-            </p>
-          ) : null}
         </div>
       </div>
     </div>

@@ -54,9 +54,9 @@ Durable `tool_call` / `tool_result` events use the same pipeline as workspace to
 
 ### Human takeover (owner control lease)
 
-While a run is active, the owner can **Take control** from the live browser preview. Control state is stored in `computer_control_leases` (`bot` vs `human`) with heartbeat-based stale recovery (default 120s). Bot browser **mutations** wait until control returns; `browser_snapshot` and preview reads continue. Owner-only input endpoints: `POST …/browser-control/take|return`, `GET …/browser-control`, and `POST …/browser/{navigate,click,type,press-key}` (same persistent Sprite session — no second browser).
+While a run is active, the owner can **Take control** from the live browser preview. Control state is stored in `computer_control_leases` (`bot` vs `human`) with heartbeat-based stale recovery (default 120s). Bot browser **mutations** wait until control returns; `browser_snapshot` and preview reads continue. Owner-only input endpoints: `POST …/browser-control/take|return`, `GET …/browser-control`, and `POST …/browser/{navigate,click,scroll,type,press-key}` (same persistent Sprite session — no second browser). The workspace preview is a remote surface: take control, then click, type, and scroll the live view directly. Return to bot restores agent-driven control.
 
-While a run is active, the Computer rail polls `GET /v1/computers/{id}/browser-preview` every ~2s. The host calls the guest daemon `preview` action (viewport JPEG, base64, no workspace write, no tool approval). Preview frames skip temporary egress widening; only `navigate` and `download` open the network gate.
+While a run is active, the Computer rail polls `GET /v1/computers/{id}/browser-preview` every ~2s (about 800ms while you have control). The host calls the guest daemon `preview` action (viewport JPEG, base64, no workspace write, no tool approval). Preview frames skip temporary egress widening; only `navigate` and `download` open the network gate.
 
 The workspace UI shares one poll via `BrowserPreviewProvider`: embedded preview in the Computer rail, a floating picture-in-picture over the chat (manual **Pop out** or auto when you scroll), expand dialog, and native **Fullscreen** (`requestFullscreen`). The work detail page (`/app/work/[id]`) uses the same preview while a run is active.
 
