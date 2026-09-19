@@ -2,6 +2,7 @@ import type { BotSummary, ComputerSummary, CreateRunResponse } from "@/lib/api-t
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { cloudApiErrorFromResponse, isCloudApiError } from "@/lib/cloud-api-error";
 import { isLocalMacProvider } from "@/lib/computer-kind";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { formatUserFacingError } from "@/lib/format-api-error";
@@ -74,12 +75,34 @@ export function isUsableComputer(computer: ComputerSummary): boolean {
   return true;
 }
 
+export interface SelectUsableComputerOptions {
+  /** When true, prefer a connected This Mac over cloud sandboxes (desktop shell). */
+  preferThisMac?: boolean;
+}
+
 export function selectUsableComputer(
   computers: ComputerSummary[],
+  options?: SelectUsableComputerOptions,
 ): ComputerSummary | null {
   const usable = computers.filter(isUsableComputer);
   if (!usable.length) {
     return null;
+  }
+  const preferThisMac = options?.preferThisMac ?? isTauriRuntime();
+  if (preferThisMac) {
+    const localMac = usable.filter((computer) =>
+      isLocalMacProvider(computer.provider),
+    );
+    if (localMac.length) {
+      const pool = localMac;
+      return (
+        [...pool].sort((a, b) => {
+          const aTime = a.lastUsedAt ?? "";
+          const bTime = b.lastUsedAt ?? "";
+          return bTime.localeCompare(aTime);
+        })[0] ?? null
+      );
+    }
   }
   const cloud = usable.filter((computer) => !isLocalMacProvider(computer.provider));
   const pool = cloud.length ? cloud : usable;

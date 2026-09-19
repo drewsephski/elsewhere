@@ -21,8 +21,10 @@ import {
   SETTINGS_SECTION_ITEMS,
   type SettingsSection,
 } from "@/lib/settings-sections";
+import { ThisMacSettingsPanel } from "@/components/app/this-mac-settings-panel";
+import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { cn } from "cn";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -83,6 +85,13 @@ export function SettingsDialog({
   }, []);
 
   const subtitle = bot?.name ?? "Workspace";
+  const sectionItems = useMemo(
+    () =>
+      SETTINGS_SECTION_ITEMS.filter(
+        (item) => item.value !== "thisMac" || isTauriRuntime(),
+      ),
+    [],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -111,7 +120,7 @@ export function SettingsDialog({
               aria-label="Settings sections"
               className={desktop ? "w-full" : "overflow-x-auto"}
             >
-              {SETTINGS_SECTION_ITEMS.map((item) => (
+              {sectionItems.map((item) => (
                 <AnimatedTabsTrigger
                   key={item.value}
                   value={item.value}
@@ -181,6 +190,16 @@ export function SettingsDialog({
                   mode="owner"
                   hideHeading
                 />
+              </>
+            ) : null}
+
+            {section === "thisMac" ? (
+              <>
+                <SettingsPanelHeader
+                  title="This Mac"
+                  description="Control pairing, pause, and the live connection for this computer."
+                />
+                <ThisMacSettingsPanel />
               </>
             ) : null}
 

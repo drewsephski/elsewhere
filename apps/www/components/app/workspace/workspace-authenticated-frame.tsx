@@ -2,6 +2,7 @@
 
 import { ProductThemeScope } from "@/components/app/product-theme-scope";
 import { Toaster } from "@/components/ui/sonner";
+import { useDesktopNativeNotifications } from "@/hooks/use-desktop-native-notifications";
 import type { ReactNode } from "react";
 import { WorkspaceAppLayout } from "./workspace-app-layout";
 
@@ -18,6 +19,8 @@ export function WorkspaceAuthenticatedFrame({
   userEmail: string;
   children: ReactNode;
 }) {
+  useDesktopNativeNotifications();
+
   return (
     <>
       <ProductThemeScope />

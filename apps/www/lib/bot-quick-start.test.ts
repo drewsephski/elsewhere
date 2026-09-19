@@ -68,7 +68,7 @@ describe("selectUsableComputer", () => {
     ).toBeNull();
   });
 
-  it("prefers a cloud computer over a connected Mac", () => {
+  it("prefers a cloud computer over a connected Mac in the browser", () => {
     const cloud = computer({ id: "cloud_1", lastUsedAt: "2026-01-01T00:00:00.000Z" });
     const mac = computer({
       id: "mac_1",
@@ -76,7 +76,22 @@ describe("selectUsableComputer", () => {
       lastUsedAt: "2026-09-01T00:00:00.000Z",
       providerMetadata: { provisioned: true, connected: true },
     });
-    expect(selectUsableComputer([mac, cloud])?.id).toBe("cloud_1");
+    expect(selectUsableComputer([mac, cloud], { preferThisMac: false })?.id).toBe(
+      "cloud_1",
+    );
+  });
+
+  it("prefers This Mac when preferThisMac is set", () => {
+    const cloud = computer({ id: "cloud_1", lastUsedAt: "2026-09-01T00:00:00.000Z" });
+    const mac = computer({
+      id: "mac_1",
+      provider: "local_mac",
+      lastUsedAt: "2026-01-01T00:00:00.000Z",
+      providerMetadata: { provisioned: true, connected: true },
+    });
+    expect(selectUsableComputer([cloud, mac], { preferThisMac: true })?.id).toBe(
+      "mac_1",
+    );
   });
 
   it("reuses the most recently used cloud computer, including pending ones", () => {

@@ -17,6 +17,7 @@ async function bootstrapInTauri(): Promise<Bot[]> {
   }
 }
 
+/** @deprecated Used only by legacy `desktop-app.tsx`, not the CloudShell product path. */
 export const botService = {
   async bootstrap(): Promise<Bot[]> {
     if (isTauriRuntime()) {
