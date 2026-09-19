@@ -30,7 +30,9 @@ impl PreparedPublish {
     }
 }
 
-pub fn validate_prepared_publish_limits(changes: &[GitFileChange]) -> Result<(), GithubCodingError> {
+pub fn validate_prepared_publish_limits(
+    changes: &[GitFileChange],
+) -> Result<(), GithubCodingError> {
     if changes.len() > MAX_PUBLISH_CHANGED_FILES {
         return Err(GithubCodingError::Validation(PUBLISH_TOO_LARGE_MSG.into()));
     }

@@ -15,8 +15,6 @@ import type {
 } from "@/lib/api-types";
 import { DelegationCard } from "@/components/app/delegation-card";
 import { RunDelegationList } from "@/components/app/workspace/run-delegation-list";
-import { AssistantMessageBubble } from "@/components/app/assistant-message-bubble";
-import { UserPromptBubble } from "@/components/app/user-prompt-bubble";
 import { BotCreatureAvatar } from "@/components/app/bot-creature-avatar";
 import { InlineRenameLabel } from "@/components/app/inline-rename-label";
 import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
@@ -51,6 +49,11 @@ import {
 } from "./composer-attachments";
 import { MessageAttachmentList } from "./message-attachments";
 import { RunConversationTimeline } from "./run-conversation-timeline";
+import {
+  ChatTranscript,
+  RunAssistantMessage,
+  RunUserMessage,
+} from "./chat-transcript";
 import { ChatResultCards } from "./chat-result-cards";
 import { RunAssistantSnippet } from "./run-assistant-snippet";
 import { WorkStatusCard } from "./work-status-card";
@@ -178,6 +181,7 @@ export function BotConversationView({
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
+  const conversationFromQueryRef = useRef<string | null>(null);
   const loadScopeRef = useRef(createLoadScopeRef());
   const [conversationLoading, setConversationLoading] = useState(true);
   const [setupRequested, setSetupRequested] = useState(false);
@@ -191,6 +195,7 @@ export function BotConversationView({
     bumpLoadScope(loadScopeRef.current);
     setRuns([]);
     setConversationId(null);
+    conversationFromQueryRef.current = null;
     setLiveRunId(null);
     setLiveDelegations([]);
     setPendingTurn(null);
@@ -210,6 +215,12 @@ export function BotConversationView({
       setMessage(draft);
       setSetupRequested(false);
       return;
+    }
+    const conversation = searchParams.get("conversation")?.trim();
+    if (conversation) {
+      conversationFromQueryRef.current = conversation;
+      setConversationId(conversation);
+      router.replace(`/app/bots/${botId}`);
     }
     const setup = searchParams.get("setup") === "1";
     if (consumeOnboardingOffer(botId) || setup) {
@@ -394,7 +405,7 @@ export function BotConversationView({
     const generation = loadScopeRef.current.current;
     void (async () => {
       try {
-        const id = await resolveConversationId();
+        const id = conversationFromQueryRef.current ?? (await resolveConversationId());
         if (!isActiveLoadScope(loadScopeRef.current, generation)) {
           return;
         }
@@ -490,6 +501,7 @@ export function BotConversationView({
       const body = await response.json();
       const created = body as CreateConversationResponse;
       setConversationId(created.id);
+      conversationFromQueryRef.current = created.id;
       setRuns([]);
       setLiveRunId(null);
       setMessage("");
@@ -726,15 +738,10 @@ export function BotConversationView({
       </header>
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div
-          ref={scrollRef}
+        <ChatTranscript
+          scrollRef={scrollRef}
           onScroll={handleConversationScroll}
-          className="h-full min-h-0 overflow-y-auto"
-        >
-        <div
-          className={`mx-auto flex min-h-full max-w-3xl flex-col gap-5 px-3 py-4 sm:px-5 ${
-            showPresetPrompts ? "justify-center" : ""
-          }`}
+          centered={showPresetPrompts}
         >
           {!conversationLoading
             ? chronologicalRuns.map((run) => {
@@ -780,7 +787,7 @@ export function BotConversationView({
 
             return (
               <div key={run.runId} className="space-y-2.5">
-                <UserPromptBubble
+                <RunUserMessage
                   sentAt={run.createdAt}
                   extra={
                     <MessageAttachmentList
@@ -791,9 +798,8 @@ export function BotConversationView({
                       }
                     />
                   }
-                >
-                  {showOptimisticUser ? pendingTurn.message : run.task}
-                </UserPromptBubble>
+                  text={showOptimisticUser ? pendingTurn.message : run.task ?? ""}
+                />
 
                 {isLive && liveDelegations.length > 0 ? (
                   <div className="space-y-2">
@@ -808,6 +814,8 @@ export function BotConversationView({
                     items={timeline}
                     botName={bot?.name}
                     pendingHumanIntervention={pendingHumanIntervention}
+                    returnToBotId={botId}
+                    returnToConversationId={conversationId}
                   />
                 ) : null}
 
@@ -816,6 +824,8 @@ export function BotConversationView({
                     items={historical.items}
                     botName={bot?.name}
                     pendingHumanIntervention={historical.pendingHumanIntervention}
+                    returnToBotId={botId}
+                    returnToConversationId={conversationId}
                   />
                 ) : null}
 
@@ -855,7 +865,7 @@ export function BotConversationView({
                 {isLive ? (
                   <>
                     {assistantText?.trim() || assistantStream.commentaryText ? (
-                      <AssistantMessageBubble
+                      <RunAssistantMessage
                         leading={
                           <BotCreatureAvatar
                             name={bot?.name ?? "Bot"}
@@ -885,7 +895,7 @@ export function BotConversationView({
                         ) : (
                           <ChatThinkingLine label="Composing a reply…" />
                         )}
-                      </AssistantMessageBubble>
+                      </RunAssistantMessage>
                     ) : (
                       <BotWaitingStatus
                         name={bot?.name ?? "Bot"}
@@ -916,12 +926,11 @@ export function BotConversationView({
               (runIsActive(run.status) && run.task?.trim() === pendingTurn.message),
           ) ? (
             <div className="space-y-2.5">
-              <UserPromptBubble
+              <RunUserMessage
                 sentAt={new Date().toISOString()}
                 extra={<MessageAttachmentList attachments={pendingTurn.attachments ?? []} />}
-              >
-                {pendingTurn.message}
-              </UserPromptBubble>
+                text={pendingTurn.message}
+              />
               <BotWaitingStatus
                 name={bot?.name ?? "Bot"}
                 avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
@@ -1002,8 +1011,7 @@ export function BotConversationView({
               />
             </div>
           ) : null}
-        </div>
-        </div>
+        </ChatTranscript>
         <FloatingBrowserPreview />
       </div>
 

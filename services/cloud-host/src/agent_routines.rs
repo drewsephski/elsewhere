@@ -81,7 +81,10 @@ pub fn schedule_to_routine_fields(
 
 fn to_summary(view: &routines::RoutineView) -> RoutineSummary {
     let preview = if view.instructions.len() > 160 {
-        Some(format!("{}…", view.instructions.chars().take(160).collect::<String>()))
+        Some(format!(
+            "{}…",
+            view.instructions.chars().take(160).collect::<String>()
+        ))
     } else {
         Some(view.instructions.clone())
     };
@@ -99,9 +102,7 @@ fn to_summary(view: &routines::RoutineView) -> RoutineSummary {
 fn human_message(view: &routines::RoutineView, verb: &str) -> String {
     format!(
         "{verb} \"{}\" — {} ({})",
-        view.name,
-        view.schedule_label,
-        view.timezone
+        view.name, view.schedule_label, view.timezone
     )
 }
 
@@ -156,14 +157,9 @@ impl AgentRoutines for PostgresAgentRoutines {
                 .begin()
                 .await
                 .map_err(|e| RoutineError::Internal(e.to_string()))?;
-            crate::groups::assert_bot_may_use_conversation(
-                &mut tx,
-                &ctx.owner_id,
-                &ctx.bot_id,
-                id,
-            )
-            .await
-            .map_err(map_api)?;
+            crate::groups::assert_bot_may_use_conversation(&mut tx, &ctx.owner_id, &ctx.bot_id, id)
+                .await
+                .map_err(map_api)?;
             tx.commit()
                 .await
                 .map_err(|e| RoutineError::Internal(e.to_string()))?;

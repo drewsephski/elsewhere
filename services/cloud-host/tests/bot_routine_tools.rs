@@ -246,7 +246,9 @@ async fn routine_create_requires_approval_and_persists_timezone(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(approve.status(), axum::http::StatusCode::OK);
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&request_id);
 
@@ -292,7 +294,9 @@ async fn denied_routine_create_does_not_persist(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(deny.status(), axum::http::StatusCode::OK);
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&request_id);
     assert!(routines::list(&pool, &owner).await.unwrap().is_empty());

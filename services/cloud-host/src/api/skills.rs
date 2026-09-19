@@ -322,13 +322,9 @@ pub async fn create_run_skill_draft(
     Extension(principal): Extension<Principal>,
     Path(run_id): Path<String>,
 ) -> Result<Json<SkillDraftResponse>, ApiError> {
-    let (package, files, kind) = generate_skill_draft_from_run(
-        &state.pool,
-        &state.config,
-        principal.owner_id(),
-        &run_id,
-    )
-    .await?;
+    let (package, files, kind) =
+        generate_skill_draft_from_run(&state.pool, &state.config, principal.owner_id(), &run_id)
+            .await?;
     Ok(Json(SkillDraftResponse {
         draft_id: Uuid::new_v4().to_string(),
         skill_md: package.skill_md,
@@ -368,10 +364,7 @@ pub async fn save_run_skill(
     }
     let files = files_from_input(&body.files);
     let optional_name = body.name.as_deref().filter(|s| !s.trim().is_empty());
-    let optional_description = body
-        .description
-        .as_deref()
-        .filter(|s| !s.trim().is_empty());
+    let optional_description = body.description.as_deref().filter(|s| !s.trim().is_empty());
     let attach_bot = if body.attach_to_bot {
         Some(body.bot_id.as_str())
     } else {

@@ -241,17 +241,27 @@ fn bump_revision(record: &mut BotOnboardingRecord) {
     record.revision = record.revision.saturating_add(1);
 }
 
-fn answer_matches(existing: &OnboardingAnswer, option_id: Option<&str>, custom_text: Option<&str>) -> bool {
+fn answer_matches(
+    existing: &OnboardingAnswer,
+    option_id: Option<&str>,
+    custom_text: Option<&str>,
+) -> bool {
     let option = option_id.map(str::trim).filter(|value| !value.is_empty());
     let custom = custom_text.map(str::trim).filter(|value| !value.is_empty());
-    match (existing.option_id.as_deref(), existing.custom_text.as_deref()) {
+    match (
+        existing.option_id.as_deref(),
+        existing.custom_text.as_deref(),
+    ) {
         (Some(id), None) => option == Some(id) && custom.is_none(),
         (None, Some(text)) => option.is_none() && custom == Some(text),
         _ => false,
     }
 }
 
-async fn persist(pool: &PgPool, record: &BotOnboardingRecord) -> Result<BotOnboardingRecord, ApiError> {
+async fn persist(
+    pool: &PgPool,
+    record: &BotOnboardingRecord,
+) -> Result<BotOnboardingRecord, ApiError> {
     let mut tx = pool.begin().await.map_err(db)?;
     let saved = upsert(&mut tx, record).await?;
     tx.commit().await.map_err(db)?;
@@ -340,7 +350,10 @@ pub async fn answer_setup(
         .await?
         .ok_or_else(|| ApiError::Conflict("Start setup before answering".into()))?;
 
-    if let Some(last) = record.answers.last().filter(|answer| answer.question_id == question_id)
+    if let Some(last) = record
+        .answers
+        .last()
+        .filter(|answer| answer.question_id == question_id)
     {
         if answer_matches(last, option_id, custom_text) {
             tx.commit().await.map_err(db)?;
@@ -359,9 +372,10 @@ pub async fn answer_setup(
         }
     }
 
-    let current = record.current_question.clone().ok_or_else(|| {
-        ApiError::Conflict("There is no open setup question to answer".into())
-    })?;
+    let current = record
+        .current_question
+        .clone()
+        .ok_or_else(|| ApiError::Conflict("There is no open setup question to answer".into()))?;
     if current.id != question_id {
         return Err(ApiError::Conflict(
             "That question is no longer the current setup step".into(),

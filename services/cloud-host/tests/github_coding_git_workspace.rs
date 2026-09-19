@@ -28,7 +28,11 @@ async fn run_check_executes_from_repository_checkout() {
         checkout.replace('\'', "'\\''")
     );
     let result = computer.exec(&exec_command).await.unwrap();
-    assert!(result.ok, "README should exist in checkout: {}", result.stderr);
+    assert!(
+        result.ok,
+        "README should exist in checkout: {}",
+        result.stderr
+    );
     let root = computer.exec("test -f README.md").await.unwrap();
     assert!(!root.ok, "README must not exist at generic workspace root");
 }
@@ -47,7 +51,10 @@ async fn baseline_diff_modified_tracked_file() {
     assert_eq!(changes.len(), 1);
     assert_eq!(changes[0].path, "README.md");
     assert!(!changes[0].deleted);
-    assert_eq!(changes[0].bytes.as_deref(), Some(b"Hello from Elsewhere".as_ref()));
+    assert_eq!(
+        changes[0].bytes.as_deref(),
+        Some(b"Hello from Elsewhere".as_ref())
+    );
 }
 
 #[tokio::test]

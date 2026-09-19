@@ -6,9 +6,12 @@ import type { PendingHumanIntervention } from "@/lib/human-intervention";
 import {
   isSubagentEvent,
   subagentActivityFromPayload,
-  type SubagentActivity,
 } from "@/lib/subagent-events";
-import type { RunActivityItem } from "@/contexts/active-run-context";
+import type { RunActivityItem, ToolActivity } from "@/contexts/active-run-context";
+import {
+  parseConnectorNeed,
+  parseConnectorNeedStatus,
+} from "@/lib/connector-need";
 
 export interface RunTimelineState {
   items: RunActivityItem[];
@@ -62,6 +65,37 @@ function approvalFromPayload(payload: Record<string, unknown>): ApprovalRequeste
 function shouldSkipDuplicateText(items: RunActivityItem[], headline: string): boolean {
   const last = items[items.length - 1];
   return last?.kind === "text" && last.text === headline;
+}
+
+function toolNameFromPayload(payload: Record<string, unknown>): string {
+  return String(payload.tool ?? payload.name ?? "").trim();
+}
+
+function upsertToolItem(items: RunActivityItem[], id: string, tool: ToolActivity): RunActivityItem[] {
+  const existing = items.findIndex((item) => item.id === id || (item.kind === "tool" && item.id === id));
+  if (existing >= 0) {
+    return items.map((item, index) =>
+      index === existing && item.kind === "tool" ? { ...item, tool: { ...item.tool, ...tool } } : item,
+    );
+  }
+  return [...items.slice(-199), { id, kind: "tool", tool }];
+}
+
+function toolItemId(
+  items: RunActivityItem[],
+  payload: Record<string, unknown>,
+  toolName: string,
+): string {
+  if (typeof payload.toolInvocationId === "string" && payload.toolInvocationId) {
+    return `tool:${payload.toolInvocationId}`;
+  }
+  const open = [...items]
+    .reverse()
+    .find((item) => item.kind === "tool" && item.tool.toolName === toolName && item.tool.state === "running");
+  if (open) {
+    return open.id;
+  }
+  return `tool:${toolName}:${items.length}`;
 }
 
 export function applyRunStreamEvent(
@@ -184,6 +218,36 @@ export function applyRunStreamEvent(
     };
   }
 
+  if (streamEvent.event === "connector_needed") {
+    const need = parseConnectorNeed(runId, payload);
+    if (!need) {
+      return state;
+    }
+    if (items.some((item) => item.kind === "connector" && item.need.needId === need.needId)) {
+      return state;
+    }
+    return {
+      items: [...items, { id, kind: "connector", need }],
+      pendingHumanIntervention,
+    };
+  }
+
+  if (streamEvent.event === "connector_needed_resolved") {
+    const needId = typeof payload.needId === "string" ? payload.needId : "";
+    const status = parseConnectorNeedStatus(payload);
+    if (!needId || status.phase !== "resolved") {
+      return state;
+    }
+    return {
+      items: items.map((item) =>
+        item.kind === "connector" && item.need.needId === needId
+          ? { ...item, need: { ...item.need, status } }
+          : item,
+      ),
+      pendingHumanIntervention,
+    };
+  }
+
   if (isSubagentEvent(streamEvent.event)) {
     const activity = subagentActivityFromPayload(payload);
     if (!activity) {
@@ -207,6 +271,28 @@ export function applyRunStreamEvent(
     }
     return {
       items: [...items.slice(-199), { id, kind: "subagent", subagent: activity }],
+      pendingHumanIntervention,
+    };
+  }
+
+  const toolName = toolNameFromPayload(payload);
+  if (
+    toolName &&
+    (streamEvent.event === "tool_started" ||
+      streamEvent.event === "tool_result" ||
+      streamEvent.event.startsWith("tool_"))
+  ) {
+    const line = activityLineFromEvent(streamEvent.event, payload);
+    const toolState: ToolActivity["state"] =
+      streamEvent.event === "tool_result" ? (payload.ok === false ? "error" : "complete") : "running";
+    const toolId = toolItemId(items, payload, toolName);
+    return {
+      items: upsertToolItem(items, toolId, {
+        toolName,
+        label: line?.headline || toolName.replace(/_/g, " "),
+        state: toolState,
+        technical: line?.technical,
+      }),
       pendingHumanIntervention,
     };
   }

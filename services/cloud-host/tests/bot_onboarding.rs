@@ -150,7 +150,8 @@ fn complete_draft() -> OnboardingModelResponse {
     }
 }
 
-fn scripted_generator() -> Arc<dyn Fn(&OnboardingGenerateInput) -> Result<OnboardingModelResponse, String> + Send + Sync>
+fn scripted_generator(
+) -> Arc<dyn Fn(&OnboardingGenerateInput) -> Result<OnboardingModelResponse, String> + Send + Sync>
 {
     Arc::new(|input: &OnboardingGenerateInput| {
         if input.generation_model != DEFAULT_MODEL {

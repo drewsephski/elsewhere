@@ -149,14 +149,13 @@ pub async fn create_skill_with_version_and_attach(
         .map_err(db_err)?;
 
     if let Some(bot_id) = attach_bot_id {
-        let bot_ok: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)",
-        )
-        .bind(bot_id)
-        .bind(owner)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(db_err)?;
+        let bot_ok: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1 AND owner_id = $2)")
+                .bind(bot_id)
+                .bind(owner)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(db_err)?;
         if !bot_ok {
             return Err(ApiError::NotFound);
         }

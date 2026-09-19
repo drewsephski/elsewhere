@@ -14,6 +14,7 @@ use crate::channels::slack::SlackClient;
 use crate::codex_ops::CodexOpsPermit;
 use crate::computer_registry::ComputerRegistry;
 use crate::config::Config;
+use crate::connector_need::ConnectorNeedService;
 use crate::connectors::{ConnectorSecretBox, GitHubClient};
 use crate::events::registry::RunRegistry;
 use crate::human_intervention::HumanInterventionService;
@@ -63,6 +64,7 @@ pub struct AppState {
     pub permission_policies: PermissionPolicyService,
     pub human_interventions: HumanInterventionService,
     pub user_questions: UserQuestionService,
+    pub connector_needs: ConnectorNeedService,
     pub draining: Arc<std::sync::atomic::AtomicBool>,
     pub run_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub group_route_tasks: Arc<std::sync::Mutex<tokio::task::JoinSet<()>>>,
@@ -194,6 +196,11 @@ impl AppState {
             pool: pool.clone(),
             registry: Arc::new(crate::approval::ApprovalWaitRegistry::default()),
         };
+        let connector_needs = ConnectorNeedService {
+            pool: pool.clone(),
+            registry: Arc::new(crate::connector_need::ConnectorNeedWaitRegistry::default()),
+            timeout: Duration::from_secs(config.tool_approval_timeout_secs),
+        };
         let connector_secret_box = config
             .connector_secret_key
             .as_deref()
@@ -221,6 +228,7 @@ impl AppState {
             permission_policies,
             human_interventions,
             user_questions,
+            connector_needs,
             draining: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             run_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),
             group_route_tasks: Arc::new(std::sync::Mutex::new(tokio::task::JoinSet::new())),

@@ -22,7 +22,11 @@ pub fn checkout_root(owner: &str, repo: &str, run_id: &str) -> String {
         .take(16)
         .collect::<String>()
         .to_ascii_lowercase();
-    let suffix = if suffix.is_empty() { "run" } else { suffix.as_str() };
+    let suffix = if suffix.is_empty() {
+        "run"
+    } else {
+        suffix.as_str()
+    };
     format!("/workspace/repos/{}/{}/{}", owner, repo, suffix)
 }
 
@@ -67,7 +71,11 @@ pub fn working_branch(slug: &str, run_id: &str) -> String {
         .take(8)
         .collect::<String>()
         .to_ascii_lowercase();
-    let suffix = if suffix.is_empty() { "run" } else { suffix.as_str() };
+    let suffix = if suffix.is_empty() {
+        "run"
+    } else {
+        suffix.as_str()
+    };
     format!("{BRANCH_PREFIX}{slug}-{suffix}")
 }
 

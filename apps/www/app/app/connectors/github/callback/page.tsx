@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  parseBotChatReturnTo,
+  type GithubOAuthCompleteResponse,
+} from "@/lib/connector-need";
 
 export default function GitHubOAuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -34,7 +38,8 @@ export default function GitHubOAuthCallbackPage() {
         setError(body?.error ?? "Could not complete GitHub connection.");
         return;
       }
-      router.replace("/app/connectors");
+      const body = (await response.json()) as GithubOAuthCompleteResponse;
+      router.replace(parseBotChatReturnTo(body.returnTo ?? "") ?? "/app/connectors");
       router.refresh();
     })();
   }, [router, searchParams]);

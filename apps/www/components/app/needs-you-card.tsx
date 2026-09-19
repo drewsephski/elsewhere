@@ -18,6 +18,7 @@ interface NeedsYouCardProps {
   tone?: NeedsYouTone;
   /** Tighter padding and type for inline chat moments (e.g. approvals). */
   compact?: boolean;
+  leading?: ReactNode;
 }
 
 /**
@@ -38,6 +39,7 @@ export function NeedsYouCard({
   className,
   tone = "pending",
   compact = false,
+  leading,
 }: NeedsYouCardProps) {
   const showContinuation = tone !== "resolved" && continuation;
   return (
@@ -50,42 +52,47 @@ export function NeedsYouCard({
       role="region"
       aria-label={title}
     >
-      <p className={cn("text-foreground", compact ? "text-xs font-semibold" : "font-medium")}>
-        {title}
-      </p>
-      <p
-        className={cn(
-          "text-foreground/90",
-          compact ? "mt-0.5 text-xs leading-snug" : "mt-1 text-[13px]",
-        )}
-      >
-        {reason}
-      </p>
-      {detail ? (
-        <div
-          className={cn(
-            "text-foreground/85",
-            compact ? "mt-0.5 text-[11px]" : "mt-1.5 text-[13px]",
-          )}
-        >
-          {detail}
+      <div className={cn("flex items-start", leading ? "gap-2.5" : null)}>
+        {leading ? <div className="mt-0.5 shrink-0 text-foreground">{leading}</div> : null}
+        <div className="min-w-0 flex-1">
+          <p className={cn("text-foreground", compact ? "text-xs font-semibold" : "font-medium")}>
+            {title}
+          </p>
+          <p
+            className={cn(
+              "text-foreground/90",
+              compact ? "mt-0.5 text-xs leading-snug" : "mt-1 text-[13px]",
+            )}
+          >
+            {reason}
+          </p>
+          {detail ? (
+            <div
+              className={cn(
+                "text-foreground/85",
+                compact ? "mt-0.5 text-[11px]" : "mt-1.5 text-[13px]",
+              )}
+            >
+              {detail}
+            </div>
+          ) : null}
+          {showContinuation ? (
+            <p className={cn("text-muted-foreground", compact ? "mt-1 text-[10px]" : "mt-2 text-xs")}>
+              {continuation}
+            </p>
+          ) : null}
+          {actions ? (
+            <div
+              className={cn(
+                "flex flex-col flex-wrap items-stretch",
+                compact ? "mt-2 gap-1.5" : "mt-3 gap-2",
+              )}
+            >
+              {actions}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {showContinuation ? (
-        <p className={cn("text-muted-foreground", compact ? "mt-1 text-[10px]" : "mt-2 text-xs")}>
-          {continuation}
-        </p>
-      ) : null}
-      {actions ? (
-        <div
-          className={cn(
-            "flex flex-col flex-wrap items-stretch",
-            compact ? "mt-2 gap-1.5" : "mt-3 gap-2",
-          )}
-        >
-          {actions}
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }

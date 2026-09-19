@@ -138,12 +138,9 @@ pub fn apply_skill_save_overrides(
         .unwrap_or(package.frontmatter.description.as_str())
         .to_string();
     let body = package.skill_md_body.trim();
-    let skill_md = format!(
-        "---\nname: {slug}\ndescription: {description}\n---\n\n{body}\n"
-    );
-    let rebuilt =
-        SkillPackage::validate_and_build(&skill_md, files, Some(&slug))
-            .map_err(|e| ApiError::Validation(e.to_string()))?;
+    let skill_md = format!("---\nname: {slug}\ndescription: {description}\n---\n\n{body}\n");
+    let rebuilt = SkillPackage::validate_and_build(&skill_md, files, Some(&slug))
+        .map_err(|e| ApiError::Validation(e.to_string()))?;
     Ok((rebuilt, files.to_vec()))
 }
 
@@ -183,9 +180,7 @@ async fn load_completed_run_content(
     Ok((task, answer))
 }
 
-fn parse_skill_draft_json(
-    raw: &str,
-) -> Result<(SkillPackage, Vec<SkillPackageFile>), ApiError> {
+fn parse_skill_draft_json(raw: &str) -> Result<(SkillPackage, Vec<SkillPackageFile>), ApiError> {
     let value: serde_json::Value = serde_json::from_str(raw.trim())
         .map_err(|_| ApiError::Internal("skill draft model returned invalid JSON".into()))?;
     let skill_md = value
@@ -273,7 +268,10 @@ fn truncate_chars(input: &str, max: usize, fallback: &str) -> String {
     }
     format!(
         "{}…",
-        input.chars().take(max.saturating_sub(1)).collect::<String>()
+        input
+            .chars()
+            .take(max.saturating_sub(1))
+            .collect::<String>()
     )
 }
 
@@ -289,4 +287,3 @@ mod tests {
         );
     }
 }
-

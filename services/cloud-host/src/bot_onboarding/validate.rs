@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use agent_core::{
-    text_solicits_secrets, MAX_ASK_USER_OPTION_CHARS, MAX_ASK_USER_OPTIONS,
+    text_solicits_secrets, MAX_ASK_USER_OPTIONS, MAX_ASK_USER_OPTION_CHARS,
     MAX_ASK_USER_QUESTION_CHARS, MIN_ASK_USER_OPTIONS,
 };
 
@@ -13,7 +13,7 @@ use super::types::{
     MAX_CONTEXT_BYTES, MAX_CUSTOM_ANSWER_CHARS, MAX_HELPER_CHARS, MAX_INSTRUCTIONS_BYTES,
     MAX_ONBOARDING_QUESTIONS, MAX_OPTION_DESCRIPTION_CHARS, MAX_OPTION_ID_CHARS,
     MAX_QUESTION_ID_CHARS, MAX_SUGGESTED_CAPABILITIES, MAX_SUGGESTED_CAPABILITY_CHARS,
-    MAX_SUGGESTED_TASK_CHARS, MAX_SUGGESTED_TASKS, MAX_SUMMARY_CHARS,
+    MAX_SUGGESTED_TASKS, MAX_SUGGESTED_TASK_CHARS, MAX_SUMMARY_CHARS,
 };
 
 pub fn collapse_whitespace(value: &str) -> String {
@@ -265,14 +265,12 @@ pub fn validate_model_response(
 pub fn parse_onboarding_model_json(raw: &str) -> Result<OnboardingModelResponse, ApiError> {
     let trimmed = raw.trim();
     let json_slice = if let Some(start) = trimmed.find('{') {
-        let end = trimmed.rfind('}').ok_or_else(|| {
-            ApiError::Validation("setup returned no JSON object".into())
-        })?;
+        let end = trimmed
+            .rfind('}')
+            .ok_or_else(|| ApiError::Validation("setup returned no JSON object".into()))?;
         &trimmed[start..=end]
     } else {
-        return Err(ApiError::Validation(
-            "setup returned no JSON object".into(),
-        ));
+        return Err(ApiError::Validation("setup returned no JSON object".into()));
     };
     serde_json::from_str(json_slice)
         .map_err(|e| ApiError::Validation(format!("invalid setup JSON: {e}")))
@@ -298,7 +296,9 @@ pub fn validate_onboarding_answer(
     }
 
     if !question.allow_custom {
-        return Err(ApiError::Validation("pick one of the listed choices".into()));
+        return Err(ApiError::Validation(
+            "pick one of the listed choices".into(),
+        ));
     }
     let custom = collapse_whitespace(custom_text.unwrap_or(""));
     if custom.is_empty() {
@@ -354,7 +354,8 @@ mod tests {
 
     #[test]
     fn accepts_custom_answer() {
-        let answer = validate_onboarding_answer(&question(), None, Some("Own competitor briefs")).unwrap();
+        let answer =
+            validate_onboarding_answer(&question(), None, Some("Own competitor briefs")).unwrap();
         assert_eq!(answer.custom_text.as_deref(), Some("Own competitor briefs"));
         assert!(answer.option_id.is_none());
     }

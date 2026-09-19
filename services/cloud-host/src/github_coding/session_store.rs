@@ -1,8 +1,8 @@
 use agent_core::GithubCodingError;
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use sqlx::Row;
 use sqlx::PgPool;
+use sqlx::Row;
 
 use super::check_evidence::{CertifiedCheck, VerifiedCheck};
 use super::publish_snapshot::PreparedPublish;
@@ -233,8 +233,8 @@ impl SessionStore {
         run_id: &str,
         check: &CertifiedCheck,
     ) -> Result<(), GithubCodingError> {
-        let value = serde_json::to_value(check)
-            .map_err(|e| GithubCodingError::Internal(e.to_string()))?;
+        let value =
+            serde_json::to_value(check).map_err(|e| GithubCodingError::Internal(e.to_string()))?;
         sqlx::query(
             r#"
             UPDATE github_coding_sessions SET
@@ -407,13 +407,14 @@ impl SessionStore {
 
 fn map_session_row(row: sqlx::postgres::PgRow) -> CodingSessionRow {
     let validations_json: Value = row.get("validations_json");
-    let validations: Vec<VerifiedCheck> = serde_json::from_value(validations_json).unwrap_or_default();
+    let validations: Vec<VerifiedCheck> =
+        serde_json::from_value(validations_json).unwrap_or_default();
     let certified_json: Value = row.get("certified_checks_json");
     let certified_checks: Vec<CertifiedCheck> =
         serde_json::from_value(certified_json).unwrap_or_default();
     let prepared_json: Option<Value> = row.get("prepared_publish_json");
-    let prepared_publish: Option<PreparedPublish> = prepared_json
-        .and_then(|v| serde_json::from_value(v).ok());
+    let prepared_publish: Option<PreparedPublish> =
+        prepared_json.and_then(|v| serde_json::from_value(v).ok());
     CodingSessionRow {
         owner_id: row.get("owner_id"),
         run_id: row.get("run_id"),

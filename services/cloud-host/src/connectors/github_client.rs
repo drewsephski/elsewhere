@@ -342,12 +342,7 @@ impl GitHubClient {
         repo: &str,
         commit_sha: &str,
     ) -> Result<Value, String> {
-        let path = format!(
-            "/repos/{}/{}/commits/{}/status",
-            owner,
-            repo,
-            commit_sha
-        );
+        let path = format!("/repos/{}/{}/commits/{}/status", owner, repo, commit_sha);
         self.get_json(token, &path).await
     }
 
@@ -522,9 +517,7 @@ impl GitHubClient {
         if let Some(head) = existing_ref {
             if let Some(expected) = expected_existing_commit {
                 if head != expected {
-                    return Err(
-                        "working branch already exists for another Elsewhere change".into(),
-                    );
+                    return Err("working branch already exists for another Elsewhere change".into());
                 }
                 return Ok(head);
             }
@@ -796,9 +789,7 @@ impl GitHubClient {
 
         let parent_tree_path = format!(
             "/repos/{}/{}/git/trees/{}?recursive=1",
-            owner,
-            repo,
-            base_tree_sha
+            owner, repo, base_tree_sha
         );
         let parent_tree: Value = self.get_json(token, &parent_tree_path).await?;
         let parent_map = blob_map_from_recursive_tree(&parent_tree).map_err(|e| match e {
@@ -814,9 +805,7 @@ impl GitHubClient {
 
         let candidate_tree_path = format!(
             "/repos/{}/{}/git/trees/{}?recursive=1",
-            owner,
-            repo,
-            candidate_tree_sha
+            owner, repo, candidate_tree_sha
         );
         let candidate_tree: Value = self.get_json(token, &candidate_tree_path).await?;
         let candidate_map = blob_map_from_recursive_tree(&candidate_tree).map_err(|e| match e {

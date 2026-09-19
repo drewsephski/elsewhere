@@ -401,7 +401,9 @@ pub async fn browser_scroll(
         ));
     }
     if !body.delta_x.is_finite() || !body.delta_y.is_finite() {
-        return Err(ApiError::Validation("deltaX and deltaY must be finite".into()));
+        return Err(ApiError::Validation(
+            "deltaX and deltaY must be finite".into(),
+        ));
     }
     let computer = state
         .computer_registry

@@ -19,7 +19,10 @@ pub fn collect_pull_request_feedback(
         .unwrap_or("");
     let state = pull.get("state").and_then(|s| s.as_str()).unwrap_or("");
     let title = pull.get("title").and_then(|s| s.as_str()).unwrap_or("");
-    let body = truncate_optional(pull.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
+    let body = truncate_optional(
+        pull.get("body").and_then(|s| s.as_str()),
+        MAX_COMMENT_BODY_CHARS,
+    );
 
     let reviews_may_be_truncated = reviews.len() >= MAX_REVIEW_ITEMS;
     let review_summaries = reviews
@@ -80,7 +83,10 @@ fn summarize_review(review: &Value) -> Option<Value> {
         .and_then(|u| u.get("login"))
         .and_then(|s| s.as_str())
         .unwrap_or("unknown");
-    let body = truncate_optional(review.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
+    let body = truncate_optional(
+        review.get("body").and_then(|s| s.as_str()),
+        MAX_COMMENT_BODY_CHARS,
+    );
     Some(json!({
         "id": review.get("id"),
         "reviewer": user,
@@ -98,7 +104,10 @@ fn summarize_review_comment(comment: &Value) -> Option<Value> {
         .and_then(|s| s.as_str())
         .unwrap_or("unknown");
     let path = comment.get("path").and_then(|s| s.as_str()).unwrap_or("");
-    let body = truncate_optional(comment.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
+    let body = truncate_optional(
+        comment.get("body").and_then(|s| s.as_str()),
+        MAX_COMMENT_BODY_CHARS,
+    );
     Some(json!({
         "id": comment.get("id"),
         "reviewer": user,
@@ -116,7 +125,10 @@ fn summarize_issue_comment(comment: &Value) -> Option<Value> {
         .and_then(|u| u.get("login"))
         .and_then(|s| s.as_str())
         .unwrap_or("unknown");
-    let body = truncate_optional(comment.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
+    let body = truncate_optional(
+        comment.get("body").and_then(|s| s.as_str()),
+        MAX_COMMENT_BODY_CHARS,
+    );
     Some(json!({
         "id": comment.get("id"),
         "author": user,
@@ -126,11 +138,14 @@ fn summarize_issue_comment(comment: &Value) -> Option<Value> {
 }
 
 fn summarize_checks(combined_status: &Value, check_runs_body: &Value) -> Value {
-    let overall_state = combined_status.get("state").and_then(|s| s.as_str()).unwrap_or("unknown");
-    let status_list = combined_status
-        .get("statuses")
-        .and_then(|v| v.as_array());
-    let statuses_truncated = status_list.map(|arr| arr.len() > MAX_CHECK_ITEMS).unwrap_or(false);
+    let overall_state = combined_status
+        .get("state")
+        .and_then(|s| s.as_str())
+        .unwrap_or("unknown");
+    let status_list = combined_status.get("statuses").and_then(|v| v.as_array());
+    let statuses_truncated = status_list
+        .map(|arr| arr.len() > MAX_CHECK_ITEMS)
+        .unwrap_or(false);
     let statuses = status_list
         .map(|arr| {
             arr.iter()
@@ -150,9 +165,7 @@ fn summarize_checks(combined_status: &Value, check_runs_body: &Value) -> Value {
         })
         .unwrap_or_default();
 
-    let check_run_list = check_runs_body
-        .get("check_runs")
-        .and_then(|v| v.as_array());
+    let check_run_list = check_runs_body.get("check_runs").and_then(|v| v.as_array());
     let check_runs_truncated = check_run_list
         .map(|arr| arr.len() > MAX_CHECK_ITEMS)
         .unwrap_or(false);

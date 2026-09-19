@@ -21,9 +21,7 @@ pub struct ArchiveFile {
     pub mode: u32,
 }
 
-pub fn extract_tarball_files(
-    archive_bytes: &[u8],
-) -> Result<Vec<ArchiveFile>, GithubCodingError> {
+pub fn extract_tarball_files(archive_bytes: &[u8]) -> Result<Vec<ArchiveFile>, GithubCodingError> {
     if archive_bytes.len() > MAX_COMPRESSED_TARBALL_BYTES {
         return Err(GithubCodingError::Validation(
             "repository archive exceeds maximum download size".into(),

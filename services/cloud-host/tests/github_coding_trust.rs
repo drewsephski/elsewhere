@@ -2,8 +2,8 @@
 
 use cloud_host::github_coding::archive::{extract_tarball_files, MAX_COMPRESSED_TARBALL_BYTES};
 use cloud_host::github_coding::check_evidence::{
-    reject_forged_check_fields, verify_check_commands_for_review, verify_check_commands_from_events,
-    CertifiedCheck,
+    reject_forged_check_fields, verify_check_commands_for_review,
+    verify_check_commands_from_events, CertifiedCheck,
 };
 use serde_json::json;
 
@@ -22,7 +22,8 @@ fn forged_model_checks_rejected() {
 
 #[test]
 fn workspace_exec_evidence_required() {
-    let err = verify_check_commands_from_events(&[], &[String::from("pnpm test")]).expect_err("missing");
+    let err =
+        verify_check_commands_from_events(&[], &[String::from("pnpm test")]).expect_err("missing");
     assert!(err.message().contains("not executed"));
 }
 

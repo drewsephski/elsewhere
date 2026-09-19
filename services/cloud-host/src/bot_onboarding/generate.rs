@@ -56,9 +56,9 @@ or
 
 fn engine_error(err: ResolveRunEngineError) -> ApiError {
     match err {
-        ResolveRunEngineError::ResponsesApiKeyRequired => ApiError::Conflict(
-            "Responses API is not configured for Bot setup on this host".into(),
-        ),
+        ResolveRunEngineError::ResponsesApiKeyRequired => {
+            ApiError::Conflict("Responses API is not configured for Bot setup on this host".into())
+        }
         ResolveRunEngineError::CodexUnavailable(msg) => ApiError::Conflict(msg),
         ResolveRunEngineError::NoModelProviderAvailable => {
             ApiError::Conflict("No model provider is available for Bot setup".into())

@@ -49,7 +49,10 @@ pub async fn working_tree_fingerprint(
     baseline_sha: &str,
 ) -> Result<String, GithubCodingError> {
     let changes = collect_publish_changes(computer, checkout_path, baseline_sha).await?;
-    Ok(super::publish_snapshot::fingerprint_changes(baseline_sha, &changes))
+    Ok(super::publish_snapshot::fingerprint_changes(
+        baseline_sha,
+        &changes,
+    ))
 }
 
 pub async fn collect_publish_changes(
@@ -72,10 +75,7 @@ pub async fn collect_publish_changes(
     let mut paths: Vec<PathMutation> = Vec::new();
     parse_name_status_z(&diff_out, &mut paths);
     for path in parse_nul_paths(&untracked_out) {
-        paths.push(PathMutation {
-            path,
-            status: 'A',
-        });
+        paths.push(PathMutation { path, status: 'A' });
     }
     paths.sort_by(|a, b| a.path.cmp(&b.path));
     paths.dedup_by(|a, b| a.path == b.path);
@@ -169,7 +169,10 @@ async fn baseline_blob_mode(
     Ok("100644".into())
 }
 
-async fn worktree_file_mode(computer: &dyn AgentComputer, full_path: &str) -> Result<String, GithubCodingError> {
+async fn worktree_file_mode(
+    computer: &dyn AgentComputer,
+    full_path: &str,
+) -> Result<String, GithubCodingError> {
     let script = format!(
         "if [ -x {} ]; then echo 100755; else echo 100644; fi",
         shell_quote(full_path)

@@ -89,22 +89,14 @@ impl AgentSkills for PostgresAgentSkills {
         .map_err(map_api)?
         .ok_or(SkillError::NoSourceRun)?;
 
-        let (package, files, kind) = skill_draft_from_run(
-            &self.pool,
-            &self.config,
-            &ctx.owner_id,
-            &source_run_id,
-        )
-        .await
-        .map_err(map_api)?;
+        let (package, files, kind) =
+            skill_draft_from_run(&self.pool, &self.config, &ctx.owner_id, &source_run_id)
+                .await
+                .map_err(map_api)?;
 
-        let (package, files) = apply_skill_save_overrides(
-            &package,
-            &files,
-            optional_name,
-            optional_description,
-        )
-        .map_err(map_api)?;
+        let (package, files) =
+            apply_skill_save_overrides(&package, &files, optional_name, optional_description)
+                .map_err(map_api)?;
 
         let existing = list_skills(&self.pool, &ctx.owner_id)
             .await
@@ -226,14 +218,13 @@ impl AgentSkills for PostgresAgentSkills {
     }
 
     async fn bot_display_name(&self, ctx: &SkillContext) -> Result<String, SkillError> {
-        let name: Option<String> = sqlx::query_scalar(
-            "SELECT name FROM bots WHERE id = $1 AND owner_id = $2",
-        )
-        .bind(&ctx.bot_id)
-        .bind(&ctx.owner_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| SkillError::Internal(e.to_string()))?;
+        let name: Option<String> =
+            sqlx::query_scalar("SELECT name FROM bots WHERE id = $1 AND owner_id = $2")
+                .bind(&ctx.bot_id)
+                .bind(&ctx.owner_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| SkillError::Internal(e.to_string()))?;
         Ok(name.unwrap_or_else(|| "this Bot".into()))
     }
 }

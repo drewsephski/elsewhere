@@ -16,6 +16,7 @@ use crate::connectors::{
         mark_reconnect_required, purge_expired_oauth_states, store_oauth_state,
         upsert_github_app_credential, ConnectorRow, GitHubCredentialLoad, PROVIDER_GITHUB,
     },
+    github_access::parse_bot_chat_return_to,
     github_client::GitHubUser,
     service::collect_authorized_repositories,
     ConnectorSecretBox,
@@ -121,6 +122,12 @@ async fn github_aware_summary(
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct GitHubOAuthStartRequest {
+    pub return_to: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GitHubOAuthStartResponse {
@@ -129,9 +136,21 @@ pub struct GitHubOAuthStartResponse {
     pub expires_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitHubOAuthCompleteResponse {
+    pub provider: String,
+    pub status: String,
+    pub metadata: serde_json::Value,
+    pub connected_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub return_to: Option<String>,
+}
+
 pub async fn github_oauth_start(
     State(state): State<AppState>,
     Extension(owner): Extension<Principal>,
+    Json(body): Json<GitHubOAuthStartRequest>,
 ) -> Result<Json<GitHubOAuthStartResponse>, ApiError> {
     let _secret = secret_box(&state)?;
     let app_slug = state
@@ -145,6 +164,19 @@ pub async fn github_oauth_start(
         .as_deref()
         .ok_or_else(|| ApiError::Validation("GitHub App is not configured".into()))?;
 
+    let return_to = match body
+        .return_to
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(raw) => Some(
+            parse_bot_chat_return_to(raw)
+                .ok_or_else(|| ApiError::Validation("returnTo must be a bot chat path".into()))?,
+        ),
+        None => None,
+    };
+
     purge_expired_oauth_states(&state.pool).await?;
     let state_token = Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::minutes(10);
@@ -154,6 +186,7 @@ pub async fn github_oauth_start(
         owner.owner_id(),
         PROVIDER_GITHUB,
         expires_at,
+        return_to.as_deref(),
     )
     .await?;
 
@@ -178,7 +211,7 @@ pub async fn github_oauth_complete(
     State(state): State<AppState>,
     Extension(owner): Extension<Principal>,
     Json(body): Json<GitHubOAuthCompleteRequest>,
-) -> Result<Json<ConnectorSummary>, ApiError> {
+) -> Result<Json<GitHubOAuthCompleteResponse>, ApiError> {
     let secret_box = secret_box(&state)?;
     let client_id = state
         .config
@@ -198,11 +231,11 @@ pub async fn github_oauth_complete(
 
     let consumed =
         consume_oauth_state(&state.pool, &body.state, PROVIDER_GITHUB, owner.owner_id()).await?;
-    if !consumed {
+    let Some(consumed) = consumed else {
         return Err(ApiError::Validation(
             "invalid or expired OAuth state".into(),
         ));
-    }
+    };
 
     let token = state
         .github_client
@@ -264,8 +297,19 @@ pub async fn github_oauth_complete(
         secret_box.as_ref(),
     )
     .await?;
-
-    Ok(Json(ConnectorSummary::from(row)))
+    state
+        .connector_needs
+        .notify_owner_github_changed(owner.owner_id())
+        .await?;
+    let summary = ConnectorSummary::from(row);
+    Ok(Json(GitHubOAuthCompleteResponse {
+        provider: summary.provider,
+        status: summary.status,
+        metadata: summary.metadata,
+        connected_at: summary.connected_at,
+        updated_at: summary.updated_at,
+        return_to: consumed.return_to,
+    }))
 }
 
 pub async fn github_disconnect(
@@ -273,5 +317,9 @@ pub async fn github_disconnect(
     Extension(owner): Extension<Principal>,
 ) -> Result<Json<ConnectorSummary>, ApiError> {
     disconnect(&state.pool, owner.owner_id(), PROVIDER_GITHUB).await?;
+    state
+        .connector_needs
+        .notify_owner_github_changed(owner.owner_id())
+        .await?;
     github_status(State(state), Extension(owner)).await
 }

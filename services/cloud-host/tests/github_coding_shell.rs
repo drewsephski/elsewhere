@@ -45,7 +45,9 @@ impl AgentComputer for ShellWorkspaceComputer {
     async fn list_dir(&self, path: &str) -> Result<Vec<WorkspaceEntry>, ComputerError> {
         let mapped = self.map_path(path);
         let mut entries = Vec::new();
-        for entry in std::fs::read_dir(&mapped).map_err(|e| ComputerError::ExecutionFailed(e.to_string()))? {
+        for entry in
+            std::fs::read_dir(&mapped).map_err(|e| ComputerError::ExecutionFailed(e.to_string()))?
+        {
             let entry = entry.map_err(|e| ComputerError::ExecutionFailed(e.to_string()))?;
             let name = entry.file_name().to_string_lossy().to_string();
             let full = entry.path().to_string_lossy().to_string();

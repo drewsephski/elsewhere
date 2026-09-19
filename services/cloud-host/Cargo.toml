@@ -60,6 +60,10 @@ name = "connectors"
 required-features = ["test-utils"]
 
 [[test]]
+name = "connector_need"
+required-features = ["test-utils"]
+
+[[test]]
 name = "skills"
 required-features = ["test-utils"]
 

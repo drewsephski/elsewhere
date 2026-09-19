@@ -9,6 +9,7 @@ import {
 } from "@/lib/assistant-stream";
 import type { ApprovalRequestedPayload, ApprovalTerminalState } from "@/components/app/approval-card";
 import type { UserQuestionPayload } from "@/components/app/user-question-card";
+import type { ConnectorNeed } from "@/lib/connector-need";
 import {
   applyRunStreamEvent,
   emptyRunTimelineState,
@@ -29,9 +30,20 @@ import {
   type ReactNode,
 } from "react";
 
+export type ToolActivityState = "running" | "complete" | "error";
+
+export type ToolActivity = {
+  toolName: string;
+  label: string;
+  state: ToolActivityState;
+  technical?: string;
+};
+
 export type RunActivityItem =
   | { id: string; kind: "text"; text: string; technical?: string }
+  | { id: string; kind: "tool"; tool: ToolActivity }
   | { id: string; kind: "approval"; approval: ApprovalRequestedPayload; decision?: ApprovalTerminalState }
+  | { id: string; kind: "connector"; need: ConnectorNeed }
   | { id: string; kind: "subagent"; subagent: SubagentActivity }
   | { id: string; kind: "question"; question: UserQuestionPayload };
 

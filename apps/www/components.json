@@ -23,6 +23,7 @@
   "menuAccent": "subtle",
   "registries": {
     "@lucide-animated": "https://lucide-animated.com/r/{name}.json",
-    "@reui": "https://reui.io/r/{style}/{name}.json"
+    "@reui": "https://reui.io/r/{style}/{name}.json",
+    "@ai-elements": "https://elements.ai-sdk.dev/api/registry/{name}.json"
   }
 }

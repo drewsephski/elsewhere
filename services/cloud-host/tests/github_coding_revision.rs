@@ -124,12 +124,18 @@ async fn mock_pr_resume_apis(server: &MockServer, tarball: Vec<u8>) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(&format!(r"/repos/acme/demo/tarball/{}$", PR_HEAD_SHA)))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/tarball/{}$",
+            PR_HEAD_SHA
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(tarball))
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(&format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/git/commits/{}",
+            PR_HEAD_SHA
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": PR_HEAD_SHA,
             "tree": { "sha": PR_HEAD_TREE }
@@ -168,7 +174,10 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(&format!(r"/repos/acme/demo/commits/{}/status", PR_HEAD_SHA)))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/commits/{}/status",
+            PR_HEAD_SHA
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "state": "failure",
             "statuses": [{
@@ -181,7 +190,10 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
         .mount(server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(&format!(r"/repos/acme/demo/commits/{}/check-runs", PR_HEAD_SHA)))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/commits/{}/check-runs",
+            PR_HEAD_SHA
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "check_runs": [{
                 "id": 99,
@@ -198,7 +210,10 @@ async fn mock_pr_feedback_apis(server: &MockServer) {
 async fn mock_pr_update_apis(server: &MockServer) {
     let branch_encoded = urlencoding::encode(WORKING_BRANCH);
     Mock::given(method("GET"))
-        .and(path_regex(&format!(r"/repos/acme/demo/git/commits/{}", PR_HEAD_SHA)))
+        .and(path_regex(&format!(
+            r"/repos/acme/demo/git/commits/{}",
+            PR_HEAD_SHA
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": PR_HEAD_SHA,
             "tree": { "sha": PR_HEAD_TREE },
@@ -366,7 +381,10 @@ async fn github_resume_and_feedback(pool: PgPool) {
     )
     .await
     .expect("resume");
-    assert_eq!(resumed.get("phase").and_then(|v| v.as_str()), Some("resuming_pull_request"));
+    assert_eq!(
+        resumed.get("phase").and_then(|v| v.as_str()),
+        Some("resuming_pull_request")
+    );
 
     let feedback = dispatch_github_coding_tool(
         Some(&coding),
@@ -571,9 +589,9 @@ async fn github_update_pushes_same_pr_branch(pool: PgPool) {
 
     let posts = server.received_requests().await.unwrap_or_default();
     assert!(
-        !posts.iter().any(|r| {
-            r.url.path().ends_with("/pulls") && r.method.as_str() == "POST"
-        }),
+        !posts
+            .iter()
+            .any(|r| { r.url.path().ends_with("/pulls") && r.method.as_str() == "POST" }),
         "must not open a new pull request"
     );
     assert!(
@@ -598,7 +616,9 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
         .mount(&server)
         .await;
     Mock::given(method("GET"))
-        .and(path_regex(r"/repos/acme/demo/git/commits/someone_else_pushed"))
+        .and(path_regex(
+            r"/repos/acme/demo/git/commits/someone_else_pushed",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "sha": "someone_else_pushed",
             "tree": { "sha": "foreign_tree" },

@@ -164,13 +164,14 @@ async fn github_disconnect_clears_encrypted_secret(pool: PgPool) {
 async fn oauth_state_consumption_is_owner_scoped(pool: PgPool) {
     let state = "oauth-state-alice-only";
     let expires_at = Utc::now() + Duration::minutes(10);
-    store_oauth_state(&pool, state, "alice", PROVIDER_GITHUB, expires_at)
+    store_oauth_state(&pool, state, "alice", PROVIDER_GITHUB, expires_at, None)
         .await
         .unwrap();
 
-    assert!(!consume_oauth_state(&pool, state, PROVIDER_GITHUB, "bob")
+    assert!(consume_oauth_state(&pool, state, PROVIDER_GITHUB, "bob")
         .await
-        .unwrap());
+        .unwrap()
+        .is_none());
 
     let remaining: i64 =
         sqlx::query_scalar("SELECT COUNT(*)::bigint FROM connector_oauth_states WHERE state = $1")
@@ -182,7 +183,8 @@ async fn oauth_state_consumption_is_owner_scoped(pool: PgPool) {
 
     assert!(consume_oauth_state(&pool, state, PROVIDER_GITHUB, "alice")
         .await
-        .unwrap());
+        .unwrap()
+        .is_some());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -568,15 +570,15 @@ async fn github_app_install_start_uses_slug_and_owner_bound_state(pool: PgPool) 
     assert_eq!(status, http::StatusCode::OK);
     assert_ne!(second["state"].as_str().unwrap(), state_a);
 
-    assert!(
-        !consume_oauth_state(&pool, &state_a, PROVIDER_GITHUB, "bob")
-            .await
-            .unwrap()
-    );
+    assert!(consume_oauth_state(&pool, &state_a, PROVIDER_GITHUB, "bob")
+        .await
+        .unwrap()
+        .is_none());
     assert!(
         consume_oauth_state(&pool, &state_a, PROVIDER_GITHUB, "legacy-local")
             .await
             .unwrap()
+            .is_some()
     );
 }
 
@@ -1110,4 +1112,130 @@ async fn github_provider_errors_redact_app_tokens(pool: PgPool) {
     let message = err.message();
     assert!(!message.contains("ghu_leaked_access"));
     assert!(!message.contains("ghr_leaked_refresh"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_oauth_start_rejects_invalid_return_to(pool: PgPool) {
+    let mock = MockServer::start().await;
+    let mut state = AppState::new(pool.clone(), github_http_config());
+    state.github_client = github_client(&mock);
+    let app = build_router(state);
+
+    for return_to in [
+        "/app/connectors",
+        "https://evil.example",
+        "//evil",
+        "/app/work/x",
+    ] {
+        let (status, body) = json_auth(
+            app.clone(),
+            "POST",
+            "/v1/connectors/github/oauth/start",
+            json!({ "returnTo": return_to }),
+        )
+        .await;
+        assert_eq!(status, http::StatusCode::BAD_REQUEST, "{return_to}");
+        assert!(body["error"].as_str().unwrap_or("").contains("returnTo"));
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_oauth_return_to_round_trips_through_complete(pool: PgPool) {
+    let mock = MockServer::start().await;
+    mock_token_exchange(&mock, "ghu_access_live", "ghr_refresh_live").await;
+    mock_user_and_installs(
+        &mock,
+        &[(11, "octocat", "User")],
+        &[(11, vec![repo_json("octocat/Hello-World", false, "demo")])],
+    )
+    .await;
+
+    let mut state = AppState::new(pool.clone(), github_http_config());
+    state.github_client = github_client(&mock);
+    let app = build_router(state);
+
+    let return_to = "/app/bots/bot_1?conversation=c1";
+    let (status, start) = json_auth(
+        app.clone(),
+        "POST",
+        "/v1/connectors/github/oauth/start",
+        json!({ "returnTo": return_to }),
+    )
+    .await;
+    assert_eq!(status, http::StatusCode::OK);
+    let oauth_state = start["state"].as_str().unwrap();
+
+    let (status, connected) = json_auth(
+        app.clone(),
+        "POST",
+        "/v1/connectors/github/oauth/complete",
+        json!({
+            "code": "install-code",
+            "state": oauth_state
+        }),
+    )
+    .await;
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(connected["status"], "connected");
+    assert_eq!(connected["returnTo"], return_to);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_oauth_complete_notifies_pending_github_waiters(pool: PgPool) {
+    let mock = MockServer::start().await;
+    mock_token_exchange(&mock, "ghu_access_live", "ghr_refresh_live").await;
+    mock_user_and_installs(
+        &mock,
+        &[(11, "octocat", "User")],
+        &[(11, vec![repo_json("octocat/Hello-World", false, "demo")])],
+    )
+    .await;
+
+    let mut state = AppState::new(pool.clone(), github_http_config());
+    state.github_client = github_client(&mock);
+    let need_id = "cneed_notify_1";
+    sqlx::query(
+        r#"
+        INSERT INTO connector_need_requests (
+            id, owner_id, run_id, bot_id, provider, tool_name, reason_kind, status, created_at
+        )
+        VALUES ($1, 'legacy-local', 'run_notify', 'bot_1', 'github', 'github_list_repositories', 'disconnected', 'pending', NOW())
+        "#,
+    )
+    .bind(need_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let handle = state.connector_needs.registry.subscribe(need_id);
+    let app = build_router(state);
+
+    let (status, start) = json_auth(
+        app.clone(),
+        "POST",
+        "/v1/connectors/github/oauth/start",
+        json!({}),
+    )
+    .await;
+    assert_eq!(status, http::StatusCode::OK);
+    let oauth_state = start["state"].as_str().unwrap();
+
+    let notified = tokio::spawn(async move {
+        handle.notified().await;
+    });
+    let (status, connected) = json_auth(
+        app,
+        "POST",
+        "/v1/connectors/github/oauth/complete",
+        json!({
+            "code": "install-code",
+            "state": oauth_state
+        }),
+    )
+    .await;
+    assert_eq!(status, http::StatusCode::OK);
+    assert_eq!(connected["status"], "connected");
+    tokio::time::timeout(std::time::Duration::from_secs(2), notified)
+        .await
+        .expect("waiter notified")
+        .expect("notify task");
 }

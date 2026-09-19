@@ -59,7 +59,67 @@ describe("replayRunStreamEvents", () => {
     ];
     const once = replayRunStreamEvents("run_1", events);
     const twice = replayRunStreamEvents("run_1", [...events, ...events]);
-    expect(once.items.filter((item) => item.kind === "text").length).toBe(1);
-    expect(twice.items.filter((item) => item.kind === "text").length).toBe(1);
+    expect(once.items.filter((item) => item.kind === "tool").length).toBe(1);
+    expect(twice.items.filter((item) => item.kind === "tool").length).toBe(1);
+  });
+
+  test("replays connector_needed then resolved as one resolved card", () => {
+    const state = replayRunStreamEvents("run_1", [
+      {
+        id: "c1",
+        event: "connector_needed",
+        data: JSON.stringify({
+          needId: "cneed_1",
+          provider: "github",
+          reason: { kind: "disconnected" },
+          runId: "run_1",
+          botId: "bot_1",
+          toolName: "github_list_repositories",
+          requestedAt: "2026-09-19T17:00:00.000Z",
+        }),
+      },
+      {
+        id: "c1-dup",
+        event: "connector_needed",
+        data: JSON.stringify({
+          needId: "cneed_1",
+          provider: "github",
+          reason: { kind: "disconnected" },
+          runId: "run_1",
+          botId: "bot_1",
+          toolName: "github_list_repositories",
+          requestedAt: "2026-09-19T17:00:00.000Z",
+        }),
+      },
+      {
+        id: "c2",
+        event: "connector_needed_resolved",
+        data: JSON.stringify({ needId: "cneed_1", resolution: "connected" }),
+      },
+    ]);
+    const connectors = state.items.filter((item) => item.kind === "connector");
+    expect(connectors.length).toBe(1);
+    if (connectors[0]?.kind === "connector") {
+      expect(connectors[0].need.status).toEqual({
+        phase: "resolved",
+        resolution: "connected",
+      });
+    }
+  });
+
+  test("does not invent a connector card from a historical tool_result error", () => {
+    const state = replayRunStreamEvents("run_1", [
+      {
+        id: "t1",
+        event: "tool_result",
+        data: JSON.stringify({
+          tool: "github_list_repositories",
+          ok: false,
+          error: "Listing GitHub repositories did not complete",
+        }),
+      },
+    ]);
+    expect(state.items.some((item) => item.kind === "connector")).toBe(false);
+    expect(state.items.some((item) => item.kind === "tool")).toBe(true);
   });
 });

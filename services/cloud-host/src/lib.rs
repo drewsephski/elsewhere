@@ -62,6 +62,7 @@ pub mod collaboration;
 pub mod collaboration_completion;
 pub mod computer_control;
 pub mod computer_session;
+pub mod connector_need;
 pub mod connectors;
 pub mod delegation;
 pub mod github_coding;

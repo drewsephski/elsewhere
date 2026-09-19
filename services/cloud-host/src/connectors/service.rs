@@ -100,6 +100,14 @@ impl PostgresAgentConnectors {
             catalogs.remove(owner_id);
         }
     }
+
+    pub(crate) async fn load_authorized_catalog(
+        &self,
+        owner_id: &str,
+    ) -> Result<Vec<AuthorizedRepository>, ConnectorError> {
+        let token = self.github_access_token(owner_id).await?;
+        self.authorized_catalog(owner_id, &token).await
+    }
 }
 
 #[async_trait]
@@ -466,6 +474,12 @@ fn repo_key(owner: &str, name: &str) -> String {
         owner.to_ascii_lowercase(),
         name.to_ascii_lowercase()
     )
+}
+
+impl AuthorizedRepository {
+    pub(crate) fn matches(&self, owner: &str, name: &str) -> bool {
+        repo_key(&self.owner, &self.name) == repo_key(owner, name)
+    }
 }
 
 fn find_authorized_repo<'a>(

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { cloudHostErrorMessage, cloudHostFetch } from "@/lib/cloud-api";
 import { appRoutes } from "@/lib/app-routes";
 import { rememberSlackOAuthReturn } from "@/lib/slack-oauth-return";
+import { startGithubConnectorOAuth } from "@/lib/github-oauth";
 import type { BotSummary } from "@/lib/api-types";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
 import { IntegrationCard } from "@/components/app/integration-card";
@@ -205,15 +206,10 @@ export function ConnectorsManager() {
     setBusy(true);
     setError(null);
     try {
-      const response = await cloudHostFetch("/v1/connectors/github/oauth/start", {
-        method: "POST",
-      });
-      if (!response.ok) {
-        setError("GitHub App is not available. Check host configuration.");
-        return;
-      }
-      const body = (await response.json()) as { authorizeUrl: string };
+      const body = await startGithubConnectorOAuth();
       window.location.href = body.authorizeUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "GitHub App is not available. Check host configuration.");
     } finally {
       setBusy(false);
     }

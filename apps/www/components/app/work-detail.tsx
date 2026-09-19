@@ -36,6 +36,13 @@ import {
 } from "@/components/reui/timeline";
 import { Button } from "@/components/ui/button";
 import { UserQuestionCard, type UserQuestionPayload, userQuestionFromPayload } from "@/components/app/user-question-card";
+import { ConnectorNeedCard } from "@/components/app/connector-need-card";
+import {
+  botChatReturnTo,
+  parseConnectorNeed,
+  parseConnectorNeedStatus,
+  type ConnectorNeed,
+} from "@/lib/connector-need";
 import { MessageAttachmentList } from "@/components/app/workspace/message-attachments";
 import {
   fetchHumanInterventionStatus,
@@ -57,6 +64,7 @@ type Activity = {
   decision?: ApprovalTerminalState;
   subagent?: SubagentActivity;
   question?: UserQuestionPayload;
+  need?: ConnectorNeed;
 };
 
 const active = (status: string) => status === "queued" || status === "running";
@@ -70,6 +78,9 @@ function statusBadgeVariant(status: string | undefined) {
 }
 
 function timelineTitle(item: Activity) {
+  if (item.need) {
+    return item.need.status.phase === "resolved" ? "GitHub connected" : "GitHub needed";
+  }
   if (item.question) {
     return item.question.status === "answered" ? "Choice saved" : "Needs a choice";
   }
@@ -85,7 +96,7 @@ function timelineTitle(item: Activity) {
 }
 
 function hasInteractiveTimelineItem(item: Activity) {
-  return Boolean(item.approval || item.subagent || item.question);
+  return Boolean(item.approval || item.subagent || item.question || item.need);
 }
 
 function WorkBrowserColumn({ show }: { show: boolean }) {
@@ -259,6 +270,28 @@ export function WorkDetail({ runId }: { runId: string }) {
                   };
                 }),
               );
+            } else if (event.event === "connector_needed") {
+              const need = parseConnectorNeed(runId, payload);
+              if (need) {
+                setTimeline((previous) =>
+                  previous.some((item) => item.need?.needId === need.needId)
+                    ? previous
+                    : [...previous, { id, need }],
+                );
+              }
+            } else if (event.event === "connector_needed_resolved") {
+              const status = parseConnectorNeedStatus(payload);
+              const needId = typeof payload.needId === "string" ? payload.needId : "";
+              if (needId && status.phase === "resolved") {
+                setTimeline((previous) =>
+                  previous.map((item) => {
+                    if (!item.need || item.need.needId !== needId) {
+                      return item;
+                    }
+                    return { ...item, need: { ...item.need, status } };
+                  }),
+                );
+              }
             } else if (isSubagentEvent(event.event)) {
               const activity = subagentActivityFromPayload(payload);
               if (activity) {
@@ -598,6 +631,14 @@ export function WorkDetail({ runId }: { runId: string }) {
                             <SubagentCard activity={item.subagent} />
                           ) : item.question ? (
                             <UserQuestionCard question={item.question} />
+                          ) : item.need && detail ? (
+                            <ConnectorNeedCard
+                              need={item.need}
+                              returnTo={botChatReturnTo({
+                                botId: detail.botId,
+                                conversationId: detail.conversationId,
+                              })}
+                            />
                           ) : null}
                         </TimelineContent>
                       ) : null}

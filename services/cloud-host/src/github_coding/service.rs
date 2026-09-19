@@ -3,9 +3,8 @@ use std::sync::Arc;
 use agent_core::{
     AgentComputer, AgentGithubCoding, ComputerError, GithubCodingError,
     GITHUB_GET_PULL_REQUEST_FEEDBACK_TOOL, GITHUB_OPEN_REPOSITORY_TOOL,
-    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL,
-    GITHUB_REVIEW_PUBLISH_TOOL, GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL,
-    MAX_EXEC_COMMAND_CHARS,
+    GITHUB_PUBLISH_PULL_REQUEST_TOOL, GITHUB_RESUME_PULL_REQUEST_TOOL, GITHUB_REVIEW_PUBLISH_TOOL,
+    GITHUB_RUN_CHECK_TOOL, GITHUB_UPDATE_PULL_REQUEST_TOOL, MAX_EXEC_COMMAND_CHARS,
 };
 use async_trait::async_trait;
 use serde_json::{json, Value};
@@ -24,9 +23,7 @@ use crate::github_coding::core::{
     working_branch,
 };
 use crate::github_coding::feedback::collect_pull_request_feedback;
-use crate::github_coding::publish_snapshot::{
-    PreparedPublish, validate_prepared_publish_limits,
-};
+use crate::github_coding::publish_snapshot::{validate_prepared_publish_limits, PreparedPublish};
 use crate::github_coding::session_store::{CodingSessionRow, SessionStore};
 use crate::github_coding::workspace_git::{
     assert_git_available, collect_publish_changes, init_baseline_repo, reset_checkout_dir,
@@ -39,8 +36,7 @@ const FILES_CHANGED_MSG: &str =
     "Files changed after review. Review the updated changes before publishing.";
 const BASE_DRIFT_MSG: &str =
     "The repository changed on GitHub while you were working. Refresh the repository and reapply/review the changes before publishing.";
-const BRANCH_COLLISION_MSG: &str =
-    "working branch already exists for another Elsewhere change";
+const BRANCH_COLLISION_MSG: &str = "working branch already exists for another Elsewhere change";
 const PR_HEAD_DRIFT_MSG: &str =
     "The pull request changed on GitHub while you were working. Refresh the PR before updating it.";
 const PR_NOT_ELSEWHERE_MSG: &str =
@@ -95,9 +91,7 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                 self.open_repository(owner_id, run_id, request_id, computer, arguments)
                     .await
             }
-            GITHUB_RUN_CHECK_TOOL => {
-                self.run_check(owner_id, run_id, computer, arguments).await
-            }
+            GITHUB_RUN_CHECK_TOOL => self.run_check(owner_id, run_id, computer, arguments).await,
             GITHUB_REVIEW_PUBLISH_TOOL => {
                 self.review_publish(owner_id, run_id, request_id, computer, arguments)
                     .await
@@ -118,7 +112,9 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
                 self.update_pull_request(owner_id, run_id, computer, arguments)
                     .await
             }
-            other => Err(GithubCodingError::Validation(format!("unknown tool: {other}"))),
+            other => Err(GithubCodingError::Validation(format!(
+                "unknown tool: {other}"
+            ))),
         }
     }
 
@@ -173,10 +169,7 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
             obj.insert("workspaceFingerprint".into(), json!(prepared.fingerprint));
             obj.insert("verifiedChecks".into(), verified_checks);
             obj.insert("checksPassed".into(), json!(session.checks_passed));
-            obj.insert(
-                "explicitNoChecks".into(),
-                json!(session.explicit_no_checks),
-            );
+            obj.insert("explicitNoChecks".into(), json!(session.explicit_no_checks));
             obj.insert(
                 "publishAnyway".into(),
                 json!(arguments
@@ -290,7 +283,10 @@ impl PostgresAgentGithubCoding {
         for file in files {
             let path = path_within_checkout(&checkout_path, &file.relative_path)
                 .map_err(GithubCodingError::Validation)?;
-            let parent = path.rsplit_once('/').map(|(p, _)| p).unwrap_or(&checkout_path);
+            let parent = path
+                .rsplit_once('/')
+                .map(|(p, _)| p)
+                .unwrap_or(&checkout_path);
             let mkdir = format!("mkdir -p {}", shell_quote(parent));
             exec_ok(computer, &mkdir).await?;
             computer
@@ -364,11 +360,7 @@ impl PostgresAgentGithubCoding {
         }
         let session = self.require_session(owner_id, run_id).await?;
         let prepared_before = self.build_prepared_publish(&session, computer).await?;
-        let exec_command = format!(
-            "cd {} && {}",
-            shell_quote(&session.checkout_path),
-            command
-        );
+        let exec_command = format!("cd {} && {}", shell_quote(&session.checkout_path), command);
         let result = computer
             .exec(&exec_command)
             .await
@@ -655,7 +647,14 @@ impl PostgresAgentGithubCoding {
         };
 
         self.sessions
-            .update_publish_state(owner_id, run_id, "opening_pull_request", Some(&commit_sha), None, None)
+            .update_publish_state(
+                owner_id,
+                run_id,
+                "opening_pull_request",
+                Some(&commit_sha),
+                None,
+                None,
+            )
             .await?;
 
         let pull = self
@@ -715,10 +714,7 @@ impl PostgresAgentGithubCoding {
             &session.local_baseline_commit_sha,
         )
         .await?;
-        let prepared = PreparedPublish::from_changes(
-            &session.local_baseline_commit_sha,
-            changes,
-        );
+        let prepared = PreparedPublish::from_changes(&session.local_baseline_commit_sha, changes);
         validate_prepared_publish_limits(&prepared.changes)?;
         Ok(prepared)
     }
@@ -872,7 +868,8 @@ impl PostgresAgentGithubCoding {
         computer.ensure_ready().await.map_err(map_computer_error)?;
         assert_git_available(computer).await?;
         reset_checkout_dir(computer, &checkout_path).await?;
-        self.materialize_tarball_files(computer, &checkout_path, &files).await?;
+        self.materialize_tarball_files(computer, &checkout_path, &files)
+            .await?;
 
         let baseline_commit = init_baseline_repo(computer, &checkout_path).await?;
         let full_name = format!("{}/{}", owner, repo);
@@ -1080,7 +1077,12 @@ impl PostgresAgentGithubCoding {
 
         let pull = self
             .github
-            .get_pull_request(&token, &session.repo_owner, &session.repo_name, pr_number as u64)
+            .get_pull_request(
+                &token,
+                &session.repo_owner,
+                &session.repo_name,
+                pr_number as u64,
+            )
             .await
             .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
         if pull.get("state").and_then(|s| s.as_str()) != Some("open") {
@@ -1188,7 +1190,10 @@ impl PostgresAgentGithubCoding {
         for file in files {
             let path = path_within_checkout(checkout_path, &file.relative_path)
                 .map_err(GithubCodingError::Validation)?;
-            let parent = path.rsplit_once('/').map(|(p, _)| p).unwrap_or(checkout_path);
+            let parent = path
+                .rsplit_once('/')
+                .map(|(p, _)| p)
+                .unwrap_or(checkout_path);
             let mkdir = format!("mkdir -p {}", shell_quote(parent));
             exec_ok(computer, &mkdir).await?;
             computer
@@ -1246,15 +1251,11 @@ async fn resolve_pr_target(
         ));
     }
 
-    let session = sessions
-        .get(owner_id, run_id)
-        .await?
-        .ok_or_else(|| {
-            GithubCodingError::Validation(
-                "Provide owner, repo, and pullRequestNumber, or resume the pull request first."
-                    .into(),
-            )
-        })?;
+    let session = sessions.get(owner_id, run_id).await?.ok_or_else(|| {
+        GithubCodingError::Validation(
+            "Provide owner, repo, and pullRequestNumber, or resume the pull request first.".into(),
+        )
+    })?;
     let number = session
         .source_pr_number
         .or(session.pr_number)
@@ -1300,18 +1301,16 @@ fn parse_check_commands(args: &Value) -> Result<Vec<String>, GithubCodingError> 
 }
 
 fn validations_to_json(validations: &[VerifiedCheck]) -> Value {
-    json!(
-        validations
-            .iter()
-            .map(|v| {
-                json!({
-                    "command": v.command,
-                    "exitCode": v.exit_code,
-                    "ok": v.ok
-                })
+    json!(validations
+        .iter()
+        .map(|v| {
+            json!({
+                "command": v.command,
+                "exitCode": v.exit_code,
+                "ok": v.ok
             })
-            .collect::<Vec<_>>()
-    )
+        })
+        .collect::<Vec<_>>())
 }
 
 fn to_github_tree_changes(changes: &[GitFileChange]) -> Vec<GitHubTreeChange> {

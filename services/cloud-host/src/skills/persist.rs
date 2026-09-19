@@ -7,9 +7,7 @@ use sqlx::PgPool;
 
 use crate::error::ApiError;
 
-use super::db::{
-    create_skill_with_version_and_attach, list_skills, SkillRow, SkillVersionRow,
-};
+use super::db::{create_skill_with_version_and_attach, list_skills, SkillRow, SkillVersionRow};
 use super::draft::{apply_skill_save_overrides, title_to_skill_slug};
 
 pub fn skill_package_files_from_draft(files: &[SkillDraftFile]) -> Vec<SkillPackageFile> {

@@ -215,11 +215,8 @@ mod tests {
                 }),
             ),
         ];
-        let verified = verify_check_commands_from_events(
-            &events,
-            &[String::from("pnpm test")],
-        )
-        .expect("verified");
+        let verified = verify_check_commands_from_events(&events, &[String::from("pnpm test")])
+            .expect("verified");
         assert_eq!(verified.len(), 1);
         assert!(verified[0].ok);
     }
@@ -240,12 +237,9 @@ mod tests {
             ok: true,
             workspace_fingerprint: "fp-before-edit".into(),
         }];
-        let err = verify_check_commands_for_review(
-            &certified,
-            &[String::from("true")],
-            "fp-after-edit",
-        )
-        .expect_err("stale");
+        let err =
+            verify_check_commands_for_review(&certified, &[String::from("true")], "fp-after-edit")
+                .expect_err("stale");
         assert!(matches!(err, GithubCodingError::Validation(_)));
     }
 
@@ -257,12 +251,9 @@ mod tests {
             ok: true,
             workspace_fingerprint: "fp-current".into(),
         }];
-        let verified = verify_check_commands_for_review(
-            &certified,
-            &[String::from("true")],
-            "fp-current",
-        )
-        .expect("verified");
+        let verified =
+            verify_check_commands_for_review(&certified, &[String::from("true")], "fp-current")
+                .expect("verified");
         assert_eq!(verified[0].workspace_fingerprint, "fp-current");
     }
 
@@ -283,8 +274,7 @@ mod tests {
 
     #[test]
     fn explicit_no_checks_empty_ok() {
-        let verified =
-            verify_check_commands_for_review(&[], &[], "fp-any").expect("empty");
+        let verified = verify_check_commands_for_review(&[], &[], "fp-any").expect("empty");
         assert!(verified.is_empty());
     }
 }

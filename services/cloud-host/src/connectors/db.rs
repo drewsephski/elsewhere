@@ -349,18 +349,25 @@ pub async fn store_oauth_state(
     owner_id: &str,
     provider: &str,
     expires_at: DateTime<Utc>,
+    return_to: Option<&str>,
 ) -> Result<(), ApiError> {
     sqlx::query(
-        "INSERT INTO connector_oauth_states (state, owner_id, provider, expires_at) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO connector_oauth_states (state, owner_id, provider, expires_at, return_to) VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(state)
     .bind(owner_id)
     .bind(provider)
     .bind(expires_at)
+    .bind(return_to)
     .execute(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumedOAuthState {
+    pub return_to: Option<String>,
 }
 
 pub async fn consume_oauth_state(
@@ -368,13 +375,13 @@ pub async fn consume_oauth_state(
     state: &str,
     provider: &str,
     owner_id: &str,
-) -> Result<bool, ApiError> {
+) -> Result<Option<ConsumedOAuthState>, ApiError> {
     let now = Utc::now();
-    let consumed: Option<String> = sqlx::query_scalar(
+    let consumed: Option<(Option<String>,)> = sqlx::query_as(
         r#"
         DELETE FROM connector_oauth_states
         WHERE state = $1 AND provider = $2 AND owner_id = $3 AND expires_at > $4
-        RETURNING owner_id
+        RETURNING return_to
         "#,
     )
     .bind(state)
@@ -384,7 +391,7 @@ pub async fn consume_oauth_state(
     .fetch_optional(pool)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(consumed.is_some())
+    Ok(consumed.map(|(return_to,)| ConsumedOAuthState { return_to }))
 }
 
 pub async fn purge_expired_oauth_states(pool: &PgPool) -> Result<(), ApiError> {

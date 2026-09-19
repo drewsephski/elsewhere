@@ -162,8 +162,7 @@ pub async fn start(
     Path(bot_id): Path<String>,
     Json(body): Json<StartOnboardingRequest>,
 ) -> Result<Json<OnboardingResponse>, ApiError> {
-    let record =
-        service::start_setup(&state, principal.owner_id(), &bot_id, body.restart).await?;
+    let record = service::start_setup(&state, principal.owner_id(), &bot_id, body.restart).await?;
     Ok(Json(to_response(record)))
 }
 
@@ -192,8 +191,7 @@ pub async fn apply(
     Path(bot_id): Path<String>,
     Json(body): Json<ApplyOnboardingRequest>,
 ) -> Result<Json<OnboardingResponse>, ApiError> {
-    let record =
-        service::apply_setup(&state, principal.owner_id(), &bot_id, body.revision).await?;
+    let record = service::apply_setup(&state, principal.owner_id(), &bot_id, body.revision).await?;
     Ok(Json(to_response(record)))
 }
 

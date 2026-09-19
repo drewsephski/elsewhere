@@ -506,19 +506,18 @@ async fn github_coding_publish_allowed_opens_pull_request(pool: PgPool) {
     .expect("publish");
 
     assert_eq!(
-        published.get("pullRequest")
+        published
+            .get("pullRequest")
             .and_then(|v| v.get("number"))
             .and_then(|v| v.as_u64()),
         Some(42)
     );
-    assert!(
-        published
-            .get("pullRequest")
-            .and_then(|v| v.get("url"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .contains("/pull/42")
-    );
+    assert!(published
+        .get("pullRequest")
+        .and_then(|v| v.get("url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .contains("/pull/42"));
 
     let body = published.to_string();
     assert!(
@@ -695,7 +694,10 @@ async fn github_coding_publish_rejected_after_workspace_change(pool: PgPool) {
     .expect("review");
     mock_github_open_pulls_empty(&server).await;
     computer
-        .write_file(&demo_readme_path("run-stale"), b"Changed again after review")
+        .write_file(
+            &demo_readme_path("run-stale"),
+            b"Changed again after review",
+        )
         .await
         .unwrap();
     let err = dispatch_github_coding_tool(
@@ -806,8 +808,7 @@ async fn github_coding_session_survives_service_reconstruction(pool: PgPool) {
     let server = MockServer::start().await;
     let tarball = minimal_tarball_with_readme();
     mock_github_api(&server, tarball).await;
-    let working_branch =
-        cloud_host::github_coding::working_branch("readme-fix", "run-reload");
+    let working_branch = cloud_host::github_coding::working_branch("readme-fix", "run-reload");
     mock_publish_apis(&server, &working_branch).await;
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
     let secret = test_secret_box();

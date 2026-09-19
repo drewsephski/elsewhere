@@ -197,14 +197,12 @@ async fn seed_completed_run(
     .unwrap();
     tx.commit().await.unwrap();
 
-    sqlx::query(
-        "UPDATE messages SET body = $2, status = 'complete' WHERE id = $1",
-    )
-    .bind(&records.assistant_message_id)
-    .bind(answer)
-    .execute(pool)
-    .await
-    .unwrap();
+    sqlx::query("UPDATE messages SET body = $2, status = 'complete' WHERE id = $1")
+        .bind(&records.assistant_message_id)
+        .bind(answer)
+        .execute(pool)
+        .await
+        .unwrap();
     sqlx::query(
         "UPDATE agent_runs SET status = 'completed', finished_at = NOW(), updated_at = NOW() WHERE id = $1",
     )
@@ -258,11 +256,11 @@ async fn skill_list_includes_attachment_state(pool: PgPool) {
     let owner = format!("owner-{}", Uuid::new_v4());
     let (bot_id, _) = seed_bot(&pool, &owner).await;
     let md = "---\nname: list-test\ndescription: d\n---\n\nbody\n";
-    let package = agent_skills::SkillPackage::validate_and_build(md, &[], Some("list-test")).unwrap();
-    let (skill, _) =
-        skills::create_skill_with_version(&pool, &owner, "list-test", &package, &[])
-            .await
-            .unwrap();
+    let package =
+        agent_skills::SkillPackage::validate_and_build(md, &[], Some("list-test")).unwrap();
+    let (skill, _) = skills::create_skill_with_version(&pool, &owner, "list-test", &package, &[])
+        .await
+        .unwrap();
     skills::attach_bot_skill(&pool, &owner, &bot_id, &skill.id, None)
         .await
         .unwrap();
@@ -279,15 +277,23 @@ async fn skill_list_includes_attachment_state(pool: PgPool) {
         })
         .await
         .unwrap();
-    assert!(rows.iter().any(|row| row.slug == "list-test" && row.attached_to_bot));
+    assert!(rows
+        .iter()
+        .any(|row| row.slug == "list-test" && row.attached_to_bot));
 }
 
 #[sqlx::test(migrations = "./migrations")]
 async fn skill_save_requires_approval_and_attaches(pool: PgPool) {
     let owner = format!("owner-{}", Uuid::new_v4());
     let (bot_id, _) = seed_bot(&pool, &owner).await;
-    let (_prior_run, conversation_id) =
-        seed_completed_run(&pool, &owner, &bot_id, "Research competitors", "Brief ready.").await;
+    let (_prior_run, conversation_id) = seed_completed_run(
+        &pool,
+        &owner,
+        &bot_id,
+        "Research competitors",
+        "Brief ready.",
+    )
+    .await;
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
     let args = json!({
@@ -306,13 +312,12 @@ async fn skill_save_requires_approval_and_attaches(pool: PgPool) {
     )
     .await;
     let approval_id = wait_pending_approval(&pool, &owner).await;
-    let pending: (String,) = sqlx::query_as(
-        "SELECT tool_name FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let pending: (String,) =
+        sqlx::query_as("SELECT tool_name FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(pending.0, "skill_save_recent_work");
     let app = build_router(state.clone());
     let approve = app
@@ -327,7 +332,9 @@ async fn skill_save_requires_approval_and_attaches(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(approve.status(), axum::http::StatusCode::OK);
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&request_id);
 
@@ -345,8 +352,7 @@ async fn skill_save_requires_approval_and_attaches(pool: PgPool) {
 async fn denied_skill_save_persists_nothing(pool: PgPool) {
     let owner = format!("owner-{}", Uuid::new_v4());
     let (bot_id, _) = seed_bot(&pool, &owner).await;
-    let (_, conversation_id) =
-        seed_completed_run(&pool, &owner, &bot_id, "Task", "Done").await;
+    let (_, conversation_id) = seed_completed_run(&pool, &owner, &bot_id, "Task", "Done").await;
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
@@ -373,7 +379,9 @@ async fn denied_skill_save_persists_nothing(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(deny.status(), axum::http::StatusCode::OK);
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&request_id);
     assert!(skills::list_skills(&pool, &owner).await.unwrap().is_empty());
@@ -394,21 +402,20 @@ async fn skill_save_uses_prior_run_not_current(pool: PgPool) {
         "save skill",
         &request_id,
         Some(&conversation_id),
-        ScriptedModel::calls(
-            "skill_save_recent_work",
-            r#"{"name":"From first task"}"#,
-        ),
+        ScriptedModel::calls("skill_save_recent_work", r#"{"name":"From first task"}"#),
     )
     .await;
     let approval_id = wait_pending_approval(&pool, &owner).await;
-    let args: serde_json::Value = sqlx::query_scalar(
-        "SELECT arguments_json FROM tool_approval_requests WHERE id = $1",
-    )
-    .bind(&approval_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(args.get("name").and_then(|v| v.as_str()), Some("From first task"));
+    let args: serde_json::Value =
+        sqlx::query_scalar("SELECT arguments_json FROM tool_approval_requests WHERE id = $1")
+            .bind(&approval_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        args.get("name").and_then(|v| v.as_str()),
+        Some("From first task")
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -443,8 +450,7 @@ async fn duplicate_slug_is_conflict(pool: PgPool) {
     skills::create_skill_with_version(&pool, &owner, "competitor-brief", &package, &[])
         .await
         .unwrap();
-    let (_, conversation_id) =
-        seed_completed_run(&pool, &owner, &bot_id, "Task", "Done").await;
+    let (_, conversation_id) = seed_completed_run(&pool, &owner, &bot_id, "Task", "Done").await;
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
@@ -454,10 +460,7 @@ async fn duplicate_slug_is_conflict(pool: PgPool) {
         "save",
         &request_id,
         Some(&conversation_id),
-        ScriptedModel::calls(
-            "skill_save_recent_work",
-            r#"{"name":"Competitor brief"}"#,
-        ),
+        ScriptedModel::calls("skill_save_recent_work", r#"{"name":"Competitor brief"}"#),
     )
     .await;
     wait_no_active_runs(&pool, &owner).await;
@@ -471,11 +474,11 @@ async fn attach_and_detach_require_approval(pool: PgPool) {
     let owner = format!("owner-{}", Uuid::new_v4());
     let (bot_id, _) = seed_bot(&pool, &owner).await;
     let md = "---\nname: attach-me\ndescription: d\n---\n\nb\n";
-    let package = agent_skills::SkillPackage::validate_and_build(md, &[], Some("attach-me")).unwrap();
-    let (skill, _) =
-        skills::create_skill_with_version(&pool, &owner, "attach-me", &package, &[])
-            .await
-            .unwrap();
+    let package =
+        agent_skills::SkillPackage::validate_and_build(md, &[], Some("attach-me")).unwrap();
+    let (skill, _) = skills::create_skill_with_version(&pool, &owner, "attach-me", &package, &[])
+        .await
+        .unwrap();
     let state = jwt_state(pool.clone());
     let attach_req = Uuid::new_v4().to_string();
     start_run(
@@ -485,26 +488,25 @@ async fn attach_and_detach_require_approval(pool: PgPool) {
         "attach",
         &attach_req,
         None,
-        ScriptedModel::calls(
-            "skill_attach",
-            &json!({ "skillId": skill.id }).to_string(),
-        ),
+        ScriptedModel::calls("skill_attach", &json!({ "skillId": skill.id }).to_string()),
     )
     .await;
     let attach_approval = wait_pending_approval(&pool, &owner).await;
     let app = build_router(state.clone());
     app.clone()
         .oneshot(
-        axum::http::Request::builder()
-            .method("POST")
-            .uri(format!("/v1/approvals/{attach_approval}/approve"))
-            .header("Authorization", format!("Bearer {}", token(&owner)))
-            .body(axum::body::Body::empty())
-            .unwrap(),
-    )
-    .await
-    .unwrap();
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+            axum::http::Request::builder()
+                .method("POST")
+                .uri(format!("/v1/approvals/{attach_approval}/approve"))
+                .header("Authorization", format!("Bearer {}", token(&owner)))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&attach_req);
     assert_eq!(
@@ -523,10 +525,7 @@ async fn attach_and_detach_require_approval(pool: PgPool) {
         "detach",
         &detach_req,
         None,
-        ScriptedModel::calls(
-            "skill_detach",
-            &json!({ "skillId": skill.id }).to_string(),
-        ),
+        ScriptedModel::calls("skill_detach", &json!({ "skillId": skill.id }).to_string()),
     )
     .await;
     let detach_approval = wait_pending_approval(&pool, &owner).await;
@@ -540,15 +539,15 @@ async fn attach_and_detach_require_approval(pool: PgPool) {
     )
     .await
     .unwrap();
-    cloud_host::worker::dispatch_available(&state).await.unwrap();
+    cloud_host::worker::dispatch_available(&state)
+        .await
+        .unwrap();
     wait_no_active_runs(&pool, &owner).await;
     state.clear_test_run_overrides(&detach_req);
-    assert!(
-        skills::list_bot_skills(&pool, &owner, &bot_id)
-            .await
-            .unwrap()
-            .is_empty()
-    );
+    assert!(skills::list_bot_skills(&pool, &owner, &bot_id)
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -621,13 +620,7 @@ async fn reviewed_skill_package_files_persist(pool: PgPool) {
         content_type: None,
     }];
     let (skill, _) = cloud_host::skills::save_reviewed_skill_package(
-        &pool,
-        &owner,
-        md,
-        &files,
-        None,
-        None,
-        None,
+        &pool, &owner, md, &files, None, None, None,
     )
     .await
     .unwrap();
@@ -667,13 +660,7 @@ async fn invalid_package_file_rejected_before_persist(pool: PgPool) {
         content_type: None,
     }];
     let err = cloud_host::skills::save_reviewed_skill_package(
-        &pool,
-        &owner,
-        md,
-        &files,
-        None,
-        None,
-        None,
+        &pool, &owner, md, &files, None, None, None,
     )
     .await
     .unwrap_err();
@@ -705,17 +692,10 @@ async fn create_with_attach_rolls_back_on_missing_bot(pool: PgPool) {
         .await
         .unwrap()
         .is_empty());
-    let (retry, _) = cloud_host::skills::save_reviewed_skill_package(
-        &pool,
-        &owner,
-        md,
-        &[],
-        None,
-        None,
-        None,
-    )
-    .await
-    .unwrap();
+    let (retry, _) =
+        cloud_host::skills::save_reviewed_skill_package(&pool, &owner, md, &[], None, None, None)
+            .await
+            .unwrap();
     assert_eq!(retry.slug, "atomic-test");
 }
 
@@ -742,10 +722,7 @@ async fn archived_attach_rejected_before_approval_in_run(pool: PgPool) {
         "attach archived",
         &request_id,
         None,
-        ScriptedModel::calls(
-            "skill_attach",
-            &json!({ "skillId": skill.id }).to_string(),
-        ),
+        ScriptedModel::calls("skill_attach", &json!({ "skillId": skill.id }).to_string()),
     )
     .await;
     wait_no_active_runs(&pool, &owner).await;
@@ -760,10 +737,9 @@ async fn detach_not_attached_skips_approval(pool: PgPool) {
     let md = "---\nname: loose-skill\ndescription: d\n---\n\nb\n";
     let package =
         agent_skills::SkillPackage::validate_and_build(md, &[], Some("loose-skill")).unwrap();
-    let (skill, _) =
-        skills::create_skill_with_version(&pool, &owner, "loose-skill", &package, &[])
-            .await
-            .unwrap();
+    let (skill, _) = skills::create_skill_with_version(&pool, &owner, "loose-skill", &package, &[])
+        .await
+        .unwrap();
     let state = jwt_state(pool.clone());
     let request_id = Uuid::new_v4().to_string();
     start_run(
@@ -773,10 +749,7 @@ async fn detach_not_attached_skips_approval(pool: PgPool) {
         "detach",
         &request_id,
         None,
-        ScriptedModel::calls(
-            "skill_detach",
-            &json!({ "skillId": skill.id }).to_string(),
-        ),
+        ScriptedModel::calls("skill_detach", &json!({ "skillId": skill.id }).to_string()),
     )
     .await;
     wait_no_active_runs(&pool, &owner).await;
@@ -812,10 +785,9 @@ async fn bot_persist_save_keeps_package_files(pool: PgPool) {
         draft_kind: None,
     };
     let saved = service.persist_save(&ctx, &draft).await.unwrap();
-    let stored =
-        skills::list_version_package_files(&pool, &owner, &saved.skill_id, saved.version)
-            .await
-            .unwrap();
+    let stored = skills::list_version_package_files(&pool, &owner, &saved.skill_id, saved.version)
+        .await
+        .unwrap();
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].content, "Keep me");
     assert_eq!(
