@@ -6,14 +6,14 @@ pub const MAX_WRITE_CONTENT_PREVIEW_CHARS: usize = 200;
 pub const MAX_BROWSER_URL_CHARS: usize = 2048;
 
 use crate::connectors::ConnectorToolDefinition;
+use crate::github_coding::is_github_coding_mutation_tool;
+use crate::routines::is_routine_mutation_tool;
+use crate::skills::is_skill_mutation_tool;
 use crate::tool_catalog::{
     is_attachment_tool, is_browser_tool, is_collaboration_tool, is_connected_apps_execute_tool,
     is_connected_apps_tool, is_github_coding_tool, is_github_connector_tool, is_routine_tool,
     is_skill_tool, is_user_question_tool,
 };
-use crate::github_coding::is_github_coding_mutation_tool;
-use crate::routines::is_routine_mutation_tool;
-use crate::skills::is_skill_mutation_tool;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolOperationKind {
@@ -135,6 +135,7 @@ impl ToolApprovalGate for AllowAllApprovalGate {
 pub fn operation_kind_for_tool(tool_name: &str) -> ToolOperationKind {
     match tool_name {
         "bot_list" => ToolOperationKind::Read,
+        "bot_create" => ToolOperationKind::Mutation,
         "bot_delegate" => ToolOperationKind::Mutation,
         "run_subagent" => ToolOperationKind::Mutation,
         "recall_memory" => ToolOperationKind::Read,
@@ -215,6 +216,11 @@ pub fn sanitize_tool_arguments(tool_name: &str, args: &Value) -> Value {
             "messageLength": args.get("message").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0)
         }),
         "bot_list" => json!({}),
+        "bot_create" => json!({
+            "name": args.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+            "role": args.get("instructions").and_then(|v| v.as_str()).map(|t| truncate_str(t, 120)),
+            "avatarId": args.get("avatarId").and_then(|v| v.as_str()).unwrap_or("")
+        }),
         "bot_delegate" => json!({
             "targetBotId": args.get("targetBotId").and_then(|v| v.as_str()).unwrap_or(""),
             "instructionLength": args.get("instruction").and_then(|v| v.as_str()).map(|s| s.len()).unwrap_or(0),
@@ -429,7 +435,10 @@ fn sanitize_routine_create_arguments(args: &Value) -> Value {
 
 fn sanitize_routine_toggle_arguments(args: &Value) -> Value {
     let routine_id = args.get("routineId").and_then(|v| v.as_str()).unwrap_or("");
-    let name = args.get("routineName").and_then(|v| v.as_str()).unwrap_or("");
+    let name = args
+        .get("routineName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let schedule_label = args
         .get("scheduleLabel")
         .and_then(|v| v.as_str())
@@ -448,9 +457,18 @@ fn sanitize_routine_toggle_arguments(args: &Value) -> Value {
 
 fn sanitize_skill_save_arguments(args: &Value) -> Value {
     let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let description = args.get("description").and_then(|v| v.as_str()).unwrap_or("");
-    let bot_name = args.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
-    let attach = args.get("attachToBot").and_then(|v| v.as_bool()).unwrap_or(true);
+    let description = args
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let bot_name = args
+        .get("botName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("this Bot");
+    let attach = args
+        .get("attachToBot")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
     let preview = args
         .get("skillMdPreview")
         .and_then(|v| v.as_str())
@@ -474,7 +492,10 @@ fn sanitize_skill_save_arguments(args: &Value) -> Value {
 fn sanitize_skill_attach_arguments(args: &Value) -> Value {
     let skill_id = args.get("skillId").and_then(|v| v.as_str()).unwrap_or("");
     let name = args.get("skillName").and_then(|v| v.as_str()).unwrap_or("");
-    let bot_name = args.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+    let bot_name = args
+        .get("botName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("this Bot");
     json!({
         "skillId": skill_id,
         "skillName": truncate_str(name, 80),
@@ -492,7 +513,10 @@ fn routine_schedule_label_from_value(schedule: &Value) -> Option<String> {
     let at = schedule.get("at").and_then(|v| v.as_str());
     match repeat {
         "every_minutes" => {
-            let minutes = schedule.get("everyMinutes").and_then(|v| v.as_i64()).unwrap_or(60);
+            let minutes = schedule
+                .get("everyMinutes")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(60);
             Some(format!("every {minutes} minutes"))
         }
         "daily" => Some(format!("every day at {}", at.unwrap_or("08:00"))),
@@ -511,12 +535,18 @@ fn routine_schedule_label_from_value(schedule: &Value) -> Option<String> {
 pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
     match tool_name {
         "routine_create" => {
-            let name = sanitized.get("name").and_then(|v| v.as_str()).unwrap_or("routine");
+            let name = sanitized
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("routine");
             let schedule = sanitized
                 .get("scheduleLabel")
                 .and_then(|v| v.as_str())
                 .unwrap_or("on a schedule");
-            let timezone = sanitized.get("timezone").and_then(|v| v.as_str()).unwrap_or("UTC");
+            let timezone = sanitized
+                .get("timezone")
+                .and_then(|v| v.as_str())
+                .unwrap_or("UTC");
             format!("Run \"{name}\" {schedule} ({timezone})")
         }
         "routine_pause" => {
@@ -536,9 +566,18 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
             format!("Resume \"{name}\"")
         }
         "skill_save_recent_work" => {
-            let name = sanitized.get("name").and_then(|v| v.as_str()).unwrap_or("skill");
-            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
-            let attach = sanitized.get("attachToBot").and_then(|v| v.as_bool()).unwrap_or(true);
+            let name = sanitized
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("skill");
+            let bot = sanitized
+                .get("botName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("this Bot");
+            let attach = sanitized
+                .get("attachToBot")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             if attach {
                 format!("Save \"{name}\" and attach to {bot}")
             } else {
@@ -551,7 +590,10 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("this skill");
-            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+            let bot = sanitized
+                .get("botName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("this Bot");
             format!("Attach \"{name}\" to {bot}")
         }
         "skill_detach" => {
@@ -560,7 +602,10 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("this skill");
-            let bot = sanitized.get("botName").and_then(|v| v.as_str()).unwrap_or("this Bot");
+            let bot = sanitized
+                .get("botName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("this Bot");
             format!("Remove \"{name}\" from {bot}")
         }
         "workspace_write" => {
@@ -607,6 +652,16 @@ pub fn approval_action_summary(tool_name: &str, sanitized: &Value) -> String {
                 .and_then(|v| v.as_str())
                 .unwrap_or("helper");
             format!("Run subagent {name}")
+        }
+        "bot_create" => {
+            let name = sanitized
+                .get("name")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            match name {
+                Some(name) => format!("Create Bot \"{name}\""),
+                None => "Create a new Bot?".into(),
+            }
         }
         "github_publish_pull_request" => {
             let repo = sanitized
@@ -712,6 +767,10 @@ mod tests {
             ToolOperationKind::Mutation
         );
         assert_eq!(
+            operation_kind_for_tool("bot_create"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
             operation_kind_for_tool("run_subagent"),
             ToolOperationKind::Mutation
         );
@@ -775,5 +834,33 @@ mod tests {
         );
         assert_eq!(sanitized.get("contentLength"), Some(&json!(5)));
         assert_eq!(sanitized.get("contentPreview"), Some(&json!("hello")));
+    }
+
+    #[test]
+    fn bot_create_is_a_named_mutation() {
+        assert_eq!(
+            operation_kind_for_tool("bot_create"),
+            ToolOperationKind::Mutation
+        );
+        assert_eq!(
+            approval_action_summary("bot_create", &json!({ "name": "Researcher" })),
+            "Create Bot \"Researcher\""
+        );
+        assert_eq!(
+            approval_action_summary("bot_create", &json!({ "name": "" })),
+            "Create a new Bot?"
+        );
+        let sanitized = sanitize_tool_arguments(
+            "bot_create",
+            &json!({
+                "name": "Researcher",
+                "instructions": "Find primary sources",
+                "avatarId": "sky-wisp"
+            }),
+        );
+        assert_eq!(sanitized.get("name"), Some(&json!("Researcher")));
+        assert_eq!(sanitized.get("role"), Some(&json!("Find primary sources")));
+        assert_eq!(sanitized.get("avatarId"), Some(&json!("sky-wisp")));
+        assert!(sanitized.get("instructions").is_none());
     }
 }

@@ -1,5 +1,9 @@
 # Elsewhere product build — September 13–14, 2026
 
+> **Current status (September 2026):** This document is a historical milestone log through hosted alpha and the first one-way `bot_delegate` slice. It is **not** a live capability matrix.
+>
+> Later `main` adds automatic source-Bot resume (`source_resume_run_id`, `collaboration_lifecycle.rs`), `bot_create` for persistent teammates, groups/@mentions, GitHub PR publish/update, desktop CloudShell route parity, and provider-neutral artifact handoff. Treat [GROKBOT_EQUIVALENCE_ROADMAP.md](GROKBOT_EQUIVALENCE_ROADMAP.md) as a dated assessment with a current-status banner, not as today’s gaps.
+
 ## Product assessment
 
 Elsewhere is a place to create AI workers and give them computers. The implemented subscription engine, portable AgentComputer boundary, Postgres history, ownership, and approval gate are the foundation. The previous top-level docs substantially understated those capabilities.
@@ -111,15 +115,17 @@ The user approved the reduced testing scope. Deployed one 512 MB Fly web Machine
 
 ### 9 — Durable asynchronous Bot delegation (handoff)
 
-**Supported now**
+**This subsection is historical (September 14 slice).** Current code and tests implement automatic source-Bot resume, `bot_create`, and bounded artifact transfer. Do not treat the “not yet supported” list below as current product facts.
+
+**Supported in that original slice**
 
 - One-way asynchronous Bot delegation: a running Bot can `bot_list` teammates and `bot_delegate` durable queued work to another Bot under the same owner without waiting for completion.
 - Durable `bot_delegations` rows, owner-scoped HTTP APIs, run-event mirroring (`bot_delegation_*`), and UI handoff cards with links to the recipient's work.
 
-**Not yet supported**
+**Not yet supported *in that original slice* (since superseded)**
 
-- Automatically waking the originating Bot when the recipient finishes.
-- Group chat, @mentions, or multi-Bot parallel Codex execution on one host.
-- Automatic cross-computer artifact transfer (bounded text context only in this slice).
+- Automatically waking the originating Bot when the recipient finishes — **now supported** (`source_resume_run_id`, `resume_source`, `collaboration_lifecycle.rs`, `bot_create.rs` team-loop test).
+- Group chat, @mentions, or multi-Bot parallel Codex execution on one host — **groups/@mentions now exist**; parallel Codex on one host remains bounded by the single runner.
+- Automatic cross-computer artifact transfer — **now implemented** as server-mediated `delegation_artifact_transfers` through `ComputerRegistry::connect_agent_computer`.
 
 The user completed real hosted ChatGPT device pairing. The connection persisted after a hosted runner restart and full browser reload. A real five-tool Luna assignment completed through approved Sprite writes and read-back, and saved an artifact that triggered a browser download. The same Machine/volume survived an image update; a profile snapshot completed. Local web/Postgres are now stopped. A timed assignment and 04:40 Central routine are prepared for the user to close the laptop. Actual laptop-off completion, fresh-session retrieval, and backup restore remain open gates. These deployment checks do not establish the laptop-off promise.

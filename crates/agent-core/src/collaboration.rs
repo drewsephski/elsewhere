@@ -7,6 +7,7 @@ pub const MAX_DELEGATION_DEPTH: i32 = 4;
 pub const MAX_CHILD_DELEGATIONS_PER_ROOT: i64 = 8;
 pub const MAX_DELEGATION_INSTRUCTION_CHARS: usize = 10_000;
 pub const MAX_DELEGATION_CONTEXT_CHARS: usize = 4_000;
+pub const MAX_AGENT_CREATED_BOTS_PER_ROOT: i64 = 4;
 
 #[derive(Debug, Clone)]
 pub struct CollaborationContext {
@@ -36,6 +37,14 @@ pub struct DelegationEnqueueResult {
     pub target_bot_name: String,
     pub target_run_id: String,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BotCreateResult {
+    pub bot_id: String,
+    pub name: String,
+    pub computer_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,4 +93,12 @@ pub trait AgentCollaboration: Send + Sync {
         context: Option<&str>,
         return_policy: &str,
     ) -> Result<DelegationEnqueueResult, CollaborationError>;
+
+    async fn create_bot(
+        &self,
+        ctx: &CollaborationContext,
+        name: &str,
+        instructions: &str,
+        avatar_id: Option<&str>,
+    ) -> Result<BotCreateResult, CollaborationError>;
 }

@@ -77,8 +77,8 @@ pub async fn get_bot_for_owner(
     .await
 }
 
-pub async fn insert_bot(
-    pool: &PgPool,
+pub async fn insert_bot<'e, E>(
+    executor: E,
     owner_id: &str,
     name: &str,
     instructions: &str,
@@ -86,7 +86,10 @@ pub async fn insert_bot(
     computer_id: Option<&str>,
     engine_preference: &str,
     avatar_id: &str,
-) -> Result<BotRow, ApiError> {
+) -> Result<BotRow, ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
     let id = Uuid::new_v4().to_string();
     let now = Utc::now();
     sqlx::query_as(
@@ -108,7 +111,7 @@ pub async fn insert_bot(
     .bind(engine_preference)
     .bind(avatar_id)
     .bind(now)
-    .fetch_one(pool)
+    .fetch_one(executor)
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))
 }
@@ -173,7 +176,8 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
         return Ok(false);
     }
 
-    // Remove dependent rows in FK-safe order (all scoped to this owner + bot).
+    // Remove dependent rows in FK-safe order. Direct conversations are deleted; group
+    // conversations stay, but this bot is detached from them first.
     sqlx::query(
         r#"
         DELETE FROM work_queue
@@ -251,9 +255,135 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
     .await
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    sqlx::query(
+        r#"
+        UPDATE channel_events
+        SET run_id = NULL
+        WHERE run_id IN (
+            SELECT id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        UPDATE channel_deliveries
+        SET source_run_id = NULL
+        WHERE source_run_id IN (
+            SELECT id FROM agent_runs WHERE bot_id = $1 AND owner_id = $2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        UPDATE bot_delegations
+        SET parent_delegation_id = NULL
+        WHERE parent_delegation_id IN (
+            SELECT id FROM (
+                SELECT id FROM bot_delegations
+                WHERE owner_id = $2 AND (source_bot_id = $1 OR target_bot_id = $1)
+            ) dangling_parents
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM bot_delegations
+        WHERE owner_id = $2 AND (source_bot_id = $1 OR target_bot_id = $1)
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM bot_creations
+        WHERE owner_id = $2 AND (source_bot_id = $1 OR created_bot_id = $1)
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM run_subagents WHERE bot_id = $1 AND owner_id = $2")
+        .bind(bot_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     sqlx::query("DELETE FROM agent_runs WHERE bot_id = $1 AND owner_id = $2")
         .bind(bot_id)
         .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM channel_threads
+        WHERE owner_id = $2 AND (
+            bot_id = $1
+            OR conversation_id IN (
+                SELECT id FROM conversations WHERE bot_id = $1 AND owner_id = $2
+            )
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        DELETE FROM conversation_participants
+        WHERE bot_id = $1 AND owner_id = $2
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM conversation_bot_threads WHERE bot_id = $1")
+        .bind(bot_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM group_message_recipients WHERE bot_id = $1")
+        .bind(bot_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("UPDATE messages SET author_bot_id = NULL WHERE author_bot_id = $1")
+        .bind(bot_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -273,6 +403,26 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
     .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     sqlx::query("DELETE FROM conversations WHERE bot_id = $1 AND owner_id = $2")
+        .bind(bot_id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query(
+        r#"
+        UPDATE channel_connections
+        SET default_bot_id = NULL
+        WHERE default_bot_id = $1 AND owner_id = $2
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    sqlx::query("DELETE FROM channel_oauth_states WHERE bot_id = $1 AND owner_id = $2")
         .bind(bot_id)
         .bind(owner_id)
         .execute(&mut *tx)

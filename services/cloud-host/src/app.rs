@@ -59,10 +59,7 @@ pub fn build_router(state: AppState) -> Router {
                 .patch(api::bots::patch)
                 .delete(api::bots::delete),
         )
-        .route(
-            "/v1/bots/{id}/onboarding",
-            get(crate::bot_onboarding::get),
-        )
+        .route("/v1/bots/{id}/onboarding", get(crate::bot_onboarding::get))
         .route(
             "/v1/bots/{id}/onboarding/start",
             post(crate::bot_onboarding::start),

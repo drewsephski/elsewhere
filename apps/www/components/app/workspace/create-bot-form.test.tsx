@@ -75,6 +75,14 @@ describe("CreateBotForm", () => {
     expect(screen.queryByLabelText("Computer")).toBeNull();
   });
 
+  it("links to ChatGPT settings when the provider is disconnected", () => {
+    providerState.connected = false;
+    render(<CreateBotForm onOutcome={vi.fn()} showProviderCard={false} />);
+    const link = screen.getByRole("link", { name: "Connect ChatGPT" });
+    expect(link.getAttribute("href")).toBe("/app?settings=chatgpt");
+    providerState.connected = true;
+  });
+
   it("creates a bot without a run when no task is provided", async () => {
     const onOutcome = vi.fn();
     fetchMock.mockImplementation(async (path: string, init?: RequestInit) => {

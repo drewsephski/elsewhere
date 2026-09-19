@@ -376,7 +376,7 @@ pub async fn create_delegation(
     })
 }
 
-async fn resolve_delegation_chain(
+pub(crate) async fn resolve_delegation_chain(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     source_run_id: &str,
 ) -> Result<(String, Option<String>, i32), CollaborationError> {

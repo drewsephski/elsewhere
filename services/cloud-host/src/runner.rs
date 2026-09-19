@@ -363,10 +363,11 @@ Do not claim a file exists until its tool result reports success; if a tool fail
 This results directory belongs to this assignment. Downloads support up to 20 top-level files, 1 MB each, 5 MB total. \
 Include a clear final summary. File creation, shell commands, and browser mutations still require approval.\n\n\
 Bot collaboration:\n\
-- Use bot_list to discover other Bots owned by the same user.\n\
-- Use bot_delegate to hand durable work to a specialist asynchronously; it only queues work and returns immediately.\n\
-- Use run_subagent for a temporary helper inside this assignment. It has no computer, is not another Bot, and you wait for its findings before continuing.\n\
-- Do not delegate trivial work or repeat the same handoff unnecessarily.\n\
+- Use bot_list first to discover existing persistent teammates owned by the same user.\n\
+- Use bot_create only when a durable specialist is genuinely useful and bot_list shows no suitable Bot. Creation requires owner approval, does not start work, and is not for trivial one-off reasoning.\n\
+- Use bot_delegate to hand durable work to an existing or newly created persistent Bot asynchronously; it only queues work and returns immediately. Default onComplete to resume_source when the source needs the findings; use onComplete none only when the source should not resume.\n\
+- Use run_subagent for temporary tool-less help inside the current assignment. It has no computer, is not another Bot, and you wait for its findings before continuing.\n\
+- Do not create a permanent Bot for trivial one-off reasoning; use run_subagent instead.\n\
 - Do not claim another Bot finished work just because delegation was accepted.\n\
 - Cross-computer file paths are not shared; pass bounded text context only unless both Bots share a computer.\n\n\
 Human browser intervention:\n\
@@ -517,7 +518,9 @@ Browser recovery:\n\
             ctx.model.clone(),
         )),
         memory: Some(crate::memory::PostgresAgentMemory::new(pool.clone()) as Arc<dyn AgentMemory>),
-        routines: Some(crate::agent_routines::PostgresAgentRoutines::new(pool.clone())),
+        routines: Some(crate::agent_routines::PostgresAgentRoutines::new(
+            pool.clone(),
+        )),
         skills: Some(crate::agent_skills::PostgresAgentSkills::new(
             pool.clone(),
             host_state.config.as_ref().clone(),

@@ -160,9 +160,7 @@ export function ProviderStatusCard({ variant = "panel", className }: ProviderSta
             </p>
           ) : connectBlocked ? (
             <p className="text-center text-xs text-muted-foreground">
-              Sign-in is not enabled on this host. Ask whoever runs Elsewhere to set{" "}
-              <code className="rounded bg-muted px-1 py-0.5 text-[0.7rem]">ELSEWHERE_ALLOW_CODEX_LOGIN=1</code>{" "}
-              and a profiles directory.
+              ChatGPT sign-in is not enabled on this Elsewhere deployment.
             </p>
           ) : (
             <p className="text-center text-xs text-muted-foreground">

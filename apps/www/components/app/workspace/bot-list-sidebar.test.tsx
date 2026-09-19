@@ -113,6 +113,29 @@ describe("BotListSidebar", () => {
     ).toBeNull();
   });
 
+  it("uses destructive delete copy for a Bot", () => {
+    render(
+      <MemoryRouter>
+        <BotListSidebar
+          bots={[bot]}
+          groups={[group]}
+          selectedBotId={bot.id}
+          selectedGroupId={null}
+          runActivityAt={{}}
+          onCreateBot={vi.fn()}
+          onDeleteBot={vi.fn(async () => undefined)}
+          footer={null}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.contextMenu(screen.getByRole("link", { current: "page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(
+      screen.getByText(/Deletes this Bot, its direct conversations, completed work/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Work history may remain/)).toBeNull();
+  });
+
   it("animates a working bot that is not selected", () => {
     const idle: WorkspaceBotPresence = { ...bot, id: "bot_idle", name: "Idle" };
     const working: WorkspaceBotPresence = {

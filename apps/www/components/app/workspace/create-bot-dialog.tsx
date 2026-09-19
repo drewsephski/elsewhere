@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import type { CreateBotOutcome } from "@/lib/bot-quick-start";
 import { botConversationHref, rememberOnboardingOffer } from "@/lib/bot-onboarding";
+import { settingsDialogHref } from "@/lib/settings-sections";
 import { useRouter } from "next/navigation";
 import { CreateBotForm } from "./create-bot-form";
 
@@ -53,6 +54,10 @@ export function CreateBotDialog({ open, onClose }: CreateBotDialogProps) {
         {open ? (
           <CreateBotForm
             showProviderCard={false}
+            onConnectChatGpt={() => {
+              onClose();
+              router.push(settingsDialogHref("chatgpt"));
+            }}
             onOutcome={handleOutcome}
           />
         ) : null}

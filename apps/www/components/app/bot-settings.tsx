@@ -8,7 +8,8 @@ import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
-import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { BOT_DELETE_COPY } from "@/lib/bot-delete-copy";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
 import { Input } from "@/components/ui/input";
@@ -40,13 +41,7 @@ export function BotGeneralSettings({
   }, [bot]);
 
   function handleAvatarChange(nextAvatarId: string) {
-    if (nextAvatarId === avatarId) {
-      return;
-    }
     setAvatarId(nextAvatarId);
-    const defaults = botAvatarFormDefaults(nextAvatarId);
-    setName(defaults.name);
-    setInstructions(defaults.instructions);
   }
 
   async function save(event: React.FormEvent) {
@@ -310,7 +305,7 @@ export function BotDeleteSettings({
   return (
     <div className="max-w-md space-y-3">
       <p className="text-[13px] leading-relaxed text-muted-foreground">
-        Remove this Bot from the workspace. Work history may remain in your account.
+        {BOT_DELETE_COPY}
       </p>
       <Button
         type="button"
@@ -329,7 +324,7 @@ export function BotDeleteSettings({
           }
         }}
         title={`Delete ${bot.name}?`}
-        description="This removes the bot and its settings. Work history may remain in your account."
+        description={BOT_DELETE_COPY}
         confirmLabel="Delete"
         pendingLabel="Deleting…"
         destructive
@@ -339,16 +334,4 @@ export function BotDeleteSettings({
       />
     </div>
   );
-}
-
-/** @deprecated Legacy collapsible used by unused BotChat. Prefer SettingsDialog. */
-export function BotSettings({
-  bot,
-  onSaved,
-}: {
-  bot: BotSummary;
-  onSaved: (bot: BotSummary) => void;
-  embedded?: boolean;
-}) {
-  return <BotGeneralSettings bot={bot} onSaved={onSaved} />;
 }

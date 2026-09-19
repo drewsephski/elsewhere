@@ -1,0 +1,2 @@
+ts	phase	decision	why	evidence	result
+2026-09-19T16:42:38Z	frame	one PR from current main d09210e, keep BrowserPreviewView	origin/main advanced one commit past the audit SHA; do not revert it	git log 7d12120..HEAD	open

@@ -112,7 +112,9 @@ export function ApprovalsDataGrid() {
               {row.original.summary}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {row.original.toolName} · {row.original.toolKind}
+              {[row.original.policyActionLabel, row.original.botName]
+                .filter((part) => Boolean(part?.trim()))
+                .join(" · ")}
             </p>
           </div>
         ),

@@ -29,6 +29,12 @@ describe("permission policy activity", () => {
     );
   });
 
+  it("labels bot_create in the activity timeline", () => {
+    expect(activityText("tool_call", { tool: "bot_create" })).toBe(
+      "Creating a new Bot",
+    );
+  });
+
   it("labels GitHub coding tools in the activity timeline", () => {
     expect(activityText("tool_call", { tool: "github_open_repository" })).toBe(
       "Opening repository",

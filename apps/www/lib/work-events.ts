@@ -18,6 +18,7 @@ function toolLabel(tool: string, payload: Record<string, unknown>): string | nul
     browser_download: "Downloading a file",
     browser_request_human: "Waiting for you in the browser",
     bot_list: "Checking available Bots",
+    bot_create: "Creating a new Bot",
     bot_delegate: "Handing work to another Bot",
     run_subagent: "Running a temporary helper",
     recall_memory: "Looking up remembered context",

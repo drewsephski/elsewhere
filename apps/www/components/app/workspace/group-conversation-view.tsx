@@ -115,6 +115,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
     name: string;
   } | null>(null);
   const [removingParticipant, setRemovingParticipant] = useState(false);
+  const [addingParticipant, setAddingParticipant] = useState(false);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const idempotencyRef = useRef<string | null>(null);
   const loadScopeRef = useRef(createLoadScopeRef());
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -290,6 +292,8 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
       }
       setGroup(body);
       setConfirmRemoveParticipant(null);
+    } catch (err) {
+      toastCloudError(err instanceof Error ? err.message : "Could not remove participant");
     } finally {
       setRemovingParticipant(false);
     }
@@ -324,16 +328,28 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   }
 
   async function handleRetryRoute(messageId: string) {
-    const response = await cloudHostFetch(
-      `/v1/conversations/${groupId}/messages/${messageId}/route/retry`,
-      { method: "POST" },
-    );
-    if (!response.ok) {
-      const body = await response.json();
-      toastCloudError(body.error ?? "Could not retry routing");
+    if (retryingMessageId) {
       return;
     }
-    await loadMessages(loadScopeRef.current.current);
+    setRetryingMessageId(messageId);
+    try {
+      const response = await cloudHostFetch(
+        `/v1/conversations/${groupId}/messages/${messageId}/route/retry`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        toastCloudError(
+          typeof body.error === "string" ? body.error : "Could not retry routing",
+        );
+        return;
+      }
+      await loadMessages(loadScopeRef.current.current);
+    } catch (err) {
+      toastCloudError(err instanceof Error ? err.message : "Could not retry routing");
+    } finally {
+      setRetryingMessageId(null);
+    }
   }
 
   function canDeleteMessage(item: TranscriptMessage): boolean {
@@ -351,16 +367,26 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
   }
 
   async function handleAddParticipant(botId: string) {
-    const response = await cloudHostFetch(`/v1/conversations/${groupId}/participants`, {
-      method: "POST",
-      body: JSON.stringify({ botId }),
-    });
-    const body = await response.json();
-    if (!response.ok) {
-      toastCloudError(body.error ?? "Could not add participant");
+    if (addingParticipant) {
       return;
     }
-    setGroup(body);
+    setAddingParticipant(true);
+    try {
+      const response = await cloudHostFetch(`/v1/conversations/${groupId}/participants`, {
+        method: "POST",
+        body: JSON.stringify({ botId }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        toastCloudError(body.error ?? "Could not add participant");
+        return;
+      }
+      setGroup(body);
+    } catch (err) {
+      toastCloudError(err instanceof Error ? err.message : "Could not add participant");
+    } finally {
+      setAddingParticipant(false);
+    }
   }
 
   const addableBots = bots.filter(
@@ -467,6 +493,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                           variant="outline"
                           size="sm"
                           className="h-6 rounded-md px-2 text-[11px]"
+                          disabled={retryingMessageId === item.id}
                           onClick={() => void handleRetryRoute(item.id)}
                         >
                           Retry
@@ -572,6 +599,7 @@ export function GroupConversationView({ groupId, bots }: GroupConversationViewPr
                     {addableBots.map((bot) => (
                       <DropdownMenuItem
                         key={bot.id}
+                        disabled={addingParticipant || !canAddParticipant}
                         onClick={() => void handleAddParticipant(bot.id)}
                       >
                         <BotCreatureAvatar

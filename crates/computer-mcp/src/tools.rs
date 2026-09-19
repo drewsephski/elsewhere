@@ -2,15 +2,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use agent_core::{
-    connector_openai_tool_definitions, dispatch_agent_tool_with_gate_and_recovery,
+    collaboration_tool_specs, connector_openai_tool_definitions,
+    dispatch_agent_tool_with_gate_and_recovery, github_coding_openai_tool_definitions,
     human_intervention_openai_tool_definitions, is_attachment_tool, is_browser_tool,
     is_collaboration_tool, is_connector_tool, is_human_intervention_tool, is_memory_tool,
-    github_coding_openai_tool_definitions, is_routine_tool, is_skill_tool, is_subagent_tool,
-    is_user_question_tool, AgentAttachments, AgentCollaboration, AgentGithubCoding,
-    AgentComputer, AgentConnectors, AgentHumanIntervention, AgentMemory, AgentRoutines,
-    AgentSkills, AgentSubagents, AgentUserQuestion,
+    is_routine_tool, is_skill_tool, is_subagent_tool, is_user_question_tool, AgentAttachments,
+    AgentCollaboration, AgentComputer, AgentConnectors, AgentGithubCoding, AgentHumanIntervention,
+    AgentMemory, AgentRoutines, AgentSkills, AgentSubagents, AgentUserQuestion,
     BrowserRecoverySession, CollaborationContext, ToolApprovalGate, ToolError, ToolRunContext,
-    RUN_SUBAGENT_DESCRIPTION,
 };
 use rmcp::{
     model::{
@@ -97,45 +96,10 @@ fn schema_object(value: serde_json::Value) -> Arc<serde_json::Map<String, serde_
 }
 
 fn collaboration_tool_definitions() -> Vec<Tool> {
-    vec![
-        Tool::new(
-            "bot_list",
-            "List other Bots owned by the same user that you may hand work to asynchronously. Does not wait for them to finish.",
-            schema_object(json!({
-                "type": "object",
-                "properties": {},
-                "additionalProperties": false
-            })),
-        ),
-        Tool::new(
-            "bot_delegate",
-            "Hand work to another Bot asynchronously. This only queues durable work; it does NOT wait for completion.",
-            schema_object(json!({
-                "type": "object",
-                "properties": {
-                    "targetBotId": { "type": "string" },
-                    "instruction": { "type": "string" },
-                    "context": { "type": "string" }
-                },
-                "required": ["targetBotId", "instruction"],
-                "additionalProperties": false
-            })),
-        ),
-        Tool::new(
-            "run_subagent",
-            RUN_SUBAGENT_DESCRIPTION,
-            schema_object(json!({
-                "type": "object",
-                "properties": {
-                    "name": { "type": "string" },
-                    "task": { "type": "string" },
-                    "context": { "type": "string" }
-                },
-                "required": ["name", "task"],
-                "additionalProperties": false
-            })),
-        ),
-    ]
+    collaboration_tool_specs()
+        .into_iter()
+        .map(|spec| Tool::new(spec.name, spec.description, schema_object(spec.parameters)))
+        .collect()
 }
 
 fn tool_definitions() -> Vec<Tool> {
@@ -503,6 +467,7 @@ fn validate_tool_args(name: &str, args: &serde_json::Value) -> Result<(), Comput
         }
         name if is_browser_tool(name) => Ok(()),
         "bot_list" => Ok(()),
+        "bot_create" => Ok(()),
         "bot_delegate" => Ok(()),
         "run_subagent" => Ok(()),
         name if is_human_intervention_tool(name) => Ok(()),
@@ -546,6 +511,8 @@ mod tests {
         assert!(names.contains(&"workspace_list".to_string()));
         assert!(names.contains(&"workspace_exec".to_string()));
         assert!(names.contains(&"run_subagent".to_string()));
+        assert!(names.contains(&"bot_list".to_string()));
+        assert!(names.contains(&"bot_create".to_string()));
         assert!(names.contains(&"bot_delegate".to_string()));
         assert!(names.contains(&"connected_apps_search_tools".to_string()));
         assert!(names.contains(&"connected_apps_load_tool".to_string()));
@@ -577,5 +544,69 @@ mod tests {
                 .count(),
             3
         );
+    }
+
+    #[test]
+    fn bot_delegate_schema_includes_on_complete() {
+        let tool = tool_definitions()
+            .into_iter()
+            .find(|t| t.name.as_ref() == "bot_delegate")
+            .expect("bot_delegate");
+        let properties = tool
+            .input_schema
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .expect("properties");
+        assert!(properties.contains_key("onComplete"));
+    }
+
+    fn parameter_property_keys(parameters: &serde_json::Value) -> Vec<String> {
+        let mut keys: Vec<String> = parameters
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .map(|obj| obj.keys().cloned().collect())
+            .unwrap_or_default();
+        keys.sort();
+        keys
+    }
+
+    #[test]
+    fn collaboration_openai_and_mcp_schemas_match() {
+        let openai = agent_core::collaboration_openai_tool_definitions();
+        let mcp = tool_definitions();
+        for name in ["bot_list", "bot_create", "bot_delegate", "run_subagent"] {
+            let openai_def = openai
+                .iter()
+                .find(|def| def.get("name").and_then(|v| v.as_str()) == Some(name))
+                .unwrap_or_else(|| panic!("openai missing {name}"));
+            let mcp_tool = mcp
+                .iter()
+                .find(|tool| tool.name.as_ref() == name)
+                .unwrap_or_else(|| panic!("mcp missing {name}"));
+            let openai_keys = parameter_property_keys(
+                openai_def
+                    .get("parameters")
+                    .unwrap_or(&serde_json::Value::Null),
+            );
+            let mcp_params = serde_json::Value::Object((*mcp_tool.input_schema).clone());
+            let mcp_keys = parameter_property_keys(&mcp_params);
+            assert_eq!(openai_keys, mcp_keys, "{name} parameter keys");
+        }
+        let openai_delegate = openai
+            .iter()
+            .find(|def| def.get("name").and_then(|v| v.as_str()) == Some("bot_delegate"))
+            .expect("openai bot_delegate");
+        assert!(openai_delegate
+            .pointer("/parameters/properties/onComplete")
+            .is_some());
+        let mcp_delegate = mcp
+            .iter()
+            .find(|tool| tool.name.as_ref() == "bot_delegate")
+            .expect("mcp bot_delegate");
+        assert!(mcp_delegate
+            .input_schema
+            .get("properties")
+            .and_then(|v| v.get("onComplete"))
+            .is_some());
     }
 }

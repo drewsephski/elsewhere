@@ -199,6 +199,78 @@ async fn user_can_delete_own_bot_with_conversations() {
 }
 
 #[tokio::test]
+async fn user_can_delete_own_bot_that_is_in_a_group() {
+    let Some(pool) = try_test_pool().await else {
+        return;
+    };
+    let computer = insert_computer_placeholder(&pool, "user-a", "Computer A")
+        .await
+        .unwrap();
+    let designer = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "Designer",
+        "i",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    let researcher = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "Researcher",
+        "i",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    let group = cloud_host::groups::create_group(
+        &pool,
+        "user-a",
+        cloud_host::groups::CreateGroupRequest {
+            name: "Team 1".into(),
+            bot_ids: vec![designer.id.clone(), researcher.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+
+    let app = build_router(jwt_state(pool.clone()));
+    let resp = app
+        .oneshot(
+            http::Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/bots/{}", designer.id))
+                .header("authorization", format!("Bearer {}", token("user-a")))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), http::StatusCode::NO_CONTENT);
+
+    let still_there: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1)")
+        .bind(&designer.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!still_there);
+    let group_left: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(group_left);
+}
+
+#[tokio::test]
 async fn user_cannot_rename_or_delete_other_users_group() {
     let Some(pool) = try_test_pool().await else {
         return;

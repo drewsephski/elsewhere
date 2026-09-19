@@ -29,6 +29,7 @@ import { cloudHostFetch } from "@/lib/cloud-api";
 import { cn } from "cn";
 import { ChevronDown } from "@/components/icons/lucide";
 import Link from "next/link";
+import { settingsDialogHref } from "@/lib/settings-sections";
 import { useThisMacStatus } from "@/hooks/use-this-mac-status";
 import { isTauriRuntime } from "@/lib/tauri-runtime";
 import { isThisMacLiveForQuickStart } from "@/lib/this-mac-status";
@@ -43,6 +44,7 @@ export interface CreateBotFormProps {
   footer?: ReactNode;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  onConnectChatGpt?: () => void;
   onOutcome: (outcome: CreateBotOutcome) => void;
 }
 
@@ -54,6 +56,7 @@ export function CreateBotForm({
   footer,
   disabled = false,
   onBusyChange,
+  onConnectChatGpt,
   onOutcome,
 }: CreateBotFormProps) {
   const {
@@ -298,7 +301,14 @@ export function CreateBotForm({
           </Button>
           {!connected && !checking ? (
             <p className="text-center text-xs text-muted-foreground">
-              Connect ChatGPT to create a Bot. Your answers stay here.
+              <Link
+                href={settingsDialogHref("chatgpt")}
+                className="font-medium text-foreground underline underline-offset-2"
+                onClick={onConnectChatGpt}
+              >
+                Connect ChatGPT
+              </Link>{" "}
+              to create a Bot. Your answers stay here.
             </p>
           ) : (
             <p className="text-center text-xs text-muted-foreground">

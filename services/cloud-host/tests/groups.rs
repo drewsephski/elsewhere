@@ -458,3 +458,88 @@ async fn group_rename_and_delete(pool: PgPool) {
         cloud_host::error::ApiError::NotFound
     ));
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn deleting_a_bot_removes_group_membership_and_keeps_group_history(pool: PgPool) {
+    let designer = bot_with_computer(&pool, "alice", "Designer").await;
+    let researcher = bot_with_computer(&pool, "alice", "Researcher").await;
+    let group = groups::create_group(
+        &pool,
+        "alice",
+        groups::CreateGroupRequest {
+            name: "Team 1".into(),
+            bot_ids: vec![designer.id.clone(), researcher.id.clone()],
+        },
+    )
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r#"
+        INSERT INTO messages (
+            id, conversation_id, role, kind, body, status, sequence, author_kind, author_bot_id
+        )
+        VALUES ($1, $2, 'assistant', 'chat', 'Hello from Designer', 'complete', 1, 'bot', $3)
+        "#,
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind(&group.id)
+    .bind(&designer.id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let deleted = resources::delete_bot(&pool, "alice", &designer.id)
+        .await
+        .expect("bot in a group should be deletable");
+    assert!(deleted);
+
+    let designer_left: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM bots WHERE id = $1)")
+        .bind(&designer.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!designer_left);
+
+    let group_left: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1)")
+            .bind(&group.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(group_left);
+
+    let designer_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND bot_id = $2)",
+    )
+    .bind(&group.id)
+    .bind(&designer.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!designer_member);
+
+    let researcher_member: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND bot_id = $2 AND left_at IS NULL)",
+    )
+    .bind(&group.id)
+    .bind(&researcher.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(researcher_member);
+
+    let (message_count, unattributed): (i64, i64) = sqlx::query_as(
+        r#"
+        SELECT COUNT(*), COUNT(*) FILTER (WHERE author_bot_id IS NULL)
+        FROM messages
+        WHERE conversation_id = $1
+        "#,
+    )
+    .bind(&group.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(message_count, 1);
+    assert_eq!(unattributed, 1);
+}
