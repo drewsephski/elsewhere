@@ -267,14 +267,14 @@ async fn github_resume_rejects_non_elsewhere_branch(pool: PgPool) {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "installations": [{ "id": 1, "account": { "login": "acme", "id": 1, "type": "User" } }]
         })))
-        .mount(server)
+        .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path_regex(r"/user/installations/1/repositories.*"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "repositories": [{ "name": "demo", "full_name": "acme/demo", "owner": { "login": "acme" } }]
         })))
-        .mount(server)
+        .mount(&server)
         .await;
     Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/pulls/7$"))
@@ -283,7 +283,7 @@ async fn github_resume_rejects_non_elsewhere_branch(pool: PgPool) {
             "head": { "ref": "feature/manual", "sha": "abc", "repo": { "full_name": "acme/demo" } },
             "base": { "ref": "main" }
         })))
-        .mount(server)
+        .mount(&server)
         .await;
 
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
@@ -594,7 +594,7 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "object": { "sha": "someone_else_pushed" }
         })))
-        .mount(server)
+        .mount(&server)
         .await;
 
     let github = GitHubClient::with_api_base(server.uri(), server.uri());
