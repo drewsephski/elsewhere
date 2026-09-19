@@ -3,6 +3,10 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::github_coding::git_tree_reconcile::{
+    blob_map_from_recursive_tree, expected_tree_after_changes, trees_match, TreeReconcileError,
+};
+
 const INSTALLATION_PAGE_SIZE: u32 = 100;
 const REPO_PAGE_SIZE: u32 = 100;
 const MAX_INSTALLATIONS: usize = 50;
@@ -525,7 +529,15 @@ impl GitHubClient {
                 return Ok(head);
             }
             if self
-                .commit_matches_prepared_changes(token, owner, repo, &head, base_commit_sha, changes)
+                .commit_matches_prepared_changes(
+                    token,
+                    owner,
+                    repo,
+                    &head,
+                    base_commit_sha,
+                    base_tree_sha,
+                    changes,
+                )
                 .await?
             {
                 return Ok(head);
@@ -645,6 +657,7 @@ impl GitHubClient {
                     repo,
                     &head,
                     expected_parent_commit,
+                    parent_tree_sha,
                     changes,
                 )
                 .await;
@@ -758,6 +771,7 @@ impl GitHubClient {
         repo: &str,
         commit_sha: &str,
         base_commit_sha: &str,
+        base_tree_sha: &str,
         changes: &[GitHubTreeChange],
     ) -> Result<bool, String> {
         let path = format!("/repos/{}/{}/git/commits/{}", owner, repo, commit_sha);
@@ -774,46 +788,47 @@ impl GitHubClient {
         if parent != base_commit_sha {
             return Ok(false);
         }
-        let tree_sha = commit
+        let candidate_tree_sha = commit
             .get("tree")
             .and_then(|t| t.get("sha"))
             .and_then(|s| s.as_str())
             .ok_or_else(|| "commit missing tree sha".to_string())?;
-        let tree_path = format!(
+
+        let parent_tree_path = format!(
             "/repos/{}/{}/git/trees/{}?recursive=1",
             owner,
             repo,
-            tree_sha
+            base_tree_sha
         );
-        let tree: Value = self.get_json(token, &tree_path).await?;
-        let entries = tree
-            .get("tree")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| "tree missing entries".to_string())?;
-        for change in changes {
-            if change.deleted {
-                if entries.iter().any(|e| e.get("path").and_then(|p| p.as_str()) == Some(&change.path)) {
-                    return Ok(false);
-                }
-                continue;
+        let parent_tree: Value = self.get_json(token, &parent_tree_path).await?;
+        let parent_map = blob_map_from_recursive_tree(&parent_tree).map_err(|e| match e {
+            TreeReconcileError::TruncatedTree => {
+                "cannot reconcile: parent tree listing was truncated".to_string()
             }
-            let content = change
-                .content
-                .as_ref()
-                .ok_or_else(|| format!("missing content for {}", change.path))?;
-            let expected_blob = self
-                .create_blob_sha(token, owner, repo, content)
-                .await?;
-            let actual = entries
-                .iter()
-                .find(|e| e.get("path").and_then(|p| p.as_str()) == Some(&change.path))
-                .and_then(|e| e.get("sha"))
-                .and_then(|s| s.as_str());
-            if actual != Some(expected_blob.as_str()) {
-                return Ok(false);
+            TreeReconcileError::InvalidTreeResponse => {
+                "cannot reconcile: invalid parent tree response".to_string()
             }
-        }
-        Ok(true)
+        })?;
+        let expected =
+            expected_tree_after_changes(&parent_map, changes).map_err(|e| e.to_string())?;
+
+        let candidate_tree_path = format!(
+            "/repos/{}/{}/git/trees/{}?recursive=1",
+            owner,
+            repo,
+            candidate_tree_sha
+        );
+        let candidate_tree: Value = self.get_json(token, &candidate_tree_path).await?;
+        let candidate_map = blob_map_from_recursive_tree(&candidate_tree).map_err(|e| match e {
+            TreeReconcileError::TruncatedTree => {
+                "cannot reconcile: candidate tree listing was truncated".to_string()
+            }
+            TreeReconcileError::InvalidTreeResponse => {
+                "cannot reconcile: invalid candidate tree response".to_string()
+            }
+        })?;
+
+        Ok(trees_match(&expected, &candidate_map))
     }
 
     async fn create_blob_sha(

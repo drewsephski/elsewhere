@@ -11,6 +11,7 @@ use cloud_host::connectors::{
     db::upsert_github_app_credential, secret::ConnectorSecretBox, service::PostgresAgentConnectors,
     GitHubClient,
 };
+use cloud_host::github_coding::git_tree_reconcile::git_blob_object_sha;
 use cloud_host::github_coding::PostgresAgentGithubCoding;
 use serde_json::json;
 use sqlx::PgPool;
@@ -215,7 +216,7 @@ async fn mock_pr_update_apis(server: &MockServer) {
                 "path": "README.md",
                 "mode": "100644",
                 "type": "blob",
-                "sha": "old_readme_blob_sha"
+                "sha": git_blob_object_sha(b"Hello")
             }]
         })))
         .mount(server)
@@ -606,6 +607,18 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
         .mount(&server)
         .await;
     Mock::given(method("GET"))
+        .and(path_regex(r"/repos/acme/demo/git/trees/PR_HEAD_TREE"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "tree": [{
+                "path": "README.md",
+                "mode": "100644",
+                "type": "blob",
+                "sha": git_blob_object_sha(b"Hello")
+            }]
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
         .and(path_regex(r"/repos/acme/demo/git/trees/foreign_tree"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "tree": [{
@@ -682,4 +695,166 @@ async fn github_update_blocks_when_remote_head_moved(pool: PgPool) {
     .await
     .expect_err("drift");
     assert!(err.message().contains("changed on GitHub"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_revision_consumed_baseline_blocks_review(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_pr_resume_apis(&server, minimal_tarball_with_readme()).await;
+    mock_pr_update_apis(&server).await;
+
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool, connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-rev-consumed".into(),
+        request_id: "req-rev-consumed".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot".into(),
+        computer_id: "comp".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_resume_pull_request",
+        r#"{"owner":"acme","repo":"demo","pullRequestNumber":42}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("resume");
+    computer
+        .write_file(&demo_readme_path("run-rev-consumed"), b"Revised content")
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_update_pull_request",
+        r#"{"commitMessage":"Round one"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("update");
+
+    computer
+        .write_file(&demo_readme_path("run-rev-consumed"), b"Round two")
+        .await
+        .unwrap();
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("stale revision session");
+    assert!(
+        err.message().contains("Resume the pull request again"),
+        "unexpected: {}",
+        err.message()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn github_publish_rejected_for_revision_session(pool: PgPool) {
+    let server = MockServer::start().await;
+    mock_pr_resume_apis(&server, minimal_tarball_with_readme()).await;
+
+    let github = GitHubClient::with_api_base(server.uri(), server.uri());
+    let secret = test_secret_box();
+    upsert_github_app_credential(
+        &pool,
+        "alice",
+        &json!({ "login": "alice" }),
+        &app_credential("gho_test"),
+        &secret,
+    )
+    .await
+    .unwrap();
+    let connectors = PostgresAgentConnectors::new(pool.clone(), secret.into(), github.clone());
+    let coding = coding_service(pool, connectors, github);
+    let computer = ShellWorkspaceComputer::new();
+    let run = ToolRunContext {
+        run_id: "run-rev-pub".into(),
+        request_id: "req-rev-pub".into(),
+        owner_id: "alice".into(),
+        bot_id: "bot".into(),
+        computer_id: "comp".into(),
+        tool_invocation_id: None,
+    };
+    let cancel = AtomicBool::new(false);
+    let gate = AllowAllApprovalGate;
+
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_resume_pull_request",
+        r#"{"owner":"acme","repo":"demo","pullRequestNumber":42}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("resume");
+    computer
+        .write_file(&demo_readme_path("run-rev-pub"), b"Revised")
+        .await
+        .unwrap();
+    dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_review_publish",
+        r#"{"checkCommands":[]}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect("review");
+
+    let err = dispatch_github_coding_tool(
+        Some(&coding),
+        &computer,
+        "github_publish_pull_request",
+        r#"{"title":"Nope","body":"Nope"}"#,
+        &cancel,
+        &gate,
+        &run,
+    )
+    .await
+    .expect_err("wrong tool");
+    assert!(err.message().contains("github_update_pull_request"));
 }

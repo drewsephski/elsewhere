@@ -136,6 +136,16 @@ impl AgentGithubCoding for PostgresAgentGithubCoding {
             return Ok(arguments.clone());
         }
         let session = self.require_session(owner_id, run_id).await?;
+        if tool_name == GITHUB_PUBLISH_PULL_REQUEST_TOOL && session.session_mode == "revision" {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::RESUMED_PR_USE_UPDATE_MSG.into(),
+            ));
+        }
+        if tool_name == GITHUB_UPDATE_PULL_REQUEST_TOOL && session.session_mode != "revision" {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::INITIAL_SESSION_USE_PUBLISH_MSG.into(),
+            ));
+        }
         if !session.review_completed {
             let hint = if session.session_mode == "revision" {
                 "Run github_review_publish before updating the pull request."
@@ -402,6 +412,13 @@ impl PostgresAgentGithubCoding {
     ) -> Result<Value, GithubCodingError> {
         reject_forged_check_fields(args)?;
         let session = self.require_session(owner_id, run_id).await?;
+        if session.session_mode == "revision"
+            && session.publish_phase.as_deref() == Some("pull_request_updated")
+        {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::REVISION_ALREADY_PUSHED_MSG.into(),
+            ));
+        }
         let check_commands = parse_check_commands(args)?;
         let prepared = self.build_prepared_publish(&session, computer).await?;
         let verified = verify_check_commands_for_review(
@@ -481,6 +498,11 @@ impl PostgresAgentGithubCoding {
             .unwrap_or(false);
 
         let session = self.require_session(owner_id, run_id).await?;
+        if session.session_mode == "revision" {
+            return Err(GithubCodingError::Validation(
+                crate::github_coding::core::RESUMED_PR_USE_UPDATE_MSG.into(),
+            ));
+        }
         if !session.review_completed {
             return Err(GithubCodingError::Validation(
                 "Run github_review_publish before publishing.".into(),
@@ -739,6 +761,7 @@ impl PostgresAgentGithubCoding {
                     &session.repo_name,
                     &head_sha,
                     &session.opened_base_commit_sha,
+                    &session.opened_base_tree_sha,
                     tree_changes,
                 )
                 .await
@@ -1066,32 +1089,6 @@ impl PostgresAgentGithubCoding {
 
         let tree_changes = to_github_tree_changes(&prepared.changes);
         let expected_parent = baseline_sha;
-
-        if let Some(url) = session.pr_url.as_ref() {
-            if let Some(commit_sha) = session.publish_commit_sha.as_deref() {
-                let head = self
-                    .github
-                    .ref_head_sha(
-                        &token,
-                        &session.repo_owner,
-                        &session.repo_name,
-                        &session.working_branch,
-                    )
-                    .await
-                    .map_err(|e| GithubCodingError::Provider(redact_secrets(&e)))?;
-                if head.as_deref() == Some(commit_sha) {
-                    return Ok(json!({
-                        "ok": true,
-                        "alreadyUpdated": true,
-                        "repository": session.full_name,
-                        "branch": session.working_branch,
-                        "commitSha": commit_sha,
-                        "pullRequest": { "number": pr_number, "url": url },
-                        "phase": "pull_request_updated"
-                    }));
-                }
-            }
-        }
 
         self.sessions
             .update_publish_state(owner_id, run_id, "updating_pull_request", None, None, None)

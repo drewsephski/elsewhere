@@ -2,6 +2,15 @@ use std::collections::HashMap;
 
 pub const BRANCH_PREFIX: &str = "elsewhere/";
 
+pub const REVISION_ALREADY_PUSHED_MSG: &str =
+    "This revision was already pushed. Resume the pull request again before making another revision.";
+
+pub const RESUMED_PR_USE_UPDATE_MSG: &str =
+    "This is a resumed pull request. Use github_update_pull_request to update the existing PR.";
+
+pub const INITIAL_SESSION_USE_PUBLISH_MSG: &str =
+    "Open or resume a session first. Use github_publish_pull_request for a new pull request.";
+
 pub fn is_elsewhere_managed_branch(branch: &str) -> bool {
     branch.starts_with(BRANCH_PREFIX)
 }

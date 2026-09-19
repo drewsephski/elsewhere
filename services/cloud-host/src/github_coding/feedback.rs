@@ -21,18 +21,21 @@ pub fn collect_pull_request_feedback(
     let title = pull.get("title").and_then(|s| s.as_str()).unwrap_or("");
     let body = truncate_optional(pull.get("body").and_then(|s| s.as_str()), MAX_COMMENT_BODY_CHARS);
 
+    let reviews_may_be_truncated = reviews.len() > MAX_REVIEW_ITEMS;
     let review_summaries = reviews
         .iter()
         .take(MAX_REVIEW_ITEMS)
         .filter_map(summarize_review)
         .collect::<Vec<_>>();
 
+    let review_comments_may_be_truncated = review_comments.len() > MAX_REVIEW_ITEMS;
     let inline_comments = review_comments
         .iter()
         .take(MAX_REVIEW_ITEMS)
         .filter_map(summarize_review_comment)
         .collect::<Vec<_>>();
 
+    let issue_comments_may_be_truncated = issue_comments.len() > MAX_REVIEW_ITEMS;
     let general_comments = issue_comments
         .iter()
         .take(MAX_REVIEW_ITEMS)
@@ -42,6 +45,16 @@ pub fn collect_pull_request_feedback(
     let checks = summarize_checks(combined_status, check_runs_body);
 
     json!({
+        "contentTrust": "untrusted",
+        "truncated": {
+            "reviewsMayBeTruncated": reviews_may_be_truncated,
+            "reviewCommentsMayBeTruncated": review_comments_may_be_truncated,
+            "issueCommentsMayBeTruncated": issue_comments_may_be_truncated,
+            "checksMayBeTruncated": checks
+                .get("checksMayBeTruncated")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        },
         "pullRequest": {
             "number": pull.get("number"),
             "state": state,
@@ -114,9 +127,11 @@ fn summarize_issue_comment(comment: &Value) -> Option<Value> {
 
 fn summarize_checks(combined_status: &Value, check_runs_body: &Value) -> Value {
     let overall_state = combined_status.get("state").and_then(|s| s.as_str()).unwrap_or("unknown");
-    let statuses = combined_status
+    let status_list = combined_status
         .get("statuses")
-        .and_then(|v| v.as_array())
+        .and_then(|v| v.as_array());
+    let statuses_truncated = status_list.map(|arr| arr.len() > MAX_CHECK_ITEMS).unwrap_or(false);
+    let statuses = status_list
         .map(|arr| {
             arr.iter()
                 .take(MAX_CHECK_ITEMS)
@@ -135,9 +150,13 @@ fn summarize_checks(combined_status: &Value, check_runs_body: &Value) -> Value {
         })
         .unwrap_or_default();
 
-    let check_runs = check_runs_body
+    let check_run_list = check_runs_body
         .get("check_runs")
-        .and_then(|v| v.as_array())
+        .and_then(|v| v.as_array());
+    let check_runs_truncated = check_run_list
+        .map(|arr| arr.len() > MAX_CHECK_ITEMS)
+        .unwrap_or(false);
+    let check_runs = check_run_list
         .map(|arr| {
             arr.iter()
                 .take(MAX_CHECK_ITEMS)
@@ -170,6 +189,7 @@ fn summarize_checks(combined_status: &Value, check_runs_body: &Value) -> Value {
         "statuses": statuses,
         "checkRuns": check_runs,
         "failedCheckRuns": failed,
+        "checksMayBeTruncated": statuses_truncated || check_runs_truncated,
         "phase": "inspecting_failed_checks"
     })
 }

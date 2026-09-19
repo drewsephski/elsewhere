@@ -171,7 +171,7 @@ fn parse_exit_code_from_result(payload: &Value) -> Result<i32, GithubCodingError
 pub fn reject_forged_check_fields(args: &Value) -> Result<(), GithubCodingError> {
     if args.get("checks").is_some() {
         return Err(GithubCodingError::Validation(
-            "github_review_publish no longer accepts `checks`; use checkCommands and run workspace_exec first"
+            "github_review_publish no longer accepts `checks`; use checkCommands with commands certified via github_run_check"
                 .into(),
         ));
     }
