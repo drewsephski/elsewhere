@@ -4,7 +4,7 @@ use tauri::{
     Manager, RunEvent, WindowEvent,
 };
 
-use crate::commands::this_mac::{this_mac_status_snapshot, ThisMacPhase};
+use crate::commands::{this_mac_status_snapshot, ThisMacPhase};
 use crate::state::AppState;
 
 fn tray_status_label(phase: ThisMacPhase, paused: bool) -> String {
