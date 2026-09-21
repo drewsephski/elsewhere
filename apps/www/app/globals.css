@@ -679,16 +679,97 @@ html.tauri[data-tauri-platform="macos"] .tauri-titlebar {
   animation-duration: 9.2s;
 }
 
+/* Full-size tracks keep the cloud proportional to each portrait. Particles
+   pass behind the creature on the upper arc and in front on the lower arc. */
+@keyframes creature-orbit {
+  0%, 100% {
+    transform: translate3d(-52%, 0, 0) scale(0.8);
+    opacity: 0.65;
+    z-index: 2;
+  }
+  1% { z-index: 0; }
+  25% {
+    transform: translate3d(0, -22%, 0) scale(0.65);
+    opacity: 0.35;
+    z-index: 0;
+  }
+  49% { z-index: 0; }
+  50% {
+    transform: translate3d(52%, 0, 0) scale(0.8);
+    opacity: 0.65;
+    z-index: 2;
+  }
+  75% {
+    transform: translate3d(0, 22%, 0) scale(1);
+    opacity: 0.9;
+    z-index: 2;
+  }
+}
+
+.creature-particle {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: creature-orbit var(--orbit-duration) cubic-bezier(0.37, 0, 0.63, 1) infinite;
+  animation-delay: calc(var(--creature-phase, 0s) + var(--orbit-delay));
+}
+
+.creature-particle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: clamp(2.5px, 10%, 6px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 5px color-mix(in srgb, currentColor 50%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+.creature-particle-blue {
+  color: #7daee8;
+  --orbit-duration: 5.6s;
+  --orbit-delay: -2.8s;
+}
+
+.creature-particle-red {
+  color: #e9a097;
+  --orbit-duration: 3.8s;
+  --orbit-delay: -0.4s;
+}
+
+.creature-particle-yellow {
+  color: #dfc078;
+  --orbit-duration: 4.6s;
+  --orbit-delay: -1.6s;
+}
+
+.creature-particle-green {
+  color: #87c8b0;
+  --orbit-duration: 6.4s;
+  --orbit-delay: -4.8s;
+}
+
+[data-intensity="compact"] .creature-particle::after {
+  box-shadow: 0 0 3px color-mix(in srgb, currentColor 35%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .creature-volume,
   [data-creature-aura] .creature-glow,
   [data-creature-aura] .creature-ground,
-  .creature-spec {
+  .creature-spec,
+  .creature-particle {
     animation: none;
   }
 
   [data-creature-aura] .creature-glow {
     opacity: 0.24;
+  }
+
+  .creature-particle {
+    display: none;
   }
 }
 

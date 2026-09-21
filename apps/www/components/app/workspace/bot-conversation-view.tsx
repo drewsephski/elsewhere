@@ -693,6 +693,7 @@ export function BotConversationView({
             name={bot?.name ?? "Bot"}
             avatarId={bot?.avatarId ?? DEFAULT_BOT_AVATAR_ID}
             size="sm"
+            animated={Boolean(streamRunId || pendingTurn || pending)}
           />
           {onRenameBot && bot ? (
             <InlineRenameLabel

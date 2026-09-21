@@ -32,6 +32,7 @@ interface BotCreatureAvatarProps {
   src?: string;
   size?: BotCreatureAvatarSize;
   className?: string;
+  /** Show the working aura and orbital particles while a response is in progress. */
   animated?: boolean;
   /** Colored tile behind the creature (legacy). Default: transparent. */
   showShell?: boolean;
@@ -104,6 +105,18 @@ export function BotCreatureAvatar({
       data-intensity={intensity ?? undefined}
     >
       {animated && intensity ? <CreatureWorkingAura intensity={intensity} /> : null}
+      {animated ? (
+        <>
+          <span className="creature-particle creature-particle-blue" aria-hidden />
+          <span className="creature-particle creature-particle-red" aria-hidden />
+          {intensity !== "compact" ? (
+            <>
+              <span className="creature-particle creature-particle-yellow" aria-hidden />
+              <span className="creature-particle creature-particle-green" aria-hidden />
+            </>
+          ) : null}
+        </>
+      ) : null}
       <span
         className={cn(
           "relative z-[1] flex h-full w-full items-end justify-center",
