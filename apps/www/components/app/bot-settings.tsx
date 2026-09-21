@@ -8,7 +8,7 @@ import { DEFAULT_BOT_MODEL_ID } from "@/lib/bot-models";
 import { cloudHostFetch } from "@/lib/cloud-api";
 import { BotAvatarPicker } from "@/components/app/bot-avatar-picker";
 import { ConfirmAlertDialog } from "@/components/app/confirm-alert-dialog";
-import { DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
+import { botAvatarFormDefaults, DEFAULT_BOT_AVATAR_ID } from "@/lib/bot-avatars";
 import { BOT_DELETE_COPY } from "@/lib/bot-delete-copy";
 import { Button } from "@/components/ui/button";
 import { FormFields, FormItem } from "@/components/ui/form-item";
@@ -41,7 +41,13 @@ export function BotGeneralSettings({
   }, [bot]);
 
   function handleAvatarChange(nextAvatarId: string) {
+    if (nextAvatarId === avatarId) return;
     setAvatarId(nextAvatarId);
+    if (!bot.avatarId) {
+      const defaults = botAvatarFormDefaults(nextAvatarId);
+      setName(defaults.name);
+      setInstructions(defaults.instructions);
+    }
   }
 
   async function save(event: React.FormEvent) {

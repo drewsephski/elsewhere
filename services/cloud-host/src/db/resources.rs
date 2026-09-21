@@ -176,6 +176,59 @@ pub async fn delete_bot(pool: &PgPool, owner_id: &str, bot_id: &str) -> Result<b
         return Ok(false);
     }
 
+    let has_active_work: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM agent_runs
+            WHERE bot_id = $1
+              AND owner_id = $2
+              AND status IN ('queued', 'running')
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if has_active_work {
+        return Err(ApiError::Conflict(
+            "Stop this Bot's active work before deleting it.".into(),
+        ));
+    }
+
+    let would_orphan_group: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM conversation_participants p
+            JOIN conversations c ON c.id = p.conversation_id
+            WHERE p.bot_id = $1
+              AND p.owner_id = $2
+              AND p.left_at IS NULL
+              AND c.conversation_type = 'group'
+              AND (
+                  SELECT COUNT(*)
+                  FROM conversation_participants m
+                  WHERE m.conversation_id = c.id
+                    AND m.left_at IS NULL
+              ) <= 2
+        )
+        "#,
+    )
+    .bind(bot_id)
+    .bind(owner_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if would_orphan_group {
+        return Err(ApiError::Conflict(
+            "Remove this Bot from its two-member group (or delete the group) before deleting it."
+                .into(),
+        ));
+    }
+
     // Remove dependent rows in FK-safe order. Direct conversations are deleted; group
     // conversations stay, but this bot is detached from them first.
     sqlx::query(
