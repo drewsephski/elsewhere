@@ -199,7 +199,7 @@ async fn user_can_delete_own_bot_with_conversations() {
 }
 
 #[tokio::test]
-async fn user_can_delete_own_bot_that_is_in_a_group() {
+async fn user_can_delete_own_bot_when_two_group_members_remain() {
     let Some(pool) = try_test_pool().await else {
         return;
     };
@@ -242,6 +242,36 @@ async fn user_can_delete_own_bot_that_is_in_a_group() {
     .unwrap();
 
     let app = build_router(jwt_state(pool.clone()));
+    let resp = app
+        .clone()
+        .oneshot(
+            http::Request::builder()
+                .method("DELETE")
+                .uri(format!("/v1/bots/{}", designer.id))
+                .header("authorization", format!("Bearer {}", token("user-a")))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), http::StatusCode::CONFLICT);
+
+    let reviewer = cloud_host::db::resources::insert_bot(
+        &pool,
+        "user-a",
+        "Reviewer",
+        "i",
+        "gpt-5.6-luna",
+        Some(&computer.id),
+        "auto",
+        "sky-wisp",
+    )
+    .await
+    .unwrap();
+    cloud_host::groups::add_participant(&pool, "user-a", &group.id, &reviewer.id)
+        .await
+        .unwrap();
+
     let resp = app
         .oneshot(
             http::Request::builder()

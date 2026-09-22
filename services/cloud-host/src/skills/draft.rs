@@ -34,24 +34,23 @@ pub async fn generate_skill_draft_from_run(
         "Original task:\n{task}\n\nFinal answer:\n{answer}\n\nProduce a reusable Agent Skill draft that captures the repeatable process (when to use, steps, validation, and result format), not just the final answer as a prompt.",
     );
 
-    let profile = if config.run_engine == RunEngineMode::Responses {
-        None
-    } else {
-        provider_profile::profile_for_owner(pool, config, owner).await?
-    };
+    // Responses-only hosts must not discover and launch an ambient Codex install.
+    // A missing profile does not disable Codex; it selects its default credentials.
+    if config.run_engine != RunEngineMode::Responses {
+        let profile = provider_profile::profile_for_owner(pool, config, owner).await?;
+        let codex_attempt = run_toolless_codex_turn(
+            config.codex_executable.clone(),
+            profile,
+            &agent_core::DEFAULT_MODEL,
+            DRAFT_DEVELOPER,
+            &user_prompt,
+        )
+        .await;
 
-    let codex_attempt = run_toolless_codex_turn(
-        config.codex_executable.clone(),
-        profile,
-        &agent_core::DEFAULT_MODEL,
-        DRAFT_DEVELOPER,
-        &user_prompt,
-    )
-    .await;
-
-    if let Ok(raw) = codex_attempt {
-        if let Ok(parsed) = parse_skill_draft_json(&raw) {
-            return Ok((parsed.0, parsed.1, SkillDraftKind::Generated));
+        if let Ok(raw) = codex_attempt {
+            if let Ok(parsed) = parse_skill_draft_json(&raw) {
+                return Ok((parsed.0, parsed.1, SkillDraftKind::Generated));
+            }
         }
     }
 

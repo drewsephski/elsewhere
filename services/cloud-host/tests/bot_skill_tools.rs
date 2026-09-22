@@ -283,6 +283,42 @@ async fn skill_list_includes_attachment_state(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[cfg(unix)]
+async fn responses_skill_draft_never_launches_codex(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let owner = format!("owner-{}", Uuid::new_v4());
+    let (bot_id, _) = seed_bot(&pool, &owner).await;
+    let (run_id, _) = seed_completed_run(&pool, &owner, &bot_id, "Task", "Done").await;
+    let directory = tempfile::tempdir().unwrap();
+    let executable = directory.path().join("codex");
+    std::fs::write(&executable, "#!/bin/sh\ntouch \"${0}.called\"\nexit 1\n").unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let mut config = jwt_state(pool.clone()).config.as_ref().clone();
+    config.codex_executable = Some(executable);
+
+    for allow_heuristic in [false, true] {
+        config.allow_skill_draft_heuristic = allow_heuristic;
+        let result = skills::generate_skill_draft_from_run(&pool, &config, &owner, &run_id).await;
+        if allow_heuristic {
+            assert!(matches!(
+                result.unwrap().2,
+                skills::SkillDraftKind::Heuristic
+            ));
+        } else {
+            assert!(matches!(
+                result,
+                Err(cloud_host::error::ApiError::Validation(_))
+            ));
+        }
+        assert!(
+            !directory.path().join("codex.called").exists(),
+            "Responses-only drafting must never launch Codex"
+        );
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn skill_save_requires_approval_and_attaches(pool: PgPool) {
     let owner = format!("owner-{}", Uuid::new_v4());
     let (bot_id, _) = seed_bot(&pool, &owner).await;
